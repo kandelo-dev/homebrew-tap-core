@@ -8,6 +8,7 @@ class Zlib < Formula
   url "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
   sha256 "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
   license "Zlib"
+  revision 1
 
   # No bottle block yet: bottles are machine-generated on publish (Track C) via
   # brew bottle / pr-pull. Until then `brew install` builds from source. A
@@ -16,14 +17,18 @@ class Zlib < Formula
   skip_clean "lib/libz.a"
 
   def install
-    out_dir = kandelo_build_package("zlib", "build-zlib.sh",
-      "https://github.com/madler/zlib/releases/download/v#{version}/zlib-#{version}.tar.gz",
-      "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23")
+    kandelo_require_arch!("wasm32", "wasm64")
 
-    inreplace out_dir/"lib/pkgconfig/zlib.pc", out_dir.to_s, prefix.to_s
-    lib.install out_dir/"lib/libz.a"
-    include.install out_dir/"include/zlib.h", out_dir/"include/zconf.h"
-    (lib/"pkgconfig").install out_dir/"lib/pkgconfig/zlib.pc"
+    kandelo_wasm_build do
+      # zlib uses CHOST as both its target-system identity and cross-build
+      # signal. Without it, configure sees the macOS build host and replaces
+      # the SDK archiver with Apple's host-only libtool.
+      ENV["CHOST"] = "#{kandelo_arch}-unknown-none"
+
+      system "./configure", "--static", *kandelo_std_configure_args
+      system "make", "libz.a"
+      system "make", "install"
+    end
   end
 
   test do
