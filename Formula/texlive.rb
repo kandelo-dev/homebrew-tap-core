@@ -1,4 +1,4 @@
-require_relative "../Kandelo/formula_support/kandelo_formula_support"
+require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Texlive < Formula
   include KandeloFormulaSupport
@@ -120,16 +120,18 @@ class Texlive < Formula
     # ABI rather than shipping an uninstrumented executable.
     kandelo_fork_instrument(linked_pdftex)
     verify_wasm_contract!(linked_pdftex, root)
-    verify_builder_paths!(linked_pdftex, texmf_dist)
+    verify_builder_paths!(linked_pdftex, texmf_dist, zlib, libpng, root)
 
     kandelo_install_bin(buildpath, "pdftex.wasm", "pdftex")
     bin.install_symlink "pdftex" => "pdflatex"
+    bin.install_symlink "pdftex" => "latex"
   end
 
   test do
     texmf_dist = share/"texmf-dist"
     assert_path_exists bin/"pdftex"
     assert_path_exists bin/"pdflatex"
+    assert_path_exists bin/"latex"
     assert_path_exists texmf_dist/"web2c/pdftex/pdftex.fmt"
     assert_path_exists texmf_dist/"web2c/pdftex/pdflatex.fmt"
     assert_path_exists texmf_dist/"web2c/pdftex/latex.fmt"
@@ -189,6 +191,68 @@ class Texlive < Formula
     assert pdf_bytes.start_with?("%PDF-"), "pdfTeX output has no PDF header"
     pdf_tail = pdf_bytes.byteslice([pdf_bytes.bytesize - 1_024, 0].max, 1_024)
     assert_includes pdf_tail, "%%EOF"
+
+    guest_latex = "#{GUEST_PREFIX}/bin/latex"
+    latex_guest_files = guest_files.merge(
+      "#{GUEST_TEXMF}/web2c/pdftex/latex.fmt" => texmf_dist/"web2c/pdftex/latex.fmt",
+    )
+    latex_output = kandelo_run_wasm(
+      bin/"latex",
+      [
+        "-progname=latex",
+        "-fmt=latex",
+        "-interaction=nonstopmode",
+        "-halt-on-error",
+        "-jobname=latex-input",
+        "-output-directory=/work",
+        "/work/input.tex",
+      ],
+      argv0:                     guest_latex,
+      env:                       {
+        "HOME"       => "/work/home",
+        "KERNEL_CWD" => "/work",
+        "TEXMF"      => GUEST_TEXMF,
+        "TEXMFCNF"   => "#{GUEST_TEXMF}/web2c",
+        "TEXMFDIST"  => GUEST_TEXMF,
+        "TEXMFVAR"   => "/work/texmf-var",
+        "TIMEOUT"    => "120000",
+      },
+      exec_programs:             { guest_latex => bin/"latex" },
+      guest_files:               latex_guest_files,
+      merge_stderr:              true,
+      writable_host_directories: { "/work" => testpath.realpath },
+    )
+    assert_match(/Output written on .*latex-input\.dvi \(1 page, [0-9]+ bytes\)/, latex_output)
+    dvi = (testpath/"latex-input.dvi").binread
+    assert_operator dvi.bytesize, :>, 100
+    assert_equal [247, 2], dvi.bytes.first(2), "LaTeX output has no DVI preamble"
+    assert_includes dvi.bytes.last(16), 249, "LaTeX output has no DVI post_post opcode"
+
+    browser_root = "/home/texlive-test"
+    browser_guest_files = guest_files.merge("#{browser_root}/input.tex" => input)
+    browser_output = kandelo_run_browser_wasm(
+      bin/"pdflatex",
+      [
+        "-progname=pdflatex",
+        "-fmt=pdflatex",
+        "-interaction=nonstopmode",
+        "-halt-on-error",
+        "-output-format=pdf",
+        "-output-directory=#{browser_root}",
+        "#{browser_root}/input.tex",
+      ],
+      argv0:       "pdflatex",
+      env:         {
+        "HOME"      => browser_root,
+        "TEXMF"     => GUEST_TEXMF,
+        "TEXMFCNF"  => "#{GUEST_TEXMF}/web2c",
+        "TEXMFDIST" => GUEST_TEXMF,
+        "TEXMFVAR"  => "#{browser_root}/texmf-var",
+      },
+      guest_files: browser_guest_files,
+      timeout_ms:  120_000,
+    )
+    assert_match(/Output written on .*input\.pdf \(1 page, [0-9]+ bytes\)/, browser_output)
   end
 
   private
@@ -350,8 +414,17 @@ class Texlive < Formula
     SH
   end
 
-  def verify_builder_paths!(wasm, texmf_dist)
-    markers = [prefix.to_s, buildpath.to_s, kandelo_require_root!, "/private/tmp/", "/nix/store/"]
+  def verify_builder_paths!(wasm, texmf_dist, zlib, libpng, root)
+    markers = [
+      prefix.to_s,
+      buildpath.to_s,
+      root.to_s,
+      zlib.to_s,
+      libpng.to_s,
+      "/private/tmp/",
+      "/nix/store/",
+      "/home/runner/work/",
+    ]
     artifacts = [
       wasm,
       texmf_dist/"web2c/pdftex/pdftex.fmt",
@@ -364,6 +437,7 @@ class Texlive < Formula
         odie "#{artifact.basename} contains builder path #{marker}" if contents.include?(marker)
       end
       odie "#{artifact.basename} contains a builder home path" if contents.match?(%r{/Users/[^/]+/})
+      odie "#{artifact.basename} contains a Homebrew Cellar path" if contents.include?("/Cellar/")
     end
   end
 

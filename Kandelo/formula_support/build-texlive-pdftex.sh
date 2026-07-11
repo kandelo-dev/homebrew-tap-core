@@ -51,6 +51,11 @@ build_engine() {
   # dev shell. This script never downloads sources or resolves dependencies.
   # shellcheck source=/dev/null
   source "$kandelo_root/sdk/activate.sh"
+  export LC_ALL=C
+  export TZ=UTC
+  export SOURCE_DATE_EPOCH=1741392000
+  export FORCE_SOURCE_DATE=1
+  export ZERO_AR_DATE=1
 
   # TeX Live recurses into LuaJIT's configure even when every Lua engine is
   # disabled. Removing execute permission is upstream's supported skip signal
@@ -104,8 +109,14 @@ EOF
   pushd "$cross_build_dir" >/dev/null
   export CONFIG_SITE="$cross_build_dir/config.site"
   export PATH="$host_web2c:$PATH"
+  local prefix_maps
+  prefix_maps="-ffile-prefix-map=$source_dir=. -fdebug-prefix-map=$source_dir=. -fmacro-prefix-map=$source_dir=."
+  prefix_maps+=" -ffile-prefix-map=$host_build_dir=. -fdebug-prefix-map=$host_build_dir=. -fmacro-prefix-map=$host_build_dir=."
+  prefix_maps+=" -ffile-prefix-map=$cross_build_dir=. -fdebug-prefix-map=$cross_build_dir=. -fmacro-prefix-map=$cross_build_dir=."
+  prefix_maps+=" -ffile-prefix-map=$zlib_prefix=/opt/kandelo-deps/zlib -fdebug-prefix-map=$zlib_prefix=/opt/kandelo-deps/zlib"
+  prefix_maps+=" -ffile-prefix-map=$libpng_prefix=/opt/kandelo-deps/libpng -fdebug-prefix-map=$libpng_prefix=/opt/kandelo-deps/libpng"
   "$source_dir/configure" \
-    --host=wasm32-unknown-none \
+    --host=wasm32-unknown-linux-musl \
     --build="$(cc -dumpmachine)" \
     --prefix="$guest_prefix" \
     --disable-all-pkgs \
@@ -130,7 +141,7 @@ EOF
     BUILDCFLAGS=-O2 \
     BUILDCPPFLAGS= \
     BUILDLDFLAGS= \
-    CFLAGS="-O2 -gline-tables-only -fdebug-compilation-dir=. -I$zlib_prefix/include -I$libpng_prefix/include" \
+    CFLAGS="-O2 -gline-tables-only -fdebug-compilation-dir=. $prefix_maps -I$zlib_prefix/include -I$libpng_prefix/include" \
     LDFLAGS="-L$zlib_prefix/lib -L$libpng_prefix/lib" \
     ZLIB_CFLAGS="-I$zlib_prefix/include" \
     ZLIB_LIBS="-L$zlib_prefix/lib -lz" \
@@ -164,8 +175,10 @@ build_formats() {
   require_file "$fixture"
 
   export LC_ALL=C
+  export TZ=UTC
   export SOURCE_DATE_EPOCH=1741392000
   export FORCE_SOURCE_DATE=1
+  export ZERO_AR_DATE=1
   export TEXMFDIST="$texmf_dist"
   export TEXMF="$texmf_dist"
   export TEXMFCNF="$texmf_dist/web2c"
