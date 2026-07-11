@@ -163,9 +163,9 @@ module KandeloFormulaSupport
   end
 
   # Run a built `.wasm` under the Node kernel host and return its stdout. The
-  # guest inherits the passed `env:` (run-example.ts forwards process env into
-  # the guest, minus PATH), matching how a real `brew test` exercises behavior.
-  def kandelo_run_wasm(bin_path, argv, env: {}, stdin: nil, merge_stderr: false)
+  # guest inherits the passed `env:`, matching how a real `brew test` exercises
+  # behavior. `network: true` opts into Node's real external-TCP backend.
+  def kandelo_run_wasm(bin_path, argv, env: {}, stdin: nil, merge_stderr: false, network: false)
     root = kandelo_require_root!
     if (node = ENV.fetch("HOMEBREW_KANDELO_NODE", nil)).to_s != ""
       ENV.prepend_path "PATH", File.dirname(node)
@@ -180,8 +180,19 @@ module KandeloFormulaSupport
 
     command = +"cd "
     command << Shellwords.escape(root) << " && "
-    env.each { |key, value| command << "#{key}=#{Shellwords.escape(value.to_s)} " }
-    command << "node --experimental-wasm-exnref --import tsx/esm examples/run-example.ts "
+    if network
+      guest_env = JSON.generate(env.transform_values(&:to_s))
+      command << "KANDELO_FORMULA_GUEST_ENV_JSON=#{Shellwords.escape(guest_env)} "
+    else
+      env.each { |key, value| command << "#{key}=#{Shellwords.escape(value.to_s)} " }
+    end
+    command << "node --experimental-wasm-exnref --import tsx/esm "
+    if network
+      runner = Pathname(__dir__)/"run-network-wasm.ts"
+      command << "#{Shellwords.escape(runner.to_s)} #{Shellwords.escape(root)} "
+    else
+      command << "examples/run-example.ts "
+    end
     command << Shellwords.escape(wasm_path.to_s)
     argv.each { |arg| command << " " << Shellwords.escape(arg.to_s) }
 
