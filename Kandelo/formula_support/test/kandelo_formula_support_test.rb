@@ -842,4 +842,24 @@ class KandeloFormulaSupportTest < Minitest::Test
     harness.prefix_path = Pathname(dir)/"cellar/formula/1.0"
     harness
   end
+
+  def test_virtual_network_pairs_accept_separate_server_and_client_programs
+    harness = Harness.new
+    harness.kandelo_run_virtual_network_pairs(
+      "server.wasm",
+      [{
+        name:                         "service",
+        transport:                    "tcp",
+        serverArgs:                   ["server"],
+        clientArgs:                   ["client"],
+        expectedServerStdoutIncludes: ["server-stopped"],
+        expectedClientStdoutIncludes: ["service-ok"],
+      }],
+      client_bin_path: "client.wasm",
+    )
+
+    assert_includes harness.command, "server.wasm client.wasm"
+    assert_includes harness.command, "expectedServerStdoutIncludes"
+    assert_includes harness.command, "expectedClientStdoutIncludes"
+  end
 end

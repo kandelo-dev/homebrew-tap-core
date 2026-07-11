@@ -715,18 +715,23 @@ module KandeloFormulaSupport
   # Run paired programs on isolated Kandelo machines joined by the host's
   # LocalVirtualNetwork. This exercises bind/listen/connect and datagram paths
   # that a single-process formula runner cannot cover.
-  def kandelo_run_virtual_network_pairs(bin_path, cases)
+  def kandelo_run_virtual_network_pairs(server_bin_path, cases, client_bin_path: server_bin_path)
     root = kandelo_require_root!
     if (node = ENV.fetch("HOMEBREW_KANDELO_NODE", nil)).to_s != ""
       ENV.prepend_path "PATH", File.dirname(node)
     end
 
-    wasm_path = Pathname(bin_path)
-    if wasm_path.extname != ".wasm"
-      staged_wasm = testpath/"#{wasm_path.basename}.wasm"
-      File.binwrite(staged_wasm, File.binread(wasm_path))
-      wasm_path = staged_wasm
+    stage_wasm = lambda do |bin_path|
+      wasm_path = Pathname(bin_path)
+      if wasm_path.extname != ".wasm"
+        staged_wasm = testpath/"#{wasm_path.basename}.wasm"
+        File.binwrite(staged_wasm, File.binread(wasm_path))
+        wasm_path = staged_wasm
+      end
+      wasm_path
     end
+    server_wasm_path = stage_wasm.call(server_bin_path)
+    client_wasm_path = stage_wasm.call(client_bin_path)
 
     config = JSON.generate({ cases: cases })
     # Compiled host output shadows TypeScript source under tsx. Network-pair
@@ -738,11 +743,16 @@ module KandeloFormulaSupport
     command << "KANDELO_FORMULA_VIRTUAL_PAIRS_JSON=#{Shellwords.escape(config)} "
     command << "node --experimental-wasm-exnref --import tsx/esm "
     command << "#{Shellwords.escape(runner.to_s)} #{Shellwords.escape(root)} "
-    command << Shellwords.escape(wasm_path.to_s)
+    command << "#{Shellwords.escape(server_wasm_path.to_s)} "
+    command << Shellwords.escape(client_wasm_path.to_s)
     command << " 2>&1"
 
     output = shell_output(command)
-    kandelo_record_node_execution!(wasm_path, [], launcher: "kandelo_run_virtual_network_pairs")
+    kandelo_record_node_execution!(
+      server_wasm_path,
+      [client_wasm_path],
+      launcher: "kandelo_run_virtual_network_pairs",
+    )
     output
   end
 

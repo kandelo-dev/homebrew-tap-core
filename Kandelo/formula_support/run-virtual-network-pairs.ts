@@ -8,7 +8,10 @@ interface PairCase {
   clientArgs: string[];
   serverStdin: string;
   clientStdin: string;
-  expectedServerStdout: string;
+  expectedServerStdout?: string;
+  expectedServerStdoutIncludes?: string[];
+  expectedClientStdout?: string;
+  expectedClientStdoutIncludes?: string[];
   timeoutMs?: number;
 }
 
@@ -17,9 +20,11 @@ interface PairConfig {
 }
 
 async function main(): Promise<void> {
-  const [root, programPath] = process.argv.slice(2);
-  if (!root || !programPath) {
-    throw new Error("usage: run-virtual-network-pairs.ts KANDELO_ROOT PROGRAM");
+  const [root, serverProgramPath, clientProgramPath] = process.argv.slice(2);
+  if (!root || !serverProgramPath || !clientProgramPath) {
+    throw new Error(
+      "usage: run-virtual-network-pairs.ts KANDELO_ROOT SERVER CLIENT",
+    );
   }
 
   const config = JSON.parse(
@@ -85,7 +90,7 @@ async function main(): Promise<void> {
 
     const timeout = pair.timeoutMs ?? 10_000;
     const serverRun = runCentralizedProgram({
-      programPath,
+      programPath: serverProgramPath,
       argv: pair.serverArgs,
       io: serverIO,
       stdin: pair.serverStdin,
@@ -105,7 +110,7 @@ async function main(): Promise<void> {
       }),
     ]);
     const clientRun = runCentralizedProgram({
-      programPath,
+      programPath: clientProgramPath,
       argv: pair.clientArgs,
       io: clientIO,
       stdin: pair.clientStdin,
@@ -117,14 +122,24 @@ async function main(): Promise<void> {
       clientStatus: client.exitCode,
       serverStdout: server.stdout,
       serverStderr: server.stderr,
+      clientStdout: client.stdout,
       clientStderr: client.stderr,
     };
+    const expectedServerStdout = pair.expectedServerStdout;
+    const expectedServerIncludes = pair.expectedServerStdoutIncludes ?? [];
+    const expectedClientStdout = pair.expectedClientStdout;
+    const expectedClientIncludes = pair.expectedClientStdoutIncludes ?? [];
     if (
       server.exitCode !== 0 ||
       client.exitCode !== 0 ||
-      server.stdout !== pair.expectedServerStdout ||
+      (expectedServerStdout !== undefined &&
+        server.stdout !== expectedServerStdout) ||
+      expectedServerIncludes.some((value) => !server.stdout.includes(value)) ||
       server.stderr !== "" ||
-      client.stderr !== ""
+      client.stderr !== "" ||
+      (expectedClientStdout !== undefined &&
+        client.stdout !== expectedClientStdout) ||
+      expectedClientIncludes.some((value) => !client.stdout.includes(value))
     ) {
       throw new Error(`${pair.name} failed: ${JSON.stringify(summary)}`);
     }
