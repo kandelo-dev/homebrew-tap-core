@@ -75,6 +75,7 @@ Formula source currently present in this repository includes:
 - `findutils`, GNU filesystem traversal and argument-driven process execution.
 - `vim`, the ncurses-backed editor, Ex mode, runtime, and `xxd` tools.
 - `git`, distributed version control with Kandelo-native HTTP and HTTPS transport.
+- `texlive`, the pdfTeX engine plus its pinned macro, font, and format runtime.
 
 Presence in `Formula/` means that the source recipe is tracked; it does not mean
 that a current bottle has been published. A bottle becomes available only after
