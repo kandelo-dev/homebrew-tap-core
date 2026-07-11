@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, statSync } from "node:fs";
+import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { rootfsSizeForStagedBytes, validateGuestPath } from "./rootfs-size.ts";
@@ -74,8 +74,14 @@ async function main(): Promise<void> {
   const guestFiles = JSON.parse(
     process.env.KANDELO_FORMULA_GUEST_FILES_JSON ?? "{}",
   ) as Record<string, string>;
+  const writableHostDirectories = JSON.parse(
+    process.env.KANDELO_FORMULA_WRITABLE_HOST_DIRS_JSON ?? "{}",
+  ) as Record<string, string>;
+  const configuredArgv0 = process.env.KANDELO_FORMULA_ARGV0;
+  const argv0 = configuredArgv0 ?? programPath;
   const guestPaths = [...Object.keys(guestFiles), ...Object.keys(execPrograms)];
   for (const guestPath of guestPaths) validateGuestPath(guestPath, []);
+  if (configuredArgv0 !== undefined) validateGuestPath(argv0, []);
   for (const guestPath of Object.keys(execPrograms)) {
     if (guestPath in guestFiles) {
       throw new Error(`guest path is both a file and executable: ${guestPath}`);
@@ -104,8 +110,41 @@ async function main(): Promise<void> {
     "/dev",
     "/proc",
   ];
+  const writableGuestRoots = Object.keys(writableHostDirectories);
+  for (let index = 0; index < writableGuestRoots.length; index++) {
+    const guestRoot = writableGuestRoots[index];
+    validateGuestPath(guestRoot, overlaidRoots);
+    for (const otherRoot of writableGuestRoots.slice(index + 1)) {
+      if (
+        guestRoot.startsWith(`${otherRoot}/`) ||
+        otherRoot.startsWith(`${guestRoot}/`)
+      ) {
+        throw new Error(
+          `writable host-backed guest directories must not overlap: ${guestRoot}, ${otherRoot}`,
+        );
+      }
+    }
+
+    const hostPath = writableHostDirectories[guestRoot];
+    if (!isAbsolute(hostPath) || resolve(hostPath) !== hostPath) {
+      throw new Error(
+        `writable host directory must be absolute and normalized: ${hostPath}`,
+      );
+    }
+    if (!statSync(hostPath).isDirectory()) {
+      throw new Error(`writable host path is not a directory: ${hostPath}`);
+    }
+  }
   for (const guestPath of guestPaths) {
     validateGuestPath(guestPath, overlaidRoots);
+    const hiddenByWritableMount = writableGuestRoots.find(
+      (root) => guestPath === root || guestPath.startsWith(`${root}/`),
+    );
+    if (hiddenByWritableMount) {
+      throw new Error(
+        `guest file path is hidden by writable host mount ${hiddenByWritableMount}: ${guestPath}`,
+      );
+    }
   }
 
   const bytes = readFileSync(programPath);
@@ -139,6 +178,9 @@ async function main(): Promise<void> {
   const host = new NodeKernelHost({
     maxWorkers: 8,
     execPrograms,
+    extraMounts: Object.entries(writableHostDirectories).map(
+      ([mountPoint, hostPath]) => ({ mountPoint, hostPath, readonly: false }),
+    ),
     enableTcpNetwork: process.env.KANDELO_FORMULA_ENABLE_NETWORK === "1",
     rootfsImage,
     onStdout: (_pid: number, data: Uint8Array) => process.stdout.write(data),
@@ -166,7 +208,7 @@ async function main(): Promise<void> {
       guestEnv.TIMEOUT ?? process.env.TIMEOUT ?? "30000",
       10,
     );
-    const exit = host.spawn(program, [programPath, ...args], {
+    const exit = host.spawn(program, [argv0, ...args], {
       cwd: guestEnv.KERNEL_CWD ?? "/tmp",
       env,
       stdin,

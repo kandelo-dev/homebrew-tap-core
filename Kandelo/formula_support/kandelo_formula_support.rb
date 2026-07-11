@@ -224,15 +224,24 @@ module KandeloFormulaSupport
   # guest inherits the passed `env:`, matching how a real `brew test` exercises
   # behavior. `network: true` opts into Node's real external-TCP backend, while
   # `preserve_argv0: true` keeps multicall command names such as gunzip,
+  # `argv0:` supplies an explicit staged guest executable path,
   # `exec_programs:` stages explicit guest exec targets, `guest_files:` stages
-  # ordinary files in the guest VFS, and
-  # `expected_status:` permits tests for specified nonzero results such as a
-  # grep no-match status.
+  # ordinary files in the guest VFS, `writable_host_directories:` exposes
+  # explicit host directories as writable guest mounts for output validation,
+  # and `expected_status:` permits tests for specified nonzero results such as
+  # a grep no-match status.
   def kandelo_run_wasm(
     bin_path, argv, env: {}, stdin: nil, merge_stderr: false, network: false,
-    preserve_argv0: false, exec_programs: {}, guest_files: {}, expected_status: 0
+    preserve_argv0: false, argv0: nil, exec_programs: {}, guest_files: {},
+    writable_host_directories: {}, expected_status: 0
   )
     root = kandelo_require_root!
+    if !argv0.nil? && (
+      argv0.empty? || !argv0.start_with?("/") || argv0.include?("\0") ||
+      Pathname(argv0).cleanpath.to_s != argv0
+    )
+      odie "guest argv0 must be a nonempty normalized absolute path: #{argv0.inspect}"
+    end
     if (node = ENV.fetch("HOMEBREW_KANDELO_NODE", nil)).to_s != ""
       ENV.prepend_path "PATH", File.dirname(node)
     end
@@ -247,14 +256,18 @@ module KandeloFormulaSupport
 
     command = +"cd "
     command << Shellwords.escape(root) << " && "
-    isolated_runner = network || preserve_argv0 || exec_programs.any? || guest_files.any?
+    isolated_runner = network || preserve_argv0 || !argv0.nil? || exec_programs.any? ||
+                      guest_files.any? || writable_host_directories.any?
     if isolated_runner
       guest_env = JSON.generate(env.transform_values(&:to_s))
       guest_exec_programs = JSON.generate(exec_programs.transform_values(&:to_s))
       staged_guest_files = JSON.generate(guest_files.transform_values(&:to_s))
+      writable_mounts = JSON.generate(writable_host_directories.transform_values(&:to_s))
       command << "KANDELO_FORMULA_GUEST_ENV_JSON=#{Shellwords.escape(guest_env)} "
       command << "KANDELO_FORMULA_EXEC_PROGRAMS_JSON=#{Shellwords.escape(guest_exec_programs)} "
       command << "KANDELO_FORMULA_GUEST_FILES_JSON=#{Shellwords.escape(staged_guest_files)} "
+      command << "KANDELO_FORMULA_WRITABLE_HOST_DIRS_JSON=#{Shellwords.escape(writable_mounts)} "
+      command << "KANDELO_FORMULA_ARGV0=#{Shellwords.escape(argv0.to_s)} " if argv0
       command << "KANDELO_FORMULA_ENABLE_NETWORK=#{network ? 1 : 0} "
     else
       env.each { |key, value| command << "#{key}=#{Shellwords.escape(value.to_s)} " }

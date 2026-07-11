@@ -32,6 +32,10 @@ class KandeloFormulaSupportTest < Minitest::Test
       nix_path || super
     end
 
+    def odie(message)
+      raise RuntimeError, message
+    end
+
     def shell_output(command, expected_status = 0)
       @command = command
       @expected_status = expected_status
@@ -237,6 +241,35 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes harness.command, "KANDELO_FORMULA_GUEST_FILES_JSON="
     assert_includes harness.command, "/etc/service.conf"
     assert_includes harness.command, "/formula/service.conf"
+  end
+
+  def test_execution_accepts_guest_argv0_and_writable_host_directory
+    harness = Harness.new
+
+    harness.kandelo_run_wasm(
+      "program.wasm",
+      ["input.tex"],
+      argv0:                       "/home/linuxbrew/.linuxbrew/opt/texlive/bin/pdflatex",
+      exec_programs:               {
+        "/home/linuxbrew/.linuxbrew/opt/texlive/bin/pdflatex" => "/formula/pdflatex",
+      },
+      writable_host_directories: { "/work" => "/formula/test-output" },
+    )
+
+    assert_includes harness.command, "run-network-wasm.ts"
+    assert_includes harness.command, "KANDELO_FORMULA_ARGV0="
+    assert_includes harness.command, "KANDELO_FORMULA_WRITABLE_HOST_DIRS_JSON="
+    assert_includes harness.command, "/home/linuxbrew/.linuxbrew/opt/texlive/bin/pdflatex"
+    assert_includes harness.command, "/work"
+    assert_includes harness.command, "/formula/test-output"
+  end
+
+  def test_execution_rejects_an_empty_guest_argv0
+    error = assert_raises(RuntimeError) do
+      Harness.new.kandelo_run_wasm("program.wasm", [], argv0: "")
+    end
+
+    assert_includes error.message, "guest argv0 must be a nonempty normalized absolute path"
   end
 
   def test_preserve_argv0_stages_the_original_command_name
