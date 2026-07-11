@@ -1,0 +1,44 @@
+name: Dry-run Kandelo bottles
+
+on:
+  workflow_dispatch:
+    inputs:
+      formulae:
+        description: Formulae to build and validate.
+        required: true
+        type: string
+      arches:
+        description: Kandelo architectures to build.
+        required: true
+        default: wasm32
+        type: string
+      kandelo-ref:
+        description: Kandelo branch, tag, or commit to validate against.
+        required: true
+        default: main
+        type: string
+      tap-ref:
+        description: Tap branch, tag, or commit containing the formulae.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+jobs:
+  dry-run:
+    permissions:
+      contents: read
+      packages: read
+      actions: read
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@main
+    with:
+      kandelo-repository: Automattic/kandelo
+      kandelo-ref: ${{ inputs.kandelo-ref }}
+      tap-repository: Automattic/kandelo-homebrew
+      tap-ref: ${{ inputs.tap-ref }}
+      formulae: ${{ inputs.formulae }}
+      arches: ${{ inputs.arches }}
+      dry-run: true

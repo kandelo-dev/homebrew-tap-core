@@ -118,6 +118,13 @@ across Kandelo ABI versions. The existing `hello` sidecar files are historical
 publication evidence; broader publication is gated on the native Homebrew OCI
 publisher and real guest-install validation in `Automattic/kandelo`.
 
+The read-only dry-run bottle workflow may build an open tap branch by selecting
+its `tap-ref` and the Kandelo platform `kandelo-ref` to validate against. It
+cannot publish bottle blobs or sidecar commits; publication always starts from
+reviewed tap `main` in the separate trusted publisher workflow. Dry runs may
+upload run-scoped diagnostic artifacts and use GitHub Actions storage, but no
+write-capable bottle workflow restores dependency caches produced by them.
+
 Formula Ruby and Homebrew bottle metadata remain authoritative for Homebrew.
 Files under `Kandelo/` are additive validation and provenance data and must not
 be required for a stock guest install.
