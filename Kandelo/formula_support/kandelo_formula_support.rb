@@ -1,6 +1,7 @@
 # typed: strict
 # frozen_string_literal: true
 
+require "fileutils"
 require "json"
 require "shellwords"
 
@@ -329,6 +330,11 @@ module KandeloFormulaSupport
       cols:             cols,
       rows:             rows,
     })
+
+    # Compiled host output shadows TypeScript source under tsx. PTY formula
+    # tests must exercise the checkout supplied by HOMEBREW_KANDELO_ROOT.
+    FileUtils.rm_rf(Pathname(root)/"host/dist")
+
     runner = Pathname(__dir__)/"run-pty-wasm.ts"
     command = "cd #{Shellwords.escape(root)} && "
     command << "KANDELO_FORMULA_PTY_CONFIG_JSON=#{Shellwords.escape(config)} "
@@ -445,6 +451,42 @@ module KandeloFormulaSupport
     command = [
       "node", "--experimental-wasm-exnref", "--import", "tsx/esm",
       runner, root, wasm_path, config, guest_files_manifest
+    ].map { |arg| Shellwords.escape(arg.to_s) }.join(" ")
+
+    shell_output("cd #{Shellwords.escape(root)} && #{command} < /dev/null")
+  end
+
+  # Run a framebuffer program through Kandelo's browser host and require
+  # observable /dev/fb0 rendering. The tap-owned runner builds a temporary VFS
+  # from the installed executable and explicitly staged guest files, boots the
+  # program with a PTY, then checks framebuffer bind/write telemetry and canvas
+  # pixels in Chromium.
+  def kandelo_run_framebuffer_wasm(
+    bin_path, argv: [], guest_files: {}, min_writes: 1,
+    min_nonblank_pixels: 1_000, timeout_ms: 30_000
+  )
+    root = kandelo_require_root!
+    if (node = ENV.fetch("HOMEBREW_KANDELO_NODE", nil)).to_s != ""
+      ENV.prepend_path "PATH", File.dirname(node)
+    end
+
+    wasm_path = Pathname(bin_path).expand_path
+    config = JSON.generate({
+      argv:              argv.map(&:to_s),
+      guestFiles:        guest_files.transform_values { |path| Pathname(path).expand_path.to_s },
+      minWrites:         min_writes,
+      minNonBlankPixels: min_nonblank_pixels,
+      timeoutMs:         timeout_ms,
+    })
+
+    # Compiled host output shadows TypeScript source under tsx. Browser formula
+    # tests must exercise the checkout supplied by HOMEBREW_KANDELO_ROOT.
+    FileUtils.rm_rf(Pathname(root)/"host/dist")
+
+    runner = Pathname(__dir__)/"run-framebuffer-wasm.ts"
+    command = [
+      "node", "--experimental-wasm-exnref", "--import", "tsx/esm",
+      runner, root, wasm_path, config
     ].map { |arg| Shellwords.escape(arg.to_s) }.join(" ")
 
     shell_output("cd #{Shellwords.escape(root)} && #{command} < /dev/null")
