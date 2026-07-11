@@ -147,14 +147,22 @@ class KandeloFormulaSupportTest < Minitest::Test
     refute_includes harness.command, "examples/run-example.ts"
   end
 
-  def test_default_execution_keeps_standard_runner
-    harness = Harness.new
+  def test_default_execution_keeps_standard_runner_and_removes_stale_host_dist
+    Dir.mktmpdir("kandelo-formula-support") do |dir|
+      root = Pathname(dir)/"kandelo root"
+      host_dist = root/"host/dist"
+      host_dist.mkpath
+      (host_dist/"stale.js").binwrite("stale")
 
-    harness.kandelo_run_wasm("program.wasm", [])
+      harness = Harness.new
+      harness.root_path = root.to_s
+      harness.kandelo_run_wasm("program.wasm", [])
 
-    assert_includes harness.command, "examples/run-example.ts"
-    refute_includes harness.command, "run-network-wasm.ts"
-    refute_includes harness.command, "KANDELO_FORMULA_ENABLE_NETWORK="
+      assert_includes harness.command, "examples/run-example.ts"
+      refute_includes harness.command, "run-network-wasm.ts"
+      refute_includes harness.command, "KANDELO_FORMULA_ENABLE_NETWORK="
+      refute_path_exists host_dist
+    end
   end
 
   def test_kms_execution_uses_stats_runner_and_removes_stale_host_dist

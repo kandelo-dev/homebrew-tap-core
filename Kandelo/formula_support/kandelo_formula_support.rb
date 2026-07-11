@@ -247,6 +247,10 @@ module KandeloFormulaSupport
       ENV.prepend_path "PATH", File.dirname(node)
     end
 
+    # Compiled host output shadows TypeScript source under tsx. Formula tests
+    # must exercise the checkout supplied by HOMEBREW_KANDELO_ROOT.
+    FileUtils.rm_rf(Pathname(root)/"host/dist")
+
     wasm_path = Pathname(bin_path)
     if wasm_path.extname != ".wasm"
       staged_name = preserve_argv0 ? wasm_path.basename : "#{wasm_path.basename}.wasm"
