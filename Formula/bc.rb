@@ -38,7 +38,7 @@ class Bc < Formula
   test do
     assert_match(/bc(?:\.wasm)? 1\.08\.2$/,
       kandelo_run_wasm(bin/"bc", ["--version"]))
-    assert_match(/dc(?:\.wasm)?.*1\.5\.2$/,
+    assert_match(/\Adc(?:\.wasm)? 1\.5\.2 \(GNU bc 1\.08\.2\)$/,
       kandelo_run_wasm(bin/"dc", ["--version"]))
 
     source = <<~BC
