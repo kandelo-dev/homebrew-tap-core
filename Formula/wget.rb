@@ -127,11 +127,16 @@ class Wget < Formula
         "Wget Cellar path"      => prefix.to_s,
         "Wget host etc path"    => etc.to_s,
         "Kandelo checkout path" => root.to_s,
+        "OpenSSL build prefix"  => openssl.to_s,
+        "zlib build prefix"     => zlib.to_s,
         "Nix store path"        => "/nix/store/",
         "temporary build path"  => "/private/tmp/",
+        "CI workspace path"     => "/home/runner/work/",
+        "OpenSSL Cellar path"   => "/Cellar/openssl/",
       }.each do |description, marker|
         odie "Wget embeds #{description}: #{marker}" if binary.include?(marker)
       end
+      odie "Wget embeds a builder home path" if binary.match?(%r{/Users/[^/]+/})
     end
 
     kandelo_install_bin(buildpath/"src", "wget", "wget")
