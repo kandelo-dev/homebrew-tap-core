@@ -88,6 +88,8 @@ Formula source currently present in this repository includes:
 - `fbdoom`, the pinned framebuffer Doom engine with its reviewed Kandelo
   input, audio, and save-path adaptations (the shareware IWAD remains an
   external, integrity-checked demo asset); and
+- `tcl`, the threaded Tcl 9 interpreter, standard library, extension loader,
+  and development files; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
 
 These seven exact-shell Formulae and Ruby intentionally use the transitional
