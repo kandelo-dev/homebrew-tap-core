@@ -58,7 +58,18 @@ Current migration controls and pilots include:
 - `gencat`, the POSIX message-catalog compiler producing catalogs consumed by
   Kandelo's musl `catopen` and `catgets` implementation.
 - `ctags`, Universal Ctags' maintained tag generator, `readtags` query client,
-  and optscript interpreter with complete C and C++ workflows.
+  and optscript interpreter with complete C and C++ workflows;
+- `spidermonkey`, Mozilla's static JavaScript shell plus Kandelo's Node.js API
+  compatibility layer under the `spidermonkey-node` and `node` command aliases.
+  These aliases are not the Node.js runtime.
+
+SpiderMonkey intentionally remains without fork continuation instrumentation:
+the rewrite expands Mozilla's C++ control flow beyond Chromium's Wasm call-stack
+limit. Its limited `worker_threads` eval-worker and shared-memory subset uses
+clone/pthreads and is validated in Node and Chromium; worker messaging is not
+implemented. Its raw `kernel_fork` import therefore remains a truthful unsupported
+fork boundary. Trusted publication must not claim a Homebrew-derived VFS runtime
+status that conflicts with the artifact-policy evidence.
 
 The SDK is not yet a Homebrew dependency. Trusted builds supply an
 `HOMEBREW_KANDELO_ROOT` checkout containing the SDK, sysroot, kernel, and Node
