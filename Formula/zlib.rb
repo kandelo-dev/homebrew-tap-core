@@ -8,7 +8,7 @@ class Zlib < Formula
   url "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
   sha256 "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
   license "Zlib"
-  revision 1
+  revision 2
 
   # No bottle block yet: bottles are machine-generated on publish (Track C) via
   # brew bottle / pr-pull. Until then `brew install` builds from source. A
@@ -24,6 +24,9 @@ class Zlib < Formula
       # signal. Without it, configure sees the macOS build host and replaces
       # the SDK archiver with Apple's host-only libtool.
       ENV["CHOST"] = "#{kandelo_arch}-unknown-none"
+      # Static archives linked into Wasm side modules must contain PIC objects.
+      # Keep libz.a usable by both executables and dlopen-loaded extensions.
+      ENV["CFLAGS"] = "-O2 -fPIC"
 
       system "./configure", "--static", *kandelo_std_configure_args
       system "make", "libz.a"
@@ -42,6 +45,10 @@ class Zlib < Formula
 
     smoke_c = testpath/"zlib-smoke.c"
     smoke_wasm = testpath/"zlib-smoke.wasm"
+    plugin_c = testpath/"zlib-plugin.c"
+    plugin_so = testpath/"zlib-plugin.so"
+    loader_c = testpath/"zlib-loader.c"
+    loader_wasm = testpath/"zlib-loader.wasm"
     smoke_c.write <<~C
       #include <stdio.h>
       #include <string.h>
@@ -75,5 +82,49 @@ class Zlib < Formula
     system kandelo_cc, smoke_c, "-I#{include}", "-L#{lib}", "-lz", "-o", smoke_wasm
     output = kandelo_run_wasm(smoke_wasm, [])
     assert_match "zlib #{version} ok", output
+
+    plugin_c.write <<~C
+      #include <zlib.h>
+
+      const char *kandelo_zlib_version(void) {
+        return zlibVersion();
+      }
+    C
+    loader_c.write <<~C
+      #include <dlfcn.h>
+      #include <stdio.h>
+      #include <stdlib.h>
+
+      typedef const char *(*version_fn)(void);
+
+      int main(int argc, char **argv) {
+        void *handle;
+        void *allocation;
+        version_fn version;
+
+        if (argc != 2) return 2;
+        allocation = calloc(1, 1);
+        if (allocation == NULL) return 5;
+        free(allocation);
+        handle = dlopen(argv[1], RTLD_NOW);
+        if (handle == NULL) {
+          fprintf(stderr, "dlopen: %s\\n", dlerror());
+          return 3;
+        }
+        version = (version_fn)dlsym(handle, "kandelo_zlib_version");
+        if (version == NULL) {
+          fprintf(stderr, "dlsym: %s\\n", dlerror());
+          return 4;
+        }
+        printf("zlib-side-module %s ok\\n", version());
+        return 0;
+      }
+    C
+
+    system kandelo_cc, "-shared", "-fPIC", plugin_c,
+      "-I#{include}", "-L#{lib}", "-lz", "-o", plugin_so
+    system kandelo_cc, loader_c, "-ldl", "-Wl,--export-all", "-o", loader_wasm
+    assert_equal "zlib-side-module #{version} ok\n",
+      kandelo_run_wasm(loader_wasm, [plugin_so])
   end
 end
