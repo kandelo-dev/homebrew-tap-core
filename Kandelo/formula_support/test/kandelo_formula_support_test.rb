@@ -38,6 +38,10 @@ class KandeloFormulaSupportTest < Minitest::Test
       "runtime-ok\n"
     end
 
+    def odie(message)
+      raise message
+    end
+
     # The Formula double must intercept Kernel#system under its real name.
     # rubocop:disable Naming/PredicateMethod
     def system(*args)
@@ -260,6 +264,75 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     assert_equal "runtime-ok\n", output
     assert_equal 2, harness.expected_status
+  end
+
+  def test_browser_execution_uses_focused_chromium_runner_and_removes_stale_host_dist
+    Dir.mktmpdir("kandelo-formula-support") do |dir|
+      root = Pathname(dir)/"kandelo root"
+      host_dist = root/"host/dist"
+      host_dist.mkpath
+      (host_dist/"stale.js").binwrite("stale")
+      command = Pathname(dir)/"node"
+      command.binwrite("\0asm")
+
+      harness = Harness.new
+      harness.root_path = root.to_s
+      harness.test_path = Pathname(dir)/"formula test"
+      harness.test_path.mkpath
+      guest_file = Pathname(dir)/"format.dat"
+      guest_file.binwrite("immutable")
+      output = harness.kandelo_run_browser_wasm(
+        command, ["-e", "console.log(42)"],
+        argv0: "node", env: { "HOME" => "/root" },
+        guest_files: { "/opt/formula/format.dat" => guest_file }, timeout_ms: 5_000
+      )
+
+      assert_equal "runtime-ok\n", output
+      assert_includes harness.command, "run-browser-wasm.ts"
+      assert_includes harness.command, root.to_s.shellescape
+      assert_includes harness.command, command.to_s
+      assert_includes harness.command, "console.log"
+      assert_includes harness.command, "allowStderr"
+      assert_includes harness.command, "node"
+      manifest = harness.test_path/"node.browser-guest-files.json"
+      assert_equal({ "/opt/formula/format.dat" => guest_file.to_s }, JSON.parse(manifest.read))
+      assert_includes harness.command, manifest.to_s.shellescape
+      refute_includes harness.command, guest_file.to_s
+      refute_path_exists host_dist
+    end
+  end
+
+  def test_browser_execution_accepts_posix_multicall_bracket_name
+    Dir.mktmpdir("kandelo-formula-support") do |dir|
+      harness = Harness.new
+      harness.root_path = Pathname(dir)/"kandelo root"
+      harness.test_path = Pathname(dir)/"formula test"
+      harness.test_path.mkpath
+      command = Pathname(dir)/"["
+      command.binwrite("\0asm")
+      relative_guest_file = Pathname(dir)/"relative.dat"
+      relative_guest_file.binwrite("relative")
+
+      Dir.chdir(dir) do
+        harness.kandelo_run_browser_wasm(
+          Pathname("["), ["value", "="], argv0: "[",
+          guest_files: { "/formula/relative.dat" => Pathname("relative.dat") }
+        )
+      end
+
+      assert_includes harness.command, 'argv0\":\"\[\"'
+      assert_includes harness.command, command.to_s.shellescape
+      manifest = harness.test_path/"[.browser-guest-files.json"
+      assert_equal({ "/formula/relative.dat" => relative_guest_file.to_s }, JSON.parse(manifest.read))
+    end
+  end
+
+  def test_browser_execution_rejects_dot_dot_command_name
+    error = assert_raises(RuntimeError) do
+      Harness.new.kandelo_run_browser_wasm("program.wasm", [], argv0: "..")
+    end
+
+    assert_equal "invalid browser guest command name: ..", error.message
   end
 
   def test_pty_execution_uses_tap_owned_runner
