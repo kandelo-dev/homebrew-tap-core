@@ -1,0 +1,13 @@
+diff --git a/fbdoom/i_system.c b/fbdoom/i_system.c
+index 3c3f3df..9fc110a 100644
+--- a/fbdoom/i_system.c
++++ b/fbdoom/i_system.c
+@@ -461,7 +461,5 @@ void I_Error (char *error, ...)
+     exit(-1);
+ #else
+-    while (true)
+-    {
+-    }
++    exit(EXIT_FAILURE);
+ #endif
+ }
