@@ -118,14 +118,32 @@ across Kandelo ABI versions. The existing `hello` sidecar files are historical
 publication evidence; broader publication is gated on the native Homebrew OCI
 publisher and real guest-install validation in `Automattic/kandelo`.
 
-Dispatch the read-only dry-run bottle workflow from tap `main`, then select an
-open formula branch with its separate `tap-ref` input and the Kandelo platform
-`kandelo-ref` to validate against. The workflow rejects dispatches whose caller
-definition comes from another branch. It cannot publish bottle blobs or sidecar
-commits; publication always starts from reviewed tap `main` in the separate
-trusted publisher workflow. Dry runs may upload run-scoped diagnostic artifacts
-and use GitHub Actions storage, but no write-capable bottle workflow restores
-dependency caches produced by them.
+Bottle workflows use `repository_dispatch`, which always loads the workflow
+definition from tap `main`. A read-only dry run may select unmerged formula and
+Kandelo code only through event payload refs:
+
+```bash
+gh api --method POST repos/Automattic/kandelo-homebrew/dispatches \
+  -f event_type=dry-run-kandelo-bottles \
+  -f 'client_payload[formulae]=bzip2,xz' \
+  -f 'client_payload[arches]=wasm32' \
+  -f 'client_payload[tap_ref]=migrate/compression-library-surfaces' \
+  -f 'client_payload[kandelo_ref]=main'
+```
+
+Write publication accepts formulae, arches, and an optional release tag, but
+hardcodes both executable repositories to reviewed `main`:
+
+```bash
+gh api --method POST repos/Automattic/kandelo-homebrew/dispatches \
+  -f event_type=publish-kandelo-bottles \
+  -f 'client_payload[formulae]=bzip2,xz' \
+  -f 'client_payload[arches]=wasm32'
+```
+
+Dry runs cannot publish bottle blobs or sidecar commits. They may upload
+run-scoped diagnostic artifacts and use GitHub Actions storage, but no
+write-capable bottle workflow restores dependency caches produced by them.
 
 Formula Ruby and Homebrew bottle metadata remain authoritative for Homebrew.
 Files under `Kandelo/` are additive validation and provenance data and must not
