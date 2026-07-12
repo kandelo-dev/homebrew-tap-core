@@ -48,6 +48,7 @@ Current migration controls and pilots include:
   replacing the compact base-image byte-copy fallback;
 - `ncompress`, the upstream LZW `compress`, `uncompress`, and `zcat` tools
   replacing the compact base-image fallback.
+- `pax`, the MirBSD pax, cpio, and tar interfaces for portable archive interchange.
 
 The SDK is not yet a Homebrew dependency. Trusted builds supply an
 `HOMEBREW_KANDELO_ROOT` checkout containing the SDK, sysroot, kernel, and Node
