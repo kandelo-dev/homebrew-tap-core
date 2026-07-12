@@ -5,8 +5,8 @@ on:
     types: [publish-kandelo-bottles]
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
+  packages: read
   actions: read
 
 concurrency:
