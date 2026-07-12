@@ -1,4 +1,4 @@
-require_relative "../Kandelo/formula_support/kandelo_formula_support"
+require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Dinit < Formula
   include KandeloFormulaSupport
@@ -9,6 +9,7 @@ class Dinit < Formula
   sha256 "3c0f624eb958f8e884631be4ef687da1e475ebaa6241e7ee330b864e6cd9e30b"
   license "Apache-2.0"
 
+  depends_on "binaryen" => :build
   depends_on "m4" => :build
   depends_on "wabt" => :build
   depends_on "automattic/kandelo-homebrew/libcxx"
@@ -91,15 +92,15 @@ class Dinit < Formula
       fork_programs.each { |program| kandelo_fork_instrument(buildpath/"src"/program) }
 
       programs = %w[dinit dinitctl dinitcheck dinit-monitor]
-      artifact_guards = "#{root}/scripts/wasm-artifact-guards.sh"
+      programs.each do |program|
+        fork_policy = fork_programs.include?(program) ? :required : :auto
+        kandelo_validate_wasm_artifact(buildpath/"src"/program, fork: fork_policy)
+      end
+
       program_paths = programs.map { |program| (buildpath/"src"/program).to_s.shellescape }.join(" ")
-      fork_paths = fork_programs.map { |program| (buildpath/"src"/program).to_s.shellescape }.join(" ")
       system "bash", "-c", <<~SH
         set -euo pipefail
-        . #{artifact_guards.shellescape}
         for program in #{program_paths}; do
-          wasm_require_no_legacy_asyncify "$program"
-          wasm_require_fork_instrumentation_if_needed "$program"
           unexpected_env_imports=$(wasm-objdump -x "$program" |
             awk '/<- env[.]/ { sub(/^.*<- env[.]/, ""); print $1 }' |
             grep -Ev '^(__channel_base|memory|setjmp|longjmp)$' || true)
@@ -109,43 +110,7 @@ class Dinit < Formula
             exit 1
           fi
         done
-        for program in #{fork_paths}; do
-          if ! wasm_has_complete_fork_instrumentation "$program"; then
-            echo "ERROR: $program has incomplete fork instrumentation" >&2
-            exit 1
-          fi
-        done
       SH
-
-      expected_abi = (Pathname(root)/"crates/shared/src/lib.rs").read[
-        /^pub const ABI_VERSION: u32 = ([0-9]+);$/,
-        1,
-      ]
-      odie "could not read Kandelo ABI version" if expected_abi.nil?
-
-      abi_probe = <<~JS
-        import { readFileSync } from "node:fs";
-        import { pathToFileURL } from "node:url";
-        const { extractAbiVersion } = await import(pathToFileURL(process.argv[1]).href);
-        const bytes = readFileSync(process.argv[2]);
-        const program = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-        const abi = extractAbiVersion(program);
-        if (abi === null) process.exit(2);
-        process.stdout.write(String(abi));
-      JS
-      constants = Pathname(root)/"host/src/constants.ts"
-      programs.each do |program|
-        wasm = buildpath/"src"/program
-        artifact_abi = cd(root) do
-          Utils.safe_popen_read(
-            "node", "--import", "tsx/esm", "--input-type=module", "--eval", abi_probe,
-            constants, wasm
-          ).strip
-        end
-        if artifact_abi != expected_abi
-          odie "#{program} ABI #{artifact_abi} does not match Kandelo ABI #{expected_abi}"
-        end
-      end
     end
 
     %w[dinit dinitctl dinitcheck dinit-monitor].each do |program|
