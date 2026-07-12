@@ -8,6 +8,7 @@ class Pcre2 < Formula
   url "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.44/pcre2-10.44.tar.gz"
   sha256 "86b9cb0aa3bcb7994faa88018292bc704cdbb708e785f7c74352ff6ea7d3175b"
   license "BSD-3-Clause"
+  revision 1
 
   depends_on "binaryen" => :build
   depends_on "pkgconf" => [:build, :test]
@@ -20,7 +21,19 @@ class Pcre2 < Formula
     kandelo_require_arch!("wasm32")
 
     kandelo_wasm_build do |root|
-      ENV["CFLAGS"] = "-O2 -gline-tables-only -fdebug-compilation-dir=."
+      stable_source = "/usr/src/pcre2-#{version}"
+      prefix_maps = {
+        buildpath.to_s => stable_source,
+      }.flat_map do |from, to|
+        [
+          "-ffile-prefix-map=#{from}=#{to}",
+          "-fdebug-prefix-map=#{from}=#{to}",
+          "-fmacro-prefix-map=#{from}=#{to}",
+        ]
+      end
+      ENV["CFLAGS"] = [
+        "-O2", "-gline-tables-only", "-fdebug-compilation-dir=#{stable_source}", *prefix_maps
+      ].join(" ")
 
       system kandelo_configure(root), *kandelo_std_configure_args,
         "--disable-shared",
@@ -43,30 +56,9 @@ class Pcre2 < Formula
       instrumented = buildpath/"pcre2grep.instrumented"
       system "#{root}/scripts/run-wasm-fork-instrument.sh", pcre2grep, "-o", instrumented
 
-      artifact_guards = "#{root}/scripts/wasm-artifact-guards.sh"
       pcre2test = buildpath/"pcre2test"
-      system "bash", "-c", <<~SH
-        set -euo pipefail
-        . #{artifact_guards.shellescape}
-        expected_abi=$(wasm_current_abi_version #{root.to_s.shellescape})
-        if [ -z "$expected_abi" ]; then
-          echo "ERROR: could not determine Kandelo ABI" >&2
-          exit 1
-        fi
-        for artifact in #{instrumented.to_s.shellescape} #{pcre2test.to_s.shellescape}; do
-          artifact_abi=$(wasm_extract_abi_version "$artifact")
-          if [ "$artifact_abi" != "$expected_abi" ]; then
-            echo "ERROR: PCRE2 ABI $artifact_abi does not match Kandelo ABI $expected_abi" >&2
-            exit 1
-          fi
-          wasm_require_no_legacy_asyncify "$artifact"
-        done
-        if ! wasm_has_complete_fork_instrumentation #{instrumented.to_s.shellescape}; then
-          echo "ERROR: pcre2grep has incomplete fork instrumentation" >&2
-          exit 1
-        fi
-        wasm_require_fork_instrumentation_if_needed #{pcre2test.to_s.shellescape}
-      SH
+      kandelo_validate_wasm_artifact(instrumented, fork: :required)
+      kandelo_validate_wasm_artifact(pcre2test, fork: :auto)
       mv instrumented, pcre2grep
 
       system "make", "install"
