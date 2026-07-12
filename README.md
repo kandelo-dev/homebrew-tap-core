@@ -26,6 +26,7 @@ Current migration controls and pilots include:
 - `libcxx`, the LLVM C++ standard library, ABI runtime, and bundled unwinder;
 - `libcurl`, the TLS, compression, threaded-resolver, and Unix-socket transfer library;
 - `curl`, the matching command-line transfer client linked against the tap library;
+- `ncurses`, the wide-character terminal library and CLI dependency root;
 - `sed`, the GNU stream-editing CLI used by shell and build workflows;
 - `gzip`, the GNU compression CLI with native gunzip and zcat aliases;
 - `grep`, GNU regular-expression and file search for the leaf CLI wave.
