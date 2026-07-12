@@ -26,6 +26,7 @@ Current migration controls and pilots include:
 - `openssl`, the first dependency-root library migration;
 - `libpng` and `libxml2`, zlib-backed dependency-root libraries;
 - `libcxx`, the LLVM C++ standard library, ABI runtime, and bundled unwinder;
+- `musl-fts`, the BSD hierarchy traversal library for portable archive and filesystem tools;
 - `libcurl`, the TLS, compression, threaded-resolver, and Unix-socket transfer library;
 - `curl`, the matching command-line transfer client linked against the tap library;
 - `ncurses`, the wide-character terminal library and CLI dependency root;
