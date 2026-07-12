@@ -1,6 +1,6 @@
 --- a/Makefile
 +++ b/Makefile
-@@ -241,7 +241,7 @@ ext/DynaLoader/Makefile: config.h | dist/lib/pm_to_blib
+@@ -241,6 +241,6 @@ ext/DynaLoader/Makefile: config.h | dist/lib/pm_to_blib
  
  $(static_modules): %/pm_to_blib: | %/Makefile $(nonxs_tgt)
 -	$(MAKE) -C $(dir $@) PERL_CORE=1 LIBPERL=$(LIBPERL) LINKTYPE=static static
