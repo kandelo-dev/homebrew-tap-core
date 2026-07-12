@@ -93,7 +93,7 @@ class Dinit < Formula
 
       programs = %w[dinit dinitctl dinitcheck dinit-monitor]
       programs.each do |program|
-        fork_policy = fork_programs.include?(program) ? :required : :auto
+        fork_policy = fork_programs.include?(program) ? :required : :forbidden
         kandelo_validate_wasm_artifact(buildpath/"src"/program, fork: fork_policy)
       end
 
