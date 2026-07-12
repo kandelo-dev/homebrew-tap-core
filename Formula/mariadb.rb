@@ -1,4 +1,4 @@
-require_relative "../Kandelo/formula_support/kandelo_formula_support"
+require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Mariadb < Formula
   include KandeloFormulaSupport
@@ -9,6 +9,7 @@ class Mariadb < Formula
   sha256 "0b5070208da0116640f20bd085f1136527f998cc23268715bcbf352e7b7f3cc1"
   license "GPL-2.0-only"
 
+  depends_on "binaryen" => :build
   depends_on "bison" => :build
   depends_on "cmake" => :build
   depends_on "pkgconf" => :build
@@ -510,30 +511,18 @@ class Mariadb < Formula
         mv "$artifact.instrumented" "$artifact"
       fi
       wasm-strip -k name -k target_features -k wasm-posix-abi "$artifact"
-      wasm_require_no_legacy_asyncify "$artifact"
-      wasm_require_fork_instrumentation_if_needed "$artifact"
     SH
 
-    abi_source = File.read("#{root}/crates/shared/src/lib.rs")
-    expected_abi = abi_source[/^pub const ABI_VERSION: u32 = (\d+);$/, 1]
-    odie "could not determine Kandelo ABI" if expected_abi.nil?
+    kandelo_validate_wasm_artifact(artifact, fork: :auto)
 
     validator = buildpath/"validate-#{artifact.basename}.mjs"
     validator.write <<~JS
       import { readFileSync } from "node:fs";
-      import { extractAbiVersion } from "#{root}/host/src/constants.ts";
 
-      const [expectedAbiText, artifact] = process.argv.slice(2);
-      const expectedAbi = Number(expectedAbiText);
+      const [artifact] = process.argv.slice(2);
       const bytes = readFileSync(artifact);
-      const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
       const module = await WebAssembly.compile(bytes);
       const imports = WebAssembly.Module.imports(module);
-      const exports = new Set(WebAssembly.Module.exports(module).map(({ name }) => name));
-      const actualAbi = extractAbiVersion(arrayBuffer);
-      if (actualAbi !== expectedAbi) {
-        throw new Error(`MariaDB ABI ${actualAbi} does not match Kandelo ABI ${expectedAbi}`);
-      }
 
       const allowedEnvImports = new Set(["memory", "__channel_base", "__cxa_thread_atexit"]);
       const unexpectedImports = imports.filter(({ module, name }) =>
@@ -543,28 +532,10 @@ class Mariadb < Formula
         const names = unexpectedImports.map(({ module, name }) => `${module}.${name}`);
         throw new Error(`MariaDB has unexpected host imports: ${names.join(", ")}`);
       }
-
-      const importsFork = imports.some(({ module, name }) =>
-        module === "kernel" && name === "kernel_fork");
-      const forkExports = [
-        "wpk_fork_unwind_begin",
-        "wpk_fork_unwind_end",
-        "wpk_fork_rewind_begin",
-        "wpk_fork_rewind_end",
-        "wpk_fork_state",
-      ];
-      const missing = forkExports.filter((name) => !exports.has(name));
-      if (importsFork && missing.length !== 0) {
-        throw new Error(`MariaDB has incomplete fork instrumentation: ${missing.join(", ")}`);
-      }
-      const present = forkExports.filter((name) => exports.has(name));
-      if (!importsFork && present.length !== 0) {
-        throw new Error(`MariaDB is unexpectedly fork-instrumented: ${present.join(", ")}`);
-      }
     JS
     validator_command = [
       "node", "--experimental-wasm-exnref", "--import", "tsx/esm",
-      validator, expected_abi, artifact
+      validator, artifact
     ].shelljoin
     system "bash", "-c", "cd #{root.to_s.shellescape} && #{validator_command}"
     chmod 0755, artifact
