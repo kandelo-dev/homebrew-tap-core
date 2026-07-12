@@ -9,6 +9,7 @@ class Bash < Formula
   mirror "https://ftp.gnu.org/gnu/bash/bash-5.2.37.tar.gz"
   sha256 "9599b22ecd1d5787ad7d3b7bf0c59f312b3396d1e281175dd1f8a4014da621ff"
   license "GPL-3.0-or-later"
+  revision 1
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
@@ -37,34 +38,50 @@ class Bash < Formula
   def install
     kandelo_require_arch!("wasm32")
     ncurses = formula_opt_prefix("automattic/kandelo-homebrew/ncurses")
+    stable_source = "/usr/src/bash-#{version}"
+    stable_ncurses = "/usr/src/kandelo-deps/ncurses"
 
     normalize_wasm_cleanup_callbacks
 
     kandelo_wasm_build do |root|
+      prefix_maps = {
+        buildpath.to_s => stable_source,
+        ncurses.to_s   => stable_ncurses,
+      }.flat_map do |from, to|
+        [
+          "-ffile-prefix-map=#{from}=#{to}",
+          "-fdebug-prefix-map=#{from}=#{to}",
+          "-fmacro-prefix-map=#{from}=#{to}",
+        ]
+      end
       ENV["CPPFLAGS"] = "-I#{ncurses}/include"
       ENV["LDFLAGS"] = "-L#{ncurses}/lib"
       ENV["CFLAGS"] = [
         "-O2",
         "-gline-tables-only",
-        "-fdebug-compilation-dir=.",
+        "-fdebug-compilation-dir=#{stable_source}",
+        *prefix_maps,
         "-Wno-implicit-function-declaration",
         "-Wno-int-conversion",
         "-Wno-incompatible-pointer-types",
       ].join(" ")
 
-      # These Bash-specific runtime/path probes cannot be inferred by a cross
-      # compile. Shared function and type facts remain owned by the SDK or by
-      # configure's target link/compile probes.
+      # These Bash-specific runtime/path probes and absent-symbol facts cannot
+      # be inferred by a cross compile. Shared function and type facts remain
+      # owned by the SDK or by configure's target link/compile probes.
       {
-        "bash_cv_dev_fd"          => "standard",
-        "bash_cv_dev_stdin"       => "present",
-        "bash_cv_getcwd_malloc"   => "yes",
-        "bash_cv_mail_dir"        => "/var/mail",
-        "bash_cv_printf_a_format" => "yes",
-        "bash_cv_sys_errlist"     => "no",
-        "bash_cv_sys_named_pipes" => "present",
-        "bash_cv_termcap_lib"     => "libtinfo",
-        "bash_cv_unusable_rtsigs" => "no",
+        "ac_cv_func___setostype"   => "no",
+        "ac_cv_func_mbschr"        => "no",
+        "ac_cv_func_setdtablesize" => "no",
+        "bash_cv_dev_fd"           => "standard",
+        "bash_cv_dev_stdin"        => "present",
+        "bash_cv_getcwd_malloc"    => "yes",
+        "bash_cv_mail_dir"         => "/var/mail",
+        "bash_cv_printf_a_format"  => "yes",
+        "bash_cv_sys_errlist"      => "no",
+        "bash_cv_sys_named_pipes"  => "present",
+        "bash_cv_termcap_lib"      => "libtinfo",
+        "bash_cv_unusable_rtsigs"  => "no",
       }.each { |key, value| ENV[key] = value }
 
       # Compile runtime paths against the stable guest opt link; make install
@@ -106,32 +123,28 @@ class Bash < Formula
       instrumented = buildpath/"bash.instrumented"
       system "wasm-opt", "-O2", buildpath/"bash", "-o", optimized
       system "#{root}/scripts/run-wasm-fork-instrument.sh", optimized, "-o", instrumented
-
-      artifact_guards = "#{root}/scripts/wasm-artifact-guards.sh"
-      system "bash", "-c", <<~SH
-        set -euo pipefail
-        . #{artifact_guards.shellescape}
-        expected_abi=$(wasm_current_abi_version #{root.to_s.shellescape})
-        artifact_abi=$(wasm_extract_abi_version #{instrumented.to_s.shellescape})
-        if [ -z "$expected_abi" ] || [ "$artifact_abi" != "$expected_abi" ]; then
-          echo "ERROR: Bash ABI $artifact_abi does not match Kandelo ABI $expected_abi" >&2
-          exit 1
-        fi
-        wasm_require_no_legacy_asyncify #{instrumented.to_s.shellescape}
-        wasm_has_complete_fork_instrumentation #{instrumented.to_s.shellescape}
-      SH
-
-      artifact = instrumented.binread
-      [buildpath.to_s, prefix.to_s].each do |staging_path|
-        odie "Bash artifact embeds staging path #{staging_path}" if artifact.include?(staging_path)
-      end
-      odie "Bash artifact embeds a host workspace path" if artifact.match?(%r{/(?:Users/|home/runner/work/)})
+      kandelo_validate_wasm_artifact(instrumented, fork: :required)
 
       mv instrumented, buildpath/"bash"
       system "make", "install", "prefix=#{prefix}", "exec_prefix=#{prefix}"
     end
 
-    inreplace bin/"bashbug", "#!/bin/sh -", "#!#{GUEST_OPT_PREFIX}/bin/bash"
+    bashbug = bin/"bashbug"
+    inreplace bashbug, "#!/bin/sh -", "#!#{GUEST_OPT_PREFIX}/bin/bash"
+
+    # Upstream records the full build CFLAGS in bashbug. Keep that diagnostic
+    # information while replacing host staging paths with the same stable
+    # identities used in the compiled artifact.
+    inreplace bashbug, buildpath.to_s, stable_source
+    inreplace bashbug, ncurses.to_s, stable_ncurses
+    bashbug_contents = bashbug.binread
+    [buildpath.to_s, ncurses.to_s, prefix.to_s].each do |path|
+      odie "bashbug embeds staging path #{path}" if bashbug_contents.include?(path)
+    end
+    if bashbug_contents.match?(%r{/(?:private/tmp/|Users/|home/runner/(?:_work|work)/|nix/store/)})
+      odie "bashbug embeds a host workspace path"
+    end
+
     chmod 0755, bin/"bash"
   end
 
@@ -153,6 +166,19 @@ class Bash < Formula
     bashbug = (bin/"bashbug").read
     assert_equal "#!#{GUEST_OPT_PREFIX}/bin/bash\n", bashbug.lines.first
     assert_includes bashbug, 'VERSTR="GNU bashbug, version ${RELEASE}.${PATCHLEVEL}-${RELSTATUS}"'
+    assert_includes bashbug, "-fdebug-compilation-dir=/usr/src/bash-#{version}"
+    assert_includes bashbug, "-ffile-prefix-map=/usr/src/bash-#{version}=/usr/src/bash-#{version}"
+    assert_includes bashbug, "-ffile-prefix-map=/usr/src/kandelo-deps/ncurses=/usr/src/kandelo-deps/ncurses"
+    [
+      prefix.to_s,
+      "/private/tmp/",
+      "/Users/",
+      "/home/runner/work/",
+      "/home/runner/_work/",
+      "/nix/store/",
+    ].each do |path|
+      refute_includes bashbug, path
+    end
     assert_empty kandelo_run_wasm(bin/"bash", ["-n", bin/"bashbug"], env: env)
 
     source_fixture = testpath/"source-args.sh"
