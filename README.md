@@ -44,6 +44,7 @@ Current migration controls and pilots include:
 - `gawk`, GNU's pattern scanning and text-processing language;
 - `file`, compression-aware file type identification backed by the complete
   `libmagic` database;
+- `what`, FreeBSD's SCCS identification-string extractor;
 - `zip` and `unzip`, the security-patched Info-ZIP creation, extraction, and inspection tools.
 - `libiconv`, GNU's complete character-set conversion library and CLI,
   replacing the compact base-image byte-copy fallback;
