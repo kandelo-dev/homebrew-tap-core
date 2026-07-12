@@ -42,6 +42,9 @@ Current migration controls and pilots include:
 - `asa`, FreeBSD's POSIX carriage-control translator for FORTRAN output;
 - `m4`, the GNU macro processor with process-executing builtins backed by the tap's Dash shell;
 - `gawk`, GNU's pattern scanning and text-processing language;
+- `binutils`, GNU's native WebAssembly archive, symbol, and inspection suite,
+  with exact trailing/representable `.wasm.*` custom-section and strip transforms,
+  plus explicit rejection of relocatable, dynamic, cross-format, or lossy rewrites;
 - `file`, compression-aware file type identification backed by the complete
   `libmagic` database;
 - `what`, FreeBSD's SCCS identification-string extractor;
