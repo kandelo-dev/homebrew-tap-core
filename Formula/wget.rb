@@ -117,10 +117,15 @@ class Wget < Formula
       assert_includes version_output.split, feature
     end
     assert_match(/#{Regexp.escape(GUEST_WGETRC)} \(system\)/o, version_output)
-    refute_includes version_output, prefix.to_s
-    refute_includes version_output, etc.to_s
-    refute_includes version_output, formula_opt_prefix("automattic/kandelo-homebrew/openssl").to_s
-    refute_includes version_output, formula_opt_prefix("automattic/kandelo-homebrew/zlib").to_s
+    [
+      [prefix.to_s, GUEST_OPT_PREFIX],
+      [etc.to_s, File.dirname(GUEST_WGETRC)],
+      [formula_opt_prefix("automattic/kandelo-homebrew/openssl").to_s, GUEST_OPENSSL_PREFIX],
+      [formula_opt_prefix("automattic/kandelo-homebrew/zlib").to_s, GUEST_ZLIB_PREFIX],
+    ].each do |source, destination|
+      assert_includes version_output, destination
+      refute_includes version_output, source if source != destination
+    end
 
     compressed_page = kandelo_run_wasm(
       bin/"wget",
