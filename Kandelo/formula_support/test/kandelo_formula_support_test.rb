@@ -10,12 +10,14 @@ require_relative "../kandelo_formula_support"
 # Regression coverage for Formula runtime execution evidence.
 class KandeloFormulaSupportTest < Minitest::Test
   DependencyFormula = Struct.new(:full_name, :opt_bin, :opt_sbin, :opt_libexec, keyword_init: true)
+  InstalledFormula = Struct.new(:rack, :pkg_version, keyword_init: true)
 
   # Minimal Formula double for command-construction tests.
   class Harness
     include KandeloFormulaSupport
 
-    attr_accessor :build_path, :nix_path, :prefix_path, :root_path, :runtime_formulae, :shell_result, :test_path
+    attr_accessor :build_path, :dependency_formulae, :nix_path, :prefix_path, :root_path, :runtime_formulae,
+                  :shell_result, :test_path
     attr_reader :command, :expected_status, :recorded_launcher, :system_args, :system_calls
 
     def kandelo_require_root!
@@ -36,6 +38,12 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     def kandelo_nix_executable
       nix_path || super
+    end
+
+    def kandelo_formula(formula_name)
+      return dependency_formulae.fetch(formula_name) if dependency_formulae&.key?(formula_name)
+
+      super
     end
 
     def runtime_formula_dependencies(read_from_tab:, undeclared:)
@@ -90,6 +98,37 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_nil Harness.new.kandelo_record_node_execution!("program.wasm", [])
   ensure
     ENV["HOMEBREW_KANDELO_NODE_RECEIPT_PATH"] = previous if previous
+  end
+
+  def test_target_dependency_paths_use_the_exact_installed_keg
+    Dir.mktmpdir("kandelo-dependency-prefix") do |dir|
+      harness = Harness.new
+      target = "automattic/kandelo-homebrew/openssl"
+      rack = Pathname(dir)/"Cellar/openssl"
+      keg = rack/"3.3.2_2"
+      keg.mkpath
+      harness.dependency_formulae = {
+        target => InstalledFormula.new(rack:, pkg_version: "3.3.2_2"),
+      }
+
+      assert_equal keg, harness.formula_opt_prefix(target)
+      assert_equal keg/"bin", harness.formula_opt_bin(target)
+      assert_equal keg/"lib", harness.formula_opt_lib(target)
+      assert_equal keg/"libexec", harness.formula_opt_libexec(target)
+      assert_equal keg/"include", harness.formula_opt_include(target)
+      refute_equal Pathname(dir)/"opt/openssl", harness.formula_opt_prefix(target)
+    end
+  end
+
+  def test_target_dependency_paths_reject_a_missing_current_keg
+    harness = Harness.new
+    target = "automattic/kandelo-homebrew/openssl"
+    harness.dependency_formulae = {
+      target => InstalledFormula.new(rack: Pathname("/missing/Cellar/openssl"), pkg_version: "3.3.2_2"),
+    }
+
+    error = assert_raises(RuntimeError) { harness.formula_opt_prefix(target) }
+    assert_includes error.message, "is not installed at /missing/Cellar/openssl/3.3.2_2"
   end
 
   def test_fork_instrumentation_replaces_the_linked_program

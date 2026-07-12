@@ -68,9 +68,12 @@ workflow.
 
 During a source build, the shared Formula support removes Kandelo runtime
 dependency executable directories from the host `PATH`. Those dependencies are
-target Wasm and remain available through `formula_opt_prefix` for headers,
-libraries, and explicit runtime staging; native Homebrew build dependencies
-remain on the host `PATH`.
+target Wasm. Full tap names passed to the `formula_opt_*` helpers resolve to the
+exact installed target keg, so a native Homebrew alias with the same short name
+cannot redirect a cross build to host headers or libraries. Formulae map those
+host keg paths to stable guest opt paths for compiled runtime identities and
+explicit test staging. Native Homebrew build dependencies remain on the host
+`PATH`.
 
 ## Publication State
 

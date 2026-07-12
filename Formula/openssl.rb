@@ -8,7 +8,9 @@ class Openssl < Formula
   url "https://github.com/openssl/openssl/releases/download/openssl-3.3.2/openssl-3.3.2.tar.gz"
   sha256 "2e8a40b01979afe8be0bbfb3de5dc1c6709fedb46d6c89c10da114ab5fc3d281"
   license "Apache-2.0"
-  revision 1
+  revision 2
+
+  keg_only "its Kandelo target headers and libraries conflict with native Homebrew OpenSSL"
 
   skip_clean "lib/libssl.a"
   skip_clean "lib/libcrypto.a"

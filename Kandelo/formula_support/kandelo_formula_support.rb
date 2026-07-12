@@ -20,6 +20,45 @@ require "shellwords"
 module KandeloFormulaSupport
   KANDELO_TAP_FORMULA_PREFIX = "automattic/kandelo-homebrew/"
 
+  # Homebrew's formula_opt_* helpers discard the tap name and resolve through
+  # HOMEBREW_PREFIX/opt. A native formula alias can therefore redirect a
+  # Kandelo dependency to a host keg with the same short name. Resolve full tap
+  # dependencies to their exact installed keg; Formulae still map those host
+  # paths to stable guest opt paths in their compiler and runtime contracts.
+  def formula_opt_prefix(formula_name)
+    return Utils::Path.formula_opt_prefix(formula_name) unless formula_name.start_with?(KANDELO_TAP_FORMULA_PREFIX)
+
+    kandelo_formula_prefix(formula_name)
+  end
+
+  def formula_opt_bin(formula_name)
+    formula_opt_prefix(formula_name)/"bin"
+  end
+
+  def formula_opt_lib(formula_name)
+    formula_opt_prefix(formula_name)/"lib"
+  end
+
+  def formula_opt_libexec(formula_name)
+    formula_opt_prefix(formula_name)/"libexec"
+  end
+
+  def formula_opt_include(formula_name)
+    formula_opt_prefix(formula_name)/"include"
+  end
+
+  def kandelo_formula_prefix(formula_name)
+    formula = kandelo_formula(formula_name)
+    prefix = formula.rack/formula.pkg_version.to_s
+    odie "Kandelo dependency #{formula_name} is not installed at #{prefix}" unless prefix.directory?
+
+    prefix
+  end
+
+  def kandelo_formula(formula_name)
+    Formula[formula_name]
+  end
+
   # Resolve the Kandelo checkout the SDK/toolchain lives in. Returns the path
   # string, or nil when the env bridge is not configured.
   def kandelo_root
