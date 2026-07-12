@@ -28,7 +28,19 @@ permissions:
   actions: read
 
 jobs:
+  validate-caller:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the reviewed caller workflow
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::dispatch this workflow from main and select formula code with tap-ref"
+            exit 2
+          fi
+
   dry-run:
+    needs: [validate-caller]
     permissions:
       contents: read
       packages: read
