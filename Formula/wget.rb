@@ -1,4 +1,5 @@
 require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require "socket"
 
 class Wget < Formula
   include KandeloFormulaSupport
@@ -143,6 +144,66 @@ class Wget < Formula
     )
     assert_match(/"gzipped":\s*true/, compressed_page)
     assert_match(/"Accept-Encoding":\s*"gzip"/, compressed_page)
+
+    background_dir = testpath/"background"
+    background_dir.mkpath
+    background_payload = "Kandelo Wget background child completed\n"
+    server = TCPServer.new("127.0.0.1", 0)
+    server_error = nil
+    server_thread = Thread.new do
+      client = nil
+      begin
+        client = server.accept
+        request = +""
+        request << client.readpartial(1024) until request.include?("\r\n\r\n")
+        raise "unexpected Wget request: #{request.lines.first.inspect}" unless request.start_with?("GET /background ")
+
+        client.write([
+          "HTTP/1.1 200 OK",
+          "Content-Type: text/plain",
+          "Content-Length: #{background_payload.bytesize}",
+          "Connection: close",
+          "",
+          background_payload,
+        ].join("\r\n"))
+      rescue => e
+        server_error = e
+      ensure
+        client&.close
+      end
+    end
+
+    begin
+      background_output = kandelo_run_wasm(
+        bin/"wget",
+        [
+          "--background",
+          "--no-hsts",
+          "--timeout=10",
+          "--tries=1",
+          "--output-document=/work/background.txt",
+          "--output-file=/work/wget.log",
+          "http://127.0.0.1:#{server.addr[1]}/background",
+        ],
+        env:                       { "TIMEOUT" => "15000" },
+        merge_stderr:              true,
+        network:                   true,
+        guest_files:               guest_files,
+        writable_host_directories: { "/work" => background_dir },
+        expected_fork_descendants: 1,
+      )
+      background_pid = background_output[/Continuing in background, pid ([1-9]\d*)\./, 1]
+      refute_nil background_pid
+      assert server_thread.join(2), "background Wget child did not complete its HTTP request"
+      raise server_error if server_error
+
+      assert_equal background_payload, (background_dir/"background.txt").read
+      assert_match(/saved/, (background_dir/"wget.log").read)
+    ensure
+      server.close
+      server_thread.kill if server_thread.alive?
+      server_thread.join
+    end
 
     failure = kandelo_run_wasm(
       bin/"wget",
