@@ -131,6 +131,8 @@ def check_dry_run(workflow)
   validation = jobs.fetch("validate-request")
   check(validation.keys.sort == %w[outputs runs-on steps],
         "dry-run validation job execution contract changed")
+  check(validation["runs-on"] == "ubuntu-latest",
+        "dry-run validation runner trust boundary changed")
   check(!validation.key?("permissions"), "dry-run validation overrides read-only permissions")
   expected_outputs = {
     "arches" => "${{ steps.request.outputs.arches }}",
@@ -188,6 +190,8 @@ def check_publish(workflow)
   validation = jobs.fetch("validate-request")
   check(validation.keys.sort == %w[outputs permissions runs-on steps],
         "publication validation job execution contract changed")
+  check(validation["runs-on"] == "ubuntu-latest",
+        "publication validation runner trust boundary changed")
   check(exact_permissions?(validation["permissions"], READ_PERMISSIONS),
         "publication validation permissions are not read-only")
   expected_outputs = {
@@ -324,6 +328,11 @@ def self_test(dry_run, publish, contract)
   expect_rejection("continued dry-run validation failure") do
     mutated = deep_copy(dry_run)
     mutated.dig("jobs", "validate-request", "steps").first["continue-on-error"] = true
+    check_dry_run(mutated)
+  end
+  expect_rejection("a self-hosted dry-run validation") do
+    mutated = deep_copy(dry_run)
+    mutated.dig("jobs", "validate-request")["runs-on"] = "self-hosted"
     check_dry_run(mutated)
   end
   expect_rejection("an extra dry-run backdoor job") do
