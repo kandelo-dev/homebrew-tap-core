@@ -20,7 +20,6 @@ class Libpng < Formula
     kandelo_wasm_build do
       ENV["CPPFLAGS"] = "-I#{zlib}/include"
       ENV["LDFLAGS"] = "-L#{zlib}/lib"
-      ENV["ac_cv_func_feenableexcept"] = "no"
 
       system kandelo_configure, *kandelo_std_configure_args,
         "--enable-static",

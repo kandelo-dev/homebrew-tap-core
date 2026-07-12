@@ -19,8 +19,6 @@ class Sed < Formula
     kandelo_require_arch!("wasm32")
 
     kandelo_wasm_build do
-      ENV["gl_cv_func_strerror_0_works"] = "yes"
-
       system kandelo_configure, *kandelo_std_configure_args, "--disable-nls"
       system "make"
       kandelo_validate_wasm_artifact(buildpath/"sed/sed", fork: :forbidden)

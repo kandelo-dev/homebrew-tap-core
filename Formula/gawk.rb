@@ -18,10 +18,6 @@ class Gawk < Formula
     guest_prefix = "/home/linuxbrew/.linuxbrew"
     instrumented = buildpath/"gawk.instrumented"
     kandelo_wasm_build do |root|
-      # The SDK site owns target facts; these probes are specific to gnulib and gawk.
-      ENV["gl_cv_func_strerror_0_works"] = "yes"
-      ENV["ac_cv_func_GetSystemTimeAsFileTime"] = "no"
-
       system kandelo_configure, *kandelo_std_configure_args,
         "--disable-nls",
         "--disable-extensions",

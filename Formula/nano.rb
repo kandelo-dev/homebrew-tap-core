@@ -24,11 +24,6 @@ class Nano < Formula
       ENV["NCURSESW_CFLAGS"] = "-I#{ncurses}/include"
       ENV["NCURSESW_LIBS"] = "-L#{ncurses}/lib -lncursesw -ltinfow"
 
-      # The SDK site owns target facts; these are gnulib probes that cannot run
-      # while cross-compiling.
-      ENV["gl_cv_func_strerror_0_works"] = "yes"
-      ENV["gl_cv_func_working_getdelim"] = "yes"
-
       system kandelo_configure, *kandelo_std_configure_args,
         "--sysconfdir=#{guest_prefix}/etc",
         "--disable-nls",

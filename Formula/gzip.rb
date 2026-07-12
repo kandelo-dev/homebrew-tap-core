@@ -23,8 +23,6 @@ class Gzip < Formula
       # from argv[0], matching Kandelo's executable-alias rootfs contract.
       ENV.append "CPPFLAGS", "-DGNU_STANDARD=0"
 
-      ENV["gl_cv_func_strerror_0_works"] = "yes"
-
       system kandelo_configure, *kandelo_std_configure_args, "--disable-nls"
       system "make"
       kandelo_validate_wasm_artifact(buildpath/"gzip", fork: :forbidden)

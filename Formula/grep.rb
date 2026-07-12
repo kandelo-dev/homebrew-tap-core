@@ -18,9 +18,6 @@ class Grep < Formula
     kandelo_require_arch!("wasm32")
 
     kandelo_wasm_build do
-      # The SDK site owns target facts; this gnulib runtime probe is package-specific.
-      ENV["gl_cv_func_strerror_0_works"] = "yes"
-
       system kandelo_configure, *kandelo_std_configure_args,
         "--disable-nls",
         "--disable-perl-regexp",

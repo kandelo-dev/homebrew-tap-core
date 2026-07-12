@@ -19,8 +19,7 @@ class Make < Formula
     kandelo_require_arch!("wasm32")
 
     kandelo_wasm_build do
-      # These runtime probes are package-specific; target facts stay in the SDK site file.
-      ENV["gl_cv_func_strerror_0_works"] = "yes"
+      # This package-specific runtime probe cannot run while cross-compiling.
       ENV["make_cv_synchronous_posix_spawn"] = "yes"
 
       system kandelo_configure, *kandelo_std_configure_args,

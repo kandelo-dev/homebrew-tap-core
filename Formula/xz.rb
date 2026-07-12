@@ -24,17 +24,6 @@ class Xz < Formula
 
     kandelo_wasm_build do
       ENV["CFLAGS"] = "-O2 -fPIC"
-      ENV["ac_cv_func_closedir_void"] = "no"
-      ENV["ac_cv_func_malloc_0_nonnull"] = "yes"
-      ENV["ac_cv_func_realloc_0_nonnull"] = "yes"
-      ENV["ac_cv_func_calloc_0_nonnull"] = "yes"
-      ENV["ac_cv_header_sys_capsicum_h"] = "no"
-      ENV["ac_cv_func_cap_rights_limit"] = "no"
-      ENV["ac_cv_sizeof_long"] = "4"
-      ENV["ac_cv_sizeof_long_long"] = "8"
-      ENV["ac_cv_sizeof_unsigned_long"] = "4"
-      ENV["ac_cv_sizeof_int"] = "4"
-      ENV["ac_cv_sizeof_size_t"] = "4"
 
       system kandelo_configure, *kandelo_std_configure_args,
         "--disable-nls",
