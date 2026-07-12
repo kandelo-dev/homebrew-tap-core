@@ -48,8 +48,9 @@ Current migration controls and pilots include:
 - `zip` and `unzip`, the security-patched Info-ZIP creation, extraction, and inspection tools.
 - `libiconv`, GNU's complete character-set conversion library and CLI,
   replacing the compact base-image byte-copy fallback;
-- `ncompress`, the upstream LZW `compress`, `uncompress`, and `zcat` tools
-  replacing the compact base-image fallback.
+- `ncompress`, the upstream LZW `compress` and `uncompress` tools replacing the
+  compact base-image fallback; GNU `gzip` owns the shared `zcat` command and
+  reads both gzip and legacy compress streams.
 - `pax`, the MirBSD pax, cpio, and tar interfaces for portable archive interchange.
 - `gencat`, the POSIX message-catalog compiler producing catalogs consumed by
   Kandelo's musl `catopen` and `catgets` implementation.

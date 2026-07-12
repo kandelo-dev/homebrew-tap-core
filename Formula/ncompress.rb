@@ -8,6 +8,7 @@ class Ncompress < Formula
   url "https://github.com/vapier/ncompress/archive/refs/tags/v5.0.tar.gz"
   sha256 "96ec931d06ab827fccad377839bfb91955274568392ddecf809e443443aead46"
   license "Unlicense"
+  revision 1
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
@@ -41,13 +42,13 @@ class Ncompress < Formula
 
     kandelo_install_bin(buildpath, artifact.basename, "compress")
     bin.install_symlink "compress" => "uncompress"
-    bin.install_symlink "compress" => "zcat"
     man1.install "compress.1", "uncompress.1"
   end
 
   test do
     assert_equal "compress", (bin/"uncompress").readlink.to_s
-    assert_equal "compress", (bin/"zcat").readlink.to_s
+    # GNU gzip owns zcat and also decodes legacy compress streams.
+    refute_path_exists bin/"zcat"
     assert_path_exists man1/"compress.1"
     assert_path_exists man1/"uncompress.1"
 
@@ -57,8 +58,6 @@ class Ncompress < Formula
     refute_equal input, compressed
     assert_equal input,
       kandelo_run_wasm(bin/"uncompress", ["-c"], stdin: compressed, preserve_argv0: true).b
-    assert_equal input,
-      kandelo_run_wasm(bin/"zcat", [], stdin: compressed, preserve_argv0: true).b
 
     workspace = testpath/"filesystem"
     workspace.mkpath
