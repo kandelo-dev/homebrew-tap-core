@@ -53,6 +53,8 @@ Current migration controls and pilots include:
 - `pax`, the MirBSD pax, cpio, and tar interfaces for portable archive interchange.
 - `gencat`, the POSIX message-catalog compiler producing catalogs consumed by
   Kandelo's musl `catopen` and `catgets` implementation.
+- `ctags`, Universal Ctags' maintained tag generator, `readtags` query client,
+  and optscript interpreter with complete C and C++ workflows.
 
 The SDK is not yet a Homebrew dependency. Trusted builds supply an
 `HOMEBREW_KANDELO_ROOT` checkout containing the SDK, sysroot, kernel, and Node
