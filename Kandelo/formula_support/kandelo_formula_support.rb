@@ -74,6 +74,33 @@ module KandeloFormulaSupport
     root
   end
 
+  # Resolve a Kandelo runtime artifact through the checkout's authoritative
+  # binary resolver. This preserves local/fetched/package priority and ABI
+  # validation instead of teaching Formula tests a second artifact layout.
+  def kandelo_resolve_binary(rel_path)
+    root = kandelo_require_root!
+    relative = rel_path.to_s
+    invalid = relative.empty? || relative.start_with?("/") || relative.include?("\0") ||
+              relative == "." || relative == ".." || relative.start_with?("../") ||
+              relative.include?("\\") || Pathname(relative).cleanpath.to_s != relative
+    odie "invalid Kandelo binary resolver path: #{relative.inspect}" if invalid
+
+    if (node = ENV.fetch("HOMEBREW_KANDELO_NODE", nil)).to_s != ""
+      ENV.prepend_path "PATH", File.dirname(node)
+    end
+
+    FileUtils.rm_rf(Pathname(root)/"host/dist")
+    runner = Pathname(__dir__)/"resolve-binary.ts"
+    command = "cd #{Shellwords.escape(root)} && "
+    command << "node --import tsx/esm #{Shellwords.escape(runner.to_s)} "
+    command << "#{Shellwords.escape(root)} #{Shellwords.escape(relative)}"
+    resolved = Pathname(shell_output(command).strip)
+    valid_result = resolved.absolute? && resolved.cleanpath == resolved && resolved.file?
+    odie "Kandelo binary resolver returned an invalid path: #{resolved}" unless valid_result
+
+    resolved
+  end
+
   # The wasm target arch (wasm32 default). Drives the SDK tool prefix and sysroot.
   def kandelo_arch
     ENV.fetch("HOMEBREW_KANDELO_ARCH", ENV.fetch("KANDELO_HOMEBREW_ARCH", "wasm32"))

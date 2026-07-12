@@ -141,10 +141,43 @@ class Unzip < Formula
       kandelo_run_wasm(bin/"unzip", ["-Z", "-1", "fixture.zip"], env: cwd_env)
     assert_match(/^ZipInfo 3\.00/, kandelo_run_wasm(bin/"zipinfo", ["-h"], preserve_argv0: true))
     assert_match(/^UnZipSFX 6\.00/, kandelo_run_wasm(bin/"unzipsfx", ["-h"]))
+    assert_predicate bin/"zipgrep", :executable?
 
-    zipgrep = (bin/"zipgrep").read
-    assert_equal "#!/bin/sh\n", zipgrep.each_line.first
-    %w[egrep sed basename unzip].each { |command| assert_match(/\b#{command}\b/, zipgrep) }
+    guest_unzip_bin = "/home/linuxbrew/.linuxbrew/opt/unzip/bin"
+    dash = kandelo_resolve_binary("programs/dash.wasm")
+    exec_programs = {
+      "/bin/sh"                    => dash,
+      "/usr/bin/egrep"             => kandelo_resolve_binary("programs/grep.wasm"),
+      "/usr/bin/sed"               => kandelo_resolve_binary("programs/sed.wasm"),
+      "/usr/bin/basename"          => kandelo_resolve_binary("programs/coreutils.wasm"),
+      "#{guest_unzip_bin}/unzip"   => bin/"unzip",
+      "#{guest_unzip_bin}/zipgrep" => bin/"zipgrep",
+    }
+    zipgrep_env = {
+      "KERNEL_CWD" => "/work",
+      "PATH"       => "#{guest_unzip_bin}:/usr/bin:/bin",
+    }
+    zipgrep_files = { "/work/fixture.zip" => archive }
+    zipgrep_command = "exec #{guest_unzip_bin}/zipgrep"
+
+    assert_equal "alpha.txt\nnested/beta.txt\n", kandelo_run_wasm(
+      dash,
+      ["-c", "#{zipgrep_command} -l Kandelo fixture.zip"],
+      argv0:         "/bin/sh",
+      env:           zipgrep_env,
+      exec_programs: exec_programs,
+      guest_files:   zipgrep_files,
+    )
+    usage = kandelo_run_wasm(
+      dash,
+      ["-c", zipgrep_command],
+      argv0:           "/bin/sh",
+      env:             zipgrep_env,
+      exec_programs:   exec_programs,
+      expected_status: 1,
+      guest_files:     zipgrep_files,
+    )
+    assert_match(/^usage: zipgrep /, usage)
     %w[funzip unzip unzipsfx zipgrep zipinfo].each do |program|
       assert_path_exists man1/"#{program}.1"
     end

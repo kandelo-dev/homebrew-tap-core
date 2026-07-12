@@ -131,6 +131,37 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes error.message, "is not installed at /missing/Cellar/openssl/3.3.2_2"
   end
 
+  def test_binary_resolution_uses_the_checkout_resolver
+    Dir.mktmpdir("kandelo-formula-support") do |dir|
+      root = Pathname(dir)/"kandelo root"
+      artifact = root/"binaries/programs/wasm32/dash.wasm"
+      artifact.dirname.mkpath
+      artifact.binwrite("\0asm")
+      host_dist = root/"host/dist"
+      host_dist.mkpath
+      (host_dist/"stale.js").binwrite("stale")
+
+      harness = Harness.new
+      harness.root_path = root.to_s
+      harness.shell_result = "#{artifact}\n"
+
+      assert_equal artifact, harness.kandelo_resolve_binary("programs/dash.wasm")
+      assert_includes harness.command, "resolve-binary.ts"
+      assert_includes harness.command, root.to_s.shellescape
+      assert_includes harness.command, "programs/dash.wasm"
+      refute_path_exists host_dist
+    end
+  end
+
+  def test_binary_resolution_rejects_noncanonical_paths
+    harness = Harness.new
+
+    ["", ".", "..", "../dash.wasm", "/programs/dash.wasm", "programs/../dash.wasm"].each do |path|
+      error = assert_raises(RuntimeError) { harness.kandelo_resolve_binary(path) }
+      assert_includes error.message, "invalid Kandelo binary resolver path"
+    end
+  end
+
   def test_fork_instrumentation_replaces_the_linked_program
     Dir.mktmpdir("kandelo-formula-support") do |dir|
       harness = Harness.new
