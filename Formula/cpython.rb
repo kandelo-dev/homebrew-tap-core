@@ -1,4 +1,4 @@
-require_relative "../Kandelo/formula_support/kandelo_formula_support"
+require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Cpython < Formula
   include KandeloFormulaSupport
@@ -157,26 +157,11 @@ class Cpython < Formula
 
         static_library = target_build/"libpython3.13.a"
         odie "CPython did not build libpython3.13.a" unless static_library.file?
-        artifact_guards = "#{root}/scripts/wasm-artifact-guards.sh"
-        system "bash", "-c", <<~SH
-          set -euo pipefail
-          . #{artifact_guards.shellescape}
-          expected_abi=$(wasm_current_abi_version #{root.to_s.shellescape})
-          if [ -z "$expected_abi" ]; then
-            echo "ERROR: could not determine the Kandelo ABI" >&2
-            exit 1
-          fi
-          artifact_abi=$(wasm_extract_abi_version #{instrumented.to_s.shellescape})
-          if [ "$artifact_abi" != "$expected_abi" ]; then
-            echo "ERROR: CPython ABI $artifact_abi does not match Kandelo ABI $expected_abi" >&2
-            exit 1
-          fi
-          wasm_require_no_legacy_asyncify #{instrumented.to_s.shellescape}
-          if ! wasm_has_complete_fork_instrumentation #{instrumented.to_s.shellescape}; then
-            echo "ERROR: CPython has incomplete fork instrumentation" >&2
-            exit 1
-          fi
-        SH
+        kandelo_validate_wasm_artifact(
+          instrumented,
+          fork:            :required,
+          forbidden_paths: [zlib.to_s, zlib_real.to_s],
+        )
 
         [instrumented, static_library].each do |artifact|
           contents = artifact.binread
