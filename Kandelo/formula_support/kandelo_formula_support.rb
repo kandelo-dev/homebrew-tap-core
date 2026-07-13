@@ -709,11 +709,13 @@ module KandeloFormulaSupport
   # intentionally separate from the Node runner: browser worker startup,
   # SharedArrayBuffer isolation, Wasm memory, and process teardown are distinct
   # platform contracts. `argv0:` controls the guest command name for multicall
-  # runtimes whose behavior depends on argv[0]. Immutable `guest_files:` use
-  # the same absolute-path and bounded-rootfs contract as Node formula tests.
+  # runtimes whose behavior depends on argv[0]. `exec_programs:` stages
+  # executable Wasm programs for spawn/exec behavior, while immutable
+  # `guest_files:` use the same absolute-path and bounded-rootfs contract as
+  # Node formula tests.
   def kandelo_run_browser_wasm(
-    bin_path, argv, argv0: nil, env: {}, guest_files: {}, timeout_ms: 120_000,
-    allow_stderr: false
+    bin_path, argv, argv0: nil, env: {}, exec_programs: {}, guest_files: {},
+    timeout_ms: 120_000, allow_stderr: false
   )
     root = kandelo_require_root!
     if (node = ENV.fetch("HOMEBREW_KANDELO_NODE", nil)).to_s != ""
@@ -738,6 +740,11 @@ module KandeloFormulaSupport
       guest_files_manifest,
       JSON.generate(guest_files.transform_values { |path| Pathname(path).expand_path.to_s }),
     )
+    exec_programs_manifest = testpath/"#{wasm_path.basename}.browser-exec-programs.json"
+    File.binwrite(
+      exec_programs_manifest,
+      JSON.generate(exec_programs.transform_values { |path| Pathname(path).expand_path.to_s }),
+    )
 
     # Compiled host output shadows TypeScript source under tsx/Vite. Browser
     # formula tests must exercise the checkout supplied by the build contract.
@@ -746,7 +753,7 @@ module KandeloFormulaSupport
     runner = Pathname(__dir__)/"run-browser-wasm.ts"
     command = [
       "node", "--experimental-wasm-exnref", "--import", "tsx/esm",
-      runner, root, wasm_path, config, guest_files_manifest
+      runner, root, wasm_path, config, guest_files_manifest, exec_programs_manifest
     ].map { |arg| Shellwords.escape(arg.to_s) }.join(" ")
 
     shell_output("cd #{Shellwords.escape(root)} && #{command} < /dev/null")

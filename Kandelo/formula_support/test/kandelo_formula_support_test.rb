@@ -902,9 +902,12 @@ class KandeloFormulaSupportTest < Minitest::Test
       harness.test_path.mkpath
       guest_file = Pathname(dir)/"format.dat"
       guest_file.binwrite("immutable")
+      guest_executable = Pathname(dir)/"helper.wasm"
+      guest_executable.binwrite("\0asm")
       output = harness.kandelo_run_browser_wasm(
         command, ["-e", "console.log(42)"],
         argv0: "node", env: { "HOME" => "/root" },
+        exec_programs: { "/opt/formula/bin/helper" => guest_executable },
         guest_files: { "/opt/formula/format.dat" => guest_file }, timeout_ms: 5_000
       )
 
@@ -919,6 +922,13 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_equal({ "/opt/formula/format.dat" => guest_file.to_s }, JSON.parse(manifest.read))
       assert_includes harness.command, manifest.to_s.shellescape
       refute_includes harness.command, guest_file.to_s
+      exec_manifest = harness.test_path/"node.browser-exec-programs.json"
+      assert_equal(
+        { "/opt/formula/bin/helper" => guest_executable.to_s },
+        JSON.parse(exec_manifest.read),
+      )
+      assert_includes harness.command, exec_manifest.to_s.shellescape
+      refute_includes harness.command, guest_executable.to_s
       refute_path_exists host_dist
     end
   end

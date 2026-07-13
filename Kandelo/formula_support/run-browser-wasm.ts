@@ -181,6 +181,7 @@ async function buildVfs(
   programPath: string,
   guestProgram: string,
   guestFiles: Record<string, string>,
+  execPrograms: Record<string, string>,
   imagePath: string,
 ): Promise<void> {
   const [{ MemoryFileSystem }, imageHelpers, { ABI_VERSION }] = await Promise.all([
@@ -192,26 +193,37 @@ async function buildVfs(
   MemoryFileSystem.assertImageKernelAbi(rootfsBytes, ABI_VERSION, "formula browser rootfs");
 
   const programBytes = new Uint8Array(readFileSync(programPath));
-  const stagedGuestFiles = Object.entries(guestFiles)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([guestPath, hostPath]) => {
+  const stagedFiles = [
+    ...Object.entries(guestFiles).map(([guestPath, hostPath]) => ({
+      guestPath,
+      hostPath,
+      mode: 0o644,
+    })),
+    ...Object.entries(execPrograms).map(([guestPath, hostPath]) => ({
+      guestPath,
+      hostPath,
+      mode: 0o755,
+    })),
+  ]
+    .sort((left, right) => left.guestPath.localeCompare(right.guestPath))
+    .map(({ guestPath, hostPath, mode }) => {
       const absoluteHostPath = resolve(hostPath);
       const stat = statSync(absoluteHostPath);
       if (!stat.isFile()) {
         throw new Error(`formula browser guest source is not a file: ${absoluteHostPath}`);
       }
-      return { guestPath, bytes: new Uint8Array(readFileSync(absoluteHostPath)) };
+      return { guestPath, bytes: new Uint8Array(readFileSync(absoluteHostPath)), mode };
     });
-  const stagedBytes = stagedGuestFiles.reduce(
+  const stagedBytes = stagedFiles.reduce(
     (total, entry) => total + entry.bytes.byteLength,
     programBytes.byteLength + rootfsBytes.byteLength,
   );
   const maxByteLength = rootfsSizeForStagedBytes(stagedBytes);
   const buildFs = MemoryFileSystem.fromImage(rootfsBytes)
     .rebaseToNewFileSystem(maxByteLength);
-  for (const { guestPath, bytes } of stagedGuestFiles) {
+  for (const { guestPath, bytes, mode } of stagedFiles) {
     imageHelpers.ensureDirRecursive(buildFs, posix.dirname(guestPath));
-    writeStagedFile(buildFs, guestPath, bytes, 0o644);
+    writeStagedFile(buildFs, guestPath, bytes, mode);
   }
   imageHelpers.ensureDirRecursive(buildFs, posix.dirname(guestProgram));
   writeStagedFile(buildFs, guestProgram, programBytes, 0o755);
@@ -229,22 +241,41 @@ async function buildVfs(
       `formula browser VFS program size mismatch: ${programStat.size} != ${programBytes.byteLength}`,
     );
   }
-  for (const { guestPath, bytes } of stagedGuestFiles) {
+  for (const { guestPath, bytes, mode } of stagedFiles) {
     const stat = verificationFs.stat(guestPath);
     if (stat.size !== bytes.byteLength) {
       throw new Error(
         `formula browser VFS guest file size mismatch for ${guestPath}: ${stat.size} != ${bytes.byteLength}`,
       );
     }
+    if ((mode & 0o111) !== 0 && (stat.mode & 0o111) === 0) {
+      throw new Error(`formula browser VFS executable mode missing for ${guestPath}`);
+    }
   }
   writeFileSync(imagePath, image);
 }
 
+function readStagedManifest(path: string, label: string): Record<string, string> {
+  const manifest = resolve(path);
+  const value = JSON.parse(readFileSync(manifest, "utf8")) as unknown;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`formula browser ${label} manifest must be an object`);
+  }
+  if (!Object.entries(value).every(
+    ([guestPath, hostPath]) => guestPath.length > 0 && typeof hostPath === "string",
+  )) {
+    throw new Error(`formula browser ${label} manifest values must be host paths`);
+  }
+  return value as Record<string, string>;
+}
+
 async function main(): Promise<void> {
-  const [rootArg, programArg, configArg, guestFilesManifestArg] = process.argv.slice(2);
-  if (!rootArg || !programArg || !configArg || !guestFilesManifestArg) {
+  const [rootArg, programArg, configArg, guestFilesManifestArg, execProgramsManifestArg] =
+    process.argv.slice(2);
+  if (!rootArg || !programArg || !configArg || !guestFilesManifestArg || !execProgramsManifestArg) {
     throw new Error(
-      "usage: run-browser-wasm.ts <kandelo-root> <program.wasm> <config-json> <guest-files-json>",
+      "usage: run-browser-wasm.ts <kandelo-root> <program.wasm> <config-json> " +
+        "<guest-files-json> <exec-programs-json>",
     );
   }
 
@@ -252,16 +283,8 @@ async function main(): Promise<void> {
   const program = resolve(programArg);
   if (!existsSync(program)) throw new Error(`formula Wasm does not exist: ${program}`);
   const config = parseConfig(configArg);
-  const guestFilesManifest = resolve(guestFilesManifestArg);
-  const guestFiles = JSON.parse(readFileSync(guestFilesManifest, "utf8")) as unknown;
-  if (!guestFiles || typeof guestFiles !== "object" || Array.isArray(guestFiles)) {
-    throw new Error("formula browser guest-files manifest must be an object");
-  }
-  if (!Object.entries(guestFiles).every(
-    ([guestPath, hostPath]) => guestPath.length > 0 && typeof hostPath === "string",
-  )) {
-    throw new Error("formula browser guest-files manifest values must be host paths");
-  }
+  const guestFiles = readStagedManifest(guestFilesManifestArg, "guest-files");
+  const execPrograms = readStagedManifest(execProgramsManifestArg, "exec-programs");
   const browserApp = join(root, "apps/browser-demos");
   const pageRoot = mkdtempSync(join(tmpdir(), "kandelo-formula-browser-"));
   const port = await availablePort();
@@ -281,12 +304,17 @@ async function main(): Promise<void> {
       "/dev",
       "/proc",
     ];
-    const guestFilesMap = guestFiles as Record<string, string>;
-    for (const guestPath of Object.keys(guestFilesMap)) {
+    const stagedPaths = [...Object.keys(guestFiles), ...Object.keys(execPrograms)];
+    for (const guestPath of stagedPaths) {
       validateGuestPath(guestPath, overlaidRoots);
     }
+    for (const guestPath of Object.keys(execPrograms)) {
+      if (guestPath in guestFiles) {
+        throw new Error(`guest path is both a file and executable: ${guestPath}`);
+      }
+    }
     const guestProgram = `/usr/local/bin/${config.argv0}`;
-    if (guestProgram in guestFilesMap) {
+    if (guestProgram in guestFiles || guestProgram in execPrograms) {
       throw new Error(`guest path is both the formula executable and a staged file: ${guestProgram}`);
     }
     const kernelWasm = await resolveArtifact(root, [
@@ -304,7 +332,8 @@ async function main(): Promise<void> {
       rootfsVfs,
       program,
       guestProgram,
-      guestFilesMap,
+      guestFiles,
+      execPrograms,
       join(publicDir, "formula.vfs"),
     );
     const pageConfig: PageRunnerConfig = {
