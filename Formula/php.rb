@@ -284,7 +284,8 @@ class Php < Formula
       icu_data = dependencies.fetch("icu")/"share/icu.dat"
       odie "ICU data byte length drifted" if icu_data.size != ICU_DATA_BYTES
       odie "ICU data digest drifted" if Digest::SHA256.file(icu_data).hexdigest != ICU_DATA_SHA256
-      (lib/"php").install icu_data
+      (lib/"php").mkpath
+      cp icu_data, lib/"php/icu.dat"
       installed_modules = side_modules
     end
 
@@ -385,8 +386,9 @@ class Php < Formula
 
     libtool = buildpath/"libtool"
     text = libtool.read
-    odie "PHP libtool shared mode marker drifted" unless text.include?("build_libtool_libs=no")
-    File.write(libtool, text.sub(/^build_libtool_libs=no$/, "build_libtool_libs=yes"))
+    shared_mode_markers = text.scan(/^build_libtool_libs=no$/).length
+    odie "PHP libtool shared mode markers drifted" if shared_mode_markers < 2
+    File.write(libtool, text.gsub(/^build_libtool_libs=no$/, "build_libtool_libs=yes"))
   end
 
   def build_opcache!(root, output, extra_includes)
@@ -460,8 +462,15 @@ class Php < Formula
     loader_object = buildpath/"ext/intl/kandelo_icu_data_loader.o"
     system kandelo_cc(root), "-fPIC", "-O2", "-c", icu_loader,
       "-I#{icu}/include", "-o", loader_object
-    objects = (buildpath/"ext/intl").glob("**/.libs/*.o").sort
-    odie "intl did not produce PIC objects" if objects.empty?
+    objects = targets.map do |target|
+      path = buildpath/target
+      path.dirname/".libs/#{path.basename(".lo")}.o"
+    end
+    missing_objects = objects.reject(&:file?)
+    unless missing_objects.empty?
+      missing_paths = missing_objects.map { |path| path.relative_path_from(buildpath) }
+      odie "intl did not produce declared PIC objects: #{missing_paths.join(", ")}"
+    end
     libcxx = dependencies.fetch("libcxx")
     artifact = output/"intl.so"
     system kandelo_cc(root), "-shared", "-fPIC", "-Wl,--export=__tls_base", "-o", artifact,
@@ -477,6 +486,7 @@ class Php < Formula
   end
 
   def validate_php_artifacts!(root, php, php_fpm, side_modules, forbidden_paths)
+    root = Pathname(root)
     [php, php_fpm, *side_modules.values].each do |artifact|
       bytes = artifact.binread
       odie "#{artifact.basename} contains legacy Asyncify instrumentation" if bytes.include?("asyncify_".b)
@@ -611,12 +621,9 @@ class Php < Formula
       ["#{GUEST_EXTENSION_DIR}/#{name}.so", path]
     end
     guest_files[GUEST_ICU_DATA] = lib/"php/icu.dat"
-    opcache_keep = testpath/"opcache.keep"
-    opcache_keep.write("")
-    guest_files["/tmp/php-opcache/.keep"] = opcache_keep
 
     php_program = <<~PHP
-      $required = ['opcache', 'curl', 'Phar', 'zend_test', 'zip', 'intl'];
+      $required = ['Zend OPcache', 'curl', 'Phar', 'zend_test', 'zip', 'intl'];
       foreach ($required as $name) {
           if (!extension_loaded($name)) {
               throw new RuntimeException("missing extension: " . $name);
@@ -680,7 +687,7 @@ class Php < Formula
       "-d", "zend_extension=#{GUEST_EXTENSION_DIR}/opcache.so",
       "-d", "opcache.enable=1",
       "-d", "opcache.enable_cli=1",
-      "-d", "opcache.file_cache=/tmp/php-opcache",
+      "-d", "opcache.file_cache=/tmp",
       "-d", "opcache.file_cache_only=1",
       "-d", "phar.readonly=0",
       *%w[curl phar zend_test zip intl].flat_map do |name|
@@ -806,7 +813,7 @@ class Php < Formula
           usleep(25000);
         }
         if (fd < 0) {
-          kill(master, SIGTERM);
+          kill(master, SIGQUIT);
           waitpid(master, NULL, 0);
           return 3;
         }
@@ -817,7 +824,7 @@ class Php < Formula
         used += param(params + used, "GATEWAY_INTERFACE", "CGI/1.1");
         used += param(params + used, "REQUEST_METHOD", "GET");
         used += param(params + used, "REQUEST_URI", "/index.php");
-        used += param(params + used, "SCRIPT_FILENAME", "/tmp/index.php");
+        used += param(params + used, "SCRIPT_FILENAME", "#{GUEST_OPT_PREFIX}/share/php-test/index.php");
         used += param(params + used, "SCRIPT_NAME", "/index.php");
         used += param(params + used, "SERVER_PROTOCOL", "HTTP/1.1");
         used += param(params + used, "SERVER_SOFTWARE", "kandelo-test");
@@ -854,14 +861,18 @@ class Php < Formula
           free(content);
         }
         close(fd);
-        response[response_length] = '\0';
+        response[response_length] = '\\0';
         int ok = strstr(response, "fpm-ok") != NULL;
-        kill(master, SIGTERM);
+        kill(master, SIGQUIT);
         int status = 0;
         waitpid(master, &status, 0);
         if (!ok) {
           fprintf(stderr, "FastCGI response did not contain fpm-ok: %s\\n", response);
           return 8;
+        }
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+          fprintf(stderr, "PHP-FPM master did not exit successfully: %d\\n", status);
+          return 9;
         }
         puts("php-fpm-fastcgi-ok");
         return 0;
@@ -877,20 +888,28 @@ class Php < Formula
     script.write("<?php echo 'fpm-ok';\n")
     placeholder = testpath/"placeholder"
     placeholder.write("")
+    passwd = testpath/"passwd"
+    passwd.write("root:x:0:0:root:/root:/bin/sh\n")
+    group = testpath/"group"
+    group.write("root:x:0:\n")
     guest_files = {
-      "#{GUEST_SYSCONFDIR}/php-fpm.conf"       => libexec/"config/php-fpm.conf",
-      "#{GUEST_SYSCONFDIR}/php-fpm.d/www.conf" => libexec/"config/php-fpm.d/www.conf",
-      "#{GUEST_PHP_CONFIG_DIR}/php.ini"        => libexec/"config/php.ini",
-      "#{GUEST_LOCALSTATEDIR}/run/.keep"       => placeholder,
-      "#{GUEST_LOCALSTATEDIR}/log/.keep"       => placeholder,
-      "/tmp/index.php"                         => script,
+      "/etc/passwd"                                  => passwd,
+      "/etc/group"                                   => group,
+      "#{GUEST_SYSCONFDIR}/php-fpm.conf"             => libexec/"config/php-fpm.conf",
+      "#{GUEST_SYSCONFDIR}/php-fpm.d/www.conf"       => libexec/"config/php-fpm.d/www.conf",
+      "#{GUEST_PHP_CONFIG_DIR}/php.ini"              => libexec/"config/php.ini",
+      "#{GUEST_LOCALSTATEDIR}/run/.keep"             => placeholder,
+      "#{GUEST_LOCALSTATEDIR}/log/.keep"             => placeholder,
+      "#{GUEST_OPT_PREFIX}/share/php-test/index.php" => script,
     }
     output = kandelo_run_wasm(
       harness,
       [],
-      exec_programs:             { "#{GUEST_OPT_PREFIX}/sbin/php-fpm" => sbin/"php-fpm" },
-      guest_files:               guest_files,
-      expected_fork_descendants: 2,
+      exec_programs:                     { "#{GUEST_OPT_PREFIX}/sbin/php-fpm" => sbin/"php-fpm" },
+      guest_files:                       guest_files,
+      # PHP 8.3.15's fpm_pctl_action_next() escalates a live worker from
+      # SIGQUIT to SIGTERM while the FPM master completes a finishing shutdown.
+      expected_fork_descendant_statuses: [0, 143],
     )
     assert_equal "php-fpm-fastcgi-ok\n", output
   end

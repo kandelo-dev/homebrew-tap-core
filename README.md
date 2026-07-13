@@ -20,6 +20,8 @@ Current migration controls and pilots include:
 
 - `hello`, the original publication control;
 - `zlib` and `ruby`, the first dependency and heavy-runtime Formulae;
+- `php`, the PHP 8.3 CLI and FPM runtime with curl, archive, Unicode,
+  database, XML, TLS, and opcache extension surfaces;
 - `sqlite` and the `bzip2`/`xz` compression tools and static libraries, the dependency-first source-build pilot;
 - `zstd`, the threaded Zstandard library and command-line dependency root;
 - `libmagic`, the full file-type database and compression-aware identification library;
