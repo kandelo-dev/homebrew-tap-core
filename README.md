@@ -25,6 +25,7 @@ Current migration controls and pilots include:
 - `libmagic`, the full file-type database and compression-aware identification library;
 - `openssl`, the first dependency-root library migration;
 - `libpng` and `libxml2`, zlib-backed dependency-root libraries;
+- `libzip`, the zlib-backed ZIP library and upstream archive comparison, merge, and inspection tools;
 - `libcxx`, the LLVM C++ standard library, ABI runtime, and bundled unwinder;
 - `musl-fts`, the BSD hierarchy traversal library for portable archive and filesystem tools;
 - `libcurl`, the TLS, compression, threaded-resolver, and Unix-socket transfer library;
