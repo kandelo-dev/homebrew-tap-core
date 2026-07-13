@@ -13,8 +13,8 @@ class Libxml2 < Formula
   license "MIT"
   revision 2
 
-  depends_on "cmake" => :build
-  depends_on "pkgconf" => :build
+  depends_on "cmake" => [:build, :test]
+  depends_on "pkgconf" => [:build, :test]
   depends_on "automattic/kandelo-homebrew/libiconv"
   depends_on "automattic/kandelo-homebrew/zlib"
 
