@@ -4,68 +4,21 @@ on:
   repository_dispatch:
     types: [publish-kandelo-bottles]
 
-permissions:
-  contents: read
-  packages: read
-  actions: read
-
-concurrency:
-  group: kandelo-homebrew-bottle-publish-${{ github.event.client_payload.release_tag || github.run_id }}
-  cancel-in-progress: false
-
 jobs:
-  validate-request:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
-      actions: read
-    outputs:
-      arches: ${{ steps.request.outputs.arches }}
-      formulae: ${{ steps.request.outputs.formulae }}
-      release-tag: ${{ steps.request.outputs.release-tag }}
-    steps:
-      - name: Validate default-branch publication request
-        id: request
-        shell: bash
-        env:
-          REQUEST_ARCHES: ${{ github.event.client_payload.arches || 'wasm32' }}
-          REQUEST_FORMULAE: ${{ github.event.client_payload.formulae }}
-          REQUEST_RELEASE_TAG: ${{ github.event.client_payload.release_tag || '' }}
-        run: |
-          set -euo pipefail
-          [ "$GITHUB_REF" = "refs/heads/main" ] || {
-            echo "::error::publication must use the default-branch workflow"; exit 2;
-          }
-          [[ "$REQUEST_FORMULAE" =~ ^(all|[a-z0-9][a-z0-9+._-]*([,\ ][a-z0-9][a-z0-9+._-]*)*)$ ]] || {
-            echo "::error::client_payload.formulae must be a formula list or all"; exit 2;
-          }
-          [[ "$REQUEST_ARCHES" =~ ^wasm(32|64)([,\ ]wasm(32|64))*$ ]] || {
-            echo "::error::client_payload.arches must contain wasm32 and/or wasm64"; exit 2;
-          }
-          if [ -n "$REQUEST_RELEASE_TAG" ] && ! [[ "$REQUEST_RELEASE_TAG" =~ ^bottles-abi-v[1-9][0-9]*$ ]]; then
-            echo "::error::client_payload.release_tag must be bottles-abi-v<N>"
-            exit 2
-          fi
-          {
-            echo "formulae=$REQUEST_FORMULAE"
-            echo "arches=$REQUEST_ARCHES"
-            echo "release-tag=$REQUEST_RELEASE_TAG"
-          } >> "$GITHUB_OUTPUT"
-
   publish:
-    needs: [validate-request]
     permissions:
+      actions: read
       contents: write
       packages: write
-      actions: read
     uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@main
     with:
       kandelo-repository: Automattic/kandelo
       kandelo-ref: main
       tap-repository: Automattic/kandelo-homebrew
       tap-ref: main
-      formulae: ${{ needs.validate-request.outputs.formulae }}
-      arches: ${{ needs.validate-request.outputs.arches }}
-      release-tag: ${{ needs.validate-request.outputs.release-tag }}
+      formulae: ${{ github.event.client_payload.formulae }}
+      arches: ${{ github.event.client_payload.arches || 'wasm32' }}
+      release-tag: ${{ github.event.client_payload.release_tag || '' }}
+      expected-cache-keys: ${{ github.event.client_payload.expected_cache_keys || '' }}
+      force: ${{ github.event.client_payload.force || false }}
       dry-run: false

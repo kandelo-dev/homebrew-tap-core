@@ -118,9 +118,15 @@ across Kandelo ABI versions. The existing `hello` sidecar files are historical
 publication evidence; broader publication is gated on the native Homebrew OCI
 publisher and real guest-install validation in `Automattic/kandelo`.
 
-Bottle workflows use `repository_dispatch`, which always loads the workflow
-definition from tap `main`. A read-only dry run may select unmerged formula and
-Kandelo code only through event payload refs:
+Bottle operations use `repository_dispatch`, so GitHub always loads the small
+caller workflow from tap `main`. These tap workflows contain no shell steps or
+other executable logic. They pass request data to the reviewed reusable
+publisher and maintenance workflows in `Automattic/kandelo`, which validate the
+request and own the build, credential isolation, artifact verification, and tap
+finalization logic.
+
+A dry run may select unmerged Formula or Kandelo code through event payload
+repositories and refs:
 
 ```bash
 gh api --method POST repos/Automattic/kandelo-homebrew/dispatches \
@@ -132,12 +138,12 @@ gh api --method POST repos/Automattic/kandelo-homebrew/dispatches \
 ```
 
 Replace `main` with a reviewed branch name or exact commit SHA when the dry run
-needs to execute unmerged tap or Kandelo code. Both refs are data passed to the
-publisher; they never select the dispatch workflow definition. The caller grants
-the reusable workflow's maximum permission ceiling because called workflows
-cannot elevate caller authority. The reusable workflow narrows every scheduled
-dry-run job to read-only permissions, and its upload and tap-finalization jobs
-are not scheduled.
+needs to execute unmerged tap or Kandelo code. The repositories and refs are
+data passed to the publisher; they never select the dispatch workflow
+definition. The caller grants the reusable workflow's maximum permission
+ceiling because a called workflow cannot elevate caller authority. The reusable
+workflow narrows each scheduled job, and a dry run never schedules its bottle
+upload or tap-finalization jobs.
 
 Write publication accepts formulae, arches, and an optional release tag, but
 hardcodes both executable repositories to reviewed `main`:
@@ -150,8 +156,22 @@ gh api --method POST repos/Automattic/kandelo-homebrew/dispatches \
 ```
 
 Dry runs cannot publish bottle blobs or sidecar commits. They may upload
-run-scoped diagnostic artifacts and use GitHub Actions storage, but no
-write-capable bottle workflow restores dependency caches produced by them.
+run-scoped diagnostic artifacts, but later write-capable bottle jobs do not
+restore state produced by an untrusted dry run.
+
+Rebuild and rollback maintenance uses a separate reviewed entry point. Rebuilds
+may provide expected cache keys and may explicitly force work that current
+metadata would otherwise skip. Rollbacks preserve the last-green metadata and
+record the reason; deleting a package additionally requires its URL and an
+operational reason.
+
+```bash
+gh api --method POST repos/Automattic/kandelo-homebrew/dispatches \
+  -f event_type=maintain-kandelo-bottles \
+  -f 'client_payload[mode]=rebuild' \
+  -f 'client_payload[formulae]=bzip2,xz' \
+  -f 'client_payload[arches]=wasm32'
+```
 
 Formula Ruby and Homebrew bottle metadata remain authoritative for Homebrew.
 Files under `Kandelo/` are additive validation and provenance data and must not

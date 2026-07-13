@@ -1,67 +1,24 @@
-name: Dry-run Kandelo bottles
+name: Dry run Kandelo bottles
 
 on:
   repository_dispatch:
     types: [dry-run-kandelo-bottles]
 
-permissions:
-  contents: read
-  packages: read
-  actions: read
-
 jobs:
-  validate-request:
-    runs-on: ubuntu-latest
-    outputs:
-      arches: ${{ steps.request.outputs.arches }}
-      formulae: ${{ steps.request.outputs.formulae }}
-      kandelo-ref: ${{ steps.request.outputs.kandelo-ref }}
-      tap-ref: ${{ steps.request.outputs.tap-ref }}
-    steps:
-      - name: Validate default-branch dry-run request
-        id: request
-        shell: bash
-        env:
-          REQUEST_ARCHES: ${{ github.event.client_payload.arches || 'wasm32' }}
-          REQUEST_FORMULAE: ${{ github.event.client_payload.formulae }}
-          REQUEST_KANDELO_REF: ${{ github.event.client_payload.kandelo_ref || 'main' }}
-          REQUEST_TAP_REF: ${{ github.event.client_payload.tap_ref }}
-        run: |
-          set -euo pipefail
-          [ "$GITHUB_REF" = "refs/heads/main" ] || {
-            echo "::error::dry runs must use the default-branch workflow"; exit 2;
-          }
-          [[ "$REQUEST_FORMULAE" =~ ^(all|[a-z0-9][a-z0-9+._-]*([,\ ][a-z0-9][a-z0-9+._-]*)*)$ ]] || {
-            echo "::error::client_payload.formulae must be a formula list or all"; exit 2;
-          }
-          [[ "$REQUEST_ARCHES" =~ ^wasm(32|64)([,\ ]wasm(32|64))*$ ]] || {
-            echo "::error::client_payload.arches must contain wasm32 and/or wasm64"; exit 2;
-          }
-          [[ "$REQUEST_KANDELO_REF" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || {
-            echo "::error::client_payload.kandelo_ref is not a safe Git ref"; exit 2;
-          }
-          [[ "$REQUEST_TAP_REF" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || {
-            echo "::error::client_payload.tap_ref is not a safe Git ref"; exit 2;
-          }
-          {
-            echo "formulae=$REQUEST_FORMULAE"
-            echo "arches=$REQUEST_ARCHES"
-            echo "kandelo-ref=$REQUEST_KANDELO_REF"
-            echo "tap-ref=$REQUEST_TAP_REF"
-          } >> "$GITHUB_OUTPUT"
-
   dry-run:
-    needs: [validate-request]
     permissions:
+      actions: read
       contents: write
       packages: write
-      actions: read
     uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@main
     with:
-      kandelo-repository: Automattic/kandelo
-      kandelo-ref: ${{ needs.validate-request.outputs.kandelo-ref }}
-      tap-repository: Automattic/kandelo-homebrew
-      tap-ref: ${{ needs.validate-request.outputs.tap-ref }}
-      formulae: ${{ needs.validate-request.outputs.formulae }}
-      arches: ${{ needs.validate-request.outputs.arches }}
+      kandelo-repository: ${{ github.event.client_payload.kandelo_repository || 'Automattic/kandelo' }}
+      kandelo-ref: ${{ github.event.client_payload.kandelo_ref || 'main' }}
+      tap-repository: ${{ github.event.client_payload.tap_repository || 'Automattic/kandelo-homebrew' }}
+      tap-ref: ${{ github.event.client_payload.tap_ref || 'main' }}
+      formulae: ${{ github.event.client_payload.formulae }}
+      arches: ${{ github.event.client_payload.arches || 'wasm32' }}
+      release-tag: ${{ github.event.client_payload.release_tag || '' }}
+      expected-cache-keys: ${{ github.event.client_payload.expected_cache_keys || '' }}
+      force: ${{ github.event.client_payload.force || false }}
       dry-run: true

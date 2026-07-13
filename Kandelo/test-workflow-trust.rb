@@ -1,13 +1,18 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require "digest"
 require "yaml"
 
 ROOT = File.expand_path("..", __dir__)
-DRY_RUN_PATH = File.join(ROOT, ".github/workflows/dry-run-bottles.yml")
-PUBLISH_PATH = File.join(ROOT, ".github/workflows/publish-bottles.yml")
-CONTRACT_PATH = File.join(ROOT, ".github/workflows/contract-checks.yml")
+WORKFLOW_ROOT = File.join(ROOT, ".github/workflows")
+CONTRACT_PATH = File.join(WORKFLOW_ROOT, "contract-checks.yml")
+CALLER_PERMISSIONS = {
+  "actions" => "read",
+  "contents" => "write",
+  "packages" => "write",
+}.freeze
+CHECKOUT_ACTION = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 
 def check(condition, message)
   raise message unless condition
@@ -25,6 +30,13 @@ def workflow_events(workflow)
   events
 end
 
+def normalized_keys(mapping, label)
+  check(mapping.is_a?(Hash), "#{label} is not a mapping")
+  keys = mapping.keys.map { |key| key == true ? "on" : key.to_s }
+  check(keys.uniq.length == keys.length, "#{label} has ambiguous keys")
+  keys
+end
+
 def values_for_key(node, wanted, values = [])
   case node
   when Hash
@@ -36,6 +48,14 @@ def values_for_key(node, wanted, values = [])
     node.each { |value| values_for_key(value, wanted, values) }
   end
   values
+end
+
+def exact_permissions?(actual, expected)
+  actual.is_a?(Hash) && actual.transform_keys(&:to_s) == expected
+end
+
+def expression(source)
+  "$" + "{{ #{source} }}"
 end
 
 def deep_copy(value)
@@ -52,259 +72,122 @@ def expect_rejection(label)
   check(rejected, "self-test accepted #{label}")
 end
 
-def keys_named(node, wanted, matches = [])
-  case node
-  when Hash
-    node.each do |key, value|
-      matches << value if key.to_s == wanted
-      keys_named(value, wanted, matches)
-    end
-  when Array
-    node.each { |value| keys_named(value, wanted, matches) }
-  end
-  matches
-end
+PUBLISH_INPUTS = {
+  "kandelo-repository" => "Automattic/kandelo",
+  "kandelo-ref" => "main",
+  "tap-repository" => "Automattic/kandelo-homebrew",
+  "tap-ref" => "main",
+  "formulae" => expression("github.event.client_payload.formulae"),
+  "arches" => expression("github.event.client_payload.arches || 'wasm32'"),
+  "release-tag" => expression("github.event.client_payload.release_tag || ''"),
+  "expected-cache-keys" => expression("github.event.client_payload.expected_cache_keys || ''"),
+  "force" => expression("github.event.client_payload.force || false"),
+  "dry-run" => false,
+}.freeze
 
-def exact_permissions?(actual, expected)
-  actual.is_a?(Hash) && actual.transform_keys(&:to_s) == expected
-end
+CALLER_SPECS = {
+  "publish" => {
+    path: File.join(WORKFLOW_ROOT, "publish-bottles.yml"),
+    name: "Publish Kandelo bottles",
+    event: "publish-kandelo-bottles",
+    job: "publish",
+    reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@main",
+    inputs: PUBLISH_INPUTS,
+  },
+  "dry-run" => {
+    path: File.join(WORKFLOW_ROOT, "dry-run-bottles.yml"),
+    name: "Dry run Kandelo bottles",
+    event: "dry-run-kandelo-bottles",
+    job: "dry-run",
+    reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@main",
+    inputs: PUBLISH_INPUTS.merge({
+      "kandelo-repository" => expression(
+        "github.event.client_payload.kandelo_repository || 'Automattic/kandelo'"
+      ),
+      "kandelo-ref" => expression("github.event.client_payload.kandelo_ref || 'main'"),
+      "tap-repository" => expression(
+        "github.event.client_payload.tap_repository || 'Automattic/kandelo-homebrew'"
+      ),
+      "tap-ref" => expression("github.event.client_payload.tap_ref || 'main'"),
+      "dry-run" => true,
+    }).freeze,
+  },
+  "maintenance" => {
+    path: File.join(WORKFLOW_ROOT, "maintain-bottles.yml"),
+    name: "Maintain Kandelo bottles",
+    event: "maintain-kandelo-bottles",
+    job: "maintain",
+    reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@main",
+    inputs: {
+      "mode" => expression("github.event.client_payload.mode || 'rebuild'"),
+      "formulae" => expression("github.event.client_payload.formulae"),
+      "arches" => expression("github.event.client_payload.arches || 'wasm32'"),
+      "release-tag" => expression("github.event.client_payload.release_tag || ''"),
+      "expected-cache-keys" => expression(
+        "github.event.client_payload.expected_cache_keys || ''"
+      ),
+      "force" => expression("github.event.client_payload.force || false"),
+      "rollback-reason" => expression("github.event.client_payload.rollback_reason || ''"),
+      "rollback-ref" => expression("github.event.client_payload.rollback_ref || ''"),
+      "deleted-package-url" => expression(
+        "github.event.client_payload.deleted_package_url || ''"
+      ),
+      "deletion-reason" => expression("github.event.client_payload.deletion_reason || ''"),
+    }.freeze,
+  },
+}.freeze
 
-def normalized_top_level_keys(workflow, label)
-  keys = workflow.keys.map { |key| key == true ? "on" : key.to_s }
-  check(keys.uniq.length == keys.length, "#{label} has ambiguous top-level keys")
-  keys
-end
+def check_caller(workflow, spec, label)
+  check(normalized_keys(workflow, label).sort == %w[jobs name on],
+        "#{label} has unexpected top-level configuration")
+  check(workflow["name"] == spec.fetch(:name), "#{label} name changed")
+  check(workflow_events(workflow) == {
+    "repository_dispatch" => { "types" => [spec.fetch(:event)] },
+  }, "#{label} must expose only its reviewed repository_dispatch event")
 
-def check_workflow_header(workflow, label, expected_name, expected_keys, expected_concurrency = nil)
-  actual_keys = normalized_top_level_keys(workflow, label)
-  check(actual_keys.sort == expected_keys.sort, "#{label} top-level contract changed")
-  check(workflow["name"] == expected_name, "#{label} name changed")
-  return unless expected_keys.include?("concurrency")
-
-  check(workflow["concurrency"] == expected_concurrency, "#{label} concurrency changed")
-end
-
-def workflow_jobs(workflow)
   jobs = workflow["jobs"]
-  check(jobs.is_a?(Hash), "workflow jobs: value is not a mapping")
-  jobs
-end
+  check(jobs.is_a?(Hash) && jobs.keys == [spec.fetch(:job)],
+        "#{label} has an unexpected job set")
+  job = jobs.fetch(spec.fetch(:job))
+  check(normalized_keys(job, "#{label} job").sort == %w[permissions uses with],
+        "#{label} caller job is not data-only")
+  check(exact_permissions?(job["permissions"], CALLER_PERMISSIONS),
+        "#{label} permission ceiling changed")
+  check(job["uses"] == spec.fetch(:reusable), "#{label} reusable workflow target changed")
+  check(job["with"] == spec.fetch(:inputs), "#{label} caller inputs changed")
 
-def job_steps(job, name)
-  steps = job["steps"]
-  check(steps.is_a?(Array), "#{name} steps: value is not an array")
-  check(steps.all? { |step| step.is_a?(Hash) }, "#{name} contains a non-mapping step")
-  steps
-end
-
-def check_common(workflow, label)
-  cache_uses = values_for_key(workflow, "uses").select do |value|
-    value.is_a?(String) && value.downcase.match?(%r{\Aactions/cache(?:/restore)?@})
+  check(values_for_key(workflow, "uses") == [spec.fetch(:reusable)],
+        "#{label} executable workflow set changed")
+  %w[run steps secrets env defaults].each do |key|
+    check(values_for_key(workflow, key).empty?, "#{label} contains caller-local #{key}")
   end
-  check(cache_uses.empty?, "#{label} consumes Actions cache state: #{cache_uses.join(', ')}")
-  check(keys_named(workflow, "secrets").empty?, "#{label} passes repository secrets")
-
-  unsafe_runs = values_for_key(workflow, "run").select do |value|
-    value.is_a?(String) && value.include?("${{")
-  end
-  check(unsafe_runs.empty?, "#{label} interpolates a GitHub expression into shell syntax")
-end
-
-def check_dispatch(workflow, event_type, label)
-  events = workflow_events(workflow)
-  check(events.keys == ["repository_dispatch"], "#{label} must only expose repository_dispatch")
-  types = events.dig("repository_dispatch", "types")
-  check(types == [event_type], "#{label} has an unexpected repository_dispatch type")
-end
-
-def check_default_branch(job, label, expected_name, expected_hash)
-  steps = job_steps(job, label)
-  check(steps.length == 1, "#{label} must contain exactly one validation step")
-  validation = steps.first
-  check(validation.keys.sort == %w[env id name run shell] &&
-        validation["name"] == expected_name &&
-        validation["id"] == "request" &&
-        validation["shell"] == "bash",
-        "#{label} validation step mapping changed")
-  check(validation["run"].to_s.include?('[ "$GITHUB_REF" = "refs/heads/main" ]'),
-        "#{label} does not enforce the default-branch event invariant")
-  check(Digest::SHA256.hexdigest(validation["run"].to_s) == expected_hash,
-        "#{label} validation script changed")
-end
-
-READ_PERMISSIONS = { "contents" => "read", "packages" => "read", "actions" => "read" }.freeze
-WRITE_PERMISSIONS = { "contents" => "write", "packages" => "write", "actions" => "read" }.freeze
-
-def check_dry_run(workflow)
-  check_workflow_header(
-    workflow,
-    "dry-run workflow",
-    "Dry-run Kandelo bottles",
-    %w[jobs name on permissions]
-  )
-  check_dispatch(workflow, "dry-run-kandelo-bottles", "dry-run workflow")
-  check_common(workflow, "dry-run workflow")
-  check(exact_permissions?(workflow["permissions"], READ_PERMISSIONS),
-        "dry-run workflow permissions are not exact")
-
-  jobs = workflow_jobs(workflow)
-  check(jobs.keys.sort == %w[dry-run validate-request], "dry-run workflow has an unexpected job set")
-  validation = jobs.fetch("validate-request")
-  check(validation.keys.sort == %w[outputs runs-on steps],
-        "dry-run validation job execution contract changed")
-  check(validation["runs-on"] == "ubuntu-latest",
-        "dry-run validation runner trust boundary changed")
-  check(!validation.key?("permissions"), "dry-run validation overrides read-only permissions")
-  expected_outputs = {
-    "arches" => "${{ steps.request.outputs.arches }}",
-    "formulae" => "${{ steps.request.outputs.formulae }}",
-    "kandelo-ref" => "${{ steps.request.outputs.kandelo-ref }}",
-    "tap-ref" => "${{ steps.request.outputs.tap-ref }}",
-  }
-  check(validation["outputs"] == expected_outputs, "dry-run validation outputs changed")
-  expected_env = {
-    "REQUEST_ARCHES" => "${{ github.event.client_payload.arches || 'wasm32' }}",
-    "REQUEST_FORMULAE" => "${{ github.event.client_payload.formulae }}",
-    "REQUEST_KANDELO_REF" => "${{ github.event.client_payload.kandelo_ref || 'main' }}",
-    "REQUEST_TAP_REF" => "${{ github.event.client_payload.tap_ref }}",
-  }
-  check(job_steps(validation, "dry-run validation").first["env"] == expected_env,
-        "dry-run validation input wiring changed")
-  check_default_branch(
-    validation,
-    "dry-run validation",
-    "Validate default-branch dry-run request",
-    "dd0dcc5d4565ab1d83342c43bb439ccd350397321254cf3a15b45a72cde270ba"
-  )
-  caller = jobs.fetch("dry-run")
-  check(caller.keys.sort == %w[needs permissions uses with],
-        "dry-run caller execution contract changed")
-  check(caller["needs"] == ["validate-request"],
-        "dry-run caller bypasses request validation")
-  check(exact_permissions?(caller["permissions"], WRITE_PERMISSIONS),
-        "dry-run caller permission ceiling is not exact")
-  check(caller["uses"] ==
-        "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@main",
-        "dry-run caller does not use the reviewed publisher")
-  expected_inputs = {
-    "kandelo-repository" => "Automattic/kandelo",
-    "kandelo-ref" => "${{ needs.validate-request.outputs.kandelo-ref }}",
-    "tap-repository" => "Automattic/kandelo-homebrew",
-    "tap-ref" => "${{ needs.validate-request.outputs.tap-ref }}",
-    "formulae" => "${{ needs.validate-request.outputs.formulae }}",
-    "arches" => "${{ needs.validate-request.outputs.arches }}",
-    "dry-run" => true,
-  }
-  check(caller["with"] == expected_inputs, "dry-run caller bypasses validated inputs")
-  expected_uses = ["Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@main"]
-  check(values_for_key(workflow, "uses") == expected_uses, "dry-run action set changed")
-end
-
-def check_publish(workflow)
-  expected_concurrency = {
-    "group" => 'kandelo-homebrew-bottle-publish-${{ github.event.client_payload.release_tag || github.run_id }}',
-    "cancel-in-progress" => false,
-  }
-  check_workflow_header(
-    workflow,
-    "publish workflow",
-    "Publish Kandelo bottles",
-    %w[concurrency jobs name on permissions],
-    expected_concurrency
-  )
-  check_dispatch(workflow, "publish-kandelo-bottles", "publish workflow")
-  check_common(workflow, "publish workflow")
-  check(exact_permissions?(workflow["permissions"], READ_PERMISSIONS),
-        "publish workflow defaults are not read-only")
-
-  jobs = workflow_jobs(workflow)
-  check(jobs.keys.sort == %w[publish validate-request], "publish workflow has an unexpected job set")
-  validation = jobs.fetch("validate-request")
-  check(validation.keys.sort == %w[outputs permissions runs-on steps],
-        "publication validation job execution contract changed")
-  check(validation["runs-on"] == "ubuntu-latest",
-        "publication validation runner trust boundary changed")
-  check(exact_permissions?(validation["permissions"], READ_PERMISSIONS),
-        "publication validation permissions are not read-only")
-  expected_outputs = {
-    "arches" => "${{ steps.request.outputs.arches }}",
-    "formulae" => "${{ steps.request.outputs.formulae }}",
-    "release-tag" => "${{ steps.request.outputs.release-tag }}",
-  }
-  check(validation["outputs"] == expected_outputs, "publication validation outputs changed")
-  expected_env = {
-    "REQUEST_ARCHES" => "${{ github.event.client_payload.arches || 'wasm32' }}",
-    "REQUEST_FORMULAE" => "${{ github.event.client_payload.formulae }}",
-    "REQUEST_RELEASE_TAG" => "${{ github.event.client_payload.release_tag || '' }}",
-  }
-  check(job_steps(validation, "publication validation").first["env"] == expected_env,
-        "publication validation input wiring changed")
-  check_default_branch(
-    validation,
-    "publication validation",
-    "Validate default-branch publication request",
-    "f62d1a67ad9100fe33d406e9923139f50c5c2e252c81cc71e63dbd1fde74b7a2"
-  )
-
-  caller = jobs.fetch("publish")
-  check(caller.keys.sort == %w[needs permissions uses with],
-        "publisher call execution contract changed")
-  check(caller["needs"] == ["validate-request"],
-        "publisher bypasses request validation")
-  check(exact_permissions?(caller["permissions"], WRITE_PERMISSIONS),
-        "publisher call permissions are not exact")
-  check(caller["uses"] ==
-        "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@main",
-        "publisher does not use the reviewed reusable workflow")
-  expected_inputs = {
-    "kandelo-repository" => "Automattic/kandelo",
-    "kandelo-ref" => "main",
-    "tap-repository" => "Automattic/kandelo-homebrew",
-    "tap-ref" => "main",
-    "formulae" => "${{ needs.validate-request.outputs.formulae }}",
-    "arches" => "${{ needs.validate-request.outputs.arches }}",
-    "release-tag" => "${{ needs.validate-request.outputs.release-tag }}",
-    "dry-run" => false,
-  }
-  check(caller["with"] == expected_inputs, "publisher bypasses validated inputs or main refs")
-
-  serialized = workflow.to_s
-  check(!serialized.include?("client_payload.kandelo_ref") &&
-        !serialized.include?("client_payload.tap_ref"), "publisher accepts executable refs")
-  expected_uses = ["Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@main"]
-  check(values_for_key(workflow, "uses") == expected_uses, "publish action set changed")
 end
 
 def check_contract_workflow(workflow)
-  check_workflow_header(
-    workflow,
-    "contract-check workflow",
-    "Tap contract checks",
-    %w[jobs name on permissions]
-  )
-  events = workflow_events(workflow)
+  label = "contract-check workflow"
+  check(normalized_keys(workflow, label).sort == %w[jobs name on permissions],
+        "#{label} has unexpected top-level configuration")
+  check(workflow["name"] == "Tap contract checks", "#{label} name changed")
+
   watched_paths = [
     ".github/workflows/**",
     "Kandelo/test-workflow-trust.sh",
     "Kandelo/test-workflow-trust.rb",
   ]
-  expected_events = {
+  check(workflow_events(workflow) == {
     "pull_request" => {},
     "push" => { "branches" => ["main"], "paths" => watched_paths },
-  }
-  check(events == expected_events, "contract-check workflow triggers changed")
-  expected = { "contents" => "read" }
-  check(exact_permissions?(workflow["permissions"], expected),
-        "contract-check workflow permissions are not exact")
-  jobs = workflow_jobs(workflow)
-  check(jobs.keys == ["publisher-trust"], "contract-check workflow has an unexpected job set")
-  job = jobs.fetch("publisher-trust")
-  check(!job.key?("permissions"), "contract-check job overrides read-only permissions")
-  steps = job_steps(job, "contract-check")
+  }, "#{label} triggers changed")
+  check(exact_permissions?(workflow["permissions"], { "contents" => "read" }),
+        "#{label} permissions are not exact")
+
+  jobs = workflow["jobs"]
+  check(jobs.is_a?(Hash) && jobs.keys == ["publisher-trust"],
+        "#{label} has an unexpected job set")
   expected_steps = [
-    { "uses" => "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0" },
+    { "uses" => CHECKOUT_ACTION },
     {
-      "uses" => "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9",
+      "uses" => RUBY_ACTION,
       "with" => { "ruby-version" => "3.4" },
     },
     {
@@ -312,200 +195,94 @@ def check_contract_workflow(workflow)
       "run" => "bash Kandelo/test-workflow-trust.sh",
     },
   ]
-  expected_job = { "runs-on" => "ubuntu-latest", "steps" => expected_steps }
-  check(job == expected_job, "contract-check job execution contract changed")
-  uses = values_for_key(workflow, "uses")
-  expected_uses = [
-    "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
-    "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9",
-  ]
-  check(uses == expected_uses, "contract-check action set or pins changed")
-  ruby_step = steps.find do |step|
-    step["uses"] == "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
-  end
-  check(ruby_step&.dig("with", "ruby-version") == "3.4",
-        "contract-check Ruby version changed")
-  check_common(workflow, "contract-check workflow")
+  check(jobs.fetch("publisher-trust") == {
+    "runs-on" => "ubuntu-latest",
+    "steps" => expected_steps,
+  }, "#{label} job execution contract changed")
+  check(values_for_key(workflow, "uses") == [CHECKOUT_ACTION, RUBY_ACTION],
+        "#{label} action set or pins changed")
+  check(values_for_key(workflow, "secrets").empty?, "#{label} passes repository secrets")
 end
 
-def self_test(dry_run, publish, contract)
-  fixture = YAML.safe_load(<<~YAML, aliases: false)
-    on:
-      workflow_dispatch: {}
-    permissions: "write-all"
-    jobs:
-      unsafe:
-        permissions:
-          contents: "write"
-        steps:
-          - uses: >-
-              actions/cache/restore@v4
-          - run: >-
-              echo "${{ inputs.formulae }}"
-  YAML
-  check(workflow_events(fixture).key?("workflow_dispatch"), "self-test missed workflow_dispatch")
-  check(fixture["permissions"] == "write-all", "self-test missed quoted write-all")
-  check(fixture.dig("jobs", "unsafe", "permissions", "contents") == "write",
-        "self-test missed quoted write permission")
-  check(values_for_key(fixture, "uses").include?("actions/cache/restore@v4"),
-        "self-test missed folded cache action")
-  check(values_for_key(fixture, "run").first.include?("${{"),
-        "self-test missed folded shell expression")
-
-  expect_rejection("a dry-run top-level BASH_ENV injection") do
-    mutated = deep_copy(dry_run)
-    mutated["env"] = { "BASH_ENV" => "/tmp/untrusted-bash-env" }
-    check_dry_run(mutated)
+def self_test(callers, contract)
+  expect_rejection("caller-local environment configuration") do
+    mutated = deep_copy(callers.fetch("dry-run"))
+    mutated["env"] = { "BASH_ENV" => "/tmp/untrusted" }
+    check_caller(mutated, CALLER_SPECS.fetch("dry-run"), "dry-run workflow")
   end
-  expect_rejection("a renamed dry-run workflow") do
-    mutated = deep_copy(dry_run)
-    mutated["name"] = "Trusted-looking dry run"
-    check_dry_run(mutated)
+  expect_rejection("caller-local executable steps") do
+    mutated = deep_copy(callers.fetch("dry-run"))
+    mutated.dig("jobs", "dry-run")["steps"] = [{ "run" => "true" }]
+    check_caller(mutated, CALLER_SPECS.fetch("dry-run"), "dry-run workflow")
   end
-  expect_rejection("a write-capable dry-run validation job") do
-    mutated = deep_copy(dry_run)
-    mutated.dig("jobs", "validate-request")["permissions"] = { "contents" => "write" }
-    check_dry_run(mutated)
+  expect_rejection("secret inheritance") do
+    mutated = deep_copy(callers.fetch("publish"))
+    mutated.dig("jobs", "publish")["secrets"] = "inherit"
+    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
   end
-  expect_rejection("short-circuited dry-run validation") do
-    mutated = deep_copy(dry_run)
-    step = mutated.dig("jobs", "validate-request", "steps").first
-    step["run"] = "exit 0\n#{step['run']}"
-    check_dry_run(mutated)
-  end
-  expect_rejection("continued dry-run validation failure") do
-    mutated = deep_copy(dry_run)
-    mutated.dig("jobs", "validate-request", "steps").first["continue-on-error"] = true
-    check_dry_run(mutated)
-  end
-  expect_rejection("a self-hosted dry-run validation") do
-    mutated = deep_copy(dry_run)
-    mutated.dig("jobs", "validate-request")["runs-on"] = "self-hosted"
-    check_dry_run(mutated)
-  end
-  expect_rejection("a dry-run caller that cannot satisfy the reusable permission ceiling") do
-    mutated = deep_copy(dry_run)
-    mutated.dig("jobs", "dry-run")["permissions"] = READ_PERMISSIONS
-    check_dry_run(mutated)
-  end
-  expect_rejection("an extra dry-run backdoor job") do
-    mutated = deep_copy(dry_run)
+  expect_rejection("an extra privileged job") do
+    mutated = deep_copy(callers.fetch("publish"))
     mutated.fetch("jobs")["backdoor"] = {
-      "permissions" => { "contents" => "write", "packages" => "write" },
-      "uses" => "owner/repo/.github/workflows/write.yml@main",
+      "permissions" => { "contents" => "write" },
+      "uses" => "owner/repo/.github/workflows/publish.yml@main",
     }
-    check_dry_run(mutated)
+    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
   end
-  expect_rejection("a dry-run cache restore") do
-    mutated = deep_copy(dry_run)
-    mutated.dig("jobs", "validate-request", "steps") << {
-      "uses" => "actions/cache/restore@v4",
-    }
-    check_dry_run(mutated)
+  expect_rejection("a mutable publisher target") do
+    mutated = deep_copy(callers.fetch("publish"))
+    mutated.dig("jobs", "publish")["uses"] =
+      "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@feature"
+    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
   end
-  expect_rejection("a dry-run shell expression") do
-    mutated = deep_copy(dry_run)
-    mutated.dig("jobs", "validate-request", "steps") << {
-      "run" => 'echo "${{ github.token }}"',
-    }
-    check_dry_run(mutated)
+  expect_rejection("an executable publish ref from event data") do
+    mutated = deep_copy(callers.fetch("publish"))
+    mutated.dig("jobs", "publish", "with")["tap-ref"] =
+      expression("github.event.client_payload.tap_ref")
+    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
   end
-  expect_rejection("a publish top-level BASH_ENV injection") do
-    mutated = deep_copy(publish)
-    mutated["env"] = { "BASH_ENV" => "/tmp/untrusted-bash-env" }
-    check_publish(mutated)
+  expect_rejection("dry-run publication") do
+    mutated = deep_copy(callers.fetch("dry-run"))
+    mutated.dig("jobs", "dry-run", "with")["dry-run"] = false
+    check_caller(mutated, CALLER_SPECS.fetch("dry-run"), "dry-run workflow")
   end
-  expect_rejection("a renamed publish workflow") do
-    mutated = deep_copy(publish)
-    mutated["name"] = "Trusted-looking publisher"
-    check_publish(mutated)
+  expect_rejection("maintenance through the publisher") do
+    mutated = deep_copy(callers.fetch("maintenance"))
+    mutated.dig("jobs", "maintain")["uses"] =
+      "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@main"
+    check_caller(mutated, CALLER_SPECS.fetch("maintenance"), "maintenance workflow")
   end
-  expect_rejection("changed publication concurrency") do
-    mutated = deep_copy(publish)
-    mutated.fetch("concurrency")["cancel-in-progress"] = true
-    check_publish(mutated)
-  end
-  expect_rejection("an extra publish backdoor job") do
-    mutated = deep_copy(publish)
-    mutated.fetch("jobs")["backdoor"] = {
-      "permissions" => { "contents" => "write", "packages" => "write" },
-      "uses" => "owner/repo/.github/workflows/write.yml@main",
-    }
-    check_publish(mutated)
-  end
-  expect_rejection("publication detached from validation") do
-    mutated = deep_copy(publish)
-    caller = mutated.dig("jobs", "publish")
-    caller.delete("needs")
-    caller.fetch("with")["formulae"] = "${{ github.event.client_payload.formulae }}"
-    check_publish(mutated)
-  end
-  expect_rejection("contract-check top-level run defaults") do
+  expect_rejection("path-filtered pull-request checks") do
     mutated = deep_copy(contract)
-    mutated["defaults"] = {
-      "run" => { "shell" => "bash -c 'exit 0' {0}" },
-    }
+    workflow_events(mutated)["pull_request"] = { "paths" => [".github/workflows/**"] }
     check_contract_workflow(mutated)
   end
-  expect_rejection("a renamed contract-check workflow") do
-    mutated = deep_copy(contract)
-    mutated["name"] = "Trusted-looking contract checks"
-    check_contract_workflow(mutated)
-  end
-  expect_rejection("a write-capable contract-check job") do
+  expect_rejection("a write-capable contract check") do
     mutated = deep_copy(contract)
     mutated.dig("jobs", "publisher-trust")["permissions"] = { "contents" => "write" }
     check_contract_workflow(mutated)
   end
-  expect_rejection("an extra contract-check job") do
+  expect_rejection("an unpinned setup action") do
     mutated = deep_copy(contract)
-    mutated.fetch("jobs")["backdoor"] = {
-      "permissions" => { "contents" => "write" },
-      "runs-on" => "ubuntu-latest",
-      "steps" => [{ "run" => "true" }],
-    }
+    mutated.dig("jobs", "publisher-trust", "steps", 1)["uses"] = "ruby/setup-ruby@v1"
     check_contract_workflow(mutated)
   end
-  expect_rejection("an unpinned Ruby setup action") do
-    mutated = deep_copy(contract)
-    mutated.dig("jobs", "publisher-trust", "steps") << { "uses" => "ruby/setup-ruby@v1" }
-    check_contract_workflow(mutated)
-  end
-  expect_rejection("a disabled hosted contract command") do
+  expect_rejection("a disabled contract command") do
     mutated = deep_copy(contract)
     mutated.dig("jobs", "publisher-trust", "steps", 2)["run"] = "true"
-    check_contract_workflow(mutated)
-  end
-  expect_rejection("a skipped hosted contract job") do
-    mutated = deep_copy(contract)
-    mutated.dig("jobs", "publisher-trust")["if"] = false
-    check_contract_workflow(mutated)
-  end
-  expect_rejection("a self-hosted contract job") do
-    mutated = deep_copy(contract)
-    mutated.dig("jobs", "publisher-trust")["runs-on"] = "self-hosted"
-    check_contract_workflow(mutated)
-  end
-  expect_rejection("contract checks filtered out of formula pull requests") do
-    mutated = deep_copy(contract)
-    workflow_events(mutated)["pull_request"] = {
-      "paths" => [
-        ".github/workflows/**",
-        "Kandelo/test-workflow-trust.sh",
-        "Kandelo/test-workflow-trust.rb",
-      ],
-    }
     check_contract_workflow(mutated)
   end
 end
 
 begin
-  dry_run = load_workflow(DRY_RUN_PATH)
-  publish = load_workflow(PUBLISH_PATH)
+  callers = CALLER_SPECS.to_h do |key, spec|
+    [key, load_workflow(spec.fetch(:path))]
+  end
   contract = load_workflow(CONTRACT_PATH)
-  self_test(dry_run, publish, contract)
-  check_dry_run(dry_run)
-  check_publish(publish)
+
+  self_test(callers, contract)
+  callers.each do |key, workflow|
+    check_caller(workflow, CALLER_SPECS.fetch(key), "#{key} workflow")
+  end
   check_contract_workflow(contract)
   puts "test-workflow-trust.rb: ok"
 rescue KeyError, Psych::Exception, RuntimeError => e
