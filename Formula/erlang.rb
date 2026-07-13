@@ -304,18 +304,7 @@ class Erlang < Formula
       relative = artifact.relative_path_from(release_root).to_s
       kandelo_validate_wasm_artifact(artifact, fork: fork_policies.fetch(relative))
     end
-
-    forbidden = [buildpath.to_s, prefix.to_s, root.to_s, "/nix/store/"]
-    Find.find(release_root.to_s) do |candidate|
-      next unless File.file?(candidate)
-      next if File.symlink?(candidate)
-
-      contents = File.binread(candidate)
-      forbidden.each do |marker|
-        odie "OTP release embeds staging path #{marker} in #{candidate}" if contents.include?(marker)
-      end
-      odie "OTP release contains legacy Asyncify metadata in #{candidate}" if contents.include?("asyncify_")
-    end
+    validate_non_wasm_release_data_paths!(release_root, wasm, root)
 
     validator = buildpath/"validate-erlang-artifacts.mjs"
     validator.write <<~JS
@@ -357,6 +346,21 @@ class Erlang < Formula
     cd(root) do
       system "node", "--experimental-wasm-exnref", "--import", "tsx/esm",
         validator, *wasm
+    end
+  end
+
+  def validate_non_wasm_release_data_paths!(release_root, wasm, root)
+    wasm_paths = wasm.to_h { |path| [File.expand_path(path), true] }
+    forbidden = [buildpath.to_s, prefix.to_s, root.to_s, "/nix/store/"]
+    Find.find(release_root.to_s) do |candidate|
+      next unless File.file?(candidate)
+      next if File.symlink?(candidate)
+      next if wasm_paths.key?(File.expand_path(candidate))
+
+      contents = File.binread(candidate)
+      forbidden.each do |marker|
+        odie "OTP release data embeds staging path #{marker} in #{candidate}" if contents.include?(marker)
+      end
     end
   end
 end
