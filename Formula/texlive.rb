@@ -238,9 +238,23 @@ class Texlive < Formula
     # shell escape disabled. Apply and verify the current Kandelo continuation
     # ABI rather than shipping an uninstrumented executable.
     kandelo_fork_instrument(linked_pdftex)
-    kandelo_validate_wasm_artifact(linked_pdftex, fork: :required)
-    verify_wasm_contract!(linked_pdftex, root)
-    verify_builder_paths!(linked_pdftex, texmf_dist, zlib, libpng, libcxx, root)
+    kandelo_validate_wasm_artifact(
+      linked_pdftex,
+      fork:            :required,
+      forbidden_paths: [
+        root.realpath.to_s,
+        zlib.to_s,
+        zlib.realpath.to_s,
+        libpng.to_s,
+        libpng.realpath.to_s,
+        libcxx.to_s,
+        libcxx.realpath.to_s,
+        "/.cache/kandelo/",
+        "/Cellar/",
+      ],
+    )
+    verify_no_unresolved_cxx_imports!(linked_pdftex)
+    verify_generated_format_paths!(texmf_dist, zlib, libpng, libcxx, root)
 
     kandelo_install_bin(buildpath, "pdftex.wasm", "pdftex")
     bin.install_symlink "pdftex" => "pdflatex"
@@ -778,24 +792,7 @@ class Texlive < Formula
     inputs
   end
 
-  def verify_wasm_contract!(wasm, root)
-    guards = root/"scripts/wasm-artifact-guards.sh"
-    system "bash", "-c", <<~SH
-      set -euo pipefail
-      . #{guards.to_s.shellescape}
-      expected_abi=$(wasm_current_abi_version #{root.to_s.shellescape})
-      artifact_abi=$(wasm_extract_abi_version #{wasm.to_s.shellescape})
-      if [ -z "$expected_abi" ] || [ "$artifact_abi" != "$expected_abi" ]; then
-        echo "ERROR: pdfTeX ABI $artifact_abi does not match Kandelo ABI $expected_abi" >&2
-        exit 1
-      fi
-      wasm_require_no_legacy_asyncify #{wasm.to_s.shellescape}
-      if ! wasm_has_complete_fork_instrumentation #{wasm.to_s.shellescape}; then
-        echo "ERROR: pdfTeX has incomplete fork instrumentation" >&2
-        exit 1
-      fi
-    SH
-
+  def verify_no_unresolved_cxx_imports!(wasm)
     imports = Utils.safe_popen_read("wasm-objdump", "-x", wasm.to_s)
     unresolved_cxx = imports.each_line.select do |line|
       line.include?(" <- ") && line.match?(/(?:<|\.)(?:_Z|__cxa_|__gxx_|_Unwind_)/)
@@ -805,7 +802,7 @@ class Texlive < Formula
     odie "pdfTeX retains unresolved C++ runtime imports:\n#{unresolved_cxx.join}"
   end
 
-  def verify_builder_paths!(wasm, texmf_dist, zlib, libpng, libcxx, root)
+  def verify_generated_format_paths!(texmf_dist, zlib, libpng, libcxx, root)
     markers = [
       prefix.to_s,
       buildpath.to_s,
@@ -822,19 +819,18 @@ class Texlive < Formula
       "/nix/store/",
       "/home/runner/work/",
     ]
-    artifacts = [
-      wasm,
+    formats = [
       texmf_dist/"web2c/pdftex/pdftex.fmt",
       texmf_dist/"web2c/pdftex/pdflatex.fmt",
       texmf_dist/"web2c/pdftex/latex.fmt",
     ]
-    artifacts.each do |artifact|
-      contents = artifact.binread
+    formats.each do |format|
+      contents = format.binread
       markers.each do |marker|
-        odie "#{artifact.basename} contains builder path #{marker}" if contents.include?(marker)
+        odie "#{format.basename} contains builder path #{marker}" if contents.include?(marker)
       end
-      odie "#{artifact.basename} contains a builder home path" if contents.match?(%r{/Users/[^/]+/})
-      odie "#{artifact.basename} contains a Homebrew Cellar path" if contents.include?("/Cellar/")
+      odie "#{format.basename} contains a builder home path" if contents.match?(%r{/Users/[^/]+/})
+      odie "#{format.basename} contains a Homebrew Cellar path" if contents.include?("/Cellar/")
     end
   end
 
