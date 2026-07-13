@@ -243,7 +243,21 @@ module KandeloFormulaSupport
     root = kandelo_activate_sdk!
     kandelo_activate_sysroot!(root)
 
-    %w[CFLAGS CPPFLAGS CXXFLAGS LDFLAGS MACOSX_DEPLOYMENT_TARGET].each { |key| ENV.delete(key) }
+    # CMake treats its ambient search paths as program roots, so Homebrew's
+    # injected prefix can bypass PATH isolation and select a linked target tool.
+    %w[
+      CFLAGS
+      CMAKE_APPBUNDLE_PATH
+      CMAKE_FRAMEWORK_PATH
+      CMAKE_INCLUDE_PATH
+      CMAKE_LIBRARY_PATH
+      CMAKE_PREFIX_PATH
+      CMAKE_PROGRAM_PATH
+      CPPFLAGS
+      CXXFLAGS
+      LDFLAGS
+      MACOSX_DEPLOYMENT_TARGET
+    ].each { |key| ENV.delete(key) }
     ENV["CC"] = kandelo_cc(root)
     ENV["CXX"] = kandelo_tool("c++", root)
     ENV["AR"] = kandelo_ar(root)

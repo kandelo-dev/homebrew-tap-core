@@ -398,6 +398,34 @@ class KandeloFormulaSupportTest < Minitest::Test
     ENV.replace(original) if original
   end
 
+  def test_wasm_build_clears_cmake_host_search_paths_and_restores_environment
+    harness = Harness.new
+    harness.homebrew_prefix_path = Pathname("/prefix")
+    harness.root_path = "/tmp/kandelo-root"
+    harness.runtime_formulae = []
+    original = ENV.to_hash
+    ENV["PATH"] = ["/prefix/bin", "/usr/bin"].join(File::PATH_SEPARATOR)
+    cmake_search_variables = %w[
+      CMAKE_APPBUNDLE_PATH
+      CMAKE_FRAMEWORK_PATH
+      CMAKE_INCLUDE_PATH
+      CMAKE_LIBRARY_PATH
+      CMAKE_PREFIX_PATH
+      CMAKE_PROGRAM_PATH
+    ]
+    cmake_search_variables.each { |key| ENV[key] = "/prefix" }
+    scoped = ENV.to_hash
+
+    build_environment = nil
+    harness.kandelo_wasm_build { build_environment = ENV.to_hash }
+
+    refute_includes build_environment.fetch("PATH").split(File::PATH_SEPARATOR), "/prefix/bin"
+    cmake_search_variables.each { |key| refute build_environment.key?(key) }
+    assert_equal scoped, ENV.to_hash
+  ensure
+    ENV.replace(original) if original
+  end
+
   def test_network_execution_uses_tap_owned_runner
     harness = Harness.new
     output = harness.kandelo_run_wasm(
