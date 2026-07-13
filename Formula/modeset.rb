@@ -1,4 +1,4 @@
-require_relative "../Kandelo/formula_support/kandelo_formula_support"
+require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Modeset < Formula
   include KandeloFormulaSupport
@@ -10,6 +10,7 @@ class Modeset < Formula
   sha256 "d8b7f263638cd87b81e2cd07df9602fbea15da8999fbc21c045d8c38a45fb652"
   license "GPL-2.0-or-later"
 
+  depends_on "binaryen" => [:build, :test]
   depends_on "wabt" => [:build, :test]
 
   skip_clean "bin/modeset"
@@ -38,68 +39,10 @@ class Modeset < Formula
         "-D_DEFAULT_SOURCE", *path_flags, *cflags, buildpath/"programs/modeset.c",
         *libraries, "-lm", "-o", artifact
 
-      # Preserve the registry recipe's instrumentation stage. The instrumenter
-      # binds the executable to the active ABI and installs the continuation
-      # runtime even though modeset does not currently call fork itself.
-      kandelo_fork_instrument artifact
-      validate_artifact!(artifact, root)
+      kandelo_validate_wasm_artifact(artifact, fork: :forbidden)
     end
 
     kandelo_install_bin(buildpath, artifact.basename, "modeset")
-  end
-
-  def validate_artifact!(artifact, root)
-    expected_abi = (Pathname(root)/"crates/shared/src/lib.rs").read[
-      /^pub const ABI_VERSION: u32 = (\d+);$/,
-      1,
-    ]
-    odie "could not read Kandelo ABI version" if expected_abi.nil?
-
-    # wasm-objdump labels this exported function with its source-level name
-    # under Homebrew's debug flags. Use Kandelo's binary parser, which follows
-    # the export index and function body rather than depending on name metadata.
-    host_dist = Pathname(root)/"host/dist"
-    rm_r host_dist if host_dist.exist?
-    abi_probe = <<~JS
-      import { readFileSync } from "node:fs";
-      import { pathToFileURL } from "node:url";
-      const { extractAbiVersion } = await import(pathToFileURL(process.argv[1]).href);
-      const bytes = readFileSync(process.argv[2]);
-      const program = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-      const abi = extractAbiVersion(program);
-      if (abi === null) process.exit(2);
-      process.stdout.write(String(abi));
-    JS
-    artifact_abi = cd(root) do
-      Utils.safe_popen_read(
-        "node", "--import", "tsx/esm", "--input-type=module", "--eval", abi_probe,
-        Pathname(root)/"host/src/constants.ts", artifact
-      ).strip
-    end
-    odie "modeset ABI #{artifact_abi} does not match Kandelo ABI #{expected_abi}" if artifact_abi != expected_abi
-
-    guards = Pathname(root)/"scripts/wasm-artifact-guards.sh"
-    system "bash", "-c", <<~SH
-      set -euo pipefail
-      . #{guards.to_s.shellescape}
-      wasm_require_no_legacy_asyncify #{artifact.to_s.shellescape}
-      wasm_require_fork_instrumentation_if_needed #{artifact.to_s.shellescape}
-      if ! wasm_has_complete_fork_instrumentation #{artifact.to_s.shellescape}; then
-        echo "ERROR: modeset lacks complete fork instrumentation exports" >&2
-        exit 1
-      fi
-    SH
-
-    binary = artifact.binread
-    {
-      "formula build path"    => buildpath.to_s,
-      "formula Cellar path"   => prefix.to_s,
-      "Kandelo checkout path" => root.to_s,
-      "Nix store path"        => "/nix/store/",
-      "temporary build path"  => "/private/tmp/",
-    }.each do |description, marker|
-      odie "modeset embeds #{description}: #{marker}" if binary.include?(marker)
-    end
   end
 
   test do
