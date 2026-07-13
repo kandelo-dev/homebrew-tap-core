@@ -14,6 +14,7 @@ interface BrowserSmokeResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  mergedOutput: string;
 }
 
 let activeKernel: BrowserKernel | null = null;
@@ -40,14 +41,21 @@ async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
 
   const stdoutDecoder = new TextDecoder();
   const stderrDecoder = new TextDecoder();
+  const mergedChunks: Uint8Array[] = [];
   let stdout = "";
   let stderr = "";
   const kernel = new BrowserKernel({
     kernelOwnedFs: true,
     maxWorkers: 6,
     maxMemoryPages: 16_384,
-    onStdout: (data) => { stdout += stdoutDecoder.decode(data, { stream: true }); },
-    onStderr: (data) => { stderr += stderrDecoder.decode(data, { stream: true }); },
+    onStdout: (data) => {
+      stdout += stdoutDecoder.decode(data, { stream: true });
+      mergedChunks.push(data.slice());
+    },
+    onStderr: (data) => {
+      stderr += stderrDecoder.decode(data, { stream: true });
+      mergedChunks.push(data.slice());
+    },
   });
   activeKernel = kernel;
 
@@ -89,7 +97,20 @@ async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
     );
     stdout += stdoutDecoder.decode();
     stderr += stderrDecoder.decode();
-    return { exitCode, stdout, stderr };
+    const mergedBytes = new Uint8Array(
+      mergedChunks.reduce((total, chunk) => total + chunk.byteLength, 0),
+    );
+    let offset = 0;
+    for (const chunk of mergedChunks) {
+      mergedBytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return {
+      exitCode,
+      stdout,
+      stderr,
+      mergedOutput: new TextDecoder().decode(mergedBytes),
+    };
   } finally {
     await kernel.destroy().catch(() => {});
     activeKernel = null;

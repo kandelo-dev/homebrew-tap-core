@@ -1086,6 +1086,8 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_includes harness.command, command.to_s
       assert_includes harness.command, "console.log"
       assert_includes harness.command, "allowStderr"
+      assert_includes harness.command, "expectedStatus"
+      assert_includes harness.command, "mergeStderr"
       assert_includes harness.command, "node"
       manifest = harness.test_path/"node.browser-guest-files.json"
       assert_equal({ "/opt/formula/format.dat" => guest_file.to_s }, JSON.parse(manifest.read))
@@ -1100,6 +1102,34 @@ class KandeloFormulaSupportTest < Minitest::Test
       refute_includes harness.command, guest_executable.to_s
       refute_path_exists host_dist
     end
+  end
+
+  def test_browser_execution_accepts_expected_nonzero_status_and_merged_stderr
+    Dir.mktmpdir("kandelo-formula-support") do |dir|
+      harness = Harness.new
+      harness.root_path = Pathname(dir)/"kandelo root"
+      harness.test_path = Pathname(dir)/"formula test"
+      harness.test_path.mkpath
+      command = Pathname(dir)/"getconf"
+      command.binwrite("\0asm")
+
+      output = harness.kandelo_run_browser_wasm(
+        command, ["NOT_A_VARIABLE"],
+        argv0: "getconf", expected_status: 1, merge_stderr: true
+      )
+
+      assert_equal "runtime-ok\n", output
+      assert_includes harness.command, 'expectedStatus\":1'
+      assert_includes harness.command, 'mergeStderr\":true'
+    end
+  end
+
+  def test_browser_execution_rejects_invalid_expected_status
+    error = assert_raises(RuntimeError) do
+      Harness.new.kandelo_run_browser_wasm("program.wasm", [], expected_status: 256)
+    end
+
+    assert_equal "expected browser status must be an integer from 0 through 255", error.message
   end
 
   def test_browser_execution_accepts_posix_multicall_bracket_name
