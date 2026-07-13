@@ -101,6 +101,7 @@ class Texlive < Formula
   sha256 "fffdb1a3d143c177a4398a2229a40d6a88f18098e5f6dcfd57648c9f2417490f"
   license :cannot_represent
 
+  depends_on "binaryen" => :build
   depends_on "pkgconf" => :build
   depends_on "wabt" => :build
   depends_on "automattic/kandelo-homebrew/libcxx"
@@ -237,6 +238,7 @@ class Texlive < Formula
     # shell escape disabled. Apply and verify the current Kandelo continuation
     # ABI rather than shipping an uninstrumented executable.
     kandelo_fork_instrument(linked_pdftex)
+    kandelo_validate_wasm_artifact(linked_pdftex, fork: :required)
     verify_wasm_contract!(linked_pdftex, root)
     verify_builder_paths!(linked_pdftex, texmf_dist, zlib, libpng, libcxx, root)
 
