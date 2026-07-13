@@ -235,6 +235,58 @@ class Cxref < Formula
         return helper;
       }
     C
+    (workspace/"macro_generated.c").write <<~C
+      #define ID(value) value
+      #define DECLARE(name) int name(void)
+      #define LOCAL(name) int name
+
+      int target(void) {
+        return 1;
+      }
+
+      DECLARE(generated);
+
+      int f(void) {
+        return ID(target)();
+      }
+
+      int g(void) {
+        return generated();
+      }
+
+      int local_user(void) {
+        LOCAL(local_value) = 1;
+        return local_value;
+      }
+      #define DECLARE_LITERAL int literal_generated(void)
+      #define LOCAL_LITERAL int literal_local
+
+      DECLARE_LITERAL;
+
+      int literal_call(void) {
+        return literal_generated();
+      }
+
+      int literal_local_user(void) {
+        LOCAL_LITERAL = 1;
+        return literal_local;
+      }
+    C
+    (workspace/"old_style.c").write <<~C
+      int target(void) {
+        return 1;
+      }
+
+      int old_style(target)
+      int target;
+      {
+        return target;
+      }
+
+      int after_old_style(void) {
+        return target();
+      }
+    C
 
     env = { "KERNEL_CWD" => "/work" }
     mount = { "/work" => workspace }
@@ -273,6 +325,30 @@ class Cxref < Formula
     assert_match(%r{^helper \| /work/linkage_a\.c \| - \| 6$}, linked)
     assert_match(%r{^helper \| /work/linkage_b\.c \| from_b \| 4$}, linked)
     refute_match(%r{^helper \| /work/linkage_b\.c \| - \| 4$}, linked)
+
+    generated = kandelo_run_wasm(
+      bin/"cxref", ["-cs", "macro_generated.c"], env: env, writable_host_directories: mount
+    )
+    assert_match(%r{^generated \| /work/macro_generated\.c \| - \| \*9$}, generated)
+    assert_match(%r{^generated \| /work/macro_generated\.c \| - \| 16$}, generated)
+    assert_match(%r{^target \| /work/macro_generated\.c \| - \| 12$}, generated)
+    assert_match(%r{^local_value \| /work/macro_generated\.c \| local_user \| \*20$}, generated)
+    assert_match(%r{^local_value \| /work/macro_generated\.c \| local_user \| 21$}, generated)
+    refute_match(%r{^generated \| /work/macro_generated\.c \| g \| 16$}, generated)
+    refute_match(%r{^target \| /work/macro_generated\.c \| f \| 12$}, generated)
+    assert_match(%r{^literal_generated \| /work/macro_generated\.c \| - \| \*23$}, generated)
+    assert_match(%r{^literal_generated \| /work/macro_generated\.c \| - \| 29$}, generated)
+    assert_match(%r{^literal_local \| /work/macro_generated\.c \| - \| \*24$}, generated)
+    assert_match(%r{^literal_local \| /work/macro_generated\.c \| literal_local_user \| 34$}, generated)
+
+    old_style = kandelo_run_wasm(
+      bin/"cxref", ["-cs", "old_style.c"], env: env, writable_host_directories: mount
+    )
+    assert_match(%r{^target \| /work/old_style\.c \| old_style \| \*5$}, old_style)
+    assert_match(%r{^target \| /work/old_style\.c \| old_style \| \*6$}, old_style)
+    assert_match(%r{^target \| /work/old_style\.c \| old_style \| 8$}, old_style)
+    assert_match(%r{^target \| /work/old_style\.c \| - \| 12$}, old_style)
+    refute_match(%r{^target \| /work/old_style\.c \| after_old_style \| 12$}, old_style)
 
     ordered = kandelo_run_wasm(
       bin/"cxref",
@@ -328,7 +404,7 @@ class Cxref < Formula
         "-cs", "-I/work/include", "-USELECT_PATH", "-DSELECT_PATH",
         "-I/work/first", "-DORDERED=1", "-I/work/second", "-UORDERED", "-DORDERED=2",
         "/work/one.c", "/work/conditional.c", "/work/review.c", "/work/option_order.c",
-        "/work/linkage_a.c", "/work/linkage_b.c"
+        "/work/linkage_a.c", "/work/linkage_b.c", "/work/macro_generated.c", "/work/old_style.c"
       ],
       argv0:       "cxref",
       guest_files: {
@@ -341,6 +417,8 @@ class Cxref < Formula
         "/work/second/choice.h"   => second_include/"choice.h",
         "/work/linkage_a.c"       => workspace/"linkage_a.c",
         "/work/linkage_b.c"       => workspace/"linkage_b.c",
+        "/work/macro_generated.c" => workspace/"macro_generated.c",
+        "/work/old_style.c"       => workspace/"old_style.c",
       },
       timeout_ms:  120_000,
     )
@@ -357,6 +435,22 @@ class Cxref < Formula
     assert_match(%r{^helper \| /work/linkage_a\.c \| - \| 6$}, browser_output)
     assert_match(%r{^helper \| /work/linkage_b\.c \| from_b \| 4$}, browser_output)
     refute_match(%r{^helper \| /work/linkage_b\.c \| - \| 4$}, browser_output)
+    assert_match(%r{^generated \| /work/macro_generated\.c \| - \| \*9$}, browser_output)
+    assert_match(%r{^generated \| /work/macro_generated\.c \| - \| 16$}, browser_output)
+    assert_match(%r{^target \| /work/macro_generated\.c \| - \| 12$}, browser_output)
+    assert_match(%r{^local_value \| /work/macro_generated\.c \| local_user \| \*20$}, browser_output)
+    assert_match(%r{^local_value \| /work/macro_generated\.c \| local_user \| 21$}, browser_output)
+    refute_match(%r{^generated \| /work/macro_generated\.c \| g \| 16$}, browser_output)
+    refute_match(%r{^target \| /work/macro_generated\.c \| f \| 12$}, browser_output)
+    assert_match(%r{^literal_generated \| /work/macro_generated\.c \| - \| \*23$}, browser_output)
+    assert_match(%r{^literal_generated \| /work/macro_generated\.c \| - \| 29$}, browser_output)
+    assert_match(%r{^literal_local \| /work/macro_generated\.c \| - \| \*24$}, browser_output)
+    assert_match(%r{^literal_local \| /work/macro_generated\.c \| literal_local_user \| 34$}, browser_output)
+    assert_match(%r{^target \| /work/old_style\.c \| old_style \| \*5$}, browser_output)
+    assert_match(%r{^target \| /work/old_style\.c \| old_style \| \*6$}, browser_output)
+    assert_match(%r{^target \| /work/old_style\.c \| old_style \| 8$}, browser_output)
+    assert_match(%r{^target \| /work/old_style\.c \| - \| 12$}, browser_output)
+    refute_match(%r{^target \| /work/old_style\.c \| after_old_style \| 12$}, browser_output)
     assert_match(%r{^first_choice \| /work/first/choice\.h \| - \| \*1$}, browser_output)
     assert_match(%r{^final_define \| /work/option_order\.c \| - \| \*3$}, browser_output)
   end
