@@ -1,4 +1,4 @@
-require_relative "../Kandelo/formula_support/kandelo_formula_support"
+require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Tcl < Formula
   include KandeloFormulaSupport
@@ -129,22 +129,7 @@ class Tcl < Formula
         mv instrumented, tclsh
         chmod 0755, tclsh
 
-        artifact_guards = "#{root}/scripts/wasm-artifact-guards.sh"
-        system "bash", "-c", <<~SH
-          set -euo pipefail
-          . #{artifact_guards.shellescape}
-          expected_abi=$(wasm_current_abi_version #{root.to_s.shellescape})
-          artifact_abi=$(wasm_extract_abi_version #{tclsh.to_s.shellescape})
-          if [ -z "$expected_abi" ] || [ "$artifact_abi" != "$expected_abi" ]; then
-            echo "ERROR: Tcl ABI $artifact_abi does not match Kandelo ABI $expected_abi" >&2
-            exit 1
-          fi
-          wasm_require_no_legacy_asyncify #{tclsh.to_s.shellescape}
-          if ! wasm_has_complete_fork_instrumentation #{tclsh.to_s.shellescape}; then
-            echo "ERROR: Tcl has incomplete fork instrumentation" >&2
-            exit 1
-          fi
-        SH
+        kandelo_validate_wasm_artifact(tclsh, fork: :required, forbidden_paths: [zlib.to_s])
 
         # Appending Tcl's ZIPFS payload produces trailing bytes that standard
         # WebAssembly engines reject. Install the normal runtime library instead.
