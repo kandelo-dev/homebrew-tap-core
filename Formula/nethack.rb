@@ -10,6 +10,8 @@ class Nethack < Formula
   sha256 "98cf67df6debf9668a61745aa84c09bcab362e5d33f5b944ec5155d44d2aacb2"
   license "NGPL"
 
+  depends_on "binaryen" => :build
+  depends_on "wabt" => :build
   depends_on "automattic/kandelo-homebrew/ncurses"
 
   skip_clean "bin/nethack"
@@ -41,6 +43,7 @@ class Nethack < Formula
     end
 
     kandelo_fork_instrument buildpath/"src/nethack"
+    kandelo_validate_wasm_artifact(buildpath/"src/nethack", fork: :required)
     kandelo_install_bin(buildpath/"src", "nethack", "nethack")
 
     data_dir = share/"nethack"
@@ -233,16 +236,6 @@ class Nethack < Formula
     %w[/private/tmp/ /nix/store/ /Users/].each do |builder_path|
       refute_includes binary, builder_path
     end
-
-    root = kandelo_require_root!
-    system "#{root}/scripts/dev-shell.sh", "bash", "-c", <<~SH, "nethack-artifact-guard", root, bin/"nethack"
-      set -euo pipefail
-      . "$1/scripts/wasm-artifact-guards.sh"
-      wasm_require_exports "$2" __abi_version \
-        wpk_fork_unwind_begin wpk_fork_unwind_end \
-        wpk_fork_rewind_begin wpk_fork_rewind_end wpk_fork_state
-      wasm_require_no_legacy_asyncify "$2"
-    SH
 
     version_output = kandelo_run_wasm(
       bin/"nethack", ["--version"],
