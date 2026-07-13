@@ -137,10 +137,10 @@ class Php < Formula
         *MAIN_ONLY_EXPORTS.flat_map { |symbol| ["-u", symbol] },
         "-Wl,-z,stack-size=4194304",
       ].join(" ")
-      ENV["PKG_CONFIG_LIBDIR"] = dependencies.values
-                                             .map { |dependency| dependency/"lib/pkgconfig" }
-                                             .join(File::PATH_SEPARATOR)
-      ENV.delete("PKG_CONFIG_PATH")
+      ENV["PKG_CONFIG_PATH"] = dependencies.values
+                                           .map { |dependency| dependency/"lib/pkgconfig" }
+                                           .join(File::PATH_SEPARATOR)
+      ENV.delete("PKG_CONFIG_LIBDIR")
       ENV.delete("PKG_CONFIG_SYSROOT_DIR")
 
       zlib = dependencies.fetch("zlib")
@@ -150,6 +150,7 @@ class Php < Formula
       libiconv = dependencies.fetch("libiconv")
       libzip = dependencies.fetch("libzip")
       libcurl = dependencies.fetch("libcurl")
+      icu = dependencies.fetch("icu")
       ENV["ZLIB_CFLAGS"] = "-I#{zlib}/include"
       ENV["ZLIB_LIBS"] = "-L#{zlib}/lib -lz"
       ENV["SQLITE_CFLAGS"] = "-I#{sqlite}/include"
@@ -164,6 +165,8 @@ class Php < Formula
       ENV["LIBZIP_LIBS"] = "-L#{libzip}/lib -lzip -L#{zlib}/lib -lz"
       ENV["CURL_CFLAGS"] = "-I#{libcurl}/include -DCURL_STATICLIB"
       ENV["CURL_LIBS"] = "-L#{libcurl}/lib -lcurl"
+      ENV["ICU_CFLAGS"] = "-I#{icu}/include"
+      ENV["ICU_LIBS"] = "-L#{icu}/lib -licui18n -licuio -licuuc -licudata"
       ENV["PHP_UNAME"] = "Kandelo wasm32-posix-kernel"
       ENV["ac_cv_lib_iconv_libiconv"] = "yes"
       ENV["ac_cv_lib_curl_curl_easy_perform"] = "yes"
@@ -260,7 +263,7 @@ class Php < Formula
       system "wasm-opt", "-O2", "sapi/fpm/php-fpm", "-o", php_fpm
       kandelo_fork_instrument php
       kandelo_fork_instrument php_fpm
-      chmod 0755, php, php_fpm
+      [php, php_fpm].each { |artifact| chmod 0755, artifact }
 
       dependency_paths = dependencies.values
       kandelo_validate_wasm_artifact(php, fork: :required, forbidden_paths: dependency_paths)
@@ -336,6 +339,9 @@ class Php < Formula
     (destination/"include/c++").mkpath
     cp_r libcxx/"include/c++/v1", destination/"include/c++/v1"
     (destination/"lib").mkpath
+    %w[libc++.a libc++abi.a libstdc++.a].each do |archive|
+      rm destination/"lib"/archive if (destination/"lib"/archive).exist?
+    end
     cp libcxx/"lib/libc++.a", destination/"lib/libc++.a"
     cp libcxx/"lib/libc++abi.a", destination/"lib/libc++abi.a"
     cp libcxx/"lib/libc++.a", destination/"lib/libstdc++.a"
@@ -361,7 +367,7 @@ class Php < Formula
     text.gsub!("/* #undef HAVE_PRCTL */", "#define HAVE_PRCTL 1")
     text.gsub!(/^#define PHP_OS .*$/, '#define PHP_OS "Kandelo"')
     text.gsub!(/^#define PHP_UNAME .*$/, '#define PHP_UNAME "Kandelo wasm32-posix-kernel"')
-    config.write(text)
+    File.write(config, text)
     odie "PHP configure did not select GNU libiconv aliases" unless text.include?("#define ICONV_ALIASED_LIBICONV 1")
     odie "PHP configure did not retain musl fopencookie support" unless text.include?("#define HAVE_FOPENCOOKIE 1")
     if text.include?("#define COOKIE_SEEKER_USES_OFF64_T 1")
@@ -372,15 +378,15 @@ class Php < Formula
     text = build_defs.read
     text.gsub!(/^#define CONFIGURE_COMMAND .*$/, '#define CONFIGURE_COMMAND "Kandelo reproducible Homebrew build"')
     text.gsub!(/^#define PHP_EXTENSION_DIR .*$/, %Q(#define PHP_EXTENSION_DIR       "#{GUEST_EXTENSION_DIR}"))
-    build_defs.write(text)
+    File.write(build_defs, text)
 
     makefile = buildpath/"Makefile"
-    makefile.write(makefile.read.gsub(/ -MMD -MF \S+ -MT \S+/, ""))
+    File.write(makefile, makefile.read.gsub(/ -MMD -MF \S+ -MT \S+/, ""))
 
     libtool = buildpath/"libtool"
     text = libtool.read
     odie "PHP libtool shared mode marker drifted" unless text.include?("build_libtool_libs=no")
-    libtool.write(text.sub(/^build_libtool_libs=no$/, "build_libtool_libs=yes"))
+    File.write(libtool, text.sub(/^build_libtool_libs=no$/, "build_libtool_libs=yes"))
   end
 
   def build_opcache!(root, output, extra_includes)
