@@ -1,4 +1,5 @@
 require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require "digest"
 
 class Libcurl < Formula
   include KandeloFormulaSupport
@@ -8,19 +9,42 @@ class Libcurl < Formula
   url "https://curl.se/download/curl-8.11.1.tar.xz"
   sha256 "c7ca7db48b0909743eaef34250da02c19bc61d4f1dcedd6603f109409536ab56"
   license "curl"
+  revision 1
 
   depends_on "pkgconf" => [:build, :test]
+  depends_on "binaryen" => :test
+  depends_on "wabt" => :test
   depends_on "automattic/kandelo-homebrew/openssl"
   depends_on "automattic/kandelo-homebrew/zlib"
 
   skip_clean "lib/libcurl.a"
+  skip_clean "lib/libcurl-pic.a"
 
   def install
     kandelo_require_arch!("wasm32", "wasm64")
     openssl = formula_opt_prefix("automattic/kandelo-homebrew/openssl")
     zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
 
-    kandelo_wasm_build do
+    kandelo_wasm_build do |root|
+      pic_source = buildpath.parent/"#{buildpath.basename}-pic"
+      odie "stale PIC libcurl source tree exists: #{pic_source}" if pic_source.exist?
+      cp_r buildpath, pic_source
+      prefix_maps = lambda do |source_root|
+        {
+          source_root => "/usr/src/libcurl",
+          root        => "/usr/src/kandelo",
+          openssl     => "/usr/src/kandelo-deps/openssl",
+          zlib        => "/usr/src/kandelo-deps/zlib",
+        }.flat_map do |from, to|
+          [Pathname(from), Pathname(from).realpath].uniq.flat_map do |source|
+            [
+              "-ffile-prefix-map=#{source}=#{to}",
+              "-fdebug-prefix-map=#{source}=#{to}",
+              "-fmacro-prefix-map=#{source}=#{to}",
+            ]
+          end
+        end
+      end
       ENV["CPPFLAGS"] = "-I#{openssl}/include -I#{zlib}/include"
       ENV["LDFLAGS"] = "-L#{openssl}/lib -L#{zlib}/lib"
       ENV["LIBS"] = "-ldl -pthread"
@@ -36,7 +60,8 @@ class Libcurl < Formula
       ENV["ac_cv_lib_z_gzread"] = "yes"
       ENV["ac_cv_func_SSL_set0_wbio"] = "yes"
 
-      system kandelo_configure, *kandelo_std_configure_args,
+      configure_args = [
+        *kandelo_std_configure_args,
         "--disable-shared",
         "--enable-static",
         "--with-openssl=#{openssl}",
@@ -56,9 +81,51 @@ class Libcurl < Formula
         "--disable-ldap",
         "--disable-ldaps",
         "--disable-manual",
-        "--disable-docs"
+        "--disable-docs",
+      ]
+      ENV["WASM_POSIX_TARGET_ARCH"] = kandelo_arch
+      # Keep the main archive on curl's exact in-tree default CFLAGS contract;
+      # changing user CFLAGS changes static member selection for existing
+      # main-module consumers. The cloned tree owns PIC code generation.
+      ENV["CFLAGS"] = ""
+      system kandelo_configure(root), *configure_args
+      cd pic_source do
+        ENV["CFLAGS"] = ["-O2", "-fPIC", *prefix_maps.call(pic_source)].join(" ")
+        system kandelo_configure(root), *configure_args
+      end
+
+      # The builds use distinct relocation/CFLAGS policies. Fail closed if
+      # configure nevertheless selected a different target feature set.
+      normal_config = (buildpath/"lib/curl_config.h").binread
+      pic_config = (pic_source/"lib/curl_config.h").binread
+      odie "normal and PIC libcurl target facts differ" if normal_config != pic_config
+      %w[
+        HAVE_LIBZ
+        USE_OPENSSL
+        USE_UNIX_SOCKETS
+      ].each do |fact|
+        odie "libcurl target fact missing: #{fact}" unless normal_config.include?("#define #{fact} 1")
+      end
+      ca_fact = '#define CURL_CA_BUNDLE "/etc/ssl/certs/ca-certificates.crt"'
+      odie "libcurl CA bundle target fact drifted" unless normal_config.include?(ca_fact)
+      expected_pointer_size = (kandelo_arch == "wasm64") ? 8 : 4
+      %w[SIZEOF_LONG SIZEOF_SIZE_T].each do |fact|
+        expected = "#define #{fact} #{expected_pointer_size}"
+        odie "libcurl #{fact} target width drifted" unless normal_config.include?(expected)
+      end
+
+      ENV["CFLAGS"] = ""
       system "make"
       system "make", "install"
+      cd pic_source do
+        ENV["CFLAGS"] = ["-O2", "-fPIC", *prefix_maps.call(pic_source)].join(" ")
+        system "make"
+        pic_archive = pic_source/"lib/.libs/libcurl.a"
+        odie "PIC libcurl archive was not built" unless pic_archive.file?
+
+        lib.install pic_archive => "libcurl-pic.a"
+      end
+      rm_r pic_source
     end
 
     rm_r bin if bin.exist?
@@ -68,11 +135,41 @@ class Libcurl < Formula
 
   test do
     assert_path_exists lib/"libcurl.a"
+    assert_path_exists lib/"libcurl-pic.a"
     assert_path_exists include/"curl/curl.h"
     assert_path_exists lib/"pkgconfig/libcurl.pc"
 
+    root = kandelo_require_root!
     openssl = formula_opt_prefix("automattic/kandelo-homebrew/openssl")
     zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    forbidden_paths = [
+      root,
+      prefix,
+      openssl,
+      openssl.realpath,
+      zlib,
+      zlib.realpath,
+      "/opt/homebrew/Cellar/",
+      "/usr/local/Cellar/",
+      "/private/tmp/",
+      "/private/var/",
+      "/nix/store/",
+    ].map(&:to_s).uniq
+    %w[libcurl.a libcurl-pic.a].each do |archive_name|
+      archive = (lib/archive_name).binread
+      forbidden_paths.each do |forbidden|
+        refute_includes archive, forbidden
+      end
+      refute_match %r{/Users/[^/]+/}, archive
+    end
+    refute_equal Digest::SHA256.file(lib/"libcurl.a").hexdigest,
+      Digest::SHA256.file(lib/"libcurl-pic.a").hexdigest
+    refute_includes (lib/"pkgconfig/libcurl.pc").read, "libcurl-pic"
+    normal_members = Utils.safe_popen_read(kandelo_ar(root), "t", lib/"libcurl.a").lines.map(&:strip)
+    pic_members = Utils.safe_popen_read(kandelo_ar(root), "t", lib/"libcurl-pic.a").lines.map(&:strip)
+    assert_operator normal_members.length, :>, 100
+    assert_equal normal_members, pic_members
+
     source = testpath/"libcurl-smoke.c"
     wasm = testpath/"libcurl-smoke.wasm"
     source.write <<~C
@@ -310,7 +407,101 @@ class Libcurl < Formula
       end
       system kandelo_cc, source, *flags, "-o", wasm
     end
-    assert_equal "libcurl-ok http=200 ca=/etc/ssl/certs/ca-certificates.crt\n",
-      kandelo_run_wasm(wasm, [], network: true)
+    ca_bundle = Pathname(root)/"images/rootfs/etc/ssl/cert.pem"
+    assert_path_exists ca_bundle
+    guest_ca_bundle = "/etc/ssl/certs/ca-certificates.crt"
+    assert_equal "libcurl-ok http=200 ca=#{guest_ca_bundle}\n",
+      kandelo_run_wasm(
+        wasm, [], network: true, guest_files: { guest_ca_bundle => ca_bundle }
+      )
+
+    side_source = testpath/"libcurl-pic-side.c"
+    side_module = testpath/"libcurl-pic-side.so"
+    loader_source = testpath/"libcurl-pic-loader.c"
+    loader = testpath/"libcurl-pic-loader.wasm"
+    side_source.write <<~C
+      #include <curl/curl.h>
+
+      __attribute__((visibility("default")))
+      const char *kandelo_libcurl_pic_version(void) {
+        return curl_version();
+      }
+    C
+    loader_source.write <<~C
+      #include <curl/curl.h>
+      #include <dlfcn.h>
+      #include <stdio.h>
+      #include <string.h>
+
+      typedef const char *(*version_fn)(void);
+
+      int main(int argc, char **argv) {
+        const curl_version_info_data *main_info;
+        version_fn side_version;
+        void *module;
+        const char *value;
+
+        if (argc != 2 || curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) return 1;
+        main_info = curl_version_info(CURLVERSION_NOW);
+        if (main_info == NULL || main_info->version == NULL) return 2;
+        module = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
+        if (module == NULL) {
+          fprintf(stderr, "dlopen: %s\\n", dlerror());
+          return 3;
+        }
+        side_version = (version_fn)dlsym(module, "kandelo_libcurl_pic_version");
+        if (side_version == NULL || (value = side_version()) == NULL) return 4;
+        if (strstr(value, "libcurl/8.11.1") == NULL) return 5;
+        printf("libcurl-pic-ok %s\\n", value);
+        curl_global_cleanup();
+        return dlclose(module) == 0 ? 0 : 6;
+      }
+    C
+
+    kandelo_wasm_build do |sdk_root|
+      pic_whole_archive = [
+        "-Wl,--whole-archive", lib/"libcurl-pic.a", "-Wl,--no-whole-archive"
+      ]
+      normal_whole_archive = [
+        "-Wl,--whole-archive", lib/"libcurl.a", "-Wl,--no-whole-archive"
+      ]
+      system kandelo_cc(sdk_root), side_source, "-O2", "-fPIC", "-shared", "-I#{include}",
+        *pic_whole_archive, "-o", side_module
+
+      nonpic_module = testpath/"libcurl-nonpic-negative.so"
+      nonpic_command = [
+        kandelo_cc(sdk_root), side_source, "-O2", "-fPIC", "-shared", "-I#{include}",
+        *normal_whole_archive, "-o", nonpic_module
+      ].shelljoin
+      nonpic_output = shell_output("#{nonpic_command} 2>&1", 1)
+      assert_match(/relocation R_WASM_.*recompile with -fPIC/m, nonpic_output)
+      refute_path_exists nonpic_module
+
+      system kandelo_cc(sdk_root), loader_source, "-O2", "-I#{include}", "-Wl,--export-all",
+        *normal_whole_archive,
+        openssl/"lib/libssl.a", openssl/"lib/libcrypto.a", zlib/"lib/libz.a",
+        "-ldl", "-pthread", "-o", loader
+    end
+
+    side_info = Utils.safe_popen_read("wasm-objdump", "-x", side_module)
+    assert_match(/dylink\.0/, side_info)
+    assert_match(/memory.*<- env\.memory/, side_info)
+    refute_match(/<- env\.(?:Curl_|curl_|curlx_)/, side_info)
+
+    # Wasm64 side-module paths and lengths cross the JS import boundary as
+    # BigInts. The host's current __wasm_dlopen adapter still constructs a
+    # Uint8Array with those values directly, so runtime dlopen coverage remains
+    # wasm32-only until that platform gap is fixed. The build/link checks above
+    # still cover every member of both wasm64 archives.
+    if kandelo_arch == "wasm32"
+      expected_prefix = "libcurl-pic-ok libcurl/8.11.1"
+      node_output = kandelo_run_wasm(loader, [side_module])
+      assert_match(/^#{Regexp.escape(expected_prefix)}/, node_output)
+      guest_side = "/usr/lib/libcurl-pic-side.so"
+      browser_output = kandelo_run_browser_wasm(
+        loader, [guest_side], guest_files: { guest_side => side_module }
+      )
+      assert_match(/^#{Regexp.escape(expected_prefix)}/, browser_output)
+    end
   end
 end
