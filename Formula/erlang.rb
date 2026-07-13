@@ -11,6 +11,7 @@ class Erlang < Formula
   sha256 "b984f9e02bb61637997a35daa9070ae8f41cea1667676416438c467fda3d141f"
   license "Apache-2.0"
 
+  depends_on "binaryen" => :build
   depends_on "bison" => :build
   depends_on "erlang@28" => :build
   depends_on "make" => :build
@@ -166,12 +167,17 @@ class Erlang < Formula
 
       linked_modules = wasm_files(release_root)
       odie "OTP release did not contain any linked Wasm modules" if linked_modules.empty?
-      linked_modules.each { |wasm| kandelo_fork_instrument(wasm) }
+      fork_policies = linked_modules.to_h do |wasm|
+        relative = wasm.relative_path_from(release_root).to_s
+        policy = standalone_wasm_fork_policy(wasm)
+        kandelo_fork_instrument(wasm) if policy == :required
+        [relative, policy]
+      end
 
       cd release_root do
         system "./Install", "-cross", "-minimal", GUEST_RUNTIME_ROOT
       end
-      validate_release!(release_root, root)
+      validate_release!(release_root, root, fork_policies)
     end
 
     (lib/"erlang").install release_root.children
@@ -281,8 +287,24 @@ class Erlang < Formula
     files
   end
 
-  def validate_release!(release_root, root)
+  def standalone_wasm_fork_policy(wasm)
+    dump = Utils.safe_popen_read("wasm-objdump", "-x", wasm).to_s
+    odie "OTP release contains an unexpected Wasm side module: #{wasm}" if dump.match?(/name:\s+"dylink\.0"/)
+
+    imports_fork = dump.each_line.any? { |line| line.match?(/<-\s+kernel\.kernel_fork(?:\s|$)/) }
+    imports_fork ? :required : :forbidden
+  end
+
+  def validate_release!(release_root, root, fork_policies)
     wasm = wasm_files(release_root)
+    final_paths = wasm.map { |path| path.relative_path_from(release_root).to_s }.sort
+    odie "OTP install changed the classified Wasm artifact set" if final_paths != fork_policies.keys.sort
+
+    wasm.each do |artifact|
+      relative = artifact.relative_path_from(release_root).to_s
+      kandelo_validate_wasm_artifact(artifact, fork: fork_policies.fetch(relative))
+    end
+
     forbidden = [buildpath.to_s, prefix.to_s, root.to_s, "/nix/store/"]
     Find.find(release_root.to_s) do |candidate|
       next unless File.file?(candidate)
@@ -295,19 +317,11 @@ class Erlang < Formula
       odie "OTP release contains legacy Asyncify metadata in #{candidate}" if contents.include?("asyncify_")
     end
 
-    expected_abi = (Pathname(root)/"crates/shared/src/lib.rs").read[
-      /^pub const ABI_VERSION: u32 = ([0-9]+);$/,
-      1,
-    ]
-    odie "could not read Kandelo ABI version" if expected_abi.nil?
-
     validator = buildpath/"validate-erlang-artifacts.mjs"
     validator.write <<~JS
       import { readFileSync } from "node:fs";
-      import { extractAbiVersion } from "#{root}/host/src/constants.ts";
 
-      const [expectedAbiText, ...paths] = process.argv.slice(2);
-      const expectedAbi = Number(expectedAbiText);
+      const paths = process.argv.slice(2);
       const allowedEnvImports = new Set([
         "__channel_base",
         "memory",
@@ -316,26 +330,15 @@ class Erlang < Formula
         "__wasm_dlopen",
         "__wasm_dlsym",
       ]);
-      const forkExports = [
-        "wpk_fork_unwind_begin",
-        "wpk_fork_unwind_end",
-        "wpk_fork_rewind_begin",
-        "wpk_fork_rewind_end",
-        "wpk_fork_state",
-      ];
       let beamUsesFork = false;
 
       for (const path of paths) {
         const bytes = readFileSync(path);
-        const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-        const actualAbi = extractAbiVersion(arrayBuffer);
-        if (actualAbi !== expectedAbi) {
-          throw new Error(`${path} ABI ${actualAbi} does not match Kandelo ABI ${expectedAbi}`);
-        }
-
         const module = await WebAssembly.compile(bytes);
         const imports = WebAssembly.Module.imports(module);
-        const exports = new Set(WebAssembly.Module.exports(module).map(({ name }) => name));
+        if (WebAssembly.Module.customSections(module, "dylink.0").length !== 0) {
+          throw new Error(`${path} is a side module instead of a standalone executable`);
+        }
         const unexpected = imports.filter(({ module, name }) =>
           module === "env" && !allowedEnvImports.has(name)
         );
@@ -346,10 +349,6 @@ class Erlang < Formula
         const importsFork = imports.some(({ module, name }) =>
           module === "kernel" && name === "kernel_fork"
         );
-        const presentForkExports = forkExports.filter((name) => exports.has(name));
-        if (presentForkExports.length !== forkExports.length) {
-          throw new Error(`${path} has incomplete fork instrumentation`);
-        }
         if (path.endsWith("/bin/beam.smp")) beamUsesFork ||= importsFork;
       }
 
@@ -357,7 +356,7 @@ class Erlang < Formula
     JS
     cd(root) do
       system "node", "--experimental-wasm-exnref", "--import", "tsx/esm",
-        validator, expected_abi, *wasm
+        validator, *wasm
     end
   end
 end
