@@ -77,6 +77,7 @@ class Curl < Formula
   end
 
   test do
+    root = kandelo_require_root!
     version_output = kandelo_run_wasm(bin/"curl", ["--version"])
     assert_match(%r{^curl 8\.11\.1 .* libcurl/8\.11\.1 }, version_output)
     assert_match(%r{ OpenSSL/[0-9]}, version_output)
@@ -89,6 +90,9 @@ class Curl < Formula
     assert_match(/^Features: .*\bthreadsafe\b/, version_output)
 
     write_out = "curl-ok %" + "{http_code} %" + "{ssl_verify_result}\\n"
+    ca_bundle = Pathname(root)/"images/rootfs/etc/ssl/cert.pem"
+    assert_path_exists ca_bundle
+    guest_ca_bundle = "/etc/ssl/certs/ca-certificates.crt"
     output = kandelo_run_wasm(
       bin/"curl",
       [
@@ -105,7 +109,8 @@ class Curl < Formula
         "--write-out", write_out,
         "https://example.com/"
       ],
-      network: true,
+      network:     true,
+      guest_files: { guest_ca_bundle => ca_bundle },
     )
     assert_equal "curl-ok 200 0\n", output
   end
