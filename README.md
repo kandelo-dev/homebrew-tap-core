@@ -52,6 +52,8 @@ Current migration controls and pilots include:
   plus explicit rejection of relocatable, dynamic, cross-format, or lossy rewrites;
 - `file`, compression-aware file type identification backed by the complete
   `libmagic` database;
+- `fuser`, psmisc's process and open-file ownership inspector backed by
+  Kandelo's live procfs process state;
 - `what`, FreeBSD's SCCS identification-string extractor;
 - `zip` and `unzip`, the security-patched Info-ZIP creation, extraction, and inspection tools.
 - `libiconv`, GNU's complete character-set conversion library and CLI,
