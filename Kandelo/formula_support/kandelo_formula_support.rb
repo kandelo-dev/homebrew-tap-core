@@ -745,12 +745,16 @@ module KandeloFormulaSupport
   # runtimes whose behavior depends on argv[0]. `exec_programs:` stages
   # executable Wasm programs for spawn/exec behavior, while immutable
   # `guest_files:` use the same absolute-path and bounded-rootfs contract as
-  # Node formula tests.
+  # Node formula tests. `expected_status:` and `merge_stderr:` permit exact
+  # negative-path checks without converting a guest failure into a
+  # browser-runner failure.
   def kandelo_run_browser_wasm(
     bin_path, argv, argv0: nil, env: {}, exec_programs: {}, guest_files: {},
-    timeout_ms: 120_000, allow_stderr: false
+    timeout_ms: 120_000, allow_stderr: false, merge_stderr: false, expected_status: 0
   )
     root = kandelo_require_root!
+    valid_status = expected_status.is_a?(Integer) && expected_status.between?(0, 255)
+    odie "expected browser status must be an integer from 0 through 255" unless valid_status
     if (node = ENV.fetch("HOMEBREW_KANDELO_NODE", nil)).to_s != ""
       ENV.prepend_path "PATH", File.dirname(node)
     end
@@ -762,11 +766,13 @@ module KandeloFormulaSupport
     odie "invalid browser guest command name: #{command_name}" if invalid_command_name
 
     config = JSON.generate({
-      argv:        argv.map(&:to_s),
-      argv0:       command_name,
-      env:         env.transform_values(&:to_s),
-      timeoutMs:   timeout_ms,
-      allowStderr: allow_stderr,
+      argv:           argv.map(&:to_s),
+      argv0:          command_name,
+      env:            env.transform_values(&:to_s),
+      timeoutMs:      timeout_ms,
+      allowStderr:    allow_stderr,
+      mergeStderr:    merge_stderr,
+      expectedStatus: expected_status,
     })
     guest_files_manifest = testpath/"#{wasm_path.basename}.browser-guest-files.json"
     File.binwrite(

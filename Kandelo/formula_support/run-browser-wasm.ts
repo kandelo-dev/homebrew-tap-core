@@ -23,12 +23,15 @@ interface RunnerConfig {
   env: Record<string, string>;
   timeoutMs: number;
   allowStderr: boolean;
+  mergeStderr: boolean;
+  expectedStatus: number;
 }
 
 interface BrowserSmokeResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  mergedOutput: string;
 }
 
 interface PageRunnerConfig extends RunnerConfig {
@@ -97,6 +100,16 @@ function parseConfig(text: string): RunnerConfig {
   }
   if (typeof value.allowStderr !== "boolean") {
     throw new Error("formula browser allowStderr must be boolean");
+  }
+  if (typeof value.mergeStderr !== "boolean") {
+    throw new Error("formula browser mergeStderr must be boolean");
+  }
+  if (
+    !Number.isSafeInteger(value.expectedStatus) ||
+    (value.expectedStatus ?? -1) < 0 ||
+    (value.expectedStatus ?? -1) > 255
+  ) {
+    throw new Error(`invalid formula browser expected status: ${String(value.expectedStatus)}`);
   }
   return value as RunnerConfig;
 }
@@ -391,10 +404,15 @@ async function main(): Promise<void> {
         }).__runKandeloFormulaBrowserSmoke(request),
         pageConfig,
       );
-      if (result.exitCode !== 0 || (!config.allowStderr && result.stderr.length > 0) || pageErrors.length > 0) {
+      const unexpectedStderr = !config.allowStderr && !config.mergeStderr && result.stderr.length > 0;
+      if (
+        result.exitCode !== config.expectedStatus ||
+        unexpectedStderr ||
+        pageErrors.length > 0
+      ) {
         throw new Error(`formula browser smoke failed: ${JSON.stringify({ ...result, pageErrors })}`);
       }
-      process.stdout.write(result.stdout);
+      process.stdout.write(config.mergeStderr ? result.mergedOutput : result.stdout);
       await page.evaluate(() =>
         (window as unknown as { __cleanupKandeloFormulaBrowserSmoke?: () => Promise<void> })
           .__cleanupKandeloFormulaBrowserSmoke?.(),
