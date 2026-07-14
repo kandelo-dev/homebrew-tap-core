@@ -16,6 +16,7 @@ class Mariadb < Formula
   depends_on "wabt" => [:build, :test]
   depends_on "automattic/kandelo-homebrew/libcxx"
   depends_on "automattic/kandelo-homebrew/ncurses"
+  depends_on "automattic/kandelo-homebrew/openssl"
   depends_on "automattic/kandelo-homebrew/pcre2"
   depends_on "automattic/kandelo-homebrew/zlib"
 
@@ -31,8 +32,10 @@ class Mariadb < Formula
 
     libcxx = formula_opt_prefix("automattic/kandelo-homebrew/libcxx")
     ncurses = formula_opt_prefix("automattic/kandelo-homebrew/ncurses")
+    openssl = formula_opt_prefix("automattic/kandelo-homebrew/openssl")
     pcre2 = formula_opt_prefix("automattic/kandelo-homebrew/pcre2")
     zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    openssl_version = kandelo_formula("automattic/kandelo-homebrew/openssl").version.to_s
     guest_prefix = "/home/linuxbrew/.linuxbrew/opt/mariadb"
     host_cmake = kandelo_host_tool("cmake")
 
@@ -42,6 +45,8 @@ class Mariadb < Formula
     host_build = buildpath/"host-build"
     system host_cmake, "-S", ".", "-B", host_build,
       "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+      "-DCMAKE_C_COMPILER=cc",
+      "-DCMAKE_CXX_COMPILER=c++",
       "-DWITH_UNIT_TESTS=OFF",
       "-DWITH_MARIABACKUP=OFF",
       "-DPLUGIN_CONNECT=NO",
@@ -65,9 +70,9 @@ class Mariadb < Formula
 
     kandelo_wasm_build do |root|
       toolchain = buildpath/"kandelo-mariadb-toolchain.cmake"
-      write_toolchain(toolchain, root, libcxx, ncurses, pcre2, zlib)
+      write_toolchain(toolchain, root, libcxx, ncurses, openssl, pcre2, zlib)
 
-      pkgconfig_dirs = [ncurses, pcre2, zlib].map { |dep| dep/"lib/pkgconfig" }
+      pkgconfig_dirs = [ncurses, openssl, pcre2, zlib].map { |dep| dep/"lib/pkgconfig" }
       ENV["PKG_CONFIG_LIBDIR"] = pkgconfig_dirs.join(File::PATH_SEPARATOR)
       ENV.delete("PKG_CONFIG_PATH")
       ENV.delete("PKG_CONFIG_SYSROOT_DIR")
@@ -91,6 +96,7 @@ class Mariadb < Formula
         "-fdebug-compilation-dir=.",
         *prefix_maps,
         "-I#{ncurses}/include",
+        "-I#{openssl}/include",
         "-I#{pcre2}/include",
         "-I#{zlib}/include",
       ].join(" ")
@@ -120,8 +126,13 @@ class Mariadb < Formula
         "-DENABLED_PROFILING=OFF",
         "-DWITHOUT_DYNAMIC_PLUGIN=ON",
         "-DDISABLE_SHARED=ON",
-        "-DWITH_SSL=OFF",
-        "-DCONC_WITH_SSL=OFF",
+        "-DWITH_SSL=system",
+        "-DCONC_WITH_SSL=OPENSSL",
+        "-DOPENSSL_ROOT_DIR=#{openssl}",
+        "-DOPENSSL_USE_STATIC_LIBS=TRUE",
+        "-DOPENSSL_INCLUDE_DIR=#{openssl}/include",
+        "-DOPENSSL_SSL_LIBRARY=#{openssl}/lib/libssl.a",
+        "-DOPENSSL_CRYPTO_LIBRARY=#{openssl}/lib/libcrypto.a",
         "-DWITH_PCRE=system",
         "-DWITH_READLINE=ON",
         "-DWITH_ZLIB=system",
@@ -167,6 +178,8 @@ class Mariadb < Formula
         "-DHAVE_PCRE2_MATCH_8=1",
         "-DNEEDS_PCRE2_DEBIAN_HACK=FALSE"
 
+      validate_tls_configuration!(openssl)
+
       system "cmake", "--build", "target-build", "--parallel", ENV.make_jobs,
         "--target", "mariadbd"
       system "cmake", "--build", "target-build", "--parallel", ENV.make_jobs,
@@ -174,8 +187,10 @@ class Mariadb < Formula
 
       mariadbd = buildpath/"target-build/sql/mariadbd"
       mariadb_test = buildpath/"target-build/client/mariadb-test"
-      prepare_artifact(root, mariadbd)
-      prepare_artifact(root, mariadb_test)
+      validate_tls_linkage!(openssl, buildpath/"target-build/sql/CMakeFiles/mariadbd.dir/link.txt")
+      validate_tls_linkage!(openssl, buildpath/"target-build/client/CMakeFiles/mariadb-test.dir/link.txt")
+      prepare_artifact(root, mariadbd, openssl_version)
+      prepare_artifact(root, mariadb_test, openssl_version)
 
       bin.install mariadbd => "mariadbd"
       bin.install mariadb_test => "mariadb-test"
@@ -216,6 +231,7 @@ class Mariadb < Formula
       CREATE TABLE messages (id INTEGER PRIMARY KEY, body VARCHAR(64)) ENGINE=Aria;
       INSERT INTO messages VALUES (1, 'mariadb-homebrew-ok');
       SELECT id, body FROM messages;
+      SHOW VARIABLES LIKE 'version_ssl_library';
       SHUTDOWN;
     SQL
 
@@ -365,29 +381,37 @@ class Mariadb < Formula
     end
     lifecycle = kandelo_run_wasm(
       supervisor, [],
-      env:           { "TIMEOUT" => "90000" },
-      network:       true,
-      exec_programs: {
+      env:                       { "TIMEOUT" => "90000" },
+      network:                   true,
+      exec_programs:             {
         "/usr/sbin/mariadbd"    => bin/"mariadbd",
         "/usr/bin/mariadb-test" => bin/"mariadb-test",
       },
-      guest_files:   guest_files
+      guest_files:               guest_files,
+      expected_fork_descendants: 3
     )
     assert_includes lifecycle, "mariadb-homebrew-ok"
     assert_includes lifecycle, "mariadb-lifecycle-ok"
+    openssl_version = kandelo_formula("automattic/kandelo-homebrew/openssl").version.to_s
+    assert_includes lifecycle, "OpenSSL #{openssl_version}"
 
+    tls_identity_markers = ["wolfSSL", "wolfcrypt", "/extra/wolfssl/"]
     [bin/"mariadbd", bin/"mariadb-test"].each do |artifact|
       contents = File.binread(artifact)
       paths = [prefix.to_s, buildpath.to_s, "/private/tmp/", "/Users/", "/nix/store/"].reject(&:empty?)
       paths.each do |path|
         refute contents.include?(path), "#{artifact} contains build path #{path}"
       end
+      assert_includes contents, "OpenSSL #{openssl_version}"
+      tls_identity_markers.each do |marker|
+        refute_includes contents, marker, "#{artifact} contains bundled WolfSSL identity #{marker}"
+      end
     end
   end
 
   private
 
-  def write_toolchain(path, root, libcxx, ncurses, pcre2, zlib)
+  def write_toolchain(path, root, libcxx, ncurses, openssl, pcre2, zlib)
     path.write <<~CMAKE
       set(CMAKE_SYSTEM_NAME Linux)
       set(CMAKE_SYSTEM_PROCESSOR wasm32)
@@ -402,12 +426,12 @@ class Mariadb < Formula
       set(CMAKE_C_SIZEOF_DATA_PTR 4)
       set(CMAKE_CXX_SIZEOF_DATA_PTR 4)
       set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-      set(CMAKE_FIND_ROOT_PATH "#{root}/sysroot;#{libcxx};#{ncurses};#{pcre2};#{zlib}")
+      set(CMAKE_FIND_ROOT_PATH "#{root}/sysroot;#{libcxx};#{ncurses};#{openssl};#{pcre2};#{zlib}")
       set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
       set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
       set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
       set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
-      set(CMAKE_EXE_LINKER_FLAGS_INIT "-L#{libcxx}/lib -L#{ncurses}/lib -L#{pcre2}/lib -L#{zlib}/lib")
+      set(CMAKE_EXE_LINKER_FLAGS_INIT "-L#{libcxx}/lib -L#{ncurses}/lib -L#{openssl}/lib -L#{pcre2}/lib -L#{zlib}/lib")
       set(CMAKE_CXX_STANDARD_LIBRARIES "-lc++ -lc++abi")
 
       set(SIZEOF_CHAR 1 CACHE STRING "")
@@ -473,11 +497,16 @@ class Mariadb < Formula
       set(HAVE_LINK_H 0 CACHE INTERNAL "")
       set(HAVE_MALLOC_H 0 CACHE INTERNAL "")
 
-      set(WITH_SSL "OFF" CACHE STRING "" FORCE)
+      set(WITH_SSL "system" CACHE STRING "" FORCE)
+      set(CONC_WITH_SSL "OPENSSL" CACHE STRING "" FORCE)
       set(GNUTLS_FOUND FALSE CACHE BOOL "" FORCE)
       set(GNUTLS_LIBRARY "GNUTLS_LIBRARY-NOTFOUND" CACHE FILEPATH "" FORCE)
       set(GNUTLS_INCLUDE_DIR "GNUTLS_INCLUDE_DIR-NOTFOUND" CACHE PATH "" FORCE)
-      set(OPENSSL_FOUND FALSE CACHE BOOL "" FORCE)
+      set(OPENSSL_ROOT_DIR "#{openssl}" CACHE PATH "" FORCE)
+      set(OPENSSL_USE_STATIC_LIBS TRUE CACHE BOOL "" FORCE)
+      set(OPENSSL_INCLUDE_DIR "#{openssl}/include" CACHE PATH "" FORCE)
+      set(OPENSSL_SSL_LIBRARY "#{openssl}/lib/libssl.a" CACHE FILEPATH "" FORCE)
+      set(OPENSSL_CRYPTO_LIBRARY "#{openssl}/lib/libcrypto.a" CACHE FILEPATH "" FORCE)
 
       set(CURSES_FOUND TRUE CACHE BOOL "" FORCE)
       set(CURSES_INCLUDE_PATH "#{ncurses}/include" CACHE PATH "" FORCE)
@@ -499,7 +528,40 @@ class Mariadb < Formula
     CMAKE
   end
 
-  def prepare_artifact(root, artifact)
+  def validate_tls_configuration!(openssl)
+    cache = (buildpath/"target-build/CMakeCache.txt").read.each_line.filter_map do |line|
+      next if line.start_with?("#", "//") || line.exclude?("=")
+
+      key_and_type, value = line.chomp.split("=", 2)
+      [key_and_type.split(":", 2).first, value]
+    end.to_h
+    expected = {
+      "WITH_SSL"               => "system",
+      "CONC_WITH_SSL"          => "OPENSSL",
+      "OPENSSL_ROOT_DIR"       => openssl.to_s,
+      "OPENSSL_INCLUDE_DIR"    => (openssl/"include").to_s,
+      "OPENSSL_SSL_LIBRARY"    => (openssl/"lib/libssl.a").to_s,
+      "OPENSSL_CRYPTO_LIBRARY" => (openssl/"lib/libcrypto.a").to_s,
+    }
+    expected.each do |key, value|
+      next if cache[key] == value
+
+      odie "MariaDB TLS dependency drifted: #{key}=#{cache[key].inspect}, expected #{value.inspect}"
+    end
+    odie "MariaDB configured its bundled WolfSSL build" if (buildpath/"target-build/extra/wolfssl").exist?
+  end
+
+  def validate_tls_linkage!(openssl, link_file)
+    odie "MariaDB TLS link command is missing: #{link_file}" unless link_file.file?
+
+    command = link_file.read
+    [openssl/"lib/libssl.a", openssl/"lib/libcrypto.a"].each do |archive|
+      odie "MariaDB TLS link command omitted declared dependency #{archive}" unless command.include?(archive.to_s)
+    end
+    odie "MariaDB TLS link command selected bundled WolfSSL" if command.match?(/wolfssl/i)
+  end
+
+  def prepare_artifact(root, artifact, openssl_version)
     guards = "#{root}/scripts/wasm-artifact-guards.sh"
     instrument = "#{root}/scripts/run-wasm-fork-instrument.sh"
     system "bash", "-c", <<~SH
@@ -512,6 +574,13 @@ class Mariadb < Formula
       fi
       wasm-strip -k name -k target_features -k wasm-posix-abi "$artifact"
     SH
+
+    contents = File.binread(artifact)
+    odie "#{artifact} does not identify declared OpenSSL #{openssl_version}" unless
+      contents.include?("OpenSSL #{openssl_version}")
+    ["wolfSSL", "wolfcrypt", "/extra/wolfssl/"].each do |marker|
+      odie "#{artifact} contains bundled WolfSSL identity #{marker}" if contents.include?(marker)
+    end
 
     kandelo_validate_wasm_artifact(artifact, fork: :auto)
 
