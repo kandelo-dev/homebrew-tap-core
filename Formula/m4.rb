@@ -10,6 +10,8 @@ class M4 < Formula
   sha256 "f25c6ab51548a73a75558742fb031e0625d6485fe5f9155949d6486a2408ab66"
   license "GPL-3.0-or-later"
 
+  depends_on "binaryen" => :build
+  depends_on "wabt" => :build
   depends_on "automattic/kandelo-homebrew/dash"
 
   skip_clean "bin/m4"
@@ -30,6 +32,7 @@ class M4 < Formula
         "--disable-dependency-tracking",
         "--with-syscmd-shell=dash"
       system "make", "-j#{ENV.make_jobs}"
+      kandelo_validate_wasm_artifact(buildpath/"src/m4", fork: :forbidden)
 
       system "make", "install"
     end
