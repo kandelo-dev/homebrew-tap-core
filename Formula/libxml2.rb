@@ -122,9 +122,11 @@ class Libxml2 < Formula
       #error "libxml2 zlib support is disabled"
       #endif
 
+      static const char document_path[] = "/tmp/kandelo-libxml2-document.xml.gz";
+
       static void *parse_document(void *argument) {
         int *result = argument;
-        xmlDocPtr document = xmlReadFile("document.xml.gz", NULL, XML_PARSE_NONET);
+        xmlDocPtr document = xmlReadFile(document_path, NULL, XML_PARSE_NONET);
         xmlNodePtr root;
         xmlChar *content;
 
@@ -153,13 +155,28 @@ class Libxml2 < Formula
         pthread_t thread;
         int result = -1;
 
-        compressed = gzopen("document.xml.gz", "wb");
+        remove(document_path);
+        compressed = gzopen(document_path, "wb");
         if (compressed == NULL) return 6;
-        if (gzwrite(compressed, xml, sizeof(xml) - 1) != sizeof(xml) - 1) return 7;
-        if (gzclose(compressed) != Z_OK) return 8;
+        if (gzwrite(compressed, xml, sizeof(xml) - 1) != sizeof(xml) - 1) {
+          gzclose(compressed);
+          remove(document_path);
+          return 7;
+        }
+        if (gzclose(compressed) != Z_OK) {
+          remove(document_path);
+          return 8;
+        }
 
-        if (pthread_create(&thread, NULL, parse_document, &result) != 0) return 4;
-        if (pthread_join(thread, NULL) != 0) return 5;
+        if (pthread_create(&thread, NULL, parse_document, &result) != 0) {
+          remove(document_path);
+          return 4;
+        }
+        if (pthread_join(thread, NULL) != 0) {
+          remove(document_path);
+          return 5;
+        }
+        remove(document_path);
         if (result != 0) return result;
         if (xmlModuleOpen("missing-kandelo-test-module.so", 0) != NULL) return 9;
         xmlCleanupParser();
