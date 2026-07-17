@@ -69,6 +69,7 @@ Current migration controls and pilots include:
 - `wget`, GNU HTTP and HTTPS retrieval linked against the tap TLS and compression roots.
 - `coreutils`, the GNU filesystem, text, checksum, and shell utility suite.
 - `diffutils`, GNU `diff`, `cmp`, `diff3`, and `sdiff` file-comparison tools.
+- `findutils`, GNU filesystem traversal and argument-driven process execution.
 
 The SDK is not yet a Homebrew dependency. Trusted builds supply an
 `HOMEBREW_KANDELO_ROOT` checkout containing the SDK, sysroot, kernel, and Node
