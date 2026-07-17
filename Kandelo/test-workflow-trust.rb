@@ -102,9 +102,8 @@ VFS_PUBLISH_INPUTS = PUBLISH_INPUTS.merge({
   ),
 }).freeze
 
-CURRENT_KANDELO_WORKFLOW_SHA = "d26c2f69da766830eaf5125c7b4fcf43ed620313"
-NEXT_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
-PREVIOUS_KANDELO_WORKFLOW_SHA = "6efb411f15df83819a4e21a961845084f8860f6c"
+CURRENT_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
+PREVIOUS_KANDELO_WORKFLOW_SHA = "d26c2f69da766830eaf5125c7b4fcf43ed620313"
 RETIRED_KANDELO_WORKFLOW_SHA = "b8bdecce9c450f840a64ad072fb8ddb31d8cfcb5"
 SELF_TEST_KANDELO_WORKFLOW_SHA = "1111111111111111111111111111111111111111"
 
@@ -173,7 +172,6 @@ end
 
 CALLER_PROFILES = {
   "current" => CALLER_SPECS,
-  "next" => caller_specs_for_sha(NEXT_KANDELO_WORKFLOW_SHA),
 }.freeze
 
 BASE_MATERIALIZE_RUN = <<~'BASH'
@@ -401,27 +399,22 @@ def check_base_contract_workflow(workflow)
 end
 
 def self_test(callers, contract, base_contract)
-  next_specs = caller_specs_for_sha(NEXT_KANDELO_WORKFLOW_SHA)
   previous_specs = caller_specs_for_sha(PREVIOUS_KANDELO_WORKFLOW_SHA)
   retired_specs = deep_copy(caller_specs_for_sha(RETIRED_KANDELO_WORKFLOW_SHA))
   retired_specs.fetch("publish")[:inputs] = PUBLISH_INPUTS
   retired_specs.freeze
   arbitrary_specs = caller_specs_for_sha(SELF_TEST_KANDELO_WORKFLOW_SHA)
   test_profiles = { "current" => CALLER_SPECS }
-  test_profiles["next"] = next_specs
   current_callers = callers_for_specs(callers, CALLER_SPECS)
-  next_callers = callers_for_specs(callers, next_specs)
   previous_callers = callers_for_specs(callers, previous_specs)
   retired_callers = callers_for_specs(callers, retired_specs)
   arbitrary_callers = callers_for_specs(callers, arbitrary_specs)
   check(check_caller_profile(current_callers, test_profiles) == "current",
         "current caller profile was not selected")
-  check(check_caller_profile(next_callers, test_profiles) == "next",
-        "next caller profile was not selected")
 
-  expect_rejection("mixed current and next caller generations") do
+  expect_rejection("mixed current and arbitrary caller generations") do
     mutated = deep_copy(current_callers)
-    mutated["publish"] = deep_copy(next_callers.fetch("publish"))
+    mutated["publish"] = deep_copy(arbitrary_callers.fetch("publish"))
     check_caller_profile(mutated, test_profiles)
   end
   expect_rejection("the previous complete caller generation") do
@@ -433,18 +426,13 @@ def self_test(callers, contract, base_contract)
   expect_rejection("an arbitrary immutable Kandelo workflow pin") do
     check_caller_profile(arbitrary_callers, test_profiles)
   end
-  expect_rejection("the next publisher without VFS acceptance mapping") do
-    mutated = deep_copy(next_callers)
-    mutated.dig("publish", "jobs", "publish", "with").delete("require-vfs-acceptance")
-    check_caller_profile(mutated, test_profiles)
-  end
   expect_rejection("the current publisher without VFS acceptance mapping") do
     mutated = deep_copy(current_callers)
     mutated.dig("publish", "jobs", "publish", "with").delete("require-vfs-acceptance")
     check_caller_profile(mutated, test_profiles)
   end
   expect_rejection("a changed VFS acceptance mapping") do
-    mutated = deep_copy(next_callers)
+    mutated = deep_copy(current_callers)
     mutated.dig("publish", "jobs", "publish", "with")["require-vfs-acceptance"] =
       expression("github.event.client_payload.require_vfs_acceptance")
     check_caller_profile(mutated, test_profiles)
@@ -557,7 +545,6 @@ begin
   check(CURRENT_KANDELO_WORKFLOW_SHA.match?(/\A[0-9a-f]{40}\z/),
         "current Kandelo workflow pin is not an exact SHA")
   {
-    "next" => NEXT_KANDELO_WORKFLOW_SHA,
     "previous" => PREVIOUS_KANDELO_WORKFLOW_SHA,
     "retired" => RETIRED_KANDELO_WORKFLOW_SHA,
     "self-test" => SELF_TEST_KANDELO_WORKFLOW_SHA,
@@ -567,7 +554,6 @@ begin
   end
   workflow_shas = [
     CURRENT_KANDELO_WORKFLOW_SHA,
-    NEXT_KANDELO_WORKFLOW_SHA,
     PREVIOUS_KANDELO_WORKFLOW_SHA,
     RETIRED_KANDELO_WORKFLOW_SHA,
     SELF_TEST_KANDELO_WORKFLOW_SHA,
