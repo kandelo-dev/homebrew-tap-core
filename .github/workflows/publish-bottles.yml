@@ -10,11 +10,12 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@c3f91d622c3c878e15783c67e99e483e54ab25c1
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@f01ee09a2f0b23c3e3f02fd8b2987f73efdcc065
     with:
       kandelo-repository: Automattic/kandelo
       kandelo-ref: main
-      tap-repository: Automattic/kandelo-homebrew
+      tap-repository: kandelo-dev/homebrew-tap-core
+      tap-name: kandelo-dev/tap-core
       tap-ref: main
       formulae: ${{ github.event.client_payload.formulae }}
       arches: ${{ github.event.client_payload.arches || 'wasm32' }}

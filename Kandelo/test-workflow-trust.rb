@@ -86,7 +86,8 @@ end
 PUBLISH_INPUTS = {
   "kandelo-repository" => "Automattic/kandelo",
   "kandelo-ref" => "main",
-  "tap-repository" => "Automattic/kandelo-homebrew",
+  "tap-repository" => "kandelo-dev/homebrew-tap-core",
+  "tap-name" => "kandelo-dev/tap-core",
   "tap-ref" => "main",
   "formulae" => expression("github.event.client_payload.formulae"),
   "arches" => expression("github.event.client_payload.arches || 'wasm32'"),
@@ -102,9 +103,9 @@ VFS_PUBLISH_INPUTS = PUBLISH_INPUTS.merge({
   ),
 }).freeze
 
-CURRENT_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
-PREVIOUS_KANDELO_WORKFLOW_SHA = "d26c2f69da766830eaf5125c7b4fcf43ed620313"
-RETIRED_KANDELO_WORKFLOW_SHA = "b8bdecce9c450f840a64ad072fb8ddb31d8cfcb5"
+CURRENT_KANDELO_WORKFLOW_SHA = "f01ee09a2f0b23c3e3f02fd8b2987f73efdcc065"
+PREVIOUS_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
+RETIRED_KANDELO_WORKFLOW_SHA = "d26c2f69da766830eaf5125c7b4fcf43ed620313"
 SELF_TEST_KANDELO_WORKFLOW_SHA = "1111111111111111111111111111111111111111"
 
 CALLER_SPECS = {
@@ -128,7 +129,10 @@ CALLER_SPECS = {
       ),
       "kandelo-ref" => expression("github.event.client_payload.kandelo_ref || 'main'"),
       "tap-repository" => expression(
-        "github.event.client_payload.tap_repository || 'Automattic/kandelo-homebrew'"
+        "github.event.client_payload.tap_repository || 'kandelo-dev/homebrew-tap-core'"
+      ),
+      "tap-name" => expression(
+        "github.event.client_payload.tap_name || 'kandelo-dev/tap-core'"
       ),
       "tap-ref" => expression("github.event.client_payload.tap_ref || 'main'"),
       "dry-run" => true,
