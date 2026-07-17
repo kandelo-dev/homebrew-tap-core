@@ -10,7 +10,7 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@1c731e654b90229522d9f0bba76fe62ad1300369
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@43271a107b0b28c481be1e964e42b2099709f051
     with:
       mode: ${{ github.event.client_payload.mode || 'rebuild' }}
       formulae: ${{ github.event.client_payload.formulae }}
