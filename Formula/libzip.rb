@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Libzip < Formula
   include KandeloFormulaSupport
@@ -14,13 +14,13 @@ class Libzip < Formula
   depends_on "ninja" => [:build, :test]
   depends_on "pkgconf" => [:build, :test]
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/zlib"
+  depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin", "lib/libzip.a"
 
   def install
     kandelo_require_arch!("wasm32")
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
 
     # Kandelo executables permit unresolved kernel imports, so link-based
     # CMake probes otherwise report host-only Annex K and Windows APIs as
@@ -168,7 +168,7 @@ class Libzip < Formula
     assert_equal 1, pkgconfig.scan(/^Requires\.private: zlib$/).length
     assert_equal ["Libs.private:"], pkgconfig.scan(/^Libs\.private:.*$/)
 
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
     source = testpath/"libzip-smoke.c"
     wasm = testpath/"libzip-smoke.wasm"
     cmake_source = testpath/"cmake-consumer"

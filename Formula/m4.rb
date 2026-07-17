@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class M4 < Formula
   include KandeloFormulaSupport
@@ -12,7 +12,7 @@ class M4 < Formula
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/dash"
+  depends_on "kandelo-dev/tap-core/dash"
 
   skip_clean "bin/m4"
 
@@ -40,7 +40,7 @@ class M4 < Formula
       kandelo_run_wasm(bin/"m4", ["--version"]))
 
     dash = testpath/"dash"
-    dash.binwrite((formula_opt_bin("automattic/kandelo-homebrew/dash")/"dash").binread)
+    dash.binwrite((formula_opt_bin("kandelo-dev/tap-core/dash")/"dash").binread)
     dash.chmod 0755
 
     definitions = testpath/"definitions.m4"

@@ -18,7 +18,7 @@ require "shellwords"
 # accepted Tier-2 deviation (spec §6) for heavy ported formulae (ruby/perl/…)
 # whose 49 KB `build-<name>.sh` is not yet decomposed into idiomatic steps.
 module KandeloFormulaSupport
-  KANDELO_TAP_FORMULA_PREFIX = "automattic/kandelo-homebrew/"
+  KANDELO_TAP_FORMULA_PREFIX = "kandelo-dev/tap-core/"
 
   # Homebrew's formula_opt_* helpers discard the tap name and resolve through
   # HOMEBREW_PREFIX/opt. A native formula alias can therefore redirect a

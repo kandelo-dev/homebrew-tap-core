@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Findutils < Formula
   include KandeloFormulaSupport
@@ -12,7 +12,7 @@ class Findutils < Formula
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/dash" => :test
+  depends_on "kandelo-dev/tap-core/dash" => :test
 
   skip_clean "bin/find", "bin/xargs"
 
@@ -58,7 +58,7 @@ class Findutils < Formula
     (workspace/"nested/skip.log").write("skip\n")
     env = { "KERNEL_CWD" => "/work" }
     mount = { "/work" => workspace }
-    dash = formula_opt_bin("automattic/kandelo-homebrew/dash")/"dash"
+    dash = formula_opt_bin("kandelo-dev/tap-core/dash")/"dash"
     exec_programs = { "/bin/sh" => dash }
 
     listing = kandelo_run_wasm(

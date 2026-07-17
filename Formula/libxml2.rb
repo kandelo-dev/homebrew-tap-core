@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Libxml2 < Formula
   include KandeloFormulaSupport
@@ -15,15 +15,15 @@ class Libxml2 < Formula
 
   depends_on "cmake" => [:build, :test]
   depends_on "pkgconf" => [:build, :test]
-  depends_on "automattic/kandelo-homebrew/libiconv"
-  depends_on "automattic/kandelo-homebrew/zlib"
+  depends_on "kandelo-dev/tap-core/libiconv"
+  depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "lib/libxml2.a"
 
   def install
     kandelo_require_arch!("wasm32")
-    libiconv = formula_opt_prefix("automattic/kandelo-homebrew/libiconv")
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    libiconv = formula_opt_prefix("kandelo-dev/tap-core/libiconv")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
 
     # Force downstream cross-builds to resolve the same GNU libiconv keg rather
     # than accepting the host or Kandelo musl implementation as built in.
@@ -80,8 +80,8 @@ class Libxml2 < Formula
     assert_includes archive, GUEST_CATALOG_URI
     refute_includes archive, prefix.to_s
 
-    libiconv = formula_opt_prefix("automattic/kandelo-homebrew/libiconv")
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    libiconv = formula_opt_prefix("kandelo-dev/tap-core/libiconv")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
     metadata_paths = [
       lib/"pkgconfig/libxml-2.0.pc",
       *Dir[(lib/"cmake/**/*").to_s].select { |path| File.file?(path) },

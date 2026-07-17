@@ -1,9 +1,9 @@
-# Kandelo Homebrew Tap
+# Kandelo Core Homebrew Tap
 
-This repository is Kandelo's first-party Homebrew tap. It owns Formula source,
-Kandelo-specific Formula support, generated bottle blocks, and publication
-evidence. The `Automattic/kandelo` repository owns the kernel, host runtime,
-SDK, package-build infrastructure, and trusted publisher.
+`kandelo-dev/homebrew-tap-core` is Kandelo's first-party core Homebrew tap. It
+owns Formula source, Kandelo-specific Formula support, generated bottle blocks,
+and publication evidence. The `Automattic/kandelo` repository owns the kernel,
+host runtime, SDK, package-build infrastructure, and trusted publisher.
 
 The tap is still experimental. Do not publish user-facing `brew tap` or
 `brew install` instructions until a stock guest Homebrew install has been
@@ -128,9 +128,10 @@ exercise another shell.
 
 Bottle metadata must be generated from the same trusted build that produces
 the bottle bytes. Do not hand-write placeholder hashes or reuse bottle data
-across Kandelo ABI versions. The existing `hello` sidecar files are historical
-publication evidence; broader publication is gated on the native Homebrew OCI
-publisher and real guest-install validation in `Automattic/kandelo`.
+across Kandelo ABI versions. The retained `hello` provenance report is
+historical publication evidence; broader publication is gated on the native
+Homebrew OCI publisher and real guest-install validation in
+`Automattic/kandelo`.
 
 Bottle operations use `repository_dispatch`, so GitHub always loads the small
 caller workflow from tap `main`. These tap workflows contain no shell steps or
@@ -143,7 +144,7 @@ A dry run may select unmerged Formula or Kandelo code through event payload
 repositories and refs:
 
 ```bash
-gh api --method POST repos/Automattic/kandelo-homebrew/dispatches \
+gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
   -f event_type=dry-run-kandelo-bottles \
   -f 'client_payload[formulae]=bzip2,xz' \
   -f 'client_payload[arches]=wasm32' \
@@ -163,7 +164,7 @@ Write publication accepts formulae, arches, and an optional release tag, but
 hardcodes both executable repositories to reviewed `main`:
 
 ```bash
-gh api --method POST repos/Automattic/kandelo-homebrew/dispatches \
+gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
   -f event_type=publish-kandelo-bottles \
   -f 'client_payload[formulae]=bzip2,xz' \
   -f 'client_payload[arches]=wasm32'
@@ -180,7 +181,7 @@ record the reason; deleting a package additionally requires its URL and an
 operational reason.
 
 ```bash
-gh api --method POST repos/Automattic/kandelo-homebrew/dispatches \
+gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
   -f event_type=maintain-kandelo-bottles \
   -f 'client_payload[mode]=rebuild' \
   -f 'client_payload[formulae]=bzip2,xz' \

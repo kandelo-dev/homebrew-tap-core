@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Pax < Formula
   include KandeloFormulaSupport
@@ -11,13 +11,13 @@ class Pax < Formula
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/musl-fts"
+  depends_on "kandelo-dev/tap-core/musl-fts"
 
   skip_clean "bin/pax"
 
   def install
     kandelo_require_arch!("wasm32")
-    musl_fts = formula_opt_prefix("automattic/kandelo-homebrew/musl-fts")
+    musl_fts = formula_opt_prefix("kandelo-dev/tap-core/musl-fts")
     artifact = buildpath/"paxpax"
 
     kandelo_wasm_build do |root|

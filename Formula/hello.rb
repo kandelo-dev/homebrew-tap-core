@@ -1,5 +1,5 @@
 require "shellwords"
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Hello < Formula
   include KandeloFormulaSupport
@@ -10,10 +10,6 @@ class Hello < Formula
   sha256 "0d5f60154382fee10b114a1c34e785d8b1f492073ae2d3a6f7b147687b366aa0"
   license "GPL-3.0-or-later"
 
-  bottle do
-    root_url "https://ghcr.io/v2/automattic/kandelo-homebrew"
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b31c5b52e72da1686d8d95cdfe04883e400a273d4cc3d7e15eda95ba5a57183d"
-  end
   skip_clean "bin/hello"
 
   def install

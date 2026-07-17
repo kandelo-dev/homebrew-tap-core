@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Curl < Formula
   include KandeloFormulaSupport
@@ -10,17 +10,17 @@ class Curl < Formula
   license "curl"
 
   depends_on "pkgconf" => :build
-  depends_on "automattic/kandelo-homebrew/libcurl"
-  depends_on "automattic/kandelo-homebrew/openssl"
-  depends_on "automattic/kandelo-homebrew/zlib"
+  depends_on "kandelo-dev/tap-core/libcurl"
+  depends_on "kandelo-dev/tap-core/openssl"
+  depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin/curl"
 
   def install
     kandelo_require_arch!("wasm32", "wasm64")
-    libcurl = formula_opt_prefix("automattic/kandelo-homebrew/libcurl")
-    openssl = formula_opt_prefix("automattic/kandelo-homebrew/openssl")
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    libcurl = formula_opt_prefix("kandelo-dev/tap-core/libcurl")
+    openssl = formula_opt_prefix("kandelo-dev/tap-core/openssl")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
 
     kandelo_wasm_build do
       ENV["CPPFLAGS"] = "-I#{libcurl}/include -I#{openssl}/include -I#{zlib}/include"

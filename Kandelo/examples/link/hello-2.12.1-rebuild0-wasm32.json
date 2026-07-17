@@ -8,7 +8,7 @@
   "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
   "keg": "/home/linuxbrew/.linuxbrew/Cellar/hello/2.12.1",
   "bottle": {
-    "url": "https://example.invalid/kandelo-homebrew/hello-2.12.1-rebuild0-wasm32_kandelo.bottle.tar.gz",
+    "url": "https://example.invalid/homebrew-tap-core/hello-2.12.1-rebuild0-wasm32_kandelo.bottle.tar.gz",
     "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "bytes": 12345,
     "cache_key_sha": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",

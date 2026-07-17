@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Libpng < Formula
   include KandeloFormulaSupport
@@ -9,13 +9,13 @@ class Libpng < Formula
   sha256 "6a5ca0652392a2d7c9db2ae5b40210843c0bbc081cbd410825ab00cc59f14a6c"
   license "libpng-2.0"
 
-  depends_on "automattic/kandelo-homebrew/zlib"
+  depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "lib/libpng16.a"
 
   def install
     kandelo_require_arch!("wasm32")
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
 
     kandelo_wasm_build do
       ENV["CPPFLAGS"] = "-I#{zlib}/include"
@@ -37,7 +37,7 @@ class Libpng < Formula
     assert_path_exists include/"png.h"
     assert_path_exists lib/"pkgconfig/libpng16.pc"
 
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
     source = testpath/"libpng-smoke.c"
     wasm = testpath/"libpng-smoke.wasm"
     source.write <<~C

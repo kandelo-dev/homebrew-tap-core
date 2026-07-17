@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Ncurses < Formula
   include KandeloFormulaSupport
@@ -12,7 +12,7 @@ class Ncurses < Formula
   depends_on "binaryen" => :build
   depends_on "pkgconf" => [:build, :test]
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/libcxx"
+  depends_on "kandelo-dev/tap-core/libcxx"
 
   skip_clean "bin"
   skip_clean "lib/libformw.a"
@@ -31,7 +31,7 @@ class Ncurses < Formula
   def install
     kandelo_require_arch!("wasm32")
     root = Pathname(kandelo_require_root!)
-    libcxx = formula_opt_prefix("automattic/kandelo-homebrew/libcxx")
+    libcxx = formula_opt_prefix("kandelo-dev/tap-core/libcxx")
     guest_opt_prefix = "/home/linuxbrew/.linuxbrew/opt/ncurses"
 
     host_build = buildpath/"host-build"
@@ -400,7 +400,7 @@ class Ncurses < Formula
     termcap_env = fallback_env.merge("TERM" => "dumb")
     assert_equal "termcap-ok\n", kandelo_run_wasm(termcap_wasm, [], env: termcap_env)
 
-    libcxx = formula_opt_prefix("automattic/kandelo-homebrew/libcxx")
+    libcxx = formula_opt_prefix("kandelo-dev/tap-core/libcxx")
     cxx_source = testpath/"ncurses-cxx-smoke.cpp"
     cxx_wasm = testpath/"ncurses-cxx-smoke.wasm"
     cxx_source.write <<~CPP

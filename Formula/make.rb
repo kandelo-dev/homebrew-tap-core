@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Make < Formula
   include KandeloFormulaSupport
@@ -10,7 +10,7 @@ class Make < Formula
   sha256 "dd16fb1d67bfab79a72f5e8390735c49e3e8e70b4945a15ab1f81ddb78658fb3"
   license "GPL-3.0-or-later"
 
-  depends_on "automattic/kandelo-homebrew/dash"
+  depends_on "kandelo-dev/tap-core/dash"
 
   skip_clean "bin/make"
   patch :DATA
@@ -67,7 +67,7 @@ class Make < Formula
       testpath/"kandelo_plugin.c", "-o", testpath/"kandelo_plugin.so"
 
     dash = testpath/"dash"
-    dash.binwrite((formula_opt_bin("automattic/kandelo-homebrew/dash")/"dash").binread)
+    dash.binwrite((formula_opt_bin("kandelo-dev/tap-core/dash")/"dash").binread)
     dash.chmod 0755
     recursive_make = testpath/"make"
     recursive_make.binwrite((bin/"make").binread)

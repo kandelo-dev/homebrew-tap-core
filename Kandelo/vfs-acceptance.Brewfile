@@ -1,2 +1,2 @@
-tap "automattic/kandelo-homebrew"
-brew "automattic/kandelo-homebrew/file-formula"
+tap "kandelo-dev/tap-core"
+brew "kandelo-dev/tap-core/file-formula"

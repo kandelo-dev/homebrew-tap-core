@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Less < Formula
   include KandeloFormulaSupport
@@ -15,14 +15,14 @@ class Less < Formula
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/dash" => :test
-  depends_on "automattic/kandelo-homebrew/ncurses"
+  depends_on "kandelo-dev/tap-core/dash" => :test
+  depends_on "kandelo-dev/tap-core/ncurses"
 
   skip_clean "bin/less", "bin/lesskey", "bin/lessecho"
 
   def install
     kandelo_require_arch!("wasm32")
-    ncurses = formula_opt_prefix("automattic/kandelo-homebrew/ncurses")
+    ncurses = formula_opt_prefix("kandelo-dev/tap-core/ncurses")
 
     kandelo_wasm_build do
       ENV["CPPFLAGS"] = "-I#{ncurses}/include"
@@ -66,7 +66,7 @@ class Less < Formula
 
     input = testpath/"input.txt"
     input.write "alpha\nbeta\ngamma\n"
-    dash = formula_opt_prefix("automattic/kandelo-homebrew/dash")/"bin/dash"
+    dash = formula_opt_prefix("kandelo-dev/tap-core/dash")/"bin/dash"
     env = {
       "HOME"       => testpath,
       "KERNEL_CWD" => testpath,

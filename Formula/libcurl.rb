@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 require "digest"
 
 class Libcurl < Formula
@@ -14,16 +14,16 @@ class Libcurl < Formula
   depends_on "pkgconf" => [:build, :test]
   depends_on "binaryen" => :test
   depends_on "wabt" => :test
-  depends_on "automattic/kandelo-homebrew/openssl"
-  depends_on "automattic/kandelo-homebrew/zlib"
+  depends_on "kandelo-dev/tap-core/openssl"
+  depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "lib/libcurl.a"
   skip_clean "lib/libcurl-pic.a"
 
   def install
     kandelo_require_arch!("wasm32", "wasm64")
-    openssl = formula_opt_prefix("automattic/kandelo-homebrew/openssl")
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    openssl = formula_opt_prefix("kandelo-dev/tap-core/openssl")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
 
     kandelo_wasm_build do |root|
       pic_source = buildpath.parent/"#{buildpath.basename}-pic"
@@ -140,8 +140,8 @@ class Libcurl < Formula
     assert_path_exists lib/"pkgconfig/libcurl.pc"
 
     root = kandelo_require_root!
-    openssl = formula_opt_prefix("automattic/kandelo-homebrew/openssl")
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    openssl = formula_opt_prefix("kandelo-dev/tap-core/openssl")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
     forbidden_paths = [
       root,
       prefix,

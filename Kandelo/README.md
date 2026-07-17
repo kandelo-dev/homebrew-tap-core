@@ -28,7 +28,7 @@ The publish workflow generates this directory with:
 
 ```bash
 cargo xtask homebrew-sidecars \
-  --tap-root /path/to/kandelo-homebrew \
+  --tap-root /path/to/homebrew-tap-core \
   --input /path/to/sidecars-input.json \
   --previous-metadata /path/to/previous/Kandelo/metadata.json
 ```
@@ -62,7 +62,7 @@ The semantic validator must still check cross-file and artifact facts:
 Run the repo-local validator against a generated tap checkout:
 
 ```bash
-cargo xtask homebrew-validate --tap-root /path/to/kandelo-homebrew
+cargo xtask homebrew-validate --tap-root /path/to/homebrew-tap-core
 ```
 
 The validator checks the current sidecar JSON, link-manifest consistency,
@@ -91,8 +91,8 @@ bottle bytes with:
 
 ```bash
 npx tsx images/vfs/scripts/build-homebrew-vfs-image.ts \
-  --metadata /path/to/kandelo-homebrew/Kandelo/metadata.json \
-  --tap-root /path/to/kandelo-homebrew \
+  --metadata /path/to/homebrew-tap-core/Kandelo/metadata.json \
+  --tap-root /path/to/homebrew-tap-core \
   --package hello \
   --arch wasm32 \
   --runtime node \
