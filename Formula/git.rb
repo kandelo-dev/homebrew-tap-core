@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Git < Formula
   include KandeloFormulaSupport
@@ -87,16 +87,16 @@ class Git < Formula
   depends_on "binaryen" => :build
   depends_on "pkgconf" => :build
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/coreutils"
-  depends_on "automattic/kandelo-homebrew/dash"
-  depends_on "automattic/kandelo-homebrew/diffutils"
-  depends_on "automattic/kandelo-homebrew/grep"
-  depends_on "automattic/kandelo-homebrew/less"
-  depends_on "automattic/kandelo-homebrew/libcurl"
-  depends_on "automattic/kandelo-homebrew/openssl"
-  depends_on "automattic/kandelo-homebrew/sed"
-  depends_on "automattic/kandelo-homebrew/vim"
-  depends_on "automattic/kandelo-homebrew/zlib"
+  depends_on "kandelo-dev/tap-core/coreutils"
+  depends_on "kandelo-dev/tap-core/dash"
+  depends_on "kandelo-dev/tap-core/diffutils"
+  depends_on "kandelo-dev/tap-core/grep"
+  depends_on "kandelo-dev/tap-core/less"
+  depends_on "kandelo-dev/tap-core/libcurl"
+  depends_on "kandelo-dev/tap-core/openssl"
+  depends_on "kandelo-dev/tap-core/sed"
+  depends_on "kandelo-dev/tap-core/vim"
+  depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin/git",
              "libexec/git-core/git-remote-http",
@@ -113,9 +113,9 @@ class Git < Formula
     kandelo_require_arch!("wasm32")
     odie "git #{version} manpage resource is version #{resource("man").version}" if version != resource("man").version
 
-    libcurl = formula_opt_prefix("automattic/kandelo-homebrew/libcurl")
-    openssl = formula_opt_prefix("automattic/kandelo-homebrew/openssl")
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    libcurl = formula_opt_prefix("kandelo-dev/tap-core/libcurl")
+    openssl = formula_opt_prefix("kandelo-dev/tap-core/openssl")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
 
     kandelo_wasm_build do |root|
       ENV["PKG_CONFIG_LIBDIR"] = [
@@ -219,8 +219,8 @@ class Git < Formula
     assert_equal "#{GUEST_GIT_EXEC_PATH}\n", kandelo_run_wasm(bin/"git", ["--exec-path"])
 
     git_core = libexec/"git-core"
-    coreutils_bin = formula_opt_bin("automattic/kandelo-homebrew/coreutils")
-    vim_runtime = formula_opt_prefix("automattic/kandelo-homebrew/vim")/"share/vim/vim92"
+    coreutils_bin = formula_opt_bin("kandelo-dev/tap-core/coreutils")
+    vim_runtime = formula_opt_prefix("kandelo-dev/tap-core/vim")/"share/vim/vim92"
     runtime_programs = {}
     runtime_programs["#{GUEST_GIT_BIN}/git"] = bin/"git"
     runtime_programs["#{GUEST_GIT_EXEC_PATH}/git-remote-http"] = git_core/"git-remote-http"
@@ -231,13 +231,13 @@ class Git < Formula
     COREUTILS_COMMANDS.each do |program|
       runtime_programs["#{GUEST_COREUTILS_BIN}/#{program}"] = coreutils_bin/program
     end
-    runtime_programs["#{GUEST_DIFFUTILS_BIN}/diff"] = formula_opt_bin("automattic/kandelo-homebrew/diffutils")/"diff"
-    runtime_programs["#{GUEST_GREP_BIN}/grep"] = formula_opt_bin("automattic/kandelo-homebrew/grep")/"grep"
-    runtime_programs["#{GUEST_LESS_BIN}/less"] = formula_opt_bin("automattic/kandelo-homebrew/less")/"less"
-    runtime_programs["#{GUEST_SED_BIN}/sed"] = formula_opt_bin("automattic/kandelo-homebrew/sed")/"sed"
-    runtime_programs["#{GUEST_VIM_BIN}/vi"] = formula_opt_bin("automattic/kandelo-homebrew/vim")/"vi"
-    runtime_programs["#{GUEST_VIM_BIN}/vim"] = formula_opt_bin("automattic/kandelo-homebrew/vim")/"vim"
-    runtime_programs[GUEST_DASH] = formula_opt_bin("automattic/kandelo-homebrew/dash")/"dash"
+    runtime_programs["#{GUEST_DIFFUTILS_BIN}/diff"] = formula_opt_bin("kandelo-dev/tap-core/diffutils")/"diff"
+    runtime_programs["#{GUEST_GREP_BIN}/grep"] = formula_opt_bin("kandelo-dev/tap-core/grep")/"grep"
+    runtime_programs["#{GUEST_LESS_BIN}/less"] = formula_opt_bin("kandelo-dev/tap-core/less")/"less"
+    runtime_programs["#{GUEST_SED_BIN}/sed"] = formula_opt_bin("kandelo-dev/tap-core/sed")/"sed"
+    runtime_programs["#{GUEST_VIM_BIN}/vi"] = formula_opt_bin("kandelo-dev/tap-core/vim")/"vi"
+    runtime_programs["#{GUEST_VIM_BIN}/vim"] = formula_opt_bin("kandelo-dev/tap-core/vim")/"vim"
+    runtime_programs[GUEST_DASH] = formula_opt_bin("kandelo-dev/tap-core/dash")/"dash"
     BUILTIN_ALIASES.each do |program|
       runtime_programs["#{GUEST_GIT_BIN}/#{program}"] = bin/program
     end

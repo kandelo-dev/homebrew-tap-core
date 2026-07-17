@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Tar < Formula
   include KandeloFormulaSupport
@@ -14,8 +14,8 @@ class Tar < Formula
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/dash"
-  depends_on "automattic/kandelo-homebrew/gzip"
+  depends_on "kandelo-dev/tap-core/dash"
+  depends_on "kandelo-dev/tap-core/gzip"
 
   skip_clean "bin/tar", "libexec/rmt"
 
@@ -49,8 +49,8 @@ class Tar < Formula
     (source/"nested").mkpath
     (source/"nested/beta.txt").write "beta\n"
 
-    dash = formula_opt_bin("automattic/kandelo-homebrew/dash")/"dash"
-    gzip = formula_opt_bin("automattic/kandelo-homebrew/gzip")/"gzip"
+    dash = formula_opt_bin("kandelo-dev/tap-core/dash")/"dash"
+    gzip = formula_opt_bin("kandelo-dev/tap-core/gzip")/"gzip"
     env = { "KERNEL_CWD" => "/work", "KERNEL_PATH" => "/bin" }
     mount = { "/work" => testpath }
     exec_programs = { "/bin/sh" => dash, "/bin/gzip" => gzip }

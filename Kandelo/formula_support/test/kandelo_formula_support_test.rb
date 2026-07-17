@@ -167,7 +167,7 @@ class KandeloFormulaSupportTest < Minitest::Test
   def test_target_dependency_paths_use_the_exact_installed_keg
     Dir.mktmpdir("kandelo-dependency-prefix") do |dir|
       harness = Harness.new
-      target = "automattic/kandelo-homebrew/openssl"
+      target = "kandelo-dev/tap-core/openssl"
       rack = Pathname(dir)/"Cellar/openssl"
       keg = rack/"3.3.2_2"
       keg.mkpath
@@ -186,7 +186,7 @@ class KandeloFormulaSupportTest < Minitest::Test
 
   def test_target_dependency_paths_reject_a_missing_current_keg
     harness = Harness.new
-    target = "automattic/kandelo-homebrew/openssl"
+    target = "kandelo-dev/tap-core/openssl"
     harness.dependency_formulae = {
       target => InstalledFormula.new(rack: Pathname("/missing/Cellar/openssl"), pkg_version: "3.3.2_2"),
     }
@@ -200,8 +200,8 @@ class KandeloFormulaSupportTest < Minitest::Test
     Dir.mktmpdir("kandelo-pkg-config-closure") do |dir|
       harness = Harness.new
       harness.root_path = "/tmp/kandelo-root"
-      zlib_name = "automattic/kandelo-homebrew/zlib"
-      openssl_name = "automattic/kandelo-homebrew/openssl"
+      zlib_name = "kandelo-dev/tap-core/zlib"
+      openssl_name = "kandelo-dev/tap-core/openssl"
       zlib_rack = Pathname(dir)/"Cellar/zlib"
       openssl_rack = Pathname(dir)/"Cellar/openssl"
       zlib_keg = zlib_rack/"1.3.1_2"
@@ -248,8 +248,8 @@ class KandeloFormulaSupportTest < Minitest::Test
     original = ENV.to_hash
     Dir.mktmpdir("kandelo-pkg-config-missing") do |dir|
       harness = Harness.new
-      declared_name = "automattic/kandelo-homebrew/ncurses"
-      undeclared_name = "automattic/kandelo-homebrew/openssl"
+      declared_name = "kandelo-dev/tap-core/ncurses"
+      undeclared_name = "kandelo-dev/tap-core/openssl"
       declared_rack = Pathname(dir)/"Cellar/ncurses"
       declared_keg = declared_rack/"6.5_2"
       undeclared_rack = Pathname(dir)/"Cellar/openssl"
@@ -480,7 +480,7 @@ class KandeloFormulaSupportTest < Minitest::Test
     harness.homebrew_prefix_path = Pathname("/prefix")
     harness.runtime_formulae = [
       DependencyFormula.new(
-        full_name:   "automattic/kandelo-homebrew/coreutils",
+        full_name:   "kandelo-dev/tap-core/coreutils",
         opt_bin:     Pathname("/prefix/opt/coreutils/bin"),
         opt_sbin:    Pathname("/prefix/opt/coreutils/sbin"),
         opt_libexec: Pathname("/prefix/opt/coreutils/libexec"),
@@ -591,7 +591,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       harness = Harness.new
       harness.homebrew_prefix_path = Pathname("/prefix")
       harness.root_path = "/tmp/kandelo-root"
-      target = "automattic/kandelo-homebrew/zlib"
+      target = "kandelo-dev/tap-core/zlib"
       rack = Pathname(dir)/"Cellar/zlib"
       keg = rack/"1.3.1_2"
       (keg/"lib/pkgconfig").mkpath

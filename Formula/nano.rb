@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Nano < Formula
   include KandeloFormulaSupport
@@ -10,13 +10,13 @@ class Nano < Formula
   sha256 "c17f43fc0e37336b33ee50a209c701d5beb808adc2d9f089ca831b40539c9ac4"
   license "GPL-3.0-or-later"
 
-  depends_on "automattic/kandelo-homebrew/ncurses"
+  depends_on "kandelo-dev/tap-core/ncurses"
 
   skip_clean "bin/nano"
 
   def install
     kandelo_require_arch!("wasm32")
-    ncurses = formula_opt_prefix("automattic/kandelo-homebrew/ncurses")
+    ncurses = formula_opt_prefix("kandelo-dev/tap-core/ncurses")
     guest_prefix = "/home/linuxbrew/.linuxbrew"
 
     kandelo_wasm_build do |root|

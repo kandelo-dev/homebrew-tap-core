@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 # File is a reserved Ruby class name.
 class FileFormula < Formula
@@ -11,19 +11,19 @@ class FileFormula < Formula
   license "BSD-2-Clause-Darwin"
 
   depends_on "pkgconf" => :build
-  depends_on "automattic/kandelo-homebrew/bzip2"
-  depends_on "automattic/kandelo-homebrew/libmagic"
-  depends_on "automattic/kandelo-homebrew/xz"
-  depends_on "automattic/kandelo-homebrew/zlib"
+  depends_on "kandelo-dev/tap-core/bzip2"
+  depends_on "kandelo-dev/tap-core/libmagic"
+  depends_on "kandelo-dev/tap-core/xz"
+  depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin/file"
 
   def install
     kandelo_require_arch!("wasm32")
-    bzip2 = formula_opt_prefix("automattic/kandelo-homebrew/bzip2")
-    libmagic = formula_opt_prefix("automattic/kandelo-homebrew/libmagic")
-    xz = formula_opt_prefix("automattic/kandelo-homebrew/xz")
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    bzip2 = formula_opt_prefix("kandelo-dev/tap-core/bzip2")
+    libmagic = formula_opt_prefix("kandelo-dev/tap-core/libmagic")
+    xz = formula_opt_prefix("kandelo-dev/tap-core/xz")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
     instrumented = buildpath/"src/file.instrumented"
 
     kandelo_wasm_build do |root|

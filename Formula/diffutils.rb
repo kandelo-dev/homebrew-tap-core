@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Diffutils < Formula
   include KandeloFormulaSupport
@@ -16,8 +16,8 @@ class Diffutils < Formula
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/coreutils"
-  depends_on "automattic/kandelo-homebrew/ed"
+  depends_on "kandelo-dev/tap-core/coreutils"
+  depends_on "kandelo-dev/tap-core/ed"
 
   skip_clean "bin/diff", "bin/cmp", "bin/diff3", "bin/sdiff"
 
@@ -79,7 +79,7 @@ class Diffutils < Formula
       expected_status:           1
     )
 
-    coreutils_pr = formula_opt_bin("automattic/kandelo-homebrew/coreutils")/"pr"
+    coreutils_pr = formula_opt_bin("kandelo-dev/tap-core/coreutils")/"pr"
     paginated = kandelo_run_wasm(
       bin/"diff", ["--paginate", "left.txt", "right.txt"],
       env:                       cwd_env,
@@ -110,7 +110,7 @@ class Diffutils < Formula
     )
     assert_match(/beta\s+\|\s+BETA/, side_by_side)
 
-    ed = formula_opt_bin("automattic/kandelo-homebrew/ed")/"ed"
+    ed = formula_opt_bin("kandelo-dev/tap-core/ed")/"ed"
     editor_env = cwd_env.merge("KERNEL_PATH" => "#{GUEST_DIFFUTILS_BIN}:#{File.dirname(GUEST_ED)}")
     kandelo_run_wasm(
       bin/"sdiff", ["--output=merged.txt", "left.txt", "right.txt"],

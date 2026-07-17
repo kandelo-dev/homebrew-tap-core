@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Zip < Formula
   include KandeloFormulaSupport
@@ -12,7 +12,7 @@ class Zip < Formula
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/unzip"
+  depends_on "kandelo-dev/tap-core/unzip"
 
   skip_clean "bin/zip", "bin/zipcloak", "bin/zipnote", "bin/zipsplit"
 
@@ -75,7 +75,7 @@ class Zip < Formula
     (inputs/"alpha.txt").write("alpha from Kandelo\n")
     (inputs/"nested/beta.txt").write("beta from Kandelo\n")
     unzip = inputs/"unzip"
-    unzip.binwrite((formula_opt_bin("automattic/kandelo-homebrew/unzip")/"unzip").binread)
+    unzip.binwrite((formula_opt_bin("kandelo-dev/tap-core/unzip")/"unzip").binread)
     unzip.chmod 0755
     cwd_env = { "KERNEL_CWD" => inputs, "KERNEL_PATH" => inputs }
 

@@ -10,7 +10,7 @@
   "repositories": {
     "kandelo_repository": "Automattic/kandelo",
     "kandelo_commit": "2222222222222222222222222222222222222222",
-    "tap_repository": "Automattic/kandelo-homebrew",
+    "tap_repository": "kandelo-dev/homebrew-tap-core",
     "tap_commit": "1111111111111111111111111111111111111111"
   },
   "formula": {
@@ -18,7 +18,7 @@
     "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },
   "bottle": {
-    "url": "https://example.invalid/kandelo-homebrew/hello-2.12.1-rebuild0-wasm32_kandelo.bottle.tar.gz",
+    "url": "https://example.invalid/homebrew-tap-core/hello-2.12.1-rebuild0-wasm32_kandelo.bottle.tar.gz",
     "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "bytes": 12345,
     "cache_key_sha": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -27,7 +27,7 @@
     "prefix": "/home/linuxbrew/.linuxbrew"
   },
   "build": {
-    "github_run": "https://example.invalid/Automattic/kandelo-homebrew/actions/runs/1",
+    "github_run": "https://example.invalid/kandelo-dev/homebrew-tap-core/actions/runs/1",
     "job": "publish-bottles",
     "runner_os": "ubuntu-24.04",
     "brew_version": "Homebrew 4.x fixture",

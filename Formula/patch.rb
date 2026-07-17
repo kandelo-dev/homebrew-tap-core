@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Patch < Formula
   include KandeloFormulaSupport
@@ -12,8 +12,8 @@ class Patch < Formula
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/dash"
-  depends_on "automattic/kandelo-homebrew/ed"
+  depends_on "kandelo-dev/tap-core/dash"
+  depends_on "kandelo-dev/tap-core/ed"
 
   skip_clean "bin/patch"
 
@@ -108,8 +108,8 @@ class Patch < Formula
       env:                       { "KERNEL_CWD" => guest_work, "PATH" => "#{File.dirname(guest_ed)}:/bin" },
       stdin:                     "3a\nfour\n.\n1,2c\nONE\n.\n",
       exec_programs:             {
-        "/bin/sh" => formula_opt_bin("automattic/kandelo-homebrew/dash")/"dash",
-        guest_ed  => formula_opt_bin("automattic/kandelo-homebrew/ed")/"ed",
+        "/bin/sh" => formula_opt_bin("kandelo-dev/tap-core/dash")/"dash",
+        guest_ed  => formula_opt_bin("kandelo-dev/tap-core/ed")/"ed",
       },
       writable_host_directories: { guest_work => workspace },
       expected_fork_descendants: 1,

@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Ruby < Formula
   include KandeloFormulaSupport
@@ -13,7 +13,7 @@ class Ruby < Formula
   # brew bottle / pr-pull. Until then `brew install` builds from source. A
   # hand-written placeholder sha would make a default install try to pour a
   # nonexistent bottle and fail rather than build from source.
-  depends_on "automattic/kandelo-homebrew/zlib"
+  depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin"
   skip_clean "lib/ruby"
@@ -24,7 +24,7 @@ class Ruby < Formula
       "7d6149079a63f8ae1d326c9fa65c6019ba2dc3155eae7b39159817911c88958e",
       script_env: {
         "RUBY_VERSION"            => version.to_s,
-        "WASM_POSIX_DEP_ZLIB_DIR" => formula_opt_prefix("automattic/kandelo-homebrew/zlib"),
+        "WASM_POSIX_DEP_ZLIB_DIR" => formula_opt_prefix("kandelo-dev/tap-core/zlib"),
       })
     kandelo_install_bin(out_dir, "ruby.wasm", "ruby")
 

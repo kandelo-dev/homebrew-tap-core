@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 require "digest"
 
 class Icu < Formula
@@ -21,7 +21,7 @@ class Icu < Formula
   depends_on "pkgconf" => [:build, :test]
   depends_on "binaryen" => :test
   depends_on "wabt" => :test
-  depends_on "automattic/kandelo-homebrew/libcxx"
+  depends_on "kandelo-dev/tap-core/libcxx"
 
   skip_clean "lib/libicudata.a"
   skip_clean "lib/libicui18n.a"
@@ -30,7 +30,7 @@ class Icu < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-    libcxx = formula_opt_prefix("automattic/kandelo-homebrew/libcxx")
+    libcxx = formula_opt_prefix("kandelo-dev/tap-core/libcxx")
     source = buildpath/"source"
     host_build = buildpath/"host-build"
 
@@ -181,7 +181,7 @@ class Icu < Formula
 
   test do
     root = Pathname(kandelo_require_root!)
-    libcxx = formula_opt_prefix("automattic/kandelo-homebrew/libcxx")
+    libcxx = formula_opt_prefix("kandelo-dev/tap-core/libcxx")
     archives = {
       "libicudata.a" => 1,
       "libicui18n.a" => 243,

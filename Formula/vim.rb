@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Vim < Formula
   include KandeloFormulaSupport
@@ -14,14 +14,14 @@ class Vim < Formula
 
   depends_on "binaryen" => [:build, :test]
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/dash" => :test
-  depends_on "automattic/kandelo-homebrew/ncurses"
+  depends_on "kandelo-dev/tap-core/dash" => :test
+  depends_on "kandelo-dev/tap-core/ncurses"
 
   skip_clean "bin"
 
   def install
     kandelo_require_arch!("wasm32")
-    ncurses = formula_opt_prefix("automattic/kandelo-homebrew/ncurses")
+    ncurses = formula_opt_prefix("kandelo-dev/tap-core/ncurses")
     guest_brew_prefix = "/home/linuxbrew/.linuxbrew"
     guest_opt_prefix = "#{guest_brew_prefix}/opt/vim"
     guest_ncurses = "#{guest_brew_prefix}/opt/ncurses"
@@ -272,7 +272,7 @@ class Vim < Formula
       bin/"vim",
       ["-Nu", "NONE", "-n", "-es", "-S", commands.basename, source.basename],
       env:                       vim_env,
-      exec_programs:             { "/bin/sh" => formula_opt_bin("automattic/kandelo-homebrew/dash")/"dash" },
+      exec_programs:             { "/bin/sh" => formula_opt_bin("kandelo-dev/tap-core/dash")/"dash" },
       expected_fork_descendants: 1,
       guest_files:               runtime_files,
       merge_stderr:              true,

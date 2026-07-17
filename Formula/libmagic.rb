@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Libmagic < Formula
   include KandeloFormulaSupport
@@ -10,17 +10,17 @@ class Libmagic < Formula
   license all_of: ["BSD-2-Clause-Darwin", "BSD-2-Clause", :public_domain]
 
   depends_on "pkgconf" => :test
-  depends_on "automattic/kandelo-homebrew/bzip2"
-  depends_on "automattic/kandelo-homebrew/xz"
-  depends_on "automattic/kandelo-homebrew/zlib"
+  depends_on "kandelo-dev/tap-core/bzip2"
+  depends_on "kandelo-dev/tap-core/xz"
+  depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "lib/libmagic.a"
 
   def install
     kandelo_require_arch!("wasm32")
-    bzip2 = formula_opt_prefix("automattic/kandelo-homebrew/bzip2")
-    xz = formula_opt_prefix("automattic/kandelo-homebrew/xz")
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    bzip2 = formula_opt_prefix("kandelo-dev/tap-core/bzip2")
+    xz = formula_opt_prefix("kandelo-dev/tap-core/xz")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
     jobs = "-j#{ENV.make_jobs}"
 
     # A version-matched native file(1) compiles architecture-independent
@@ -185,9 +185,9 @@ class Libmagic < Formula
     C
 
     kandelo_wasm_build do |root|
-      bzip2 = formula_opt_prefix("automattic/kandelo-homebrew/bzip2")
-      xz = formula_opt_prefix("automattic/kandelo-homebrew/xz")
-      zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+      bzip2 = formula_opt_prefix("kandelo-dev/tap-core/bzip2")
+      xz = formula_opt_prefix("kandelo-dev/tap-core/xz")
+      zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
       ENV["PKG_CONFIG_LIBDIR"] = [lib/"pkgconfig", xz/"lib/pkgconfig", zlib/"lib/pkgconfig"].join(":")
       ENV.delete("PKG_CONFIG_PATH")
       ENV.delete("PKG_CONFIG_SYSROOT_DIR")

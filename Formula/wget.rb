@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Wget < Formula
   include KandeloFormulaSupport
@@ -18,15 +18,15 @@ class Wget < Formula
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/openssl"
-  depends_on "automattic/kandelo-homebrew/zlib"
+  depends_on "kandelo-dev/tap-core/openssl"
+  depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin/wget"
 
   def install
     kandelo_require_arch!("wasm32")
-    openssl = formula_opt_prefix("automattic/kandelo-homebrew/openssl")
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
+    openssl = formula_opt_prefix("kandelo-dev/tap-core/openssl")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
 
     kandelo_wasm_build do |root|
       path_maps = {
@@ -117,8 +117,8 @@ class Wget < Formula
     [
       [prefix.to_s, GUEST_OPT_PREFIX],
       [etc.to_s, File.dirname(GUEST_WGETRC)],
-      [formula_opt_prefix("automattic/kandelo-homebrew/openssl").to_s, GUEST_OPENSSL_PREFIX],
-      [formula_opt_prefix("automattic/kandelo-homebrew/zlib").to_s, GUEST_ZLIB_PREFIX],
+      [formula_opt_prefix("kandelo-dev/tap-core/openssl").to_s, GUEST_OPENSSL_PREFIX],
+      [formula_opt_prefix("kandelo-dev/tap-core/zlib").to_s, GUEST_ZLIB_PREFIX],
     ].each do |source, destination|
       assert_includes version_output, destination
       refute_includes version_output, source if source != destination
