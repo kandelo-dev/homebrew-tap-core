@@ -16,10 +16,16 @@ EXPECTED_WORKFLOW_FILES = %w[
   dry-run-bottles.yml
   maintain-bottles.yml
   publish-bottles.yml
+  repository-namespace-canary.yml
 ].freeze
 CALLER_PERMISSIONS = {
   "actions" => "read",
   "contents" => "write",
+  "packages" => "write",
+}.freeze
+REPOSITORY_CANARY_PERMISSIONS = {
+  "actions" => "read",
+  "contents" => "read",
   "packages" => "write",
 }.freeze
 CHECKOUT_ACTION = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
@@ -113,6 +119,7 @@ PAT_PUBLISH_SECRETS = {
 }.freeze
 
 CURRENT_KANDELO_WORKFLOW_SHA = "acc54b0d0fb5ffc1e742d437081a58bfd163e785"
+REPOSITORY_CANARY_KANDELO_SHA = "2b02a771f3cf00b2c850e4060ba093035c034c8c"
 PREVIOUS_KANDELO_WORKFLOW_SHA = "129887dcaafcac304d25f3a89f7afb97b09dcd06"
 RETIRED_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
 SELF_TEST_KANDELO_WORKFLOW_SHA = "1111111111111111111111111111111111111111"
@@ -171,6 +178,17 @@ CALLER_SPECS = {
       "deletion-reason" => expression("github.event.client_payload.deletion_reason || ''"),
     }.freeze,
   },
+  "repository-canary" => {
+    path: File.join(WORKFLOW_ROOT, "repository-namespace-canary.yml"),
+    name: "Test repository-rooted GHCR package",
+    event: "test-repository-rooted-ghcr-package",
+    job: "canary",
+    permissions: REPOSITORY_CANARY_PERMISSIONS,
+    reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@#{REPOSITORY_CANARY_KANDELO_SHA}",
+    inputs: {
+      "kandelo-ref" => REPOSITORY_CANARY_KANDELO_SHA,
+    }.freeze,
+  },
 }.freeze
 
 def caller_specs_for_sha(kandelo_sha)
@@ -216,7 +234,8 @@ BASE_MATERIALIZE_RUN = <<~'BASH'
         {path: ".github/workflows/contract-checks.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/dry-run-bottles.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/maintain-bottles.yml", mode: "100644", type: "blob"},
-        {path: ".github/workflows/publish-bottles.yml", mode: "100644", type: "blob"}
+        {path: ".github/workflows/publish-bottles.yml", mode: "100644", type: "blob"},
+        {path: ".github/workflows/repository-namespace-canary.yml", mode: "100644", type: "blob"}
       ] and
     ([.tree[] |
       select(.path == "Kandelo/test-workflow-trust.rb") |
@@ -237,6 +256,7 @@ BASE_MATERIALIZE_RUN = <<~'BASH'
     .github/workflows/dry-run-bottles.yml
     .github/workflows/maintain-bottles.yml
     .github/workflows/publish-bottles.yml
+    .github/workflows/repository-namespace-canary.yml
     Kandelo/test-workflow-trust.rb
     Kandelo/test-workflow-trust.sh
   )
@@ -280,7 +300,7 @@ def check_caller(workflow, spec, label)
   expected_job_keys << "secrets" unless expected_secrets.empty?
   check(normalized_keys(job, "#{label} job").sort == expected_job_keys.sort,
         "#{label} caller job is not data-only")
-  check(exact_permissions?(job["permissions"], CALLER_PERMISSIONS),
+  check(exact_permissions?(job["permissions"], spec.fetch(:permissions, CALLER_PERMISSIONS)),
         "#{label} permission ceiling changed")
   check(job["uses"] == spec.fetch(:reusable), "#{label} reusable workflow target changed")
   check(job["with"] == spec.fetch(:inputs), "#{label} caller inputs changed")
@@ -507,6 +527,47 @@ def self_test(callers, contract, base_contract)
       expression("github.actor")
     check_caller_profile(mutated, test_profiles)
   end
+  expect_rejection("a package secret on the repository namespace canary") do
+    mutated = deep_copy(current_callers.fetch("repository-canary"))
+    mutated.dig("jobs", "canary")["secrets"] = {
+      "HOMEBREW_GITHUB_PACKAGES_TOKEN" =>
+        expression("secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN"),
+    }
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("repository-canary"),
+      "repository-canary workflow"
+    )
+  end
+  expect_rejection("an event-selected Kandelo ref on the repository namespace canary") do
+    mutated = deep_copy(current_callers.fetch("repository-canary"))
+    mutated.dig("jobs", "canary", "with")["kandelo-ref"] =
+      expression("github.event.client_payload.kandelo_ref")
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("repository-canary"),
+      "repository-canary workflow"
+    )
+  end
+  expect_rejection("write-capable contents on the repository namespace canary") do
+    mutated = deep_copy(current_callers.fetch("repository-canary"))
+    mutated.dig("jobs", "canary", "permissions")["contents"] = "write"
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("repository-canary"),
+      "repository-canary workflow"
+    )
+  end
+  expect_rejection("a mutable repository namespace canary target") do
+    mutated = deep_copy(current_callers.fetch("repository-canary"))
+    mutated.dig("jobs", "canary")["uses"] =
+      "Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@main"
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("repository-canary"),
+      "repository-canary workflow"
+    )
+  end
   expect_rejection("an extra privileged job") do
     mutated = deep_copy(current_callers.fetch("publish"))
     mutated.fetch("jobs")["backdoor"] = {
@@ -594,6 +655,7 @@ begin
   check(CURRENT_KANDELO_WORKFLOW_SHA.match?(/\A[0-9a-f]{40}\z/),
         "current Kandelo workflow pin is not an exact SHA")
   {
+    "repository canary" => REPOSITORY_CANARY_KANDELO_SHA,
     "previous" => PREVIOUS_KANDELO_WORKFLOW_SHA,
     "retired" => RETIRED_KANDELO_WORKFLOW_SHA,
     "self-test" => SELF_TEST_KANDELO_WORKFLOW_SHA,
@@ -603,6 +665,7 @@ begin
   end
   workflow_shas = [
     CURRENT_KANDELO_WORKFLOW_SHA,
+    REPOSITORY_CANARY_KANDELO_SHA,
     PREVIOUS_KANDELO_WORKFLOW_SHA,
     RETIRED_KANDELO_WORKFLOW_SHA,
     SELF_TEST_KANDELO_WORKFLOW_SHA,

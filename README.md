@@ -170,6 +170,25 @@ gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
   -f 'client_payload[arches]=wasm32'
 ```
 
+The repository-rooted GHCR canary is a one-shot transport experiment. Its
+data-only caller is pinned to one reviewed Kandelo commit, accepts no event
+payload, maps no repository secret, and grants read-only repository contents
+plus package write access. It replays the immutable zlib OCI child produced by
+the original `GITHUB_TOKEN` control into
+`ghcr.io/kandelo-dev/homebrew-tap-core/zlib`:
+
+```bash
+gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
+  -f event_type=test-repository-rooted-ghcr-package
+```
+
+The canary requires that destination package repository to be absent before
+upload, then requires credential-free readback of the exact uploaded digest.
+It does not publish a mutable version index, edit Formula metadata, run release
+verification, or finalize tap state. Canonical Homebrew identity and normal
+publication remain `kandelo-dev/tap-core`; only this canary's GHCR transport
+destination uses the exact source-repository name.
+
 Dry runs cannot publish bottle blobs or sidecar commits. They may upload
 run-scoped diagnostic artifacts, but later write-capable bottle jobs do not
 restore state produced by an untrusted dry run.
