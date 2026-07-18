@@ -50,7 +50,8 @@ jobs:
                 {path: ".github/workflows/contract-checks.yml", mode: "100644", type: "blob"},
                 {path: ".github/workflows/dry-run-bottles.yml", mode: "100644", type: "blob"},
                 {path: ".github/workflows/maintain-bottles.yml", mode: "100644", type: "blob"},
-                {path: ".github/workflows/publish-bottles.yml", mode: "100644", type: "blob"}
+                {path: ".github/workflows/publish-bottles.yml", mode: "100644", type: "blob"},
+                {path: ".github/workflows/repository-namespace-canary.yml", mode: "100644", type: "blob"}
               ] and
             ([.tree[] |
               select(.path == "Kandelo/test-workflow-trust.rb") |
@@ -71,6 +72,7 @@ jobs:
             .github/workflows/dry-run-bottles.yml
             .github/workflows/maintain-bottles.yml
             .github/workflows/publish-bottles.yml
+            .github/workflows/repository-namespace-canary.yml
             Kandelo/test-workflow-trust.rb
             Kandelo/test-workflow-trust.sh
           )

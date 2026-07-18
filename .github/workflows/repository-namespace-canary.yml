@@ -1,0 +1,15 @@
+name: Test repository-rooted GHCR package
+
+on:
+  repository_dispatch:
+    types: [test-repository-rooted-ghcr-package]
+
+jobs:
+  canary:
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@2b02a771f3cf00b2c850e4060ba093035c034c8c
+    with:
+      kandelo-ref: 2b02a771f3cf00b2c850e4060ba093035c034c8c
