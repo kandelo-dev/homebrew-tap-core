@@ -103,9 +103,18 @@ VFS_PUBLISH_INPUTS = PUBLISH_INPUTS.merge({
   ),
 }).freeze
 
-CURRENT_KANDELO_WORKFLOW_SHA = "129887dcaafcac304d25f3a89f7afb97b09dcd06"
-PREVIOUS_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
-RETIRED_KANDELO_WORKFLOW_SHA = "d26c2f69da766830eaf5125c7b4fcf43ed620313"
+PAT_PUBLISH_INPUTS = VFS_PUBLISH_INPUTS.merge({
+  "github-packages-user" => expression("vars.HOMEBREW_GITHUB_PACKAGES_USER"),
+  "require-github-packages-token" => true,
+}).freeze
+PAT_PUBLISH_SECRETS = {
+  "HOMEBREW_GITHUB_PACKAGES_TOKEN" =>
+    expression("secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN"),
+}.freeze
+
+CURRENT_KANDELO_WORKFLOW_SHA = "acc54b0d0fb5ffc1e742d437081a58bfd163e785"
+PREVIOUS_KANDELO_WORKFLOW_SHA = "129887dcaafcac304d25f3a89f7afb97b09dcd06"
+RETIRED_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
 SELF_TEST_KANDELO_WORKFLOW_SHA = "1111111111111111111111111111111111111111"
 
 CALLER_SPECS = {
@@ -115,7 +124,8 @@ CALLER_SPECS = {
     event: "publish-kandelo-bottles",
     job: "publish",
     reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@#{CURRENT_KANDELO_WORKFLOW_SHA}",
-    inputs: VFS_PUBLISH_INPUTS,
+    inputs: PAT_PUBLISH_INPUTS,
+    secrets: PAT_PUBLISH_SECRETS,
   },
   "dry-run" => {
     path: File.join(WORKFLOW_ROOT, "dry-run-bottles.yml"),
@@ -171,6 +181,8 @@ def caller_specs_for_sha(kandelo_sha)
     "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@#{kandelo_sha}"
   specs.fetch("maintenance")[:reusable] =
     "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@#{kandelo_sha}"
+  specs.fetch("publish")[:inputs] = VFS_PUBLISH_INPUTS
+  specs.fetch("publish").delete(:secrets)
   specs.freeze
 end
 
@@ -263,18 +275,25 @@ def check_caller(workflow, spec, label)
   check(jobs.is_a?(Hash) && jobs.keys == [spec.fetch(:job)],
         "#{label} has an unexpected job set")
   job = jobs.fetch(spec.fetch(:job))
-  check(normalized_keys(job, "#{label} job").sort == %w[permissions uses with],
+  expected_secrets = spec.fetch(:secrets, {})
+  expected_job_keys = %w[permissions uses with]
+  expected_job_keys << "secrets" unless expected_secrets.empty?
+  check(normalized_keys(job, "#{label} job").sort == expected_job_keys.sort,
         "#{label} caller job is not data-only")
   check(exact_permissions?(job["permissions"], CALLER_PERMISSIONS),
         "#{label} permission ceiling changed")
   check(job["uses"] == spec.fetch(:reusable), "#{label} reusable workflow target changed")
   check(job["with"] == spec.fetch(:inputs), "#{label} caller inputs changed")
+  check(job.fetch("secrets", {}) == expected_secrets, "#{label} caller secrets changed")
 
   check(values_for_key(workflow, "uses") == [spec.fetch(:reusable)],
         "#{label} executable workflow set changed")
-  %w[run steps secrets env defaults].each do |key|
+  %w[run steps env defaults].each do |key|
     check(values_for_key(workflow, key).empty?, "#{label} contains caller-local #{key}")
   end
+  expected_secret_nodes = expected_secrets.empty? ? [] : [expected_secrets]
+  check(values_for_key(workflow, "secrets") == expected_secret_nodes,
+        "#{label} may pass only its reviewed named secrets")
 end
 
 def caller_profile_errors(callers, specs)
@@ -305,6 +324,12 @@ def callers_for_specs(callers, specs)
     job = result.fetch(key).fetch("jobs").fetch(spec.fetch(:job))
     job["uses"] = spec.fetch(:reusable)
     job["with"] = spec.fetch(:inputs)
+    expected_secrets = spec.fetch(:secrets, {})
+    if expected_secrets.empty?
+      job.delete("secrets")
+    else
+      job["secrets"] = expected_secrets
+    end
   end
   result
 end
@@ -404,9 +429,7 @@ end
 
 def self_test(callers, contract, base_contract)
   previous_specs = caller_specs_for_sha(PREVIOUS_KANDELO_WORKFLOW_SHA)
-  retired_specs = deep_copy(caller_specs_for_sha(RETIRED_KANDELO_WORKFLOW_SHA))
-  retired_specs.fetch("publish")[:inputs] = PUBLISH_INPUTS
-  retired_specs.freeze
+  retired_specs = caller_specs_for_sha(RETIRED_KANDELO_WORKFLOW_SHA)
   arbitrary_specs = caller_specs_for_sha(SELF_TEST_KANDELO_WORKFLOW_SHA)
   test_profiles = { "current" => CALLER_SPECS }
   current_callers = callers_for_specs(callers, CALLER_SPECS)
@@ -461,6 +484,28 @@ def self_test(callers, contract, base_contract)
     mutated = deep_copy(current_callers.fetch("publish"))
     mutated.dig("jobs", "publish")["secrets"] = "inherit"
     check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
+  end
+  expect_rejection("missing package PAT mapping") do
+    mutated = deep_copy(current_callers.fetch("publish"))
+    mutated.dig("jobs", "publish").delete("secrets")
+    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
+  end
+  expect_rejection("unexpected package secret") do
+    mutated = deep_copy(current_callers.fetch("publish"))
+    mutated.dig("jobs", "publish", "secrets")["UNREVIEWED_TOKEN"] =
+      expression("secrets.UNREVIEWED_TOKEN")
+    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
+  end
+  expect_rejection("package PAT fallback") do
+    mutated = deep_copy(current_callers)
+    mutated.dig("publish", "jobs", "publish", "with")["require-github-packages-token"] = false
+    check_caller_profile(mutated, test_profiles)
+  end
+  expect_rejection("package PAT owner drift") do
+    mutated = deep_copy(current_callers)
+    mutated.dig("publish", "jobs", "publish", "with")["github-packages-user"] =
+      expression("github.actor")
+    check_caller_profile(mutated, test_profiles)
   end
   expect_rejection("an extra privileged job") do
     mutated = deep_copy(current_callers.fetch("publish"))
