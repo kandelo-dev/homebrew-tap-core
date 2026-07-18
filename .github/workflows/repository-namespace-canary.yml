@@ -10,6 +10,6 @@ jobs:
       actions: read
       contents: read
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@9032bb4bdf5cd20131eb1fa3112d363afb251796
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@7d9854e4a6be178e2431816cd21b8a19a1ff6d67
     with:
-      kandelo-ref: 9032bb4bdf5cd20131eb1fa3112d363afb251796
+      kandelo-ref: 7d9854e4a6be178e2431816cd21b8a19a1ff6d67
