@@ -170,24 +170,24 @@ gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
   -f 'client_payload[arches]=wasm32'
 ```
 
-The repository-rooted GHCR canary is a one-shot transport experiment. Its
-data-only caller is pinned to one reviewed Kandelo commit, accepts no event
-payload, maps no repository secret, and grants read-only repository contents
-plus package write access. It replays the immutable zlib OCI child produced by
-the original `GITHUB_TOKEN` control into
-`ghcr.io/kandelo-dev/homebrew-tap-core/zlib`:
+Production keeps `kandelo-dev/tap-core` as the canonical Homebrew identity for
+Formula references, OCI titles, and sidecars. Bottle transport instead uses the
+exact public source-repository namespace,
+`ghcr.io/kandelo-dev/homebrew-tap-core/<formula>`. Child and version-index
+uploads use only this repository's scoped built-in `GITHUB_TOKEN`; the caller
+passes no package PAT and the publisher performs no visibility mutation. A
+write publication cannot finalize Formula or sidecar state until the exact
+uploaded digest is anonymously readable and its SHA-256 and byte count match.
 
-```bash
-gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
-  -f event_type=test-repository-rooted-ghcr-package
-```
-
-The canary requires that destination package repository to be absent before
-upload, then requires credential-free readback of the exact uploaded digest.
-It does not publish a mutable version index, edit Formula metadata, run release
-verification, or finalize tap state. Canonical Homebrew identity and normal
-publication remain `kandelo-dev/tap-core`; only this canary's GHCR transport
-destination uses the exact source-repository name.
+The repository-rooted GHCR canary is completed historical evidence. Its
+data-only caller remains pinned to one reviewed Kandelo commit and must not be
+dispatched again: run `29652866481` already created
+`homebrew-tap-core/zlib`, so the canary's required absent-destination preflight
+would now fail. The run replayed the immutable zlib OCI child produced by the
+original `GITHUB_TOKEN` control and proved credential-free readback from the
+repository-rooted destination. It intentionally stopped before publishing a
+mutable version index, editing Formula metadata, running release verification,
+or finalizing tap state.
 
 Dry runs cannot publish bottle blobs or sidecar commits. They may upload
 run-scoped diagnostic artifacts, but later write-capable bottle jobs do not
