@@ -573,6 +573,7 @@ class KandeloFormulaSupportTest < Minitest::Test
   def test_sysroot_activation_clears_host_linker_search_paths
     harness = Harness.new
     original = ENV.to_hash
+    ENV.delete("HOMEBREW_KANDELO_SYSROOT")
     ENV["LIBRARY_PATH"] = "/prefix/opt/xz/lib"
     ENV["LD_RUN_PATH"] = "/prefix/opt/xz/lib"
 
@@ -581,6 +582,20 @@ class KandeloFormulaSupportTest < Minitest::Test
     refute ENV.key?("LIBRARY_PATH")
     refute ENV.key?("LD_RUN_PATH")
     assert_equal "/tmp/kandelo-root/sysroot", ENV.fetch("WASM_POSIX_SYSROOT")
+  ensure
+    ENV.replace(original) if original
+  end
+
+  def test_sysroot_activation_uses_the_protected_publisher_sysroot
+    harness = Harness.new
+    original = ENV.to_hash
+    ENV["HOMEBREW_KANDELO_SYSROOT"] = "/protected/source-aliases/sysroot"
+    ENV["WASM_POSIX_SYSROOT"] = "/caller/poison"
+
+    harness.kandelo_activate_sysroot!("/tmp/pristine-kandelo-source")
+
+    assert_equal "/protected/source-aliases/sysroot", ENV.fetch("WASM_POSIX_SYSROOT")
+    assert_equal "/tmp/pristine-kandelo-source/libc/glue", ENV.fetch("WASM_POSIX_GLUE_DIR")
   ensure
     ENV.replace(original) if original
   end

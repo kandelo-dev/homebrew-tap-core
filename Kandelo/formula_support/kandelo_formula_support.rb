@@ -125,7 +125,12 @@ module KandeloFormulaSupport
   # wasm compile. Used by `test do` blocks that compile against a library keg.
   def kandelo_activate_sysroot!(root = kandelo_require_root!)
     sysroot = (kandelo_arch == "wasm64") ? "sysroot64" : "sysroot"
-    ENV["WASM_POSIX_SYSROOT"] = "#{root}/#{sysroot}"
+    protected_sysroot = ENV.fetch("HOMEBREW_KANDELO_SYSROOT", "").to_s
+    ENV["WASM_POSIX_SYSROOT"] = if protected_sysroot.empty?
+      "#{root}/#{sysroot}"
+    else
+      protected_sysroot
+    end
     ENV["WASM_POSIX_GLUE_DIR"] = "#{root}/libc/glue"
     %w[
       SDKROOT
