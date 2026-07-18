@@ -118,8 +118,9 @@ PAT_PUBLISH_SECRETS = {
     expression("secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN"),
 }.freeze
 
-CURRENT_KANDELO_WORKFLOW_SHA = "acc54b0d0fb5ffc1e742d437081a58bfd163e785"
+CURRENT_KANDELO_WORKFLOW_SHA = "4de34320775d34020779f8fbdd7b39223959e044"
 REPOSITORY_CANARY_KANDELO_SHA = "7d9854e4a6be178e2431816cd21b8a19a1ff6d67"
+RETIRED_PAT_KANDELO_WORKFLOW_SHA = "acc54b0d0fb5ffc1e742d437081a58bfd163e785"
 PREVIOUS_KANDELO_WORKFLOW_SHA = "129887dcaafcac304d25f3a89f7afb97b09dcd06"
 RETIRED_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
 SELF_TEST_KANDELO_WORKFLOW_SHA = "1111111111111111111111111111111111111111"
@@ -131,8 +132,7 @@ CALLER_SPECS = {
     event: "publish-kandelo-bottles",
     job: "publish",
     reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@#{CURRENT_KANDELO_WORKFLOW_SHA}",
-    inputs: PAT_PUBLISH_INPUTS,
-    secrets: PAT_PUBLISH_SECRETS,
+    inputs: VFS_PUBLISH_INPUTS,
   },
   "dry-run" => {
     path: File.join(WORKFLOW_ROOT, "dry-run-bottles.yml"),
@@ -201,6 +201,13 @@ def caller_specs_for_sha(kandelo_sha)
     "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@#{kandelo_sha}"
   specs.fetch("publish")[:inputs] = VFS_PUBLISH_INPUTS
   specs.fetch("publish").delete(:secrets)
+  specs.freeze
+end
+
+def pat_caller_specs_for_sha(kandelo_sha)
+  specs = deep_copy(caller_specs_for_sha(kandelo_sha))
+  specs.fetch("publish")[:inputs] = PAT_PUBLISH_INPUTS
+  specs.fetch("publish")[:secrets] = PAT_PUBLISH_SECRETS
   specs.freeze
 end
 
@@ -448,11 +455,13 @@ def check_base_contract_workflow(workflow)
 end
 
 def self_test(callers, contract, base_contract)
+  retired_pat_specs = pat_caller_specs_for_sha(RETIRED_PAT_KANDELO_WORKFLOW_SHA)
   previous_specs = caller_specs_for_sha(PREVIOUS_KANDELO_WORKFLOW_SHA)
   retired_specs = caller_specs_for_sha(RETIRED_KANDELO_WORKFLOW_SHA)
   arbitrary_specs = caller_specs_for_sha(SELF_TEST_KANDELO_WORKFLOW_SHA)
   test_profiles = { "current" => CALLER_SPECS }
   current_callers = callers_for_specs(callers, CALLER_SPECS)
+  retired_pat_callers = callers_for_specs(callers, retired_pat_specs)
   previous_callers = callers_for_specs(callers, previous_specs)
   retired_callers = callers_for_specs(callers, retired_specs)
   arbitrary_callers = callers_for_specs(callers, arbitrary_specs)
@@ -463,6 +472,9 @@ def self_test(callers, contract, base_contract)
     mutated = deep_copy(current_callers)
     mutated["publish"] = deep_copy(arbitrary_callers.fetch("publish"))
     check_caller_profile(mutated, test_profiles)
+  end
+  expect_rejection("the retired PAT-backed caller generation") do
+    check_caller_profile(retired_pat_callers, test_profiles)
   end
   expect_rejection("the previous complete caller generation") do
     check_caller_profile(previous_callers, test_profiles)
@@ -505,15 +517,18 @@ def self_test(callers, contract, base_contract)
     mutated.dig("jobs", "publish")["secrets"] = "inherit"
     check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
   end
-  expect_rejection("missing package PAT mapping") do
-    mutated = deep_copy(current_callers.fetch("publish"))
-    mutated.dig("jobs", "publish").delete("secrets")
-    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
+  expect_rejection("the retired package PAT mapping") do
+    mutated = deep_copy(current_callers)
+    publish = mutated.dig("publish", "jobs", "publish")
+    publish["with"] = PAT_PUBLISH_INPUTS
+    publish["secrets"] = PAT_PUBLISH_SECRETS
+    check_caller_profile(mutated, test_profiles)
   end
   expect_rejection("unexpected package secret") do
     mutated = deep_copy(current_callers.fetch("publish"))
-    mutated.dig("jobs", "publish", "secrets")["UNREVIEWED_TOKEN"] =
-      expression("secrets.UNREVIEWED_TOKEN")
+    mutated.dig("jobs", "publish")["secrets"] = {
+      "UNREVIEWED_TOKEN" => expression("secrets.UNREVIEWED_TOKEN"),
+    }
     check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
   end
   expect_rejection("package PAT fallback") do
@@ -656,6 +671,7 @@ begin
         "current Kandelo workflow pin is not an exact SHA")
   {
     "repository canary" => REPOSITORY_CANARY_KANDELO_SHA,
+    "retired PAT" => RETIRED_PAT_KANDELO_WORKFLOW_SHA,
     "previous" => PREVIOUS_KANDELO_WORKFLOW_SHA,
     "retired" => RETIRED_KANDELO_WORKFLOW_SHA,
     "self-test" => SELF_TEST_KANDELO_WORKFLOW_SHA,
@@ -666,6 +682,7 @@ begin
   workflow_shas = [
     CURRENT_KANDELO_WORKFLOW_SHA,
     REPOSITORY_CANARY_KANDELO_SHA,
+    RETIRED_PAT_KANDELO_WORKFLOW_SHA,
     PREVIOUS_KANDELO_WORKFLOW_SHA,
     RETIRED_KANDELO_WORKFLOW_SHA,
     SELF_TEST_KANDELO_WORKFLOW_SHA,
