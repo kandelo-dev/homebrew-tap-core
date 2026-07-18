@@ -1,9 +1,19 @@
 # Kandelo Sidecar Metadata
 
-The future tap will generate this directory from trusted publish workflows.
-Checked-in files make metadata reviewable in the tap commit, and the same
-payload should be uploaded to a tap release named `bottles-abi-v<N>` for stable
-automation fetches.
+Trusted publish workflows generate this directory in the
+`kandelo-dev/tap-core` tap in the `kandelo-dev/homebrew-tap-core` repository.
+Checked-in files make metadata reviewable in the tap commit.
+`bottles-abi-v<N>` is the sidecar ABI namespace; the current workflow does not
+duplicate this payload into a GitHub Release.
+
+These two names serve different contracts. Homebrew references, receipts, OCI
+titles, Brewfiles, and sidecar tap fields use the canonical tap identity
+`kandelo-dev/tap-core`. Public bottle URLs use the exact repository-rooted GHCR
+namespace `https://ghcr.io/v2/kandelo-dev/homebrew-tap-core`, retaining the
+repository's `homebrew-` prefix. Production child and version-index writes use
+only the caller repository's scoped built-in `GITHUB_TOKEN` (`github.token`);
+the workflow accepts no package PAT and finalizes sidecars only after anonymous
+bottle readback.
 
 ## Files
 
