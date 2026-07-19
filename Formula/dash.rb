@@ -88,6 +88,12 @@ class Dash < Formula
     assert_equal "34\nRTMIN\nRTMAX\n",
       kandelo_run_wasm(bin/"dash", ["-c", "kill -l 34; kill -l 35; kill -l 64"])
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "89ac0416a5e160baae31560ce4dd444379722d832eabac7c4a299cf323886d36"
+  end
+
 end
 
 __END__
