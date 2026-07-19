@@ -1,0 +1,33 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 343669,
+    "cache_key_sha": "329d5c8cb98668b8040e67fcfa5d767eb14b8627c6ee8431ede338e1e12ca540",
+    "payload_root": "grep/3.11",
+    "sha256": "329d5c8cb98668b8040e67fcfa5d767eb14b8627c6ee8431ede338e1e12ca540",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/grep/blobs/sha256:329d5c8cb98668b8040e67fcfa5d767eb14b8627c6ee8431ede338e1e12ca540"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/grep/3.11",
+  "links": [
+    {
+      "source": "bin/grep",
+      "target": "bin/grep",
+      "type": "symlink"
+    }
+  ],
+  "package": "grep",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/grep.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "3.11"
+}

@@ -1,48 +1,48 @@
 {
   "bottle": {
     "bottle_tag": "wasm32_kandelo",
-    "bytes": 107537,
-    "cache_key_sha": "d09d1dc04593ba968045f95d4a3fb61150373e9624b9a61840a31a5f7fd5fbb9",
+    "bytes": 343669,
+    "cache_key_sha": "329d5c8cb98668b8040e67fcfa5d767eb14b8627c6ee8431ede338e1e12ca540",
     "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
     "prefix": "/home/linuxbrew/.linuxbrew",
-    "sha256": "d09d1dc04593ba968045f95d4a3fb61150373e9624b9a61840a31a5f7fd5fbb9",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/zlib/blobs/sha256:d09d1dc04593ba968045f95d4a3fb61150373e9624b9a61840a31a5f7fd5fbb9"
+    "sha256": "329d5c8cb98668b8040e67fcfa5d767eb14b8627c6ee8431ede338e1e12ca540",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/grep/blobs/sha256:329d5c8cb98668b8040e67fcfa5d767eb14b8627c6ee8431ede338e1e12ca540"
   },
   "build": {
     "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
     "dev_shell": "scripts/dev-shell.sh",
-    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29702223068",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706054035",
     "job": "verify-bottle",
     "runner_os": "Linux",
     "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
     "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
   },
   "formula": {
-    "path": "Formula/zlib.rb",
-    "sha256": "707ac31ec9ee85c9fab794b19710ee08d4d65b9bd55d3968e4c71768ca535ecd"
+    "path": "Formula/grep.rb",
+    "sha256": "2a273fdd35285b654fc705c400270bdf905b0a726944e75075fb6694fd243417"
   },
   "metadata": {
     "formula_json": {
-      "path": "Kandelo/formula/zlib.json",
-      "sha256": "08cfbdcf498bf7a56a8b690b2c73f53844355cae58c4b6f55ab4a18d3ab675c3"
+      "path": "Kandelo/formula/grep.json",
+      "sha256": "1e9a9530c0bda9f1113ea70330b61cfdd0c652d325846b35857b30cb601a59cc"
     },
     "link_manifest_json": {
-      "path": "Kandelo/link/zlib-1.3.1_4-rebuild0-wasm32.json",
-      "sha256": "e76c342c3a6e208bff108749cd350f3cbc93b8665b0cd90bd975877f8f111eaa"
+      "path": "Kandelo/link/grep-3.11-rebuild0-wasm32.json",
+      "sha256": "faf9034072f391ae3a44a9b04fd14a8943e7606c26c5eb405e19917c65676f70"
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
       "sha256": "a284cae699d843e8d27dc7de338d25b341ef6793aeccdeb3d4aa94220eabf16d"
     },
     "provenance_json": {
-      "path": "Kandelo/reports/zlib-1.3.1_4-rebuild0-wasm32.provenance.json",
-      "sha256": "a5d1f3052679443ad27c4b4d88bec849888830a12c07792eb8670789d7b45d84"
+      "path": "Kandelo/reports/grep-3.11-rebuild0-wasm32.provenance.json",
+      "sha256": "881b088558c563d2c4ac04781da5bfd53b610150ca1cdf75e2f14ddbeaab33d7"
     }
   },
   "repositories": {
     "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
     "kandelo_repository": "Automattic/kandelo",
-    "tap_commit": "ea64f3500f205f2e7c797cabe748246eb1acfe91",
+    "tap_commit": "bbb69174da9ab1d008c4bcc6073496acf2a84c16",
     "tap_repository": "kandelo-dev/homebrew-tap-core"
   },
   "schema": 1,
@@ -50,8 +50,8 @@
     "arch": "wasm32",
     "bottle_rebuild": 0,
     "kandelo_abi": 41,
-    "package": "zlib",
-    "version": "1.3.1_4"
+    "package": "grep",
+    "version": "3.11"
   },
   "validation": {
     "outcome_lists": [
@@ -60,9 +60,9 @@
         "name": "schema",
         "passed": [
           "Kandelo/metadata.json",
-          "Kandelo/formula/zlib.json",
-          "Kandelo/link/zlib-1.3.1_4-rebuild0-wasm32.json",
-          "Kandelo/reports/zlib-1.3.1_4-rebuild0-wasm32.provenance.json"
+          "Kandelo/formula/grep.json",
+          "Kandelo/link/grep-3.11-rebuild0-wasm32.json",
+          "Kandelo/reports/grep-3.11-rebuild0-wasm32.provenance.json"
         ],
         "skipped": [],
         "status": "success"
@@ -93,9 +93,9 @@
         "failed": [],
         "name": "node_smoke",
         "passed": [
-          "Homebrew force-poured zlib from anonymous-public-readback",
+          "Homebrew force-poured grep from anonymous-public-readback",
           "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
-          "exact bottle sha256: d09d1dc04593ba968045f95d4a3fb61150373e9624b9a61840a31a5f7fd5fbb9"
+          "exact bottle sha256: 329d5c8cb98668b8040e67fcfa5d767eb14b8627c6ee8431ede338e1e12ca540"
         ],
         "skipped": [],
         "status": "success"
