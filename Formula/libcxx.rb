@@ -352,6 +352,12 @@ class Libcxx < Formula
       assert_equal "libcxx-pic-ok\n", kandelo_run_browser_wasm(loader, [guest_side], guest_files: side_file)
     end
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "6535e2bdfe6829b31661c0cb41b6bbc75d9abf9e4ce4aea48ad98b8444b8025f"
+  end
+
 end
 
 __END__

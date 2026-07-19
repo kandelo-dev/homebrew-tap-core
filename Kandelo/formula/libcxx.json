@@ -1,0 +1,44 @@
+{
+  "bottle_rebuild": 0,
+  "bottles": [
+    {
+      "arch": "wasm32",
+      "bottle_tag": "wasm32_kandelo",
+      "browser_compatible": false,
+      "built_at": "2026-07-19T21:29:07Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29703806902",
+      "built_from": {
+        "formula_sha256": "ee983ed941c4eca98d9fb73cb7773800db5e5d3aa3efae9bae0860e3afff0dd5",
+        "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "56205b81175e12281aaa81ccb47af267d7f053ea",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "bytes": 2673397,
+      "cache_key_sha": "6535e2bdfe6829b31661c0cb41b6bbc75d9abf9e4ce4aea48ad98b8444b8025f",
+      "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+      "fork_instrumentation": "not-required",
+      "kandelo_abi": 41,
+      "link_manifest": "Kandelo/link/libcxx-21.1.7_1-rebuild0-wasm32.json",
+      "prefix": "/home/linuxbrew/.linuxbrew",
+      "runtime_support": [
+        "node"
+      ],
+      "sha256": "6535e2bdfe6829b31661c0cb41b6bbc75d9abf9e4ce4aea48ad98b8444b8025f",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libcxx/blobs/sha256:6535e2bdfe6829b31661c0cb41b6bbc75d9abf9e4ce4aea48ad98b8444b8025f"
+    }
+  ],
+  "dependencies": [],
+  "formula_path": "Formula/libcxx.rb",
+  "formula_revision": 1,
+  "full_name": "kandelo-dev/tap-core/libcxx",
+  "kandelo_abi": 41,
+  "name": "libcxx",
+  "schema": 1,
+  "source_metadata": "Kandelo/metadata.json",
+  "tap_commit": "56205b81175e12281aaa81ccb47af267d7f053ea",
+  "tap_name": "kandelo-dev/tap-core",
+  "tap_repository": "kandelo-dev/homebrew-tap-core",
+  "version": "21.1.7_1"
+}
