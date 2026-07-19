@@ -24,11 +24,29 @@ class Zstd < Formula
     kandelo_require_arch!("wasm32")
 
     kandelo_wasm_build do |root|
+      stable_source = "/usr/src/zstd-#{version}"
+      mapped_roots = {
+        buildpath.to_s                    => stable_source,
+        Pathname(buildpath).realpath.to_s => stable_source,
+        root.to_s                         => "/usr/src/kandelo",
+        Pathname(root).realpath.to_s      => "/usr/src/kandelo",
+        "/nix/store"                      => "/usr/src/toolchain",
+      }
+      prefix_maps = mapped_roots.uniq.flat_map do |from, to|
+        [
+          "-ffile-prefix-map=#{from}=#{to}",
+          "-fdebug-prefix-map=#{from}=#{to}",
+          "-fmacro-prefix-map=#{from}=#{to}",
+        ]
+      end
+      cflags = [
+        "-O2", "-gline-tables-only", "-fdebug-compilation-dir=#{stable_source}", *prefix_maps
+      ].join(" ")
       make_args = [
         "CC=#{kandelo_cc(root)}",
         "AR=#{kandelo_ar(root)}",
         "RANLIB=#{kandelo_ranlib(root)}",
-        "CFLAGS=-O2",
+        "CFLAGS=#{cflags}",
         "HAVE_THREAD=1",
         "HAVE_ZLIB=0",
         "HAVE_LZMA=0",
