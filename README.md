@@ -16,7 +16,7 @@ upstream source through Kandelo's worktree-local SDK. Shared cross-compilation
 and runtime-test mechanics live in
 `Kandelo/formula_support/kandelo_formula_support.rb`.
 
-Current migration controls and pilots include:
+Formula source currently present in this repository includes:
 
 - `hello`, the original publication control;
 - `zlib` and `ruby`, the first dependency and heavy-runtime Formulae;
@@ -73,6 +73,13 @@ Current migration controls and pilots include:
 - `findutils`, GNU filesystem traversal and argument-driven process execution.
 - `vim`, the ncurses-backed editor, Ex mode, runtime, and `xxd` tools.
 - `git`, distributed version control with Kandelo-native HTTP and HTTPS transport.
+
+Presence in `Formula/` means that the source recipe is tracked; it does not mean
+that a current bottle has been published. A bottle becomes available only after
+the trusted publisher writes its generated `bottle do` block and matching
+`Kandelo/` sidecars. Use those generated files and the
+[post-publication acceptance procedure](Kandelo/README.md#post-publication-acceptance),
+not this source inventory, to decide whether a bottle is live.
 
 The SDK is not yet a Homebrew dependency. Trusted builds supply an
 `HOMEBREW_KANDELO_ROOT` checkout containing the SDK, sysroot, kernel, and Node
@@ -162,12 +169,15 @@ workflow narrows each scheduled job, and a dry run never schedules its bottle
 upload or tap-finalization jobs.
 
 Write publication accepts formulae, arches, and an optional release tag, but
-hardcodes both executable repositories to reviewed `main`:
+hardcodes both executable repositories to reviewed `main`. Set
+`KANDELO_FORMULA` to the exact short name of one dependency-ready Formula, then
+submit the dispatch:
 
 ```bash
+: "${KANDELO_FORMULA:?set KANDELO_FORMULA to one dependency-ready Formula name}"
 gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
   -f event_type=publish-kandelo-bottles \
-  -f 'client_payload[formulae]=bzip2' \
+  -f "client_payload[formulae]=${KANDELO_FORMULA}" \
   -f 'client_payload[arches]=wasm32'
 ```
 
@@ -187,8 +197,10 @@ retains the original caller workflow and its pinned reusable-workflow revision,
 while a fresh dispatch loads the reviewed caller now on tap `main`, creates new
 run-local receipts, and replans against current tap state. Preserve the old run
 and failure report, and never move artifacts manually between runs. The
-[authoritative Homebrew publishing contract](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md)
-owns the complete trust, readiness, validation, and legacy-cleanup rules.
+[authoritative Homebrew publishing contract](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md#public-package-creation-and-legacy-namespace-retirement)
+owns the complete trust, readiness, read-only acceptance, and legacy-cleanup
+procedure. This tap links to that procedure instead of duplicating operator
+commands that must change with the publisher and namespace contracts.
 
 Production keeps `kandelo-dev/tap-core` as the canonical Homebrew identity for
 Formula references, OCI titles, and sidecars. Bottle transport instead uses the
