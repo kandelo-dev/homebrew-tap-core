@@ -22,22 +22,29 @@ metadata.schema.json
 formula.schema.json
 link-manifest.schema.json
 provenance.schema.json
+vfs-acceptance.json                                # optional tap-owned gate selection
+vfs-acceptance.Brewfile                           # optional selected static roots
 
-metadata.json                                      # generated in the real tap
-formula/<name>.json                               # generated in the real tap
-link/<name>-<version>-rebuild<N>-<arch>.json      # generated in the real tap
+metadata.json                                      # generated tap state
+formula/<name>.json                               # generated tap state
+link/<name>-<version>-rebuild<N>-<arch>.json      # generated tap state
 reports/<name>-<version>-rebuild<N>-<arch>.provenance.json
 ```
 
 The `examples/` directory contains fixture data for schema and semantic
 validator development. It is not published metadata.
 
+`vfs-acceptance.json` and its referenced Brewfile are reviewed tap policy, not
+generated sidecars. The publisher reads them from the exact tap commit and
+never rewrites them.
+
 ## Generation
 
 The publish workflow generates this directory with:
 
 ```bash
-cargo xtask homebrew-sidecars \
+cd /path/to/kandelo
+scripts/dev-shell.sh cargo xtask homebrew-sidecars \
   --tap-root /path/to/homebrew-tap-core \
   --input /path/to/sidecars-input.json \
   --previous-metadata /path/to/previous/Kandelo/metadata.json
@@ -48,6 +55,12 @@ tag, formula identities, bottle status, link-plan data, build evidence,
 validation outcome lists, and local `bottle_file` paths. The generator hashes
 the local bottle files itself and writes the resulting `sha256` and `bytes`
 into metadata, formula sidecars, link manifests, and provenance reports.
+
+The publisher carries this evidence across fresh jobs only in strict data
+handoffs. Artifact-provided scripts and environment files are rejected. The
+trusted in-tree generator creates sidecars on a read-only verification runner,
+and a separate tap finalizer validates the complete publication payload as
+inert data before acquiring push credentials.
 
 When a current bottle is `failed`, `pending`, or `building`,
 `--previous-metadata` provides the last-green fallback. The fallback is copied
@@ -60,9 +73,11 @@ formats, and basic path syntax.
 
 The semantic validator must still check cross-file and artifact facts:
 
-- metadata ABI matches the `bottles-abi-v<N>` release;
+- metadata ABI matches the `bottles-abi-v<N>` namespace;
 - formula sidecars match their package entry in `metadata.json`;
 - bottle `arch` and `bottle_tag` agree;
+- Formula bottle root, tags, and SHA-256 digests exactly match the successful
+  or last-green fallback bottles in sidecar metadata;
 - browser-compatible entries have browser validation evidence;
 - link-manifest paths do not escape the Homebrew prefix;
 - link sources exist inside the verified bottle payload;
@@ -72,12 +87,21 @@ The semantic validator must still check cross-file and artifact facts:
 Run the repo-local validator against a generated tap checkout:
 
 ```bash
-cargo xtask homebrew-validate --tap-root /path/to/homebrew-tap-core
+cd /path/to/kandelo
+scripts/dev-shell.sh cargo xtask homebrew-validate \
+  --tap-root /path/to/homebrew-tap-core
 ```
 
-The validator checks the current sidecar JSON, link-manifest consistency,
-provenance reports, and fallback link references. It does not fetch bottle
-bytes or evaluate Formula Ruby.
+The validator checks the current sidecar JSON, Ripper-parsed static Formula
+bottle structure and data, link-manifest consistency, provenance reports, and
+fallback link references. It does not fetch bottle bytes or evaluate Formula
+Ruby.
+
+A passing local semantic validator is necessary but not sufficient publication
+evidence. The trusted publisher enforces public GHCR readback, exact bottle-byte
+verification, Homebrew pour/test evidence, and runtime and browser gates.
+Formula-specific provenance records the bottle and runtime results; run-scoped
+transport receipts provide the registry proof.
 
 ## VFS Planning
 
@@ -86,9 +110,9 @@ Host VFS tooling plans a Homebrew-prefix image with
 shared by Node and browser callers. It consumes parsed `Kandelo/metadata.json`
 and a caller-provided link-manifest loader, resolves requested packages plus
 their dependency closure in dependency-first order, and rejects bad ABI,
-unsupported arch, cache-key drift, missing packages, dependency cycles, unsafe
-paths, and link-manifest bottle URL/sha/byte/cache-key drift before any bottle
-bytes are extracted.
+unsupported arch, tap-identity drift, duplicate roots or metadata, cache-key
+drift, missing packages, dependency cycles, unsafe paths, and link-manifest
+bottle URL/sha/byte/cache-key drift before any bottle bytes are extracted.
 
 For `failed`, `pending`, or `building` bottle entries, the planner uses the
 complete last-green fallback fields when available. Without a complete fallback,
@@ -100,7 +124,8 @@ Build a precomposed Homebrew-prefix image from generated sidecars and verified
 bottle bytes with:
 
 ```bash
-npx tsx images/vfs/scripts/build-homebrew-vfs-image.ts \
+cd /path/to/kandelo
+scripts/dev-shell.sh npx tsx images/vfs/scripts/build-homebrew-vfs-image.ts \
   --metadata /path/to/homebrew-tap-core/Kandelo/metadata.json \
   --tap-root /path/to/homebrew-tap-core \
   --package hello \
