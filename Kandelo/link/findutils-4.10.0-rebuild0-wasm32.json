@@ -1,0 +1,58 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 756513,
+    "cache_key_sha": "66381cfaedc0dd81edb9739e9d2eb0895fce9bcab7336b23c4a60298fa96ccb5",
+    "payload_root": "findutils/4.10.0",
+    "sha256": "66381cfaedc0dd81edb9739e9d2eb0895fce9bcab7336b23c4a60298fa96ccb5",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/findutils/blobs/sha256:66381cfaedc0dd81edb9739e9d2eb0895fce9bcab7336b23c4a60298fa96ccb5"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/findutils/4.10.0",
+  "links": [
+    {
+      "source": "bin/find",
+      "target": "bin/find",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/xargs",
+      "target": "bin/xargs",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/find-maint.info",
+      "target": "share/info/find-maint.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/find.info",
+      "target": "share/info/find.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/find.1",
+      "target": "share/man/man1/find.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/xargs.1",
+      "target": "share/man/man1/xargs.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "findutils",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/findutils.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "4.10.0"
+}

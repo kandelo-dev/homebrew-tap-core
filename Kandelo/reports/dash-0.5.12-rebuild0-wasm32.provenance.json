@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "8aeece856ec683b3c2711924cf747ed8df1cf911fbb0da85c7b70d2a53110ee1"
+      "sha256": "48409b3df27f73f518db7ec305802f96f2e088909aadbda21b7ae88097b9ecdb"
     },
     "provenance_json": {
       "path": "Kandelo/reports/dash-0.5.12-rebuild0-wasm32.provenance.json",
-      "sha256": "613369d0766eb9d2c8846b463306d3c24ded7c55f98dc8a22f07f6dfd89e5f5b"
+      "sha256": "4c42c01ea1e21ca2df9d75181c948cd2fc5d07a72a9b128203518715e1b8b6a2"
     }
   },
   "repositories": {
