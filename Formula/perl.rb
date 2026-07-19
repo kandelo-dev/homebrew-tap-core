@@ -307,7 +307,7 @@ class Perl < Formula
       # Perl's native miniperl relies on aliasing behavior that Clang's
       # optimizer may otherwise break. Set this inside the isolated host
       # shell so the respawned buildmini configure retains it.
-      system host_env, "HOSTCFLAGS=-Wno-format -fno-strict-aliasing", "./configure", *configure_args
+      system host_env, "HOSTCFLAGS=-fno-strict-aliasing", "./configure", *configure_args
 
       # MakeMaker consumers need stable SDK tool names, not this build's host
       # worktree. Keep the real prefix-map in Makefile.config for compilation,
