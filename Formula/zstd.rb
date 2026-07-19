@@ -14,6 +14,8 @@ class Zstd < Formula
     "MIT",
   ]
 
+  depends_on "binaryen" => :build
+  depends_on "wabt" => :build
   depends_on "pkgconf" => :test
 
   skip_clean "bin/zstd", "lib/libzstd.a"
@@ -36,6 +38,7 @@ class Zstd < Formula
 
       system "make", "-j#{ENV.make_jobs}", "-C", "lib", "libzstd.a-mt", *make_args
       system "make", "-j#{ENV.make_jobs}", "-C", "programs", "zstd-release", *make_args
+      kandelo_validate_wasm_artifact(buildpath/"programs/zstd", fork: :forbidden)
 
       install_args = ["PREFIX=#{prefix}", *make_args]
       system "make", "-C", "lib", "install-pc", "install-static", "install-includes",
