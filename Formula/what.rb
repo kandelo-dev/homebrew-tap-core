@@ -78,4 +78,10 @@ class What < Formula
       expected_status:           1
     )
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "69d9cbb01c23db34f19d1227361157f2910f2a83379e2a0388c2e791b3a1fa4c"
+  end
+
 end

@@ -1,0 +1,38 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 23150,
+    "cache_key_sha": "69d9cbb01c23db34f19d1227361157f2910f2a83379e2a0388c2e791b3a1fa4c",
+    "payload_root": "what/15.0.0",
+    "sha256": "69d9cbb01c23db34f19d1227361157f2910f2a83379e2a0388c2e791b3a1fa4c",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/what/blobs/sha256:69d9cbb01c23db34f19d1227361157f2910f2a83379e2a0388c2e791b3a1fa4c"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/what/15.0.0",
+  "links": [
+    {
+      "source": "bin/what",
+      "target": "bin/what",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/what.1",
+      "target": "share/man/man1/what.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "what",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/what.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "15.0.0"
+}
