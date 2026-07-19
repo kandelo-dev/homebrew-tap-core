@@ -77,4 +77,10 @@ class Ed < Formula
     refute_match(/forbidden/, restricted)
     assert_match(/Shell access restricted/, restricted)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "c7c7641234bc862a1dabe10d671d0059c5c5811a3556d507d70d742612d91b67"
+  end
+
 end
