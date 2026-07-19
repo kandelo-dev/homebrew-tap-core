@@ -1,0 +1,183 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 632681,
+    "cache_key_sha": "f466797981b45e298a413e26ea13d7fed6a0ccf797ac0b98c4c8ec2bdb47819b",
+    "payload_root": "xz/5.6.2_1",
+    "sha256": "f466797981b45e298a413e26ea13d7fed6a0ccf797ac0b98c4c8ec2bdb47819b",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/xz/blobs/sha256:f466797981b45e298a413e26ea13d7fed6a0ccf797ac0b98c4c8ec2bdb47819b"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/xz/5.6.2_1",
+  "links": [
+    {
+      "source": "bin/lzcat",
+      "target": "bin/lzcat",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/lzma",
+      "target": "bin/lzma",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/unlzma",
+      "target": "bin/unlzma",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/unxz",
+      "target": "bin/unxz",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/xz",
+      "target": "bin/xz",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/xzcat",
+      "target": "bin/xzcat",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/xzdec",
+      "target": "bin/xzdec",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma.h",
+      "target": "include/lzma.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/base.h",
+      "target": "include/lzma/base.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/bcj.h",
+      "target": "include/lzma/bcj.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/block.h",
+      "target": "include/lzma/block.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/check.h",
+      "target": "include/lzma/check.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/container.h",
+      "target": "include/lzma/container.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/delta.h",
+      "target": "include/lzma/delta.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/filter.h",
+      "target": "include/lzma/filter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/hardware.h",
+      "target": "include/lzma/hardware.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/index.h",
+      "target": "include/lzma/index.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/index_hash.h",
+      "target": "include/lzma/index_hash.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/lzma12.h",
+      "target": "include/lzma/lzma12.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/stream_flags.h",
+      "target": "include/lzma/stream_flags.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/version.h",
+      "target": "include/lzma/version.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/lzma/vli.h",
+      "target": "include/lzma/vli.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/liblzma.a",
+      "target": "lib/liblzma.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/liblzma.pc",
+      "target": "lib/pkgconfig/liblzma.pc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/lzcat.1",
+      "target": "share/man/man1/lzcat.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/lzma.1",
+      "target": "share/man/man1/lzma.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/unlzma.1",
+      "target": "share/man/man1/unlzma.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/unxz.1",
+      "target": "share/man/man1/unxz.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/xz.1",
+      "target": "share/man/man1/xz.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/xzcat.1",
+      "target": "share/man/man1/xzcat.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/xzdec.1",
+      "target": "share/man/man1/xzdec.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "xz",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/xz.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "5.6.2_1"
+}

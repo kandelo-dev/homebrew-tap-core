@@ -170,4 +170,10 @@ class Xz < Formula
     assert_equal input, kandelo_run_wasm(bin/"xz", ["-dc"], stdin: compressed).b
     assert_equal input, kandelo_run_wasm(bin/"xzdec", [], stdin: compressed).b
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "f466797981b45e298a413e26ea13d7fed6a0ccf797ac0b98c4c8ec2bdb47819b"
+  end
+
 end
