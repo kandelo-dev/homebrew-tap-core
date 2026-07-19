@@ -1,0 +1,754 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 3028000,
+    "cache_key_sha": "6b524162bd3c28edb4ced9b9456793200fa7c9918a73cebda5a1e0cfcc546579",
+    "payload_root": "openssl/3.3.2_2",
+    "sha256": "6b524162bd3c28edb4ced9b9456793200fa7c9918a73cebda5a1e0cfcc546579",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/openssl/blobs/sha256:6b524162bd3c28edb4ced9b9456793200fa7c9918a73cebda5a1e0cfcc546579"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {},
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/openssl/3.3.2_2",
+  "links": [
+    {
+      "source": "include/openssl/aes.h",
+      "target": "include/openssl/aes.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/asn1.h",
+      "target": "include/openssl/asn1.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/asn1_mac.h",
+      "target": "include/openssl/asn1_mac.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/asn1err.h",
+      "target": "include/openssl/asn1err.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/asn1t.h",
+      "target": "include/openssl/asn1t.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/async.h",
+      "target": "include/openssl/async.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/asyncerr.h",
+      "target": "include/openssl/asyncerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/bio.h",
+      "target": "include/openssl/bio.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/bioerr.h",
+      "target": "include/openssl/bioerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/blowfish.h",
+      "target": "include/openssl/blowfish.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/bn.h",
+      "target": "include/openssl/bn.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/bnerr.h",
+      "target": "include/openssl/bnerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/buffer.h",
+      "target": "include/openssl/buffer.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/buffererr.h",
+      "target": "include/openssl/buffererr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/camellia.h",
+      "target": "include/openssl/camellia.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/cast.h",
+      "target": "include/openssl/cast.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/cmac.h",
+      "target": "include/openssl/cmac.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/cmp.h",
+      "target": "include/openssl/cmp.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/cmp_util.h",
+      "target": "include/openssl/cmp_util.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/cmperr.h",
+      "target": "include/openssl/cmperr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/cms.h",
+      "target": "include/openssl/cms.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/cmserr.h",
+      "target": "include/openssl/cmserr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/comp.h",
+      "target": "include/openssl/comp.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/comperr.h",
+      "target": "include/openssl/comperr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/conf.h",
+      "target": "include/openssl/conf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/conf_api.h",
+      "target": "include/openssl/conf_api.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/conferr.h",
+      "target": "include/openssl/conferr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/configuration.h",
+      "target": "include/openssl/configuration.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/conftypes.h",
+      "target": "include/openssl/conftypes.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/core.h",
+      "target": "include/openssl/core.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/core_dispatch.h",
+      "target": "include/openssl/core_dispatch.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/core_names.h",
+      "target": "include/openssl/core_names.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/core_object.h",
+      "target": "include/openssl/core_object.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/crmf.h",
+      "target": "include/openssl/crmf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/crmferr.h",
+      "target": "include/openssl/crmferr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/crypto.h",
+      "target": "include/openssl/crypto.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/cryptoerr.h",
+      "target": "include/openssl/cryptoerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/cryptoerr_legacy.h",
+      "target": "include/openssl/cryptoerr_legacy.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ct.h",
+      "target": "include/openssl/ct.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/cterr.h",
+      "target": "include/openssl/cterr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/decoder.h",
+      "target": "include/openssl/decoder.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/decodererr.h",
+      "target": "include/openssl/decodererr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/des.h",
+      "target": "include/openssl/des.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/dh.h",
+      "target": "include/openssl/dh.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/dherr.h",
+      "target": "include/openssl/dherr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/dsa.h",
+      "target": "include/openssl/dsa.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/dsaerr.h",
+      "target": "include/openssl/dsaerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/dtls1.h",
+      "target": "include/openssl/dtls1.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/e_os2.h",
+      "target": "include/openssl/e_os2.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/e_ostime.h",
+      "target": "include/openssl/e_ostime.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ebcdic.h",
+      "target": "include/openssl/ebcdic.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ec.h",
+      "target": "include/openssl/ec.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ecdh.h",
+      "target": "include/openssl/ecdh.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ecdsa.h",
+      "target": "include/openssl/ecdsa.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ecerr.h",
+      "target": "include/openssl/ecerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/encoder.h",
+      "target": "include/openssl/encoder.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/encodererr.h",
+      "target": "include/openssl/encodererr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/engine.h",
+      "target": "include/openssl/engine.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/engineerr.h",
+      "target": "include/openssl/engineerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/err.h",
+      "target": "include/openssl/err.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ess.h",
+      "target": "include/openssl/ess.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/esserr.h",
+      "target": "include/openssl/esserr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/evp.h",
+      "target": "include/openssl/evp.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/evperr.h",
+      "target": "include/openssl/evperr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/fips_names.h",
+      "target": "include/openssl/fips_names.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/fipskey.h",
+      "target": "include/openssl/fipskey.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/hmac.h",
+      "target": "include/openssl/hmac.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/hpke.h",
+      "target": "include/openssl/hpke.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/http.h",
+      "target": "include/openssl/http.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/httperr.h",
+      "target": "include/openssl/httperr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/idea.h",
+      "target": "include/openssl/idea.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/kdf.h",
+      "target": "include/openssl/kdf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/kdferr.h",
+      "target": "include/openssl/kdferr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/lhash.h",
+      "target": "include/openssl/lhash.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/macros.h",
+      "target": "include/openssl/macros.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/md2.h",
+      "target": "include/openssl/md2.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/md4.h",
+      "target": "include/openssl/md4.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/md5.h",
+      "target": "include/openssl/md5.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/mdc2.h",
+      "target": "include/openssl/mdc2.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/modes.h",
+      "target": "include/openssl/modes.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/obj_mac.h",
+      "target": "include/openssl/obj_mac.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/objects.h",
+      "target": "include/openssl/objects.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/objectserr.h",
+      "target": "include/openssl/objectserr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ocsp.h",
+      "target": "include/openssl/ocsp.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ocsperr.h",
+      "target": "include/openssl/ocsperr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/opensslconf.h",
+      "target": "include/openssl/opensslconf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/opensslv.h",
+      "target": "include/openssl/opensslv.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ossl_typ.h",
+      "target": "include/openssl/ossl_typ.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/param_build.h",
+      "target": "include/openssl/param_build.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/params.h",
+      "target": "include/openssl/params.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/pem.h",
+      "target": "include/openssl/pem.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/pem2.h",
+      "target": "include/openssl/pem2.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/pemerr.h",
+      "target": "include/openssl/pemerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/pkcs12.h",
+      "target": "include/openssl/pkcs12.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/pkcs12err.h",
+      "target": "include/openssl/pkcs12err.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/pkcs7.h",
+      "target": "include/openssl/pkcs7.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/pkcs7err.h",
+      "target": "include/openssl/pkcs7err.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/prov_ssl.h",
+      "target": "include/openssl/prov_ssl.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/proverr.h",
+      "target": "include/openssl/proverr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/provider.h",
+      "target": "include/openssl/provider.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/quic.h",
+      "target": "include/openssl/quic.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/rand.h",
+      "target": "include/openssl/rand.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/randerr.h",
+      "target": "include/openssl/randerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/rc2.h",
+      "target": "include/openssl/rc2.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/rc4.h",
+      "target": "include/openssl/rc4.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/rc5.h",
+      "target": "include/openssl/rc5.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ripemd.h",
+      "target": "include/openssl/ripemd.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/rsa.h",
+      "target": "include/openssl/rsa.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/rsaerr.h",
+      "target": "include/openssl/rsaerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/safestack.h",
+      "target": "include/openssl/safestack.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/seed.h",
+      "target": "include/openssl/seed.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/self_test.h",
+      "target": "include/openssl/self_test.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/sha.h",
+      "target": "include/openssl/sha.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/srp.h",
+      "target": "include/openssl/srp.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/srtp.h",
+      "target": "include/openssl/srtp.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ssl.h",
+      "target": "include/openssl/ssl.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ssl2.h",
+      "target": "include/openssl/ssl2.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ssl3.h",
+      "target": "include/openssl/ssl3.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/sslerr.h",
+      "target": "include/openssl/sslerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/sslerr_legacy.h",
+      "target": "include/openssl/sslerr_legacy.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/stack.h",
+      "target": "include/openssl/stack.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/store.h",
+      "target": "include/openssl/store.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/storeerr.h",
+      "target": "include/openssl/storeerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/symhacks.h",
+      "target": "include/openssl/symhacks.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/thread.h",
+      "target": "include/openssl/thread.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/tls1.h",
+      "target": "include/openssl/tls1.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/trace.h",
+      "target": "include/openssl/trace.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ts.h",
+      "target": "include/openssl/ts.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/tserr.h",
+      "target": "include/openssl/tserr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/txt_db.h",
+      "target": "include/openssl/txt_db.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/types.h",
+      "target": "include/openssl/types.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/ui.h",
+      "target": "include/openssl/ui.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/uierr.h",
+      "target": "include/openssl/uierr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/whrlpool.h",
+      "target": "include/openssl/whrlpool.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/x509.h",
+      "target": "include/openssl/x509.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/x509_vfy.h",
+      "target": "include/openssl/x509_vfy.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/x509err.h",
+      "target": "include/openssl/x509err.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/x509v3.h",
+      "target": "include/openssl/x509v3.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/openssl/x509v3err.h",
+      "target": "include/openssl/x509v3err.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/OpenSSL/OpenSSLConfig.cmake",
+      "target": "lib/cmake/OpenSSL/OpenSSLConfig.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/OpenSSL/OpenSSLConfigVersion.cmake",
+      "target": "lib/cmake/OpenSSL/OpenSSLConfigVersion.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libcrypto.a",
+      "target": "lib/libcrypto.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libssl.a",
+      "target": "lib/libssl.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/libcrypto.pc",
+      "target": "lib/pkgconfig/libcrypto.pc",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/libssl.pc",
+      "target": "lib/pkgconfig/libssl.pc",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/openssl.pc",
+      "target": "lib/pkgconfig/openssl.pc",
+      "type": "symlink"
+    }
+  ],
+  "package": "openssl",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/openssl.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "3.3.2_2"
+}

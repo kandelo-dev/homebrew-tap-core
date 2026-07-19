@@ -1,0 +1,44 @@
+{
+  "bottle_rebuild": 0,
+  "bottles": [
+    {
+      "arch": "wasm32",
+      "bottle_tag": "wasm32_kandelo",
+      "browser_compatible": false,
+      "built_at": "2026-07-19T21:29:43Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29703806950",
+      "built_from": {
+        "formula_sha256": "cbc5b4301d72187b1ee91acd45bdeff1135e428c715ffce198336de2cea221be",
+        "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "56205b81175e12281aaa81ccb47af267d7f053ea",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "bytes": 3028000,
+      "cache_key_sha": "6b524162bd3c28edb4ced9b9456793200fa7c9918a73cebda5a1e0cfcc546579",
+      "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+      "fork_instrumentation": "not-required",
+      "kandelo_abi": 41,
+      "link_manifest": "Kandelo/link/openssl-3.3.2_2-rebuild0-wasm32.json",
+      "prefix": "/home/linuxbrew/.linuxbrew",
+      "runtime_support": [
+        "node"
+      ],
+      "sha256": "6b524162bd3c28edb4ced9b9456793200fa7c9918a73cebda5a1e0cfcc546579",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/openssl/blobs/sha256:6b524162bd3c28edb4ced9b9456793200fa7c9918a73cebda5a1e0cfcc546579"
+    }
+  ],
+  "dependencies": [],
+  "formula_path": "Formula/openssl.rb",
+  "formula_revision": 2,
+  "full_name": "kandelo-dev/tap-core/openssl",
+  "kandelo_abi": 41,
+  "name": "openssl",
+  "schema": 1,
+  "source_metadata": "Kandelo/metadata.json",
+  "tap_commit": "56205b81175e12281aaa81ccb47af267d7f053ea",
+  "tap_name": "kandelo-dev/tap-core",
+  "tap_repository": "kandelo-dev/homebrew-tap-core",
+  "version": "3.3.2_2"
+}
