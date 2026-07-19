@@ -106,6 +106,9 @@ class Ncurses < Formula
         "--without-ada",
         "--without-tests",
         "--with-manpages",
+        # Do not inherit the build host's compressed manpage convention. The
+        # Kandelo guest image expects ordinary files at stable man3 paths.
+        "--with-manpage-format=normal",
         "--with-termlib",
         "--with-debug",
         "--without-profile",
