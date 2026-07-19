@@ -209,4 +209,10 @@ class Getconf < Formula
       interleave_wasm, [], argv0: "interleaved-output", merge_stderr: true
     )
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "8ac10cdc394fc6ac9e9538c1e4726b294129cf9971fa6d8fa0c29588791c4e62"
+  end
+
 end
