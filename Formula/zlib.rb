@@ -123,4 +123,10 @@ class Zlib < Formula
     assert_equal "zlib-side-module #{version} ok\n",
       kandelo_run_wasm(loader_wasm, [plugin_so])
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "d09d1dc04593ba968045f95d4a3fb61150373e9624b9a61840a31a5f7fd5fbb9"
+  end
+
 end
