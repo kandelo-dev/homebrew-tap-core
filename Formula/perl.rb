@@ -386,4 +386,10 @@ class Perl < Formula
       bin/"perl", ["-e", 'print "locale-ok\\n"'], env: env.except("LC_ALL", "LANG")
     )
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "741bc6d332982ab299c3b4c68e5523c8d181f9ca19349cd0b3915c91ce58af4b"
+  end
+
 end
