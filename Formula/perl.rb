@@ -14,7 +14,7 @@ class Perl < Formula
 
   depends_on "binaryen" => :build
   depends_on "gnu-sed" => :build
-  depends_on "patch" => :build
+  depends_on "gpatch" => :build
   depends_on "wabt" => :build
 
   skip_clean "bin/perl"
@@ -50,13 +50,17 @@ class Perl < Formula
       cp_r Pathname.pwd.children, buildpath
     end
 
+    # Homebrew's gpatch Formula keeps the upstream `patch` executable name on
+    # Linux; only macOS applies a `g` program prefix.
+    host_patch = formula_opt_bin("gpatch")/"patch"
+
     # These patches target files supplied by perl-cross, so they must be
     # applied after that resource is overlaid onto the Perl source tree.
     resource("perl-cross-native-probes-patch").stage do
-      system "patch", "-d", buildpath, "-p1", "-i", Pathname.pwd/"0001-perl-cross-native-probes.patch"
+      system host_patch, "-d", buildpath, "-p1", "-i", Pathname.pwd/"0001-perl-cross-native-probes.patch"
     end
     resource("perl-cross-stage-static-modules-patch").stage do
-      system "patch", "-d", buildpath, "-p1", "-i", Pathname.pwd/"0003-perl-cross-stage-static-modules.patch"
+      system host_patch, "-d", buildpath, "-p1", "-i", Pathname.pwd/"0003-perl-cross-stage-static-modules.patch"
     end
 
     host_env = kandelo_host_tool("env")
