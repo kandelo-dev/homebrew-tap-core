@@ -1,10 +1,49 @@
 {
-  "generated_at": "2026-07-19T23:00:22Z",
+  "generated_at": "2026-07-19T23:00:04Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
   "kandelo_repository": "Automattic/kandelo",
   "packages": [
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-19T23:00:04Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706554417",
+          "built_from": {
+            "formula_sha256": "8850497aac25c3c0fa725c40fc80ef504c12fef7dab801cbd802bd22b9a0cdbd",
+            "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "178c1689e77e221105e5eb6c36d082b8e4210656",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 23967,
+          "cache_key_sha": "8dc6dea5229d1b01b06ce66059c235ec0b552f1e3ccda12cd526aa92a42a3634",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/asa-15.0.0-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "8dc6dea5229d1b01b06ce66059c235ec0b552f1e3ccda12cd526aa92a42a3634",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/asa/blobs/sha256:8dc6dea5229d1b01b06ce66059c235ec0b552f1e3ccda12cd526aa92a42a3634"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/asa.json",
+      "formula_path": "Formula/asa.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/asa",
+      "name": "asa",
+      "version": "15.0.0"
+    },
     {
       "bottle_rebuild": 0,
       "bottles": [
