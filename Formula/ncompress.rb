@@ -78,4 +78,10 @@ class Ncompress < Formula
     assert_equal file_input, (workspace/"sample.txt").read
     refute_path_exists workspace/"sample.txt.Z"
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c"
+  end
+
 end

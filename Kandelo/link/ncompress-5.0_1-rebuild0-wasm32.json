@@ -1,0 +1,48 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 34984,
+    "cache_key_sha": "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c",
+    "payload_root": "ncompress/5.0_1",
+    "sha256": "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ncompress/blobs/sha256:7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/ncompress/5.0_1",
+  "links": [
+    {
+      "source": "bin/compress",
+      "target": "bin/compress",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/uncompress",
+      "target": "bin/uncompress",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/compress.1",
+      "target": "share/man/man1/compress.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/uncompress.1",
+      "target": "share/man/man1/uncompress.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "ncompress",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/ncompress.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "5.0_1"
+}

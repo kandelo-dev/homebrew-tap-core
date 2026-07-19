@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-19T22:59:40Z",
+  "generated_at": "2026-07-19T22:59:54Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
@@ -238,6 +238,45 @@
       "full_name": "kandelo-dev/tap-core/libiconv",
       "name": "libiconv",
       "version": "1.19"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-19T22:59:54Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706558640",
+          "built_from": {
+            "formula_sha256": "884829f79b0c80457e0aad0e3e1fcc89dcf09930b49db4b31190cf17f6f3e82b",
+            "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "178c1689e77e221105e5eb6c36d082b8e4210656",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 34984,
+          "cache_key_sha": "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/ncompress-5.0_1-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ncompress/blobs/sha256:7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/ncompress.json",
+      "formula_path": "Formula/ncompress.rb",
+      "formula_revision": 1,
+      "full_name": "kandelo-dev/tap-core/ncompress",
+      "name": "ncompress",
+      "version": "5.0_1"
     },
     {
       "bottle_rebuild": 0,
