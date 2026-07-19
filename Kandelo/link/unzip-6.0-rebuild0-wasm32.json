@@ -1,0 +1,78 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 491202,
+    "cache_key_sha": "ad43321b5691142c84e21861c548878e8be79c1d95e7e8dff8abd12b5094bac7",
+    "payload_root": "unzip/6.0",
+    "sha256": "ad43321b5691142c84e21861c548878e8be79c1d95e7e8dff8abd12b5094bac7",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/unzip/blobs/sha256:ad43321b5691142c84e21861c548878e8be79c1d95e7e8dff8abd12b5094bac7"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/unzip/6.0",
+  "links": [
+    {
+      "source": "bin/funzip",
+      "target": "bin/funzip",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/unzip",
+      "target": "bin/unzip",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/unzipsfx",
+      "target": "bin/unzipsfx",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/zipgrep",
+      "target": "bin/zipgrep",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/zipinfo",
+      "target": "bin/zipinfo",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/funzip.1",
+      "target": "share/man/man1/funzip.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/unzip.1",
+      "target": "share/man/man1/unzip.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/unzipsfx.1",
+      "target": "share/man/man1/unzipsfx.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/zipgrep.1",
+      "target": "share/man/man1/zipgrep.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/zipinfo.1",
+      "target": "share/man/man1/zipinfo.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "unzip",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/unzip.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "6.0"
+}

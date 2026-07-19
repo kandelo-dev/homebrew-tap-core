@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-19T23:02:38Z",
+  "generated_at": "2026-07-19T23:03:32Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
@@ -589,6 +589,45 @@
       "full_name": "kandelo-dev/tap-core/sed",
       "name": "sed",
       "version": "4.9"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-19T23:03:32Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706559865",
+          "built_from": {
+            "formula_sha256": "915fa68fae583e7235144033920f51d9761bfcd0a0b1e18d1911a4afcb9786b3",
+            "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "178c1689e77e221105e5eb6c36d082b8e4210656",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 491202,
+          "cache_key_sha": "ad43321b5691142c84e21861c548878e8be79c1d95e7e8dff8abd12b5094bac7",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/unzip-6.0-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "ad43321b5691142c84e21861c548878e8be79c1d95e7e8dff8abd12b5094bac7",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/unzip/blobs/sha256:ad43321b5691142c84e21861c548878e8be79c1d95e7e8dff8abd12b5094bac7"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/unzip.json",
+      "formula_path": "Formula/unzip.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/unzip",
+      "name": "unzip",
+      "version": "6.0"
     },
     {
       "bottle_rebuild": 0,
