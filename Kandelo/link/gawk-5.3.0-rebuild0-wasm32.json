@@ -1,0 +1,38 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 614472,
+    "cache_key_sha": "8ff1da0358df5a0f2f7441699187c80c252f11139a7a055c7fec233778211e26",
+    "payload_root": "gawk/5.3.0",
+    "sha256": "8ff1da0358df5a0f2f7441699187c80c252f11139a7a055c7fec233778211e26",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/gawk/blobs/sha256:8ff1da0358df5a0f2f7441699187c80c252f11139a7a055c7fec233778211e26"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/gawk/5.3.0",
+  "links": [
+    {
+      "source": "bin/gawk",
+      "target": "bin/gawk",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/gawk.1",
+      "target": "share/man/man1/gawk.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "gawk",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/gawk.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "5.3.0"
+}
