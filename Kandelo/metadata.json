@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-19T23:03:25Z",
+  "generated_at": "2026-07-19T23:07:44Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
@@ -43,6 +43,45 @@
       "full_name": "kandelo-dev/tap-core/asa",
       "name": "asa",
       "version": "15.0.0"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-19T23:07:44Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706554564",
+          "built_from": {
+            "formula_sha256": "43186e7238b5f71ce88ac63550bc9f096eaca06a17e64d18ad529b36ea4168ac",
+            "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "178c1689e77e221105e5eb6c36d082b8e4210656",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 2724999,
+          "cache_key_sha": "2604854305b794d476c1fc7f1ad8964e74ce2e4ee08cbcd443253baebeb0fc16",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/binutils-2.46.1-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "2604854305b794d476c1fc7f1ad8964e74ce2e4ee08cbcd443253baebeb0fc16",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/binutils/blobs/sha256:2604854305b794d476c1fc7f1ad8964e74ce2e4ee08cbcd443253baebeb0fc16"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/binutils.json",
+      "formula_path": "Formula/binutils.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/binutils",
+      "name": "binutils",
+      "version": "2.46.1"
     },
     {
       "bottle_rebuild": 0,
