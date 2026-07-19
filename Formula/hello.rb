@@ -9,6 +9,9 @@ class Hello < Formula
   sha256 "0d5f60154382fee10b114a1c34e785d8b1f492073ae2d3a6f7b147687b366aa0"
   license "GPL-3.0-or-later"
 
+  depends_on "binaryen" => :build
+  depends_on "wabt" => :build
+
   skip_clean "bin/hello"
 
   def install
