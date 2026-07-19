@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-19T21:29:43Z",
+  "generated_at": "2026-07-19T22:43:13Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
@@ -129,6 +129,45 @@
           "arch": "wasm32",
           "bottle_tag": "wasm32_kandelo",
           "browser_compatible": false,
+          "built_at": "2026-07-19T22:43:13Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706054942",
+          "built_from": {
+            "formula_sha256": "002f86f05c6d29c40ffce7849c04b65701c2a5ba45cd7335698715e50497ec5d",
+            "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "bbb69174da9ab1d008c4bcc6073496acf2a84c16",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 1668988,
+          "cache_key_sha": "f97630d988a1c2e5faf2ff0980c3033981f94fc3f1bf4919f4355cdd874ab72d",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/libiconv-1.19-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "f97630d988a1c2e5faf2ff0980c3033981f94fc3f1bf4919f4355cdd874ab72d",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libiconv/blobs/sha256:f97630d988a1c2e5faf2ff0980c3033981f94fc3f1bf4919f4355cdd874ab72d"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/libiconv.json",
+      "formula_path": "Formula/libiconv.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/libiconv",
+      "name": "libiconv",
+      "version": "1.19"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
           "built_at": "2026-07-19T21:29:43Z",
           "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29703806950",
           "built_from": {
@@ -242,7 +281,7 @@
   ],
   "release_tag": "bottles-abi-v41",
   "schema": 1,
-  "tap_commit": "56205b81175e12281aaa81ccb47af267d7f053ea",
+  "tap_commit": "bbb69174da9ab1d008c4bcc6073496acf2a84c16",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }

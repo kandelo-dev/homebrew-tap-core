@@ -107,4 +107,10 @@ class Libiconv < Formula
     system kandelo_cc, smoke_c, "-I#{include}", "-L#{lib}", "-liconv", "-o", smoke_wasm
     assert_equal "libiconv c3a9 ok\n", kandelo_run_wasm(smoke_wasm, [])
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "f97630d988a1c2e5faf2ff0980c3033981f94fc3f1bf4919f4355cdd874ab72d"
+  end
+
 end
