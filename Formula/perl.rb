@@ -14,6 +14,7 @@ class Perl < Formula
 
   depends_on "binaryen" => :build
   depends_on "gnu-sed" => :build
+  depends_on "patch" => :build
   depends_on "wabt" => :build
 
   skip_clean "bin/perl"
@@ -22,6 +23,21 @@ class Perl < Formula
   resource "perl-cross" do
     url "https://github.com/arsv/perl-cross/releases/download/1.6.4/perl-cross-1.6.4.tar.gz"
     sha256 "b6202173b0a8a43fb312867d85a8cd33527f3f234b1b6e591cdaa9895c9920c7"
+  end
+
+  resource "perl-cross-native-probes-patch" do
+    url "https://raw.githubusercontent.com/Kandelo-dev/homebrew-tap-core/8cfd5b660980000fc463a560e8d555e078929e8d/Kandelo/patches/perl/0001-perl-cross-native-probes.patch"
+    sha256 "f7c84538de0dbe38e6503749c1fcfe0169b11df3bc2464c0abd37aea269b5766"
+  end
+
+  resource "perl-cross-stage-static-modules-patch" do
+    url "https://raw.githubusercontent.com/Kandelo-dev/homebrew-tap-core/8cfd5b660980000fc463a560e8d555e078929e8d/Kandelo/patches/perl/0003-perl-cross-stage-static-modules.patch"
+    sha256 "f303c96d07332b82cee31a13d20af085f0070f63576c4e36d9e1ab4e103111fe"
+  end
+
+  patch do
+    url "https://raw.githubusercontent.com/Kandelo-dev/homebrew-tap-core/8cfd5b660980000fc463a560e8d555e078929e8d/Kandelo/patches/perl/0002-errno-sysroot-headers.patch"
+    sha256 "7a2fff3092cd9f2fe71a979ac420e0e4eeff080f1ef5c461f9e31e0a44125934"
   end
 
   def install
@@ -34,10 +50,14 @@ class Perl < Formula
       cp_r Pathname.pwd.children, buildpath
     end
 
-    patch_dir = Pathname(__dir__).parent/"Kandelo/patches/perl"
-    system "patch", "-p1", "-i", patch_dir/"0001-perl-cross-native-probes.patch"
-    system "patch", "-p1", "-i", patch_dir/"0002-errno-sysroot-headers.patch"
-    system "patch", "-p1", "-i", patch_dir/"0003-perl-cross-stage-static-modules.patch"
+    # These patches target files supplied by perl-cross, so they must be
+    # applied after that resource is overlaid onto the Perl source tree.
+    resource("perl-cross-native-probes-patch").stage do
+      system "patch", "-d", buildpath, "-p1", "-i", Pathname.pwd/"0001-perl-cross-native-probes.patch"
+    end
+    resource("perl-cross-stage-static-modules-patch").stage do
+      system "patch", "-d", buildpath, "-p1", "-i", Pathname.pwd/"0003-perl-cross-stage-static-modules.patch"
+    end
 
     host_env = kandelo_host_tool("env")
     host_make = kandelo_host_tool("make")
