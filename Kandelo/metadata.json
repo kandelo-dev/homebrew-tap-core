@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-19T23:04:00Z",
+  "generated_at": "2026-07-19T23:04:07Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
@@ -550,6 +550,45 @@
       "full_name": "kandelo-dev/tap-core/openssl",
       "name": "openssl",
       "version": "3.3.2_2"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-19T23:04:07Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706559242",
+          "built_from": {
+            "formula_sha256": "88b2d0dad0f8419eb4c6be5fd8a18ba9e1dc1b5c106025316d3f784cd639b9aa",
+            "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "178c1689e77e221105e5eb6c36d082b8e4210656",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 145171,
+          "cache_key_sha": "18c446e47efca64255a38ddf577f863150fa5be4065b18b41e605fb20b728d29",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/procps-4.0.6-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "18c446e47efca64255a38ddf577f863150fa5be4065b18b41e605fb20b728d29",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/procps/blobs/sha256:18c446e47efca64255a38ddf577f863150fa5be4065b18b41e605fb20b728d29"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/procps.json",
+      "formula_path": "Formula/procps.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/procps",
+      "name": "procps",
+      "version": "4.0.6"
     },
     {
       "bottle_rebuild": 0,

@@ -92,4 +92,10 @@ class Procps < Formula
     refute_includes contents, "/Users/"
     refute_includes contents, "/nix/store/"
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "18c446e47efca64255a38ddf577f863150fa5be4065b18b41e605fb20b728d29"
+  end
+
 end

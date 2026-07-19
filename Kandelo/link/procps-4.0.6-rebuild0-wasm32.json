@@ -1,0 +1,38 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 145171,
+    "cache_key_sha": "18c446e47efca64255a38ddf577f863150fa5be4065b18b41e605fb20b728d29",
+    "payload_root": "procps/4.0.6",
+    "sha256": "18c446e47efca64255a38ddf577f863150fa5be4065b18b41e605fb20b728d29",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/procps/blobs/sha256:18c446e47efca64255a38ddf577f863150fa5be4065b18b41e605fb20b728d29"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/procps/4.0.6",
+  "links": [
+    {
+      "source": "bin/ps",
+      "target": "bin/ps",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/ps.1",
+      "target": "share/man/man1/ps.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "procps",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/procps.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "4.0.6"
+}
