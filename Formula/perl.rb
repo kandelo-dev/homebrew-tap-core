@@ -65,10 +65,9 @@ class Perl < Formula
 
     host_env = kandelo_host_tool("env")
     host_make = kandelo_host_tool("make")
+    host_sed = formula_opt_bin("gnu-sed")/"sed"
 
     kandelo_wasm_build do |root|
-      ENV.prepend_path "PATH", formula_opt_libexec("gnu-sed")/"gnubin"
-
       # The SDK permits unresolved host imports so libc glue can satisfy them
       # at link time. Perl's static interpreter must therefore name all of its
       # core objects explicitly; otherwise wasm-ld may leave archive members as
@@ -321,7 +320,7 @@ class Perl < Formula
       # perl-cross can leave empty target feature variables as `# NAME`, which
       # is not a valid preprocessor directive. Convert only those generated,
       # uppercase placeholders to ordinary defines in the native xconfig.
-      system "gsed", "-i", "-E", "s/^# ([A-Z][A-Z0-9_]+)([[:space:]])/#define \\1\\2/", "xconfig.h"
+      system host_sed, "-i", "-E", "s/^# ([A-Z][A-Z0-9_]+)([[:space:]])/#define \\1\\2/", "xconfig.h"
 
       system host_make, "-j#{ENV.make_jobs}", "all"
 
