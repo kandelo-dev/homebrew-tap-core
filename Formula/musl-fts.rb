@@ -13,6 +13,9 @@ class MuslFts < Formula
   depends_on "autoconf" => :build
   depends_on "automake" => :build
   depends_on "libtool" => :build
+  # Autoconf embeds Homebrew's canonical opt/m4 path. Declare m4 directly so
+  # the isolated publisher exposes the reviewed native m4 at that exact path.
+  depends_on "m4" => :build
   depends_on "pkgconf" => :build
   depends_on "binaryen" => :test
   depends_on "wabt" => :test
