@@ -1,0 +1,33 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 189301,
+    "cache_key_sha": "e0b34ddcee3c8e12d7aa5d3d58a7c55b8d468961d83d30ce6ebf17dc2e2427d5",
+    "payload_root": "sed/4.9",
+    "sha256": "e0b34ddcee3c8e12d7aa5d3d58a7c55b8d468961d83d30ce6ebf17dc2e2427d5",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/sed/blobs/sha256:e0b34ddcee3c8e12d7aa5d3d58a7c55b8d468961d83d30ce6ebf17dc2e2427d5"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/sed/4.9",
+  "links": [
+    {
+      "source": "bin/sed",
+      "target": "bin/sed",
+      "type": "symlink"
+    }
+  ],
+  "package": "sed",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/sed.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "4.9"
+}

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-19T22:43:34Z",
+  "generated_at": "2026-07-19T22:44:18Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
@@ -238,6 +238,45 @@
       "full_name": "kandelo-dev/tap-core/openssl",
       "name": "openssl",
       "version": "3.3.2_2"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-19T22:44:18Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706054467",
+          "built_from": {
+            "formula_sha256": "08b66753978dcae68bd5e5e23b8500b7466708a279828bed75f6a6aa0f826747",
+            "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "bbb69174da9ab1d008c4bcc6073496acf2a84c16",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 189301,
+          "cache_key_sha": "e0b34ddcee3c8e12d7aa5d3d58a7c55b8d468961d83d30ce6ebf17dc2e2427d5",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/sed-4.9-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "e0b34ddcee3c8e12d7aa5d3d58a7c55b8d468961d83d30ce6ebf17dc2e2427d5",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/sed/blobs/sha256:e0b34ddcee3c8e12d7aa5d3d58a7c55b8d468961d83d30ce6ebf17dc2e2427d5"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/sed.json",
+      "formula_path": "Formula/sed.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/sed",
+      "name": "sed",
+      "version": "4.9"
     },
     {
       "bottle_rebuild": 0,
