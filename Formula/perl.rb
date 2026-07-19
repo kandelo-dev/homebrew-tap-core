@@ -63,6 +63,12 @@ class Perl < Formula
       system host_patch, "-d", buildpath, "-p1", "-i", Pathname.pwd/"0003-perl-cross-stage-static-modules.patch"
     end
 
+    # Diagnostic branch only: preserve the compiler failure behind perl-cross's
+    # summary when the native buildmini configure cannot complete.
+    inreplace "cnf/configure",
+              '|| die "configure --mode=buildmini failed"',
+              '|| { cat config.log >&2; die "configure --mode=buildmini failed"; }'
+
     host_env = kandelo_host_tool("env")
     host_make = kandelo_host_tool("make")
 
