@@ -1,0 +1,53 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1465933,
+    "cache_key_sha": "d8a7a49c269a651b66be6a8b2d371f4f0a740e8a5db587f147a7ee437360bf83",
+    "payload_root": "sqlite/3.49.1_1",
+    "sha256": "d8a7a49c269a651b66be6a8b2d371f4f0a740e8a5db587f147a7ee437360bf83",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/sqlite/blobs/sha256:d8a7a49c269a651b66be6a8b2d371f4f0a740e8a5db587f147a7ee437360bf83"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/sqlite/3.49.1_1",
+  "links": [
+    {
+      "source": "bin/sqlite3",
+      "target": "bin/sqlite3",
+      "type": "symlink"
+    },
+    {
+      "source": "include/sqlite3.h",
+      "target": "include/sqlite3.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/sqlite3ext.h",
+      "target": "include/sqlite3ext.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libsqlite3.a",
+      "target": "lib/libsqlite3.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/sqlite3.pc",
+      "target": "lib/pkgconfig/sqlite3.pc",
+      "type": "symlink"
+    }
+  ],
+  "package": "sqlite",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/sqlite.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "3.49.1_1"
+}

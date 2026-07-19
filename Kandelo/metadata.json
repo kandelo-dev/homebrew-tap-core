@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-19T23:03:32Z",
+  "generated_at": "2026-07-19T23:04:00Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
@@ -589,6 +589,45 @@
       "full_name": "kandelo-dev/tap-core/sed",
       "name": "sed",
       "version": "4.9"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-19T23:04:00Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706559553",
+          "built_from": {
+            "formula_sha256": "a74215ffe95fe603feb3db04dc703f1064e346a1b453d7a68ef25a38dcb706c4",
+            "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "178c1689e77e221105e5eb6c36d082b8e4210656",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 1465933,
+          "cache_key_sha": "d8a7a49c269a651b66be6a8b2d371f4f0a740e8a5db587f147a7ee437360bf83",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/sqlite-3.49.1_1-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "d8a7a49c269a651b66be6a8b2d371f4f0a740e8a5db587f147a7ee437360bf83",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/sqlite/blobs/sha256:d8a7a49c269a651b66be6a8b2d371f4f0a740e8a5db587f147a7ee437360bf83"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/sqlite.json",
+      "formula_path": "Formula/sqlite.rb",
+      "formula_revision": 1,
+      "full_name": "kandelo-dev/tap-core/sqlite",
+      "name": "sqlite",
+      "version": "3.49.1_1"
     },
     {
       "bottle_rebuild": 0,
