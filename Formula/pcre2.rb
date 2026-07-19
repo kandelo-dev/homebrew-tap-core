@@ -216,4 +216,10 @@ class Pcre2 < Formula
       assert_equal "pcre2-#{width}-ok\n", kandelo_run_wasm(width_wasm, [])
     end
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "ed4db7b6a3ab57b837e545d910deeb841f908333b20f49cdafe30430cc9651de"
+  end
+
 end

@@ -1,42 +1,42 @@
 {
   "bottle": {
     "bottle_tag": "wasm32_kandelo",
-    "bytes": 34984,
-    "cache_key_sha": "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c",
+    "bytes": 1880963,
+    "cache_key_sha": "ed4db7b6a3ab57b837e545d910deeb841f908333b20f49cdafe30430cc9651de",
     "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
     "prefix": "/home/linuxbrew/.linuxbrew",
-    "sha256": "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ncompress/blobs/sha256:7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c"
+    "sha256": "ed4db7b6a3ab57b837e545d910deeb841f908333b20f49cdafe30430cc9651de",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/pcre2/blobs/sha256:ed4db7b6a3ab57b837e545d910deeb841f908333b20f49cdafe30430cc9651de"
   },
   "build": {
     "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
     "dev_shell": "scripts/dev-shell.sh",
-    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706558640",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706558937",
     "job": "verify-bottle",
     "runner_os": "Linux",
     "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
     "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
   },
   "formula": {
-    "path": "Formula/ncompress.rb",
-    "sha256": "884829f79b0c80457e0aad0e3e1fcc89dcf09930b49db4b31190cf17f6f3e82b"
+    "path": "Formula/pcre2.rb",
+    "sha256": "86d87f38f3876c42753a3aaf5756728249ee1d833b502fd35d8f3f46d48f90d0"
   },
   "metadata": {
     "formula_json": {
-      "path": "Kandelo/formula/ncompress.json",
-      "sha256": "5c055470079a9c298f5812eb171cfafd84d254a171edd114f663c4f59bfb1f19"
+      "path": "Kandelo/formula/pcre2.json",
+      "sha256": "1e7204201df84cb25248afbd45990aa782b4d79dcca66d117c72d36789ec7934"
     },
     "link_manifest_json": {
-      "path": "Kandelo/link/ncompress-5.0_1-rebuild0-wasm32.json",
-      "sha256": "64a1abbf90e07be8b3d5c9311fd4e2fe1db3b3405b4a624db351f1d5784a254e"
+      "path": "Kandelo/link/pcre2-10.44_1-rebuild0-wasm32.json",
+      "sha256": "ff38e7c3d59379b38cc48c125c9b293a433109b29562954484bb30a00d49eac8"
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
       "sha256": "52e0ad0c4f18a0afa2c22b08700b756497aad364610cd4f30d3cff0246447cec"
     },
     "provenance_json": {
-      "path": "Kandelo/reports/ncompress-5.0_1-rebuild0-wasm32.provenance.json",
-      "sha256": "d73df95cc1afd6517af5a7891162947e95a6eb8810e2ef97e0e533279075216d"
+      "path": "Kandelo/reports/pcre2-10.44_1-rebuild0-wasm32.provenance.json",
+      "sha256": "f0841207eb73adb7b0c5ca76baaf3391d67056a933206187b57f4c7314b7d5a1"
     }
   },
   "repositories": {
@@ -50,8 +50,8 @@
     "arch": "wasm32",
     "bottle_rebuild": 0,
     "kandelo_abi": 41,
-    "package": "ncompress",
-    "version": "5.0_1"
+    "package": "pcre2",
+    "version": "10.44_1"
   },
   "validation": {
     "outcome_lists": [
@@ -60,9 +60,9 @@
         "name": "schema",
         "passed": [
           "Kandelo/metadata.json",
-          "Kandelo/formula/ncompress.json",
-          "Kandelo/link/ncompress-5.0_1-rebuild0-wasm32.json",
-          "Kandelo/reports/ncompress-5.0_1-rebuild0-wasm32.provenance.json"
+          "Kandelo/formula/pcre2.json",
+          "Kandelo/link/pcre2-10.44_1-rebuild0-wasm32.json",
+          "Kandelo/reports/pcre2-10.44_1-rebuild0-wasm32.provenance.json"
         ],
         "skipped": [],
         "status": "success"
@@ -93,9 +93,9 @@
         "failed": [],
         "name": "node_smoke",
         "passed": [
-          "Homebrew force-poured ncompress from anonymous-public-readback",
+          "Homebrew force-poured pcre2 from anonymous-public-readback",
           "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
-          "exact bottle sha256: 7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c"
+          "exact bottle sha256: ed4db7b6a3ab57b837e545d910deeb841f908333b20f49cdafe30430cc9651de"
         ],
         "skipped": [],
         "status": "success"
