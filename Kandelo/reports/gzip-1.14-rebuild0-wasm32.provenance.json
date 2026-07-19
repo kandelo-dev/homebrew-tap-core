@@ -1,42 +1,42 @@
 {
   "bottle": {
     "bottle_tag": "wasm32_kandelo",
-    "bytes": 34984,
-    "cache_key_sha": "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c",
+    "bytes": 154651,
+    "cache_key_sha": "bb77f31106485ba7e67b5532eb38cb31efae65cb215a0ecdf8a99916e452d6fe",
     "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
     "prefix": "/home/linuxbrew/.linuxbrew",
-    "sha256": "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ncompress/blobs/sha256:7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c"
+    "sha256": "bb77f31106485ba7e67b5532eb38cb31efae65cb215a0ecdf8a99916e452d6fe",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/gzip/blobs/sha256:bb77f31106485ba7e67b5532eb38cb31efae65cb215a0ecdf8a99916e452d6fe"
   },
   "build": {
     "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
     "dev_shell": "scripts/dev-shell.sh",
-    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706558640",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706556048",
     "job": "verify-bottle",
     "runner_os": "Linux",
     "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
     "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
   },
   "formula": {
-    "path": "Formula/ncompress.rb",
-    "sha256": "884829f79b0c80457e0aad0e3e1fcc89dcf09930b49db4b31190cf17f6f3e82b"
+    "path": "Formula/gzip.rb",
+    "sha256": "cfd7c6adbfb9c010c8824f7a7112cbf6157b3920e84b8433d481427a903f2d58"
   },
   "metadata": {
     "formula_json": {
-      "path": "Kandelo/formula/ncompress.json",
-      "sha256": "5c055470079a9c298f5812eb171cfafd84d254a171edd114f663c4f59bfb1f19"
+      "path": "Kandelo/formula/gzip.json",
+      "sha256": "2cbd4b6cd8d497596d04a248c5445152a9175a1f8527ad3edea2884fd12d3881"
     },
     "link_manifest_json": {
-      "path": "Kandelo/link/ncompress-5.0_1-rebuild0-wasm32.json",
-      "sha256": "64a1abbf90e07be8b3d5c9311fd4e2fe1db3b3405b4a624db351f1d5784a254e"
+      "path": "Kandelo/link/gzip-1.14-rebuild0-wasm32.json",
+      "sha256": "1eda2a4a867069732bb3cd9dc87d2d6d65f4d323c03f0e648b1ce0556dadc4c8"
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
       "sha256": "b7016bb313856f90c070a1e40b0caf31472fc18084ea3f1796b73ea4645d5edb"
     },
     "provenance_json": {
-      "path": "Kandelo/reports/ncompress-5.0_1-rebuild0-wasm32.provenance.json",
-      "sha256": "8f1f0b5609c0ff4b6de4ff5dcb64caf95d527ce5eabfd42bed701e7d54ed3a84"
+      "path": "Kandelo/reports/gzip-1.14-rebuild0-wasm32.provenance.json",
+      "sha256": "84c4429e8ee21538b6521023ba31a0b2ab90eb3356b1c248af63fd6899846eb4"
     }
   },
   "repositories": {
@@ -50,8 +50,8 @@
     "arch": "wasm32",
     "bottle_rebuild": 0,
     "kandelo_abi": 41,
-    "package": "ncompress",
-    "version": "5.0_1"
+    "package": "gzip",
+    "version": "1.14"
   },
   "validation": {
     "outcome_lists": [
@@ -60,9 +60,9 @@
         "name": "schema",
         "passed": [
           "Kandelo/metadata.json",
-          "Kandelo/formula/ncompress.json",
-          "Kandelo/link/ncompress-5.0_1-rebuild0-wasm32.json",
-          "Kandelo/reports/ncompress-5.0_1-rebuild0-wasm32.provenance.json"
+          "Kandelo/formula/gzip.json",
+          "Kandelo/link/gzip-1.14-rebuild0-wasm32.json",
+          "Kandelo/reports/gzip-1.14-rebuild0-wasm32.provenance.json"
         ],
         "skipped": [],
         "status": "success"
@@ -93,9 +93,9 @@
         "failed": [],
         "name": "node_smoke",
         "passed": [
-          "Homebrew force-poured ncompress from anonymous-public-readback",
+          "Homebrew force-poured gzip from anonymous-public-readback",
           "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
-          "exact bottle sha256: 7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c"
+          "exact bottle sha256: bb77f31106485ba7e67b5532eb38cb31efae65cb215a0ecdf8a99916e452d6fe"
         ],
         "skipped": [],
         "status": "success"

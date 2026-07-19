@@ -1,0 +1,44 @@
+{
+  "bottle_rebuild": 0,
+  "bottles": [
+    {
+      "arch": "wasm32",
+      "bottle_tag": "wasm32_kandelo",
+      "browser_compatible": false,
+      "built_at": "2026-07-19T23:00:22Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706556048",
+      "built_from": {
+        "formula_sha256": "cfd7c6adbfb9c010c8824f7a7112cbf6157b3920e84b8433d481427a903f2d58",
+        "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "178c1689e77e221105e5eb6c36d082b8e4210656",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "bytes": 154651,
+      "cache_key_sha": "bb77f31106485ba7e67b5532eb38cb31efae65cb215a0ecdf8a99916e452d6fe",
+      "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+      "fork_instrumentation": "not-required",
+      "kandelo_abi": 41,
+      "link_manifest": "Kandelo/link/gzip-1.14-rebuild0-wasm32.json",
+      "prefix": "/home/linuxbrew/.linuxbrew",
+      "runtime_support": [
+        "node"
+      ],
+      "sha256": "bb77f31106485ba7e67b5532eb38cb31efae65cb215a0ecdf8a99916e452d6fe",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/gzip/blobs/sha256:bb77f31106485ba7e67b5532eb38cb31efae65cb215a0ecdf8a99916e452d6fe"
+    }
+  ],
+  "dependencies": [],
+  "formula_path": "Formula/gzip.rb",
+  "formula_revision": 0,
+  "full_name": "kandelo-dev/tap-core/gzip",
+  "kandelo_abi": 41,
+  "name": "gzip",
+  "schema": 1,
+  "source_metadata": "Kandelo/metadata.json",
+  "tap_commit": "178c1689e77e221105e5eb6c36d082b8e4210656",
+  "tap_name": "kandelo-dev/tap-core",
+  "tap_repository": "kandelo-dev/homebrew-tap-core",
+  "version": "1.14"
+}
