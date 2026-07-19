@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 87229,
+    "cache_key_sha": "b36eb1d9a37d3733088174d797f19b7a673fae32c949d42db3516227228c4e8c",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "b36eb1d9a37d3733088174d797f19b7a673fae32c949d42db3516227228c4e8c",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/bzip2/blobs/sha256:b36eb1d9a37d3733088174d797f19b7a673fae32c949d42db3516227228c4e8c"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29701320996",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
+  },
+  "formula": {
+    "path": "Formula/bzip2.rb",
+    "sha256": "195c69a680913206061d71a84b440ea8b12117b60158c7caf3269bed7441b85a"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/bzip2.json",
+      "sha256": "f625ae4bc8db73938ed426f7464087a836ed054f5d78a254ab02f57a5a3900f1"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/bzip2-1.0.8_2-rebuild0-wasm32.json",
+      "sha256": "56127942cfc50d727872bae7e8db532dc1d92490592b6eb9015c1d04fb509246"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "9efd4045dc578f2752cffe632b88711bbeaa37972807a749d740b1fefa6ec5a3"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/bzip2-1.0.8_2-rebuild0-wasm32.provenance.json",
+      "sha256": "5c267816eb5d2f3e96197134ea43b5dc7663654733caa4698e463244f0e7959b"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "54974791f35dcf9754f459331fb1277f3904fb5b",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 0,
+    "kandelo_abi": 41,
+    "package": "bzip2",
+    "version": "1.0.8_2"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/bzip2.json",
+          "Kandelo/link/bzip2-1.0.8_2-rebuild0-wasm32.json",
+          "Kandelo/reports/bzip2-1.0.8_2-rebuild0-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --no-rebuild",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured bzip2 from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: b36eb1d9a37d3733088174d797f19b7a673fae32c949d42db3516227228c4e8c"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}
