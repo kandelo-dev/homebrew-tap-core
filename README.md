@@ -128,10 +128,11 @@ exercise another shell.
 
 Bottle metadata must be generated from the same trusted build that produces
 the bottle bytes. Do not hand-write placeholder hashes or reuse bottle data
-across Kandelo ABI versions. The retained `hello` provenance report is
-historical publication evidence; broader publication is gated on the native
-Homebrew OCI publisher and real guest-install validation in
-`Automattic/kandelo`.
+across Kandelo ABI versions. The repository-rooted native Homebrew Open
+Container Initiative (OCI) publisher is implemented, and the first-party
+bottle catalog rollout is in progress. The retained `hello` provenance report
+is historical publication evidence. User-facing installation instructions
+remain gated on real stock-guest Homebrew validation in `Automattic/kandelo`.
 
 Bottle operations use `repository_dispatch`, so GitHub always loads the small
 caller workflow from tap `main`. These tap workflows contain no shell steps or
@@ -166,9 +167,28 @@ hardcodes both executable repositories to reviewed `main`:
 ```bash
 gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
   -f event_type=publish-kandelo-bottles \
-  -f 'client_payload[formulae]=bzip2,xz' \
+  -f 'client_payload[formulae]=bzip2' \
   -f 'client_payload[arches]=wasm32'
 ```
+
+The first-party catalog rollout uses one Formula per write dispatch, even
+though the reusable workflow supports a comma-separated Formula list for other
+controlled operations. Keep no more than six write-publication runs queued or
+in progress at once. Dispatch only a dependency-ready Formula: every required
+same-tap build, test, and runtime dependency must already have a successful
+bottle on tap `main` for the selected architecture, current Kandelo ABI, and
+repository-rooted bottle namespace. A failed Formula blocks its downstream
+dependents, but it does not block unrelated ready Formulae from filling an
+available slot.
+
+After a failed publication or a publisher-pin change, submit a fresh
+`repository_dispatch`; do not select **Re-run jobs** on the old run. A rerun
+retains the original caller workflow and its pinned reusable-workflow revision,
+while a fresh dispatch loads the reviewed caller now on tap `main`, creates new
+run-local receipts, and replans against current tap state. Preserve the old run
+and failure report, and never move artifacts manually between runs. The
+[authoritative Homebrew publishing contract](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md)
+owns the complete trust, readiness, validation, and legacy-cleanup rules.
 
 Production keeps `kandelo-dev/tap-core` as the canonical Homebrew identity for
 Formula references, OCI titles, and sidecars. Bottle transport instead uses the
