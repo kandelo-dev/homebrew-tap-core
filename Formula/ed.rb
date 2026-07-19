@@ -9,8 +9,9 @@ class Ed < Formula
   mirror "https://ftp.gnu.org/gnu/ed/ed-1.22.5.tar.lz"
   sha256 "56e107ddc2f29dad6690376c15bf9751509e1ee3b8241710e44edbe5c3a158cc"
   license "GPL-2.0-or-later"
+  revision 1
 
-  depends_on "lzip" => :build
+  depends_on "lzip" => [:build, :test]
 
   skip_clean "bin/ed"
 
