@@ -103,6 +103,25 @@ verification, Homebrew pour/test evidence, and runtime and browser gates.
 Formula-specific provenance records the bottle and runtime results; run-scoped
 transport receipts provide the registry proof.
 
+## Post-Publication Acceptance
+
+Treat a write run as accepted only after the centralized
+[public-package acceptance and namespace-retirement procedure](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md#public-package-creation-and-legacy-namespace-retirement)
+confirms all of the following:
+
+- the reviewed trusted workflow completed successfully;
+- the GHCR package record is public and linked to
+  `kandelo-dev/homebrew-tap-core`;
+- credential-free manifest and blob readback verifies the exact published
+  digest, SHA-256, and byte count;
+- the live Formula bottle block and generated `Kandelo/` sidecars agree and
+  pass semantic validation.
+
+The authoritative contract owns the exact commands and the separate legacy
+package cleanup gates so publisher or namespace changes have one place to
+update. Formula presence, a local validator result, or a successful build alone
+is not post-publication acceptance.
+
 ## VFS Planning
 
 Host VFS tooling plans a Homebrew-prefix image with
