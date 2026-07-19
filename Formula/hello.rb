@@ -1,4 +1,3 @@
-require "shellwords"
 require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Hello < Formula
@@ -35,21 +34,7 @@ class Hello < Formula
     hello = bin/"hello"
     assert_equal "\0asm".b, File.binread(hello, 4)
 
-    kandelo_root = ENV["HOMEBREW_KANDELO_ROOT"] || ENV["KANDELO_HOMEBREW_KANDELO_ROOT"]
-    return if kandelo_root.to_s.empty?
-
-    if (node = ENV["HOMEBREW_KANDELO_NODE"]).to_s != ""
-      ENV.prepend_path "PATH", File.dirname(node)
-    end
-
-    test_wasm = testpath/"hello.wasm"
-    File.binwrite(test_wasm, File.binread(hello))
-    command = [
-      "cd #{kandelo_root.shellescape} &&",
-      "node --experimental-wasm-exnref --import tsx/esm",
-      "examples/run-example.ts #{test_wasm.to_s.shellescape} --version",
-    ].join(" ")
-    output = shell_output(command)
+    output = kandelo_run_wasm(hello, ["--version"])
     assert_match "hello (GNU Hello) #{version}", output
   end
 end
