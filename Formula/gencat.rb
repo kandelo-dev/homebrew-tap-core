@@ -217,4 +217,10 @@ class Gencat < Formula
     )
     assert_match "setId's must be greater than zero", invalid
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "15797b34192270f24156cdb4c8ff354f486c2dda787291390b0f00218b43aee0"
+  end
+
 end

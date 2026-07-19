@@ -1,0 +1,38 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 29690,
+    "cache_key_sha": "15797b34192270f24156cdb4c8ff354f486c2dda787291390b0f00218b43aee0",
+    "payload_root": "gencat/1.37",
+    "sha256": "15797b34192270f24156cdb4c8ff354f486c2dda787291390b0f00218b43aee0",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/gencat/blobs/sha256:15797b34192270f24156cdb4c8ff354f486c2dda787291390b0f00218b43aee0"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/gencat/1.37",
+  "links": [
+    {
+      "source": "bin/gencat",
+      "target": "bin/gencat",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/gencat.1",
+      "target": "share/man/man1/gencat.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "gencat",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/gencat.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.37"
+}
