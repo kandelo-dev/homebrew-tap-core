@@ -3,7 +3,7 @@
   "formula": "file-formula",
   "brewfile": "Kandelo/vfs-acceptance.Brewfile",
   "executable": "/home/linuxbrew/.linuxbrew/bin/file",
-  "argv": ["file", "-b", "/home/linuxbrew/.linuxbrew/bin/file"],
+  "argv": ["file", "-Lb", "/home/linuxbrew/.linuxbrew/bin/file"],
   "expected_stdout": "WebAssembly (wasm) binary module",
   "shell_config": "Kandelo/vfs-acceptance-shell.json"
 }
