@@ -16,6 +16,7 @@ class Python < Formula
   license "Python-2.0"
 
   depends_on "binaryen" => :build
+  depends_on "unzip" => :build
   depends_on "wabt" => :build
   depends_on "kandelo-dev/tap-core/zlib"
 
@@ -40,7 +41,7 @@ class Python < Formula
     bin.install_symlink "python3" => "python#{PYTHON_MAJOR_MINOR}"
 
     runtime_stage = buildpath/"python-runtime-stage"
-    system "unzip", "-q", out_dir/"python-runtime.zip", "-d", runtime_stage
+    system formula_opt_bin("unzip")/"unzip", "-q", out_dir/"python-runtime.zip", "-d", runtime_stage
     stdlib = runtime_stage/"lib/python#{PYTHON_MAJOR_MINOR}"
     runtime_license = runtime_stage/"share/licenses/cpython/LICENSE"
     odie "CPython runtime archive has no standard library" unless (stdlib/"json/__init__.py").file?
