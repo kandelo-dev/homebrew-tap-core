@@ -204,6 +204,39 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes error.message, "is not installed at /missing/Cellar/openssl/3.3.2_2"
   end
 
+  def test_verified_formula_source_is_isolated_from_bridge_work_and_output_roots
+    Dir.mktmpdir("kandelo-formula-source") do |dir|
+      build_path = Pathname(dir)/"build"
+      (build_path/"src").mkpath
+      (build_path/"src/main.c").write("int main(void) { return 0; }\n")
+      (build_path/".upstream-marker").write("verified source\n")
+      harness = Harness.new
+      harness.build_path = build_path
+
+      source_dir = harness.kandelo_stage_verified_formula_source
+
+      assert_equal build_path/"kandelo-package-source", source_dir
+      assert_equal "int main(void) { return 0; }\n", (source_dir/"src/main.c").read
+      assert_equal "verified source\n", (source_dir/".upstream-marker").read
+      assert_equal [source_dir], build_path.children
+      refute_path_exists build_path/"kandelo-package-work"
+      refute_path_exists build_path/"kandelo-package-out"
+
+      error = assert_raises(RuntimeError) { harness.kandelo_stage_verified_formula_source }
+      assert_includes error.message, "Formula source was already staged"
+    end
+  end
+
+  def test_verified_formula_source_rejects_an_empty_buildpath
+    Dir.mktmpdir("kandelo-empty-formula-source") do |dir|
+      harness = Harness.new
+      harness.build_path = Pathname(dir)
+
+      error = assert_raises(RuntimeError) { harness.kandelo_stage_verified_formula_source }
+      assert_includes error.message, "did not stage Formula source"
+    end
+  end
+
   def test_sdk_activation_declares_exact_direct_and_transitive_target_pkg_config_dirs
     original = ENV.to_hash
     Dir.mktmpdir("kandelo-pkg-config-closure") do |dir|
@@ -555,7 +588,7 @@ class KandeloFormulaSupportTest < Minitest::Test
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
     rust_declarations = formula.lines.grep(/^\s*depends_on "rust"/)
 
-    assert_equal [%(  depends_on "rust" => :build\n)], rust_declarations
+    assert_equal [%Q(  depends_on "rust" => :build\n)], rust_declarations
   end
 
   def test_sdk_activation_cannot_reintroduce_the_global_homebrew_path

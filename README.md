@@ -75,6 +75,30 @@ Formula source currently present in this repository includes:
 - `vim`, the ncurses-backed editor, Ex mode, runtime, and `xxd` tools.
 - `git`, distributed version control with Kandelo-native HTTP and HTTPS transport.
 - `texlive`, the pdfTeX engine plus its pinned macro, font, and format runtime.
+- `bc`, GNU's arbitrary-precision calculator used by the main shell image;
+- `posix-utils-lite`, the initial bundled 37-command compatibility Formula
+  preserving the exact current shell output set while maintained upstream
+  replacements continue to move into independent Formulae;
+- `netcat`, GNU's virtual-network client and server utility;
+- `lsof`, Kandelo's procfs-aware open-file reporter;
+- `nethack`, the ncurses game binary and its complete immutable data tree;
+- `fbdoom`, the pinned framebuffer Doom engine with its reviewed Kandelo
+  input, audio, and save-path adaptations (the shareware IWAD remains an
+  external, integrity-checked demo asset); and
+- `modeset`, the DRM/KMS fluid simulation used by the browser demo.
+
+These seven exact-shell Formulae intentionally use the transitional
+`kandelo_build_package` bridge for their first bottle proof. Their Formulae
+pin source identity, declare native and target dependencies, retain every
+current shell output, validate final Wasm artifacts, and run through Kandelo.
+The six recipes that accept already-extracted source isolate Homebrew's
+checksum-verified tree from sibling caller-owned work and output roots; neither
+the verified source nor the reviewed Kandelo checkout is a build destination.
+NetHack compiles and tests its data lookup against
+`/home/linuxbrew/.linuxbrew/opt/nethack/share/nethack`, so a composed image must
+link both its executable and installed share tree at the poured guest opt path.
+Decomposing their registry scripts into idiomatic Formula build steps remains
+explicit follow-up work rather than a hidden change to the proof's scope.
 
 Presence in `Formula/` means that the source recipe is tracked; it does not mean
 that a current bottle has been published. A bottle becomes available only after
