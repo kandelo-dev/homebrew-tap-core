@@ -1,0 +1,58 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 165001,
+    "cache_key_sha": "4748c44e343ffa4c4f2e70e51c68085d251cb35bc94ff1fd16ffcab5080ea84d",
+    "payload_root": "pax/20240817",
+    "sha256": "4748c44e343ffa4c4f2e70e51c68085d251cb35bc94ff1fd16ffcab5080ea84d",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/pax/blobs/sha256:4748c44e343ffa4c4f2e70e51c68085d251cb35bc94ff1fd16ffcab5080ea84d"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/pax/20240817",
+  "links": [
+    {
+      "source": "bin/pax",
+      "target": "bin/pax",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/paxcpio",
+      "target": "bin/paxcpio",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/paxtar",
+      "target": "bin/paxtar",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/pax.1",
+      "target": "share/man/man1/pax.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/paxcpio.1",
+      "target": "share/man/man1/paxcpio.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/paxtar.1",
+      "target": "share/man/man1/paxtar.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "pax",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/pax.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "20240817"
+}

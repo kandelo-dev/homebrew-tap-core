@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-20T07:51:40Z",
+  "generated_at": "2026-07-20T07:52:24Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
@@ -965,6 +965,50 @@
       "full_name": "kandelo-dev/tap-core/patch",
       "name": "patch",
       "version": "2.8"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-20T07:52:24Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724872136",
+          "built_from": {
+            "formula_sha256": "09ddfbe27d3e264168bcabbbc6ac9bfc82651032d3ea71537e637835adbe619b",
+            "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 165001,
+          "cache_key_sha": "4748c44e343ffa4c4f2e70e51c68085d251cb35bc94ff1fd16ffcab5080ea84d",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/pax-20240817-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "4748c44e343ffa4c4f2e70e51c68085d251cb35bc94ff1fd16ffcab5080ea84d",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/pax/blobs/sha256:4748c44e343ffa4c4f2e70e51c68085d251cb35bc94ff1fd16ffcab5080ea84d"
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "musl-fts",
+          "version": "1.2.7"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/pax.json",
+      "formula_path": "Formula/pax.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/pax",
+      "name": "pax",
+      "version": "20240817"
     },
     {
       "bottle_rebuild": 0,
