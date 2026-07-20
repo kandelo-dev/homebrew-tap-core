@@ -291,6 +291,31 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
+  def test_texlive_build_runner_uses_the_bound_support_child_and_escaped_arguments
+    harness = Harness.new
+    harness.define_singleton_method(:kandelo_host_tool) { |name| "/host tools/#{name}" }
+
+    harness.kandelo_run_texlive_pdftex("engine", "/source tree", "$(false)")
+
+    expected_runner = Pathname(__dir__).parent/"build-texlive-pdftex.sh"
+    assert_equal ["/host tools/bash", "-c"], harness.system_args.first(2)
+    assert_equal ["/host tools/bash", expected_runner.to_s, "engine", "/source tree", "$(false)"],
+                 Shellwords.shellsplit(harness.system_args.fetch(2))
+  end
+
+  def test_texlive_config_runner_uses_the_bound_support_child_and_module_root
+    harness = Harness.new
+    harness.define_singleton_method(:kandelo_host_tool) { |name| "/host tools/#{name}" }
+
+    harness.kandelo_generate_texlive_runtime_config("/module root", "/runtime root", "selected packages")
+
+    expected_runner = Pathname(__dir__).parent/"generate-texlive-runtime-config.pl"
+    assert_equal ["/host tools/bash", "-c"], harness.system_args.first(2)
+    assert_equal [
+      "/host tools/perl", "-I/module root", expected_runner.to_s, "/runtime root", "selected packages"
+    ], Shellwords.shellsplit(harness.system_args.fetch(2))
+  end
+
   def test_artifact_validation_requires_abi_asyncify_and_fork_guards
     Dir.mktmpdir("kandelo-formula-support") do |dir|
       harness = artifact_validation_harness(dir)
