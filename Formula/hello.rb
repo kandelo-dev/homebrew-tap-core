@@ -27,6 +27,11 @@ class Hello < Formula
       "HOMEBREW_KANDELO_ARCH", ENV.fetch("KANDELO_HOMEBREW_ARCH", "wasm32")
     )
 
+    # GNU configure otherwise defaults to `-g -O2`, which records Homebrew's
+    # ephemeral build root in the Wasm DWARF sections and makes the bottle
+    # non-relocatable. Keep the release optimization without debug paths.
+    ENV["CFLAGS"] = "-O2"
+
     system "bash", "#{kandelo_root}/packages/registry/hello/build-hello.sh"
     chmod 0755, out_dir/"hello.wasm"
     bin.install out_dir/"hello.wasm" => "hello"
