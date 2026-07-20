@@ -130,7 +130,7 @@ class Less < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "4f1422d540498ad1876bb0b7d666f4c0f479950a3668144a689697deb2e59cfb"
+    rebuild 3
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "1e88b7c7050d7c0df94fa606be54ccfcef7c607bb8b1db1ac2fd0cdc40ce690b"
   end
 end
