@@ -1,0 +1,43 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 2375080,
+    "cache_key_sha": "43143be102f3f198c92248a9cee25c89b4bc531ad13217663011334522c69c26",
+    "payload_root": "wget/1.25.0",
+    "sha256": "43143be102f3f198c92248a9cee25c89b4bc531ad13217663011334522c69c26",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/wget/blobs/sha256:43143be102f3f198c92248a9cee25c89b4bc531ad13217663011334522c69c26"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/wget/1.25.0",
+  "links": [
+    {
+      "source": "bin/wget",
+      "target": "bin/wget",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/wget.info",
+      "target": "share/info/wget.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/wget.1",
+      "target": "share/man/man1/wget.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "wget",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/wget.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.25.0"
+}

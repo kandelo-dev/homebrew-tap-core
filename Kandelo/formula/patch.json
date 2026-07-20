@@ -46,7 +46,7 @@
   "name": "patch",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "a0a6728e88b8d914eac71a0bc81330fc9a60a1e2",
+  "tap_commit": "0261b9c8bd7fad02b908b8c61445164f48f5fb85",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "2.8"

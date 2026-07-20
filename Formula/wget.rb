@@ -194,4 +194,10 @@ class Wget < Formula
     )
     assert_match(/Connection refused/, failure)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "43143be102f3f198c92248a9cee25c89b4bc531ad13217663011334522c69c26"
+  end
+
 end
