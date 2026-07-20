@@ -13,6 +13,10 @@ class Ruby < Formula
   # brew bottle / pr-pull. Until then `brew install` builds from source. A
   # hand-written placeholder sha would make a default install try to pour a
   # nonexistent bottle and fail rather than build from source.
+  # The registry bridge resolves its host target with rustc and builds
+  # wasm-local-root-spill with cargo/rustc inside caller-owned scratch. Keep
+  # that native toolchain explicit instead of depending on the publisher PATH.
+  depends_on "rust" => :build
   depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin"
