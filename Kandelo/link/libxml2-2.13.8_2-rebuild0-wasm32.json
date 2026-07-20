@@ -1,0 +1,603 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1096869,
+    "cache_key_sha": "e461a9eed2839637ad061dd35d1b8569912e57a0daf84918f944f0bef3055595",
+    "payload_root": "libxml2/2.13.8_2",
+    "sha256": "e461a9eed2839637ad061dd35d1b8569912e57a0daf84918f944f0bef3055595",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libxml2/blobs/sha256:e461a9eed2839637ad061dd35d1b8569912e57a0daf84918f944f0bef3055595"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/libxml2/2.13.8_2",
+  "links": [
+    {
+      "source": "bin/xml2-config",
+      "target": "bin/xml2-config",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/HTMLparser.h",
+      "target": "include/libxml2/libxml/HTMLparser.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/HTMLtree.h",
+      "target": "include/libxml2/libxml/HTMLtree.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/SAX.h",
+      "target": "include/libxml2/libxml/SAX.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/SAX2.h",
+      "target": "include/libxml2/libxml/SAX2.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/c14n.h",
+      "target": "include/libxml2/libxml/c14n.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/catalog.h",
+      "target": "include/libxml2/libxml/catalog.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/chvalid.h",
+      "target": "include/libxml2/libxml/chvalid.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/debugXML.h",
+      "target": "include/libxml2/libxml/debugXML.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/dict.h",
+      "target": "include/libxml2/libxml/dict.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/encoding.h",
+      "target": "include/libxml2/libxml/encoding.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/entities.h",
+      "target": "include/libxml2/libxml/entities.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/globals.h",
+      "target": "include/libxml2/libxml/globals.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/hash.h",
+      "target": "include/libxml2/libxml/hash.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/list.h",
+      "target": "include/libxml2/libxml/list.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/nanoftp.h",
+      "target": "include/libxml2/libxml/nanoftp.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/nanohttp.h",
+      "target": "include/libxml2/libxml/nanohttp.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/parser.h",
+      "target": "include/libxml2/libxml/parser.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/parserInternals.h",
+      "target": "include/libxml2/libxml/parserInternals.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/pattern.h",
+      "target": "include/libxml2/libxml/pattern.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/relaxng.h",
+      "target": "include/libxml2/libxml/relaxng.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/schemasInternals.h",
+      "target": "include/libxml2/libxml/schemasInternals.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/schematron.h",
+      "target": "include/libxml2/libxml/schematron.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/threads.h",
+      "target": "include/libxml2/libxml/threads.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/tree.h",
+      "target": "include/libxml2/libxml/tree.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/uri.h",
+      "target": "include/libxml2/libxml/uri.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/valid.h",
+      "target": "include/libxml2/libxml/valid.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xinclude.h",
+      "target": "include/libxml2/libxml/xinclude.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xlink.h",
+      "target": "include/libxml2/libxml/xlink.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlIO.h",
+      "target": "include/libxml2/libxml/xmlIO.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlautomata.h",
+      "target": "include/libxml2/libxml/xmlautomata.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlerror.h",
+      "target": "include/libxml2/libxml/xmlerror.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlexports.h",
+      "target": "include/libxml2/libxml/xmlexports.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlmemory.h",
+      "target": "include/libxml2/libxml/xmlmemory.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlmodule.h",
+      "target": "include/libxml2/libxml/xmlmodule.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlreader.h",
+      "target": "include/libxml2/libxml/xmlreader.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlregexp.h",
+      "target": "include/libxml2/libxml/xmlregexp.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlsave.h",
+      "target": "include/libxml2/libxml/xmlsave.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlschemas.h",
+      "target": "include/libxml2/libxml/xmlschemas.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlschemastypes.h",
+      "target": "include/libxml2/libxml/xmlschemastypes.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlstring.h",
+      "target": "include/libxml2/libxml/xmlstring.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlunicode.h",
+      "target": "include/libxml2/libxml/xmlunicode.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlversion.h",
+      "target": "include/libxml2/libxml/xmlversion.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xmlwriter.h",
+      "target": "include/libxml2/libxml/xmlwriter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xpath.h",
+      "target": "include/libxml2/libxml/xpath.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xpathInternals.h",
+      "target": "include/libxml2/libxml/xpathInternals.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libxml2/libxml/xpointer.h",
+      "target": "include/libxml2/libxml/xpointer.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libxml2-2.13.8/libxml2-config-version.cmake",
+      "target": "lib/cmake/libxml2-2.13.8/libxml2-config-version.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libxml2-2.13.8/libxml2-config.cmake",
+      "target": "lib/cmake/libxml2-2.13.8/libxml2-config.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libxml2-2.13.8/libxml2-export-release.cmake",
+      "target": "lib/cmake/libxml2-2.13.8/libxml2-export-release.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libxml2-2.13.8/libxml2-export.cmake",
+      "target": "lib/cmake/libxml2-2.13.8/libxml2-export.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libxml2.a",
+      "target": "lib/libxml2.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/libxml-2.0.pc",
+      "target": "lib/pkgconfig/libxml-2.0.pc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/aclocal/libxml.m4",
+      "target": "share/aclocal/libxml.m4",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/general.html",
+      "target": "share/doc/libxml2/devhelp/general.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/home.png",
+      "target": "share/doc/libxml2/devhelp/home.png",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/index.html",
+      "target": "share/doc/libxml2/devhelp/index.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/left.png",
+      "target": "share/doc/libxml2/devhelp/left.png",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-HTMLparser.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-HTMLparser.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-HTMLtree.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-HTMLtree.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-SAX.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-SAX.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-SAX2.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-SAX2.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-c14n.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-c14n.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-catalog.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-catalog.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-chvalid.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-chvalid.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-debugXML.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-debugXML.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-dict.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-dict.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-encoding.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-encoding.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-entities.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-entities.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-globals.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-globals.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-hash.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-hash.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-list.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-list.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-nanoftp.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-nanoftp.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-nanohttp.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-nanohttp.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-parser.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-parser.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-parserInternals.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-parserInternals.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-pattern.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-pattern.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-relaxng.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-relaxng.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-schemasInternals.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-schemasInternals.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-schematron.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-schematron.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-threads.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-threads.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-tree.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-tree.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-uri.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-uri.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-valid.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-valid.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xinclude.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xinclude.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xlink.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xlink.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlIO.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlIO.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlautomata.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlautomata.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlerror.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlerror.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlexports.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlexports.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlmemory.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlmemory.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlmodule.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlmodule.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlreader.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlreader.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlregexp.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlregexp.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlsave.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlsave.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlschemas.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlschemas.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlschemastypes.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlschemastypes.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlstring.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlstring.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlunicode.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlunicode.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlversion.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlversion.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xmlwriter.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xmlwriter.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xpath.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xpath.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xpathInternals.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xpathInternals.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2-xpointer.html",
+      "target": "share/doc/libxml2/devhelp/libxml2-xpointer.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/libxml2.devhelp2",
+      "target": "share/doc/libxml2/devhelp/libxml2.devhelp2",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/meson.build",
+      "target": "share/doc/libxml2/devhelp/meson.build",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/right.png",
+      "target": "share/doc/libxml2/devhelp/right.png",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/style.css",
+      "target": "share/doc/libxml2/devhelp/style.css",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/devhelp/up.png",
+      "target": "share/doc/libxml2/devhelp/up.png",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/meson.build",
+      "target": "share/doc/libxml2/meson.build",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/xmlcatalog.html",
+      "target": "share/doc/libxml2/xmlcatalog.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/libxml2/xmllint.html",
+      "target": "share/doc/libxml2/xmllint.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/xml2-config.1",
+      "target": "share/man/man1/xml2-config.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/xmlcatalog.1",
+      "target": "share/man/man1/xmlcatalog.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/xmllint.1",
+      "target": "share/man/man1/xmllint.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "libxml2",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/libxml2.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "2.13.8_2"
+}

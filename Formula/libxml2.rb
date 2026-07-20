@@ -288,4 +288,10 @@ class Libxml2 < Formula
     end
     assert_equal "libxml2-cmake-ok\n", kandelo_run_wasm(cmake_build/"libxml2-cmake", [])
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "e461a9eed2839637ad061dd35d1b8569912e57a0daf84918f944f0bef3055595"
+  end
+
 end
