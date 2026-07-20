@@ -96,7 +96,7 @@ class Erlang < Formula
     otp_root.glob("**/*").select(&:file?).each do |file|
       relative = file.relative_path_from(otp_root)
       guest_path = "#{GUEST_OTP_ROOT}/#{relative}"
-      if file.stat.executable?
+      if file.stat.mode.anybits?(0111)
         runtime_programs[guest_path] = file
       else
         runtime_files[guest_path] = file
