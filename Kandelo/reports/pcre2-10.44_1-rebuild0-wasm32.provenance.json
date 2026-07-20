@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/pcre2.json",
-      "sha256": "ff1ed9f88c161460d41482a566652b954346423394de4c963241277573cc89c9"
+      "sha256": "6328ce97822fd0826c95fdc4a96f8e8360bee86c77ecc83ff37d05cf075042cd"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/pcre2-10.44_1-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "cd47b1741423a47091a74d93ada4a51dc65cfa4e69abd5beb6d13ba82a12e148"
+      "sha256": "41b55e3d72d4fc462f8f3154b9b046a0834fcb4e7c329da7daf8b8082ec7b4f0"
     },
     "provenance_json": {
       "path": "Kandelo/reports/pcre2-10.44_1-rebuild0-wasm32.provenance.json",
-      "sha256": "7c4ba8d8275bb198293e61257b2c361ae43a3a7e97a8d6696870f976b2b78b94"
+      "sha256": "587e2687c7b2f998ceaeed655de1b26fa0a4243e82648fbf8466d317ad4236da"
     }
   },
   "repositories": {
