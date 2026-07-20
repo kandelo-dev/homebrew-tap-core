@@ -33,7 +33,7 @@ class Erlang < Formula
     # OTP's package bridge runs native bootstrap Erlang and Python, and GNU tar
     # invokes zstd when it seals the deterministic runtime closure. Put only
     # those declared native tools on PATH; target Wasm dependencies remain
-    # excluded by KandeloFormulaSupport.
+    # excluded by the shared Formula support.
     kandelo_prepend_path! formula_opt_bin("erlang@28")
     kandelo_prepend_path! formula_opt_libexec("python@3.13")/"bin"
     kandelo_prepend_path! formula_opt_bin("gnu-tar")
