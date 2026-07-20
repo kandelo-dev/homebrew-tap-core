@@ -1,0 +1,68 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 322770,
+    "cache_key_sha": "4f1422d540498ad1876bb0b7d666f4c0f479950a3668144a689697deb2e59cfb",
+    "payload_root": "less/668_1",
+    "sha256": "4f1422d540498ad1876bb0b7d666f4c0f479950a3668144a689697deb2e59cfb",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/less/blobs/sha256:4f1422d540498ad1876bb0b7d666f4c0f479950a3668144a689697deb2e59cfb"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/less/668_1",
+  "links": [
+    {
+      "source": "bin/less",
+      "target": "bin/less",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/lessecho",
+      "target": "bin/lessecho",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/lesskey",
+      "target": "bin/lesskey",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/more",
+      "target": "bin/more",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/less.1",
+      "target": "share/man/man1/less.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/lessecho.1",
+      "target": "share/man/man1/lessecho.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/lesskey.1",
+      "target": "share/man/man1/lesskey.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/more.1",
+      "target": "share/man/man1/more.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "less",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/less.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "668_1"
+}

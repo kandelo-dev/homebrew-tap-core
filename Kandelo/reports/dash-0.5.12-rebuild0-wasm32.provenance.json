@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/dash.json",
-      "sha256": "487eb1742f91d7a4d3c4ce60f01a02b0ec8dcd509cc3e5fcbf8924bd0dda121e"
+      "sha256": "19bae346ccc749155d7a61ba7150fccbe558f268564c25a4be31ab99f04387c8"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/dash-0.5.12-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "b32c80ad6421ec18d0be7d154cfbb7d9fc9607c38b2738cdc324bb6605c9bc30"
+      "sha256": "4c4ad7958e0fbaabf23161fcf7811dc3b5facf881379403e9672a4c9e1e22f16"
     },
     "provenance_json": {
       "path": "Kandelo/reports/dash-0.5.12-rebuild0-wasm32.provenance.json",
-      "sha256": "1ab8409cc7d4f22d2a28c1913f663f0c2882397cf44cf35f6fe89424275fa671"
+      "sha256": "15ce6a15a9ffcbce82b667a0206ec47bf412362ab3265afbb78e6777711b083f"
     }
   },
   "repositories": {
