@@ -511,10 +511,10 @@ class KandeloFormulaSupportTest < Minitest::Test
         opt_libexec: Pathname("/prefix/opt/coreutils/libexec"),
       ),
       DependencyFormula.new(
-        full_name:   "wabt",
-        opt_bin:     Pathname("/prefix/opt/wabt/bin"),
-        opt_sbin:    Pathname("/prefix/opt/wabt/sbin"),
-        opt_libexec: Pathname("/prefix/opt/wabt/libexec"),
+        full_name:   "rust",
+        opt_bin:     Pathname("/prefix/opt/rust/bin"),
+        opt_sbin:    Pathname("/prefix/opt/rust/sbin"),
+        opt_libexec: Pathname("/prefix/opt/rust/libexec"),
       ),
     ]
     original = ENV.to_hash
@@ -524,7 +524,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       "/prefix/opt/coreutils/bin",
       "/prefix/opt/coreutils/sbin",
       "/prefix/opt/coreutils/libexec/bin",
-      "/prefix/opt/wabt/bin",
+      "/prefix/opt/rust/bin",
       "/usr/bin",
     ].join(File::PATH_SEPARATOR)
 
@@ -536,10 +536,17 @@ class KandeloFormulaSupportTest < Minitest::Test
     refute_includes build_path, "/prefix/opt/coreutils/bin"
     refute_includes build_path, "/prefix/opt/coreutils/sbin"
     refute_includes build_path, "/prefix/opt/coreutils/libexec/bin"
-    assert_includes build_path, "/prefix/opt/wabt/bin"
+    assert_includes build_path, "/prefix/opt/rust/bin"
     assert_includes build_path, "/usr/bin"
   ensure
     ENV.replace(original) if original
+  end
+
+  def test_ruby_declares_rust_as_a_native_build_dependency
+    formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
+    rust_declarations = formula.lines.grep(/^\s*depends_on "rust"/)
+
+    assert_equal [%(  depends_on "rust" => :build\n)], rust_declarations
   end
 
   def test_sdk_activation_cannot_reintroduce_the_global_homebrew_path
