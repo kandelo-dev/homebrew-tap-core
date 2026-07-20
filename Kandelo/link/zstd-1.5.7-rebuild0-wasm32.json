@@ -1,0 +1,88 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1087314,
+    "cache_key_sha": "db3d6e0d92799b39afce67376f773f26338395ef2fd992ba2f49431252863063",
+    "payload_root": "zstd/1.5.7",
+    "sha256": "db3d6e0d92799b39afce67376f773f26338395ef2fd992ba2f49431252863063",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/zstd/blobs/sha256:db3d6e0d92799b39afce67376f773f26338395ef2fd992ba2f49431252863063"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/zstd/1.5.7",
+  "links": [
+    {
+      "source": "bin/unzstd",
+      "target": "bin/unzstd",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/zstd",
+      "target": "bin/zstd",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/zstdcat",
+      "target": "bin/zstdcat",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/zstdmt",
+      "target": "bin/zstdmt",
+      "type": "symlink"
+    },
+    {
+      "source": "include/zdict.h",
+      "target": "include/zdict.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/zstd.h",
+      "target": "include/zstd.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/zstd_errors.h",
+      "target": "include/zstd_errors.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libzstd.a",
+      "target": "lib/libzstd.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/libzstd.pc",
+      "target": "lib/pkgconfig/libzstd.pc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/unzstd.1",
+      "target": "share/man/man1/unzstd.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/zstd.1",
+      "target": "share/man/man1/zstd.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/zstdcat.1",
+      "target": "share/man/man1/zstdcat.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "zstd",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/zstd.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.5.7"
+}

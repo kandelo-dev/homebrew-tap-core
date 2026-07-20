@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/sqlite.json",
-      "sha256": "c67a67d114fefc8edd51033b8c945e396d8e4f657df0913af07d2e736a2e3bdd"
+      "sha256": "b9ac44bb1b5779994ef2f542f264a0c7b3ea054a86acc47ef2a466abb6e424dd"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/sqlite-3.49.1_1-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "cc14963c8d7353f336eb8ea048f2247a5c9b00be2b18d2db509384f3afae4788"
+      "sha256": "9d74667b630f9cb477c5fc4bf8a005c99680d5e5cb3663fa8fc1a74dff6f6569"
     },
     "provenance_json": {
       "path": "Kandelo/reports/sqlite-3.49.1_1-rebuild0-wasm32.provenance.json",
-      "sha256": "969809749c19a48805f0714fb605bec855dd6445c0f49f1079c081ce14b3301c"
+      "sha256": "a1e0ff4b91a5eb4b9ad3276d61c6a1dc5b2bc42d0cada6c95e2db9d4f3304b41"
     }
   },
   "repositories": {
