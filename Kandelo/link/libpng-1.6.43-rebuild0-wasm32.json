@@ -1,0 +1,89 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 359962,
+    "cache_key_sha": "19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db",
+    "payload_root": "libpng/1.6.43",
+    "sha256": "19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libpng/blobs/sha256:19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {},
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/libpng/1.6.43",
+  "links": [
+    {
+      "source": "include/libpng16/png.h",
+      "target": "include/libpng16/png.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libpng16/pngconf.h",
+      "target": "include/libpng16/pngconf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libpng16/pnglibconf.h",
+      "target": "include/libpng16/pnglibconf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/png.h",
+      "target": "include/png.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/pngconf.h",
+      "target": "include/pngconf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/pnglibconf.h",
+      "target": "include/pnglibconf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libpng.a",
+      "target": "lib/libpng.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libpng16.a",
+      "target": "lib/libpng16.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/libpng.pc",
+      "target": "lib/pkgconfig/libpng.pc",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/libpng16.pc",
+      "target": "lib/pkgconfig/libpng16.pc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man3/libpng.3",
+      "target": "share/man/man3/libpng.3",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man3/libpngpf.3",
+      "target": "share/man/man3/libpngpf.3",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man5/png.5",
+      "target": "share/man/man5/png.5",
+      "type": "symlink"
+    }
+  ],
+  "package": "libpng",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/libpng.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.6.43"
+}

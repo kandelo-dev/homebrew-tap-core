@@ -37,7 +37,7 @@
   "name": "coreutils",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "5bb4ad4f044fa8b9488736b2ba391db77d30fb1b",
+  "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "9.6"
