@@ -928,18 +928,70 @@ class KandeloFormulaSupportTest < Minitest::Test
   end
 
   def test_execution_accepts_explicit_guest_files
-    harness = Harness.new
+    Dir.mktmpdir("kandelo-formula-guest-files") do |dir|
+      harness = Harness.new
+      harness.test_path = Pathname(dir)/"formula test"
+      harness.test_path.mkpath
+      guest_files = { "/etc/service.conf" => "/formula/service.conf" }
 
-    harness.kandelo_run_wasm(
-      "program.wasm",
-      [],
-      guest_files: { "/etc/service.conf" => "/formula/service.conf" },
-    )
+      harness.kandelo_run_wasm("program.wasm", [], guest_files:)
 
-    assert_includes harness.command, "run-network-wasm.ts"
-    assert_includes harness.command, "KANDELO_FORMULA_GUEST_FILES_JSON="
-    assert_includes harness.command, "/etc/service.conf"
-    assert_includes harness.command, "/formula/service.conf"
+      assert_includes harness.command, "run-network-wasm.ts"
+      assignment = Shellwords.shellsplit(harness.command).find do |token|
+        token.start_with?("KANDELO_FORMULA_GUEST_FILES_MANIFEST=")
+      end
+      refute_nil assignment
+      manifest = Pathname(assignment.delete_prefix("KANDELO_FORMULA_GUEST_FILES_MANIFEST="))
+      assert_equal guest_files, JSON.parse(manifest.read)
+      refute_includes harness.command, "KANDELO_FORMULA_GUEST_FILES_JSON="
+      refute_includes harness.command, "/etc/service.conf"
+      refute_includes harness.command, "/formula/service.conf"
+    end
+  end
+
+  def test_execution_keeps_large_guest_file_maps_out_of_argv_and_environment
+    original = ENV.to_hash
+    Dir.mktmpdir("kandelo-formula-large-guest-files") do |dir|
+      root = Pathname(dir)/"kandelo root"
+      fake_bin = Pathname(dir)/"fake bin"
+      root.mkpath
+      fake_bin.mkpath
+      fake_node = fake_bin/"node"
+      fake_node.binwrite <<~SH
+        #!/bin/sh
+        set -eu
+        test -f "$KANDELO_FORMULA_GUEST_FILES_MANIFEST"
+        printf 'manifest-ok\n'
+      SH
+      fake_node.chmod(0755)
+      ENV["PATH"] = [fake_bin, ENV.fetch("PATH")].join(File::PATH_SEPARATOR)
+      ENV.delete("HOMEBREW_KANDELO_NODE")
+
+      harness = RuntimeHarness.new
+      harness.root_path = root.to_s
+      harness.test_path = Pathname(dir)/"formula test"
+      harness.test_path.mkpath
+      guest_files = 2_085.times.to_h do |index|
+        name = "runtime-#{format("%04d", index)}-#{"x" * 48}.vim"
+        ["/opt/vim/share/vim/vim92/#{name}", "/formula/vim/runtime/#{name}"]
+      end
+
+      output = harness.kandelo_run_wasm("program.wasm", [], guest_files:)
+
+      assert_equal "manifest-ok\n", output
+      assignment = Shellwords.shellsplit(harness.command).find do |token|
+        token.start_with?("KANDELO_FORMULA_GUEST_FILES_MANIFEST=")
+      end
+      refute_nil assignment
+      manifest = Pathname(assignment.delete_prefix("KANDELO_FORMULA_GUEST_FILES_MANIFEST="))
+      assert_equal guest_files, JSON.parse(manifest.read)
+      assert_operator manifest.size, :>, 131_072
+      assert_operator harness.command.bytesize, :<, 2_048
+      refute_includes harness.command, guest_files.keys.last
+      refute_includes harness.command, guest_files.values.last
+    end
+  ensure
+    ENV.replace(original) if original
   end
 
   def test_execution_accepts_guest_argv0_and_writable_host_directory
