@@ -1,4 +1,4 @@
-require (Tap.fetch("automattic", "kandelo-homebrew").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
 
 class Texlive < Formula
   include KandeloFormulaSupport
@@ -96,7 +96,8 @@ class Texlive < Formula
   ].freeze
   desc "Typesetting engine and selected TeX Live runtime for Kandelo"
   homepage "https://www.tug.org/texlive/"
-  url "https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/texlive-20250308-source.tar.xz"
+  url "https://pi.kwarc.info/historic/systems/texlive/2025/texlive-20250308-source.tar.xz"
+  mirror "https://texlive.info/historic/systems/texlive/2025/texlive-20250308-source.tar.xz"
   mirror "https://ftp.tu-chemnitz.de/pub/tug/historic/systems/texlive/2025/texlive-20250308-source.tar.xz"
   sha256 "fffdb1a3d143c177a4398a2229a40d6a88f18098e5f6dcfd57648c9f2417490f"
   license :cannot_represent
@@ -104,9 +105,9 @@ class Texlive < Formula
   depends_on "binaryen" => :build
   depends_on "pkgconf" => :build
   depends_on "wabt" => :build
-  depends_on "automattic/kandelo-homebrew/libcxx"
-  depends_on "automattic/kandelo-homebrew/libpng"
-  depends_on "automattic/kandelo-homebrew/zlib"
+  depends_on "kandelo-dev/tap-core/libcxx"
+  depends_on "kandelo-dev/tap-core/libpng"
+  depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin"
 
@@ -114,21 +115,24 @@ class Texlive < Formula
   # 20250308 snapshot. The mutable tlnet repository and install-tl transaction
   # used by the registry recipe are intentionally not part of this formula.
   resource "texlive-extra" do
-    url "https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/texlive-20250308-extra.tar.xz"
+    url "https://pi.kwarc.info/historic/systems/texlive/2025/texlive-20250308-extra.tar.xz"
+    mirror "https://texlive.info/historic/systems/texlive/2025/texlive-20250308-extra.tar.xz"
     mirror "https://ftp.tu-chemnitz.de/pub/tug/historic/systems/texlive/2025/texlive-20250308-extra.tar.xz"
     version TEXLIVE_SNAPSHOT
     sha256 "ea69cfecbc9b138acbc45476e8cb4d9357f5e4e45fd12b3bf9ceabbebd7669d2"
   end
 
   resource "texlive-texmf" do
-    url "https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/texlive-20250308-texmf.tar.xz"
+    url "https://pi.kwarc.info/historic/systems/texlive/2025/texlive-20250308-texmf.tar.xz"
+    mirror "https://texlive.info/historic/systems/texlive/2025/texlive-20250308-texmf.tar.xz"
     mirror "https://ftp.tu-chemnitz.de/pub/tug/historic/systems/texlive/2025/texlive-20250308-texmf.tar.xz"
     version TEXLIVE_SNAPSHOT
     sha256 "08dcda7430bf0d2f6ebb326f1e197e1473d3f7cc0984a2adb7236df45316c7cf"
   end
 
   resource "texlive-installer" do
-    url "https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/install-tl-unx.tar.gz"
+    url "https://pi.kwarc.info/historic/systems/texlive/2025/install-tl-unx.tar.gz"
+    mirror "https://texlive.info/historic/systems/texlive/2025/install-tl-unx.tar.gz"
     mirror "https://ftp.tu-chemnitz.de/pub/tug/historic/systems/texlive/2025/install-tl-unx.tar.gz"
     version TEXLIVE_SNAPSHOT
     sha256 "9938f192af75f792e84282580cce6eedac32969e0e07b33cb39ca1b699e948b6"
@@ -137,12 +141,10 @@ class Texlive < Formula
   def install
     kandelo_require_arch!("wasm32")
     root = Pathname(kandelo_require_root!)
-    zlib = formula_opt_prefix("automattic/kandelo-homebrew/zlib")
-    libpng = formula_opt_prefix("automattic/kandelo-homebrew/libpng")
-    libcxx = formula_opt_prefix("automattic/kandelo-homebrew/libcxx")
+    zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
+    libpng = formula_opt_prefix("kandelo-dev/tap-core/libpng")
+    libcxx = formula_opt_prefix("kandelo-dev/tap-core/libcxx")
     pkg_config = formula_opt_bin("pkgconf")/"pkg-config"
-    build_script = Pathname(__dir__).parent/"Kandelo/formula_support/build-texlive-pdftex.sh"
-    config_generator = Pathname(__dir__).parent/"Kandelo/formula_support/generate-texlive-runtime-config.pl"
 
     tlpdb = buildpath/"texlive.tlpdb"
     resource("texlive-extra").stage do
@@ -210,20 +212,19 @@ class Texlive < Formula
     cross_build = buildpath/"cross-build"
     linked_pdftex = buildpath/"pdftex.wasm"
     jobs = [ENV.make_jobs, 2].min
-    host_bash = kandelo_host_tool("bash")
-    system host_bash, build_script, "engine",
+    kandelo_run_texlive_pdftex "engine",
       buildpath, host_build, cross_build, root, zlib, libpng, libcxx,
       pkg_config, linked_pdftex, GUEST_PREFIX, jobs
     generate_runtime_config!(
       texmf_dist, tlpdb, runtime_packages, upstream_root,
-      config_generator, host_build/"texk/kpathsea/kpsewhich"
+      host_build/"texk/kpathsea/kpsewhich"
     )
 
     fixture = buildpath/"kandelo-texlive-smoke.tex"
     fixture.write texlive_test_document
     format_work = buildpath/"format-work"
     host_smoke = buildpath/"host-smoke"
-    system host_bash, build_script, "formats",
+    kandelo_run_texlive_pdftex "formats",
       host_build/"texk/web2c/pdftex", texmf_dist, format_work, fixture, host_smoke
 
     test_files = recorded_texmf_inputs(
@@ -709,7 +710,7 @@ class Texlive < Formula
     inreplace texmf_cnf, "!!$TEXMFDIST", "$TEXMFDIST"
   end
 
-  def generate_runtime_config!(texmf_dist, tlpdb, runtime_packages, upstream_root, generator_script, kpsewhich)
+  def generate_runtime_config!(texmf_dist, tlpdb, runtime_packages, upstream_root, kpsewhich)
     config_contracts = [*LANGUAGE_CONFIG_FILES.values, UPDMAP_CONFIG]
     config_contracts.each do |contract|
       upstream = texmf_dist/contract.fetch(:relative_path)
@@ -727,10 +728,9 @@ class Texlive < Formula
     selected_packages.write "#{runtime_packages.keys.sort.join("\n")}\n"
     output_dir = buildpath/"generated-runtime-config"
     module_root = upstream_root/"tlpkg"
-    odie "pinned TeX Live runtime-config generator is missing" unless generator_script.file?
     odie "pinned TeX Live Perl modules are missing" unless (module_root/"TeXLive/TLPDB.pm").file?
     ln_s module_root/"TeXLive", generator_root/"tlpkg/TeXLive"
-    system kandelo_host_tool("perl"), "-I#{module_root}", generator_script,
+    kandelo_generate_texlive_runtime_config module_root,
       generator_root, selected_packages, output_dir, TEXLIVE_SNAPSHOT, kpsewhich
 
     LANGUAGE_CONFIG_FILES.each do |filename, contract|
