@@ -1,0 +1,99 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 850730,
+    "cache_key_sha": "91cfe18edf966c1b3f39c8a1f34983e0e70e84a4a5d1dd2aa71e328fe32c60da",
+    "payload_root": "libcurl/8.11.1_1",
+    "sha256": "91cfe18edf966c1b3f39c8a1f34983e0e70e84a4a5d1dd2aa71e328fe32c60da",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libcurl/blobs/sha256:91cfe18edf966c1b3f39c8a1f34983e0e70e84a4a5d1dd2aa71e328fe32c60da"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {},
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/libcurl/8.11.1_1",
+  "links": [
+    {
+      "source": "include/curl/curl.h",
+      "target": "include/curl/curl.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/curl/curlver.h",
+      "target": "include/curl/curlver.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/curl/easy.h",
+      "target": "include/curl/easy.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/curl/header.h",
+      "target": "include/curl/header.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/curl/mprintf.h",
+      "target": "include/curl/mprintf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/curl/multi.h",
+      "target": "include/curl/multi.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/curl/options.h",
+      "target": "include/curl/options.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/curl/stdcheaders.h",
+      "target": "include/curl/stdcheaders.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/curl/system.h",
+      "target": "include/curl/system.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/curl/typecheck-gcc.h",
+      "target": "include/curl/typecheck-gcc.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/curl/urlapi.h",
+      "target": "include/curl/urlapi.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/curl/websockets.h",
+      "target": "include/curl/websockets.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libcurl-pic.a",
+      "target": "lib/libcurl-pic.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libcurl.a",
+      "target": "lib/libcurl.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/libcurl.pc",
+      "target": "lib/pkgconfig/libcurl.pc",
+      "type": "symlink"
+    }
+  ],
+  "package": "libcurl",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/libcurl.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "8.11.1_1"
+}

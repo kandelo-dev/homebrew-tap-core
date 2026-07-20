@@ -14,8 +14,7 @@ class Libcurl < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 2
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "4efa1604ecdd25fa580fea2da2ed52b6a968c30c2726bc6dd481c4049258cc9a"
-    sha256 cellar: :any_skip_relocation, wasm64_kandelo: "c7a98029c72d019f7f32f8e9a8d66a62971a80efaba93e7d87ccbc0cd607a3a2"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "91cfe18edf966c1b3f39c8a1f34983e0e70e84a4a5d1dd2aa71e328fe32c60da"
   end
 
   depends_on "pkgconf" => [:build, :test]
