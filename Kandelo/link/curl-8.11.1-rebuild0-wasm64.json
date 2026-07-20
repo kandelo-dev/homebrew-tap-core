@@ -1,0 +1,33 @@
+{
+  "arch": "wasm64",
+  "bottle": {
+    "bytes": 1372371,
+    "cache_key_sha": "331fb01d9e47a0c7cfdb3eee50c3e0f57609996f2851d074b741b8410bc29284",
+    "payload_root": "curl/8.11.1",
+    "sha256": "331fb01d9e47a0c7cfdb3eee50c3e0f57609996f2851d074b741b8410bc29284",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/curl/blobs/sha256:331fb01d9e47a0c7cfdb3eee50c3e0f57609996f2851d074b741b8410bc29284"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/curl/8.11.1",
+  "links": [
+    {
+      "source": "bin/curl",
+      "target": "bin/curl",
+      "type": "symlink"
+    }
+  ],
+  "package": "curl",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/curl.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "8.11.1"
+}

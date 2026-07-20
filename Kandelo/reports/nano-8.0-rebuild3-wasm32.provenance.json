@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "8fc173594f7e5b03a951a31312605e60a34f836e0a50b34b7eceb58f8614c57c"
+      "sha256": "d5712d38acc647e5c4f780245635a490d5d203c16c0831cfc4f0bf77a6de5b9e"
     },
     "provenance_json": {
       "path": "Kandelo/reports/nano-8.0-rebuild3-wasm32.provenance.json",
-      "sha256": "a7a41df9f933cd338822a67856dd290c341657a0d19fef1b68155f4acd134d9c"
+      "sha256": "cb225413941586ce6ad24c4e96b57f73466631866c2be26ec04b145646b5bf65"
     }
   },
   "repositories": {
