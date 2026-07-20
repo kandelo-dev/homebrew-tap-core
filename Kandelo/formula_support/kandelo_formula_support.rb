@@ -408,6 +408,23 @@ module KandeloFormulaSupport
     wasm
   end
 
+  # Move Homebrew's checksum-verified source into a dedicated root before the
+  # Tier-2 bridge creates sibling work and output roots. Registry recipes copy
+  # this immutable input before changing source files or generating build state.
+  def kandelo_stage_verified_formula_source
+    source_dir = buildpath/"kandelo-package-source"
+    odie "Kandelo Formula source was already staged at #{source_dir}" if source_dir.exist?
+
+    source_entries = buildpath.children
+    odie "Homebrew did not stage Formula source under #{buildpath}" if source_entries.empty?
+
+    source_dir.mkpath
+    source_entries.each do |entry|
+      FileUtils.mv(entry, source_dir/entry.basename)
+    end
+    source_dir
+  end
+
   # Transitional Tier-2 bridge (spec §6 deviation): activate the SDK, export the
   # WASM_POSIX_DEP_* build-script contract, and shell out to the registry
   # `build-<name>.sh`. Returns the out dir the script installed into.
