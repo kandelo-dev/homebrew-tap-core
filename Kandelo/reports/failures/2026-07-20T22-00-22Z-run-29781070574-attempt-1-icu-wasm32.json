@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "formula": "icu",
+  "arch": "wasm32",
+  "release_tag": "bottles-abi-v41",
+  "status": "failed",
+  "attempted_at": "2026-07-20T22:00:22Z",
+  "attempted_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29781070574",
+  "kandelo_commit": "110619f8e7e5d51ec85b62f526176535462cd3bd",
+  "tap_commit": "c70bc9ee31e3fc56761fc31d8023655ba16b7f59",
+  "error": "publish-handoff=failure; validate-payload=skipped; publish=skipped"
+}
