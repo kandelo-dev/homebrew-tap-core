@@ -1,0 +1,63 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 487549,
+    "cache_key_sha": "4333ceb2dbb77ea96b652ec17ef8894e06c2f3d20f298b8a09d62d099259c4ef",
+    "payload_root": "make/4.4.1",
+    "sha256": "4333ceb2dbb77ea96b652ec17ef8894e06c2f3d20f298b8a09d62d099259c4ef",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/make/blobs/sha256:4333ceb2dbb77ea96b652ec17ef8894e06c2f3d20f298b8a09d62d099259c4ef"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/make/4.4.1",
+  "links": [
+    {
+      "source": "bin/make",
+      "target": "bin/make",
+      "type": "symlink"
+    },
+    {
+      "source": "include/gnumake.h",
+      "target": "include/gnumake.h",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/make.info",
+      "target": "share/info/make.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/make.info-1",
+      "target": "share/info/make.info-1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/make.info-2",
+      "target": "share/info/make.info-2",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/make.info-3",
+      "target": "share/info/make.info-3",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/make.1",
+      "target": "share/man/man1/make.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "make",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/make.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "4.4.1"
+}
