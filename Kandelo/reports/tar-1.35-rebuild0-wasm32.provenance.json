@@ -1,42 +1,42 @@
 {
   "bottle": {
     "bottle_tag": "wasm32_kandelo",
-    "bytes": 359962,
-    "cache_key_sha": "19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db",
+    "bytes": 1058565,
+    "cache_key_sha": "18a020ab36b0354d2fda2bded59d5c25d1d83efd228ac9965668382a0ce979af",
     "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
     "prefix": "/home/linuxbrew/.linuxbrew",
-    "sha256": "19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libpng/blobs/sha256:19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db"
+    "sha256": "18a020ab36b0354d2fda2bded59d5c25d1d83efd228ac9965668382a0ce979af",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/tar/blobs/sha256:18a020ab36b0354d2fda2bded59d5c25d1d83efd228ac9965668382a0ce979af"
   },
   "build": {
     "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
     "dev_shell": "scripts/dev-shell.sh",
-    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724870782",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724872146",
     "job": "verify-bottle",
     "runner_os": "Linux",
     "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
     "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
   },
   "formula": {
-    "path": "Formula/libpng.rb",
-    "sha256": "1405ca0b04ed4f8109d8039f63165a5478fcadf1ebd604997955ee17e8b917ec"
+    "path": "Formula/tar.rb",
+    "sha256": "51d94907662ca2ffc312d6d88cd579f6dfba37cdaaf4735c3374a61292d5f42a"
   },
   "metadata": {
     "formula_json": {
-      "path": "Kandelo/formula/libpng.json",
-      "sha256": "71c90fb0fa86ee914a97adb0b892710f4dc18cdd9b4ea2470da76a6ec5269f61"
+      "path": "Kandelo/formula/tar.json",
+      "sha256": "1798e96288219a5f4beb77f4137db0834b80ef9017f62ddbaa3d4ad94e785650"
     },
     "link_manifest_json": {
-      "path": "Kandelo/link/libpng-1.6.43-rebuild0-wasm32.json",
-      "sha256": "7c6d40f6abc82310b2838be642f35c602f3138053d94ee8b8cf413e3ff65c6c0"
+      "path": "Kandelo/link/tar-1.35-rebuild0-wasm32.json",
+      "sha256": "540c6ba59cf4fa5a928bfbf2132f10870eea09b6c219ffb00c6eb3819b637e30"
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
       "sha256": "5f49c82ca2089dc928435f83ef2da0343808bf3233f0275fee93c0a38440c062"
     },
     "provenance_json": {
-      "path": "Kandelo/reports/libpng-1.6.43-rebuild0-wasm32.provenance.json",
-      "sha256": "1280ffd46e5f3ab41ab0dbe42e7553b7d334e69b440d204650a91bc0a2f84af9"
+      "path": "Kandelo/reports/tar-1.35-rebuild0-wasm32.provenance.json",
+      "sha256": "8af2d7b7f1732f03d2a5ad9956df556548138da255865e5ff4554fb94782fc22"
     }
   },
   "repositories": {
@@ -50,8 +50,8 @@
     "arch": "wasm32",
     "bottle_rebuild": 0,
     "kandelo_abi": 41,
-    "package": "libpng",
-    "version": "1.6.43"
+    "package": "tar",
+    "version": "1.35"
   },
   "validation": {
     "outcome_lists": [
@@ -60,9 +60,9 @@
         "name": "schema",
         "passed": [
           "Kandelo/metadata.json",
-          "Kandelo/formula/libpng.json",
-          "Kandelo/link/libpng-1.6.43-rebuild0-wasm32.json",
-          "Kandelo/reports/libpng-1.6.43-rebuild0-wasm32.provenance.json"
+          "Kandelo/formula/tar.json",
+          "Kandelo/link/tar-1.35-rebuild0-wasm32.json",
+          "Kandelo/reports/tar-1.35-rebuild0-wasm32.provenance.json"
         ],
         "skipped": [],
         "status": "success"
@@ -93,9 +93,9 @@
         "failed": [],
         "name": "node_smoke",
         "passed": [
-          "Homebrew force-poured libpng from anonymous-public-readback",
+          "Homebrew force-poured tar from anonymous-public-readback",
           "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
-          "exact bottle sha256: 19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db"
+          "exact bottle sha256: 18a020ab36b0354d2fda2bded59d5c25d1d83efd228ac9965668382a0ce979af"
         ],
         "skipped": [],
         "status": "success"
