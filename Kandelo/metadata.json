@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-20T07:50:03Z",
+  "generated_at": "2026-07-20T07:50:08Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
@@ -1089,6 +1089,50 @@
       "full_name": "kandelo-dev/tap-core/xz",
       "name": "xz",
       "version": "5.6.2_1"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-20T07:50:08Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724872738",
+          "built_from": {
+            "formula_sha256": "cb0e38419bfe3afcb88a983e70ad6d1f3fd4f4e1ae8ff2749aa4f0d0d2ad4639",
+            "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 354381,
+          "cache_key_sha": "c28a0fb31eba5991fd3a3ee0e000a163c319d7a42a8f7c305fc4c1d4371ff65c",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/zip-3.0-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "c28a0fb31eba5991fd3a3ee0e000a163c319d7a42a8f7c305fc4c1d4371ff65c",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/zip/blobs/sha256:c28a0fb31eba5991fd3a3ee0e000a163c319d7a42a8f7c305fc4c1d4371ff65c"
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "unzip",
+          "version": "6.0"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/zip.json",
+      "formula_path": "Formula/zip.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/zip",
+      "name": "zip",
+      "version": "3.0"
     },
     {
       "bottle_rebuild": 0,

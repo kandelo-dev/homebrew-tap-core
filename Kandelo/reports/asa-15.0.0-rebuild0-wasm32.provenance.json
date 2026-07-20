@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "a96225648454f1c6760d004fe7939e9ca6fd997fb95e772f47e5835f57d4ee22"
+      "sha256": "0f6f98d20edc731153ef653f3e7fcbe9277db3c5b48063e8f06ad2aa3f6cefc6"
     },
     "provenance_json": {
       "path": "Kandelo/reports/asa-15.0.0-rebuild0-wasm32.provenance.json",
-      "sha256": "47e09ada75c4a828312e6a67850b88bdbccd4e71612a1d9b03ef5aa65eed1e94"
+      "sha256": "1ff0e7bd04d5afcc7f72648e207895a049e94b5f0c864b6f1d1274c8fd833bad"
     }
   },
   "repositories": {
