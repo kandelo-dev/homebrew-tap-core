@@ -205,11 +205,15 @@ After a failed publication or a publisher-pin change, submit a fresh
 retains the original caller workflow and its pinned reusable-workflow revision,
 while a fresh dispatch loads the reviewed caller now on tap `main`, creates new
 run-local receipts, and replans against current tap state. Preserve the old run
-and failure report, and never move artifacts manually between runs. The
-[authoritative Homebrew publishing contract](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md#public-package-creation-and-legacy-namespace-retirement)
-owns the complete trust, readiness, read-only acceptance, and legacy-cleanup
-procedure. This tap links to that procedure instead of duplicating operator
-commands that must change with the publisher and namespace contracts.
+and failure report, and never move artifacts manually between runs. Use the
+[exact caller-pin rotation](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md#rotating-the-caller-workflow-pin)
+and
+[dispatch/retry procedures](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md#dispatch-and-retry-policy)
+from the authoritative Homebrew publishing contract. That contract also owns
+the complete trust, readiness, read-only acceptance, and
+[legacy-cleanup procedure](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md#public-package-creation-and-legacy-namespace-retirement).
+This tap links to those procedures instead of duplicating commands that must
+change with the publisher and namespace contracts.
 
 If the failed run already uploaded public bottle bytes and a retry could produce
 different bytes, reserve the next bottle identity before dispatching it. Set the
@@ -220,7 +224,9 @@ finalizer replaces the complete block with its generated checksum and matching
 sidecars. Run `homebrew-validate` before merging the reservation. A Formula with
 no generated catalog entry should remain validator-clean; if last-green
 sidecars exist, document only their temporary rebuild mismatch and do not waive
-unrelated validator failures.
+unrelated validator failures. The
+[occupied-identity recovery procedure](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md#recovering-an-occupied-immutable-bottle-identity)
+defines the exact evidence and reservation sequence.
 
 Production keeps `kandelo-dev/tap-core` as the canonical Homebrew identity for
 Formula references, OCI titles, and sidecars. Bottle transport instead uses the

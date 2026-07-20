@@ -39,11 +39,13 @@ validator development. It is not published metadata.
 generated sidecars. The publisher reads them from the exact tap commit and
 never rewrites them.
 
-Schema 2 also references `vfs-acceptance-shell.json`. The accepted Brewfile
-includes the published Dash bottle as an explicit root, and the exact composed
-image must start that VFS-owned shell in Chromium without downloading Kandelo's
-legacy shell assets. The selected `file-formula` command continues to prove the
-dependency-bearing bottle closure independently in Node and Chromium.
+Schema 2 also references `vfs-acceptance-shell.json`. The current policy selects
+the published Dash bottle as an explicit Brewfile root and `file-formula` as the
+dependency-bearing command. These reviewed files are selection policy, not
+runtime evidence. Default-shell acceptance remains pending until a required
+`file-formula` publication produces accepted generated sidecars, runs the exact
+command in Node and Chromium, and starts that VFS-owned shell through the full
+browser machine without downloading Kandelo's legacy shell assets.
 
 ## Generation
 
@@ -51,7 +53,12 @@ The publish workflow generates this directory with:
 
 ```bash
 cd /path/to/kandelo
-scripts/dev-shell.sh cargo xtask homebrew-sidecars \
+host_target="$(
+  bash scripts/dev-shell.sh rustc -vV |
+    awk '/^host/ {print $2}'
+)"
+bash scripts/dev-shell.sh cargo run --release -p xtask \
+  --target "$host_target" --quiet -- homebrew-sidecars \
   --tap-root /path/to/homebrew-tap-core \
   --input /path/to/sidecars-input.json \
   --previous-metadata /path/to/previous/Kandelo/metadata.json
@@ -95,7 +102,12 @@ Run the repo-local validator against a generated tap checkout:
 
 ```bash
 cd /path/to/kandelo
-scripts/dev-shell.sh cargo xtask homebrew-validate \
+host_target="$(
+  bash scripts/dev-shell.sh rustc -vV |
+    awk '/^host/ {print $2}'
+)"
+bash scripts/dev-shell.sh cargo run --release -p xtask \
+  --target "$host_target" --quiet -- homebrew-validate \
   --tap-root /path/to/homebrew-tap-core
 ```
 
