@@ -76,4 +76,10 @@ class Nano < Formula
     refute_includes binary, prefix.to_s
     refute_match %r{/Users/[^/]+/}, binary
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "083e9714f098287a7753db919847b44d2dd6d0457f6a726da66d993ca379b189"
+  end
 end

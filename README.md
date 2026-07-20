@@ -208,6 +208,17 @@ owns the complete trust, readiness, read-only acceptance, and legacy-cleanup
 procedure. This tap links to that procedure instead of duplicating operator
 commands that must change with the publisher and namespace contracts.
 
+If the failed run already uploaded public bottle bytes and a retry could produce
+different bytes, reserve the next bottle identity before dispatching it. Set the
+Formula to the next positive `rebuild` and keep the SHA-256 of the occupied
+public child in that temporary bottle block as reviewable evidence; do not invent
+a placeholder or overwrite the existing registry reference. The retry's trusted
+finalizer replaces the complete block with its generated checksum and matching
+sidecars. Run `homebrew-validate` before merging the reservation. A Formula with
+no generated catalog entry should remain validator-clean; if last-green
+sidecars exist, document only their temporary rebuild mismatch and do not waive
+unrelated validator failures.
+
 Production keeps `kandelo-dev/tap-core` as the canonical Homebrew identity for
 Formula references, OCI titles, and sidecars. Bottle transport instead uses the
 exact public source-repository namespace,
