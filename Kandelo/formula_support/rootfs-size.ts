@@ -4,6 +4,29 @@ const ROOTFS_BLOCK_SIZE = 4096;
 const MIN_ROOTFS_SIZE = 2 * 1024 * 1024;
 const ROOTFS_HEADROOM = 1024 * 1024;
 
+interface RootfsSpace {
+  bsize: number;
+  blocks: number;
+  bfree: number;
+}
+
+export function rootfsUsedBytes(space: RootfsSpace): number {
+  const { bsize, blocks, bfree } = space;
+  if (
+    !Number.isSafeInteger(bsize) || bsize < 1 ||
+    !Number.isSafeInteger(blocks) || blocks < 0 ||
+    !Number.isSafeInteger(bfree) || bfree < 0 || bfree > blocks
+  ) {
+    throw new Error(`invalid rootfs space accounting: ${JSON.stringify(space)}`);
+  }
+
+  const usedBytes = (blocks - bfree) * bsize;
+  if (!Number.isSafeInteger(usedBytes)) {
+    throw new Error(`rootfs used byte count is too large: ${usedBytes}`);
+  }
+  return usedBytes;
+}
+
 export function rootfsSizeForStagedBytes(stagedBytes: number): number {
   if (!Number.isSafeInteger(stagedBytes) || stagedBytes < 0) {
     throw new Error(`invalid staged byte count: ${stagedBytes}`);

@@ -15,7 +15,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { rootfsSizeForStagedBytes, validateGuestPath } from "./rootfs-size.ts";
+import {
+  rootfsSizeForStagedBytes,
+  rootfsUsedBytes,
+  validateGuestPath,
+} from "./rootfs-size.ts";
 
 interface RunnerConfig {
   argv: string[];
@@ -204,6 +208,7 @@ async function buildVfs(
   ]);
   const rootfsBytes = new Uint8Array(readFileSync(rootfsPath));
   MemoryFileSystem.assertImageKernelAbi(rootfsBytes, ABI_VERSION, "formula browser rootfs");
+  const sourceFs = MemoryFileSystem.fromImage(rootfsBytes);
 
   const programBytes = new Uint8Array(readFileSync(programPath));
   const stagedFiles = [
@@ -229,11 +234,10 @@ async function buildVfs(
     });
   const stagedBytes = stagedFiles.reduce(
     (total, entry) => total + entry.bytes.byteLength,
-    programBytes.byteLength + rootfsBytes.byteLength,
+    programBytes.byteLength + rootfsUsedBytes(sourceFs.statfs("/")),
   );
   const maxByteLength = rootfsSizeForStagedBytes(stagedBytes);
-  const buildFs = MemoryFileSystem.fromImage(rootfsBytes)
-    .rebaseToNewFileSystem(maxByteLength);
+  const buildFs = sourceFs.rebaseToNewFileSystem(maxByteLength);
   for (const { guestPath, bytes, mode } of stagedFiles) {
     imageHelpers.ensureDirRecursive(buildFs, posix.dirname(guestPath));
     writeStagedFile(buildFs, guestPath, bytes, mode);
