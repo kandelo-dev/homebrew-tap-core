@@ -19,9 +19,9 @@ class Erlang < Formula
   depends_on "binaryen" => :build
   depends_on "erlang@28" => :build
   depends_on "gnu-tar" => :build
-  depends_on "homebrew/core/zstd" => :build
   depends_on "python@3.13" => :build
   depends_on "wabt" => :build
+  depends_on "zstd" => :build
 
   skip_clean "bin"
   skip_clean "lib/erlang"
@@ -37,7 +37,7 @@ class Erlang < Formula
     kandelo_prepend_path! formula_opt_bin("erlang@28")
     kandelo_prepend_path! formula_opt_libexec("python@3.13")/"bin"
     kandelo_prepend_path! formula_opt_bin("gnu-tar")
-    kandelo_prepend_path! formula_opt_bin("homebrew/core/zstd")
+    kandelo_prepend_path! formula_opt_bin("zstd")
 
     out_dir = kandelo_build_package("erlang", "build-erlang.sh", SOURCE_URL, SOURCE_SHA256)
     kandelo_validate_wasm_artifact(out_dir/"erlang.wasm", fork: :required)
