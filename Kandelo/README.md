@@ -43,7 +43,9 @@ Schema 2 also references `vfs-acceptance-shell.json`. The accepted Brewfile
 includes the published Dash bottle as an explicit root, and the exact composed
 image must start that VFS-owned shell in Chromium without downloading Kandelo's
 legacy shell assets. The selected `file-formula` command continues to prove the
-dependency-bearing bottle closure independently in Node and Chromium.
+dependency-bearing bottle closure independently in Node and Chromium. It uses
+`file -Lb` so classification follows the Homebrew prefix symlink to the poured
+WebAssembly executable instead of reporting the symlink itself.
 
 ## Generation
 
