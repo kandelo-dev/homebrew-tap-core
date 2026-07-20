@@ -11,6 +11,13 @@ class Libcurl < Formula
   license "curl"
   revision 1
 
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "0fecb84009ebaf3128172e257ac37142a412092ad7b60f9cce1f5db5bba2c96c"
+    sha256 cellar: :any_skip_relocation, wasm64_kandelo: "c289d66d3f4af617d2b2c655153fa20a0a7f27033b50dba7ddeb4472a99ef240"
+  end
+
   depends_on "pkgconf" => [:build, :test]
   depends_on "binaryen" => :test
   depends_on "wabt" => :test
@@ -139,7 +146,8 @@ class Libcurl < Formula
     assert_path_exists include/"curl/curl.h"
     assert_path_exists lib/"pkgconfig/libcurl.pc"
 
-    root = kandelo_require_root!
+    root = kandelo_activate_sdk!
+    kandelo_activate_sysroot!(root)
     openssl = formula_opt_prefix("kandelo-dev/tap-core/openssl")
     zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
     forbidden_paths = [
