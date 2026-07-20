@@ -1,0 +1,60 @@
+{
+  "bottle_rebuild": 0,
+  "bottles": [
+    {
+      "arch": "wasm32",
+      "bottle_tag": "wasm32_kandelo",
+      "browser_compatible": false,
+      "built_at": "2026-07-20T17:59:33Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29762944838",
+      "built_from": {
+        "formula_sha256": "2cd00bd181df14ed4872706c8d23f0cf4499298c36b59aa5a93f083746f05843",
+        "kandelo_commit": "f3aad8f124750525365e7019db5abf05ddf14c10",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "f9bb6d0e1b70e326e339afcded8403703f28462b",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "bytes": 816992281,
+      "cache_key_sha": "0bf97934a6ecfe14909db68d79fb4b3dcc3a8d1afd3fa4752b4fe09b6e1b5716",
+      "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+      "fork_instrumentation": "required",
+      "kandelo_abi": 41,
+      "link_manifest": "Kandelo/link/texlive-20250308-rebuild0-wasm32.json",
+      "prefix": "/home/linuxbrew/.linuxbrew",
+      "runtime_support": [
+        "node"
+      ],
+      "sha256": "0bf97934a6ecfe14909db68d79fb4b3dcc3a8d1afd3fa4752b4fe09b6e1b5716",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/texlive/blobs/sha256:0bf97934a6ecfe14909db68d79fb4b3dcc3a8d1afd3fa4752b4fe09b6e1b5716"
+    }
+  ],
+  "dependencies": [
+    {
+      "full_name": "kandelo-dev/tap-core/libcxx",
+      "name": "libcxx",
+      "version": "21.1.7_1"
+    },
+    {
+      "full_name": "kandelo-dev/tap-core/libpng",
+      "name": "libpng",
+      "version": "1.6.43"
+    },
+    {
+      "full_name": "kandelo-dev/tap-core/zlib",
+      "name": "zlib",
+      "version": "1.3.1_4"
+    }
+  ],
+  "formula_path": "Formula/texlive.rb",
+  "formula_revision": 0,
+  "full_name": "kandelo-dev/tap-core/texlive",
+  "kandelo_abi": 41,
+  "name": "texlive",
+  "schema": 1,
+  "source_metadata": "Kandelo/metadata.json",
+  "tap_commit": "f9bb6d0e1b70e326e339afcded8403703f28462b",
+  "tap_name": "kandelo-dev/tap-core",
+  "tap_repository": "kandelo-dev/homebrew-tap-core",
+  "version": "20250308"
+}

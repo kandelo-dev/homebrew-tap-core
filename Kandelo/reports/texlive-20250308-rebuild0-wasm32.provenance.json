@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 816992281,
+    "cache_key_sha": "0bf97934a6ecfe14909db68d79fb4b3dcc3a8d1afd3fa4752b4fe09b6e1b5716",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "0bf97934a6ecfe14909db68d79fb4b3dcc3a8d1afd3fa4752b4fe09b6e1b5716",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/texlive/blobs/sha256:0bf97934a6ecfe14909db68d79fb4b3dcc3a8d1afd3fa4752b4fe09b6e1b5716"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29762944838",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
+  },
+  "formula": {
+    "path": "Formula/texlive.rb",
+    "sha256": "2cd00bd181df14ed4872706c8d23f0cf4499298c36b59aa5a93f083746f05843"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/texlive.json",
+      "sha256": "3256710435a24c470a1cf7ac0e9aaf1403f4b54c8ff51895f8c9e3b6eb96f171"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/texlive-20250308-rebuild0-wasm32.json",
+      "sha256": "00ec287567f14e2487de9575a08a079c6119c11e2975cb504b356e390a5e1e8b"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "5721e373fb2449d9f24c69ba0feda9b36262ae0ac02c8d3e9bc91cc51e8213ee"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/texlive-20250308-rebuild0-wasm32.provenance.json",
+      "sha256": "a01ffd93d791f7489bf70fac10028d634782febbb2e268d3ecc6246fe51d8d9f"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "f3aad8f124750525365e7019db5abf05ddf14c10",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "f9bb6d0e1b70e326e339afcded8403703f28462b",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 0,
+    "kandelo_abi": 41,
+    "package": "texlive",
+    "version": "20250308"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/texlive.json",
+          "Kandelo/link/texlive-20250308-rebuild0-wasm32.json",
+          "Kandelo/reports/texlive-20250308-rebuild0-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured texlive from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: 0bf97934a6ecfe14909db68d79fb4b3dcc3a8d1afd3fa4752b4fe09b6e1b5716"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}
