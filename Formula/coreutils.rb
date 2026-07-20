@@ -130,4 +130,10 @@ class Coreutils < Formula
       preserve_argv0:            true
     )
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "12f2f7db009d7a28e82134726b303da720ba058adb6f202a9eeb39b09b8db53b"
+  end
+
 end

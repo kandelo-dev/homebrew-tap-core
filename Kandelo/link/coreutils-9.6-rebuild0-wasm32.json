@@ -1,0 +1,1058 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1714615,
+    "cache_key_sha": "12f2f7db009d7a28e82134726b303da720ba058adb6f202a9eeb39b09b8db53b",
+    "payload_root": "coreutils/9.6",
+    "sha256": "12f2f7db009d7a28e82134726b303da720ba058adb6f202a9eeb39b09b8db53b",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/coreutils/blobs/sha256:12f2f7db009d7a28e82134726b303da720ba058adb6f202a9eeb39b09b8db53b"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/coreutils/9.6",
+  "links": [
+    {
+      "source": "bin/[",
+      "target": "bin/[",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/arch",
+      "target": "bin/arch",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/b2sum",
+      "target": "bin/b2sum",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/base32",
+      "target": "bin/base32",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/base64",
+      "target": "bin/base64",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/basename",
+      "target": "bin/basename",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/basenc",
+      "target": "bin/basenc",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/cat",
+      "target": "bin/cat",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/chcon",
+      "target": "bin/chcon",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/chgrp",
+      "target": "bin/chgrp",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/chmod",
+      "target": "bin/chmod",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/chown",
+      "target": "bin/chown",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/chroot",
+      "target": "bin/chroot",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/cksum",
+      "target": "bin/cksum",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/comm",
+      "target": "bin/comm",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/coreutils",
+      "target": "bin/coreutils",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/cp",
+      "target": "bin/cp",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/csplit",
+      "target": "bin/csplit",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/cut",
+      "target": "bin/cut",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/date",
+      "target": "bin/date",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/dd",
+      "target": "bin/dd",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/df",
+      "target": "bin/df",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/dir",
+      "target": "bin/dir",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/dircolors",
+      "target": "bin/dircolors",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/dirname",
+      "target": "bin/dirname",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/du",
+      "target": "bin/du",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/echo",
+      "target": "bin/echo",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/env",
+      "target": "bin/env",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/expand",
+      "target": "bin/expand",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/expr",
+      "target": "bin/expr",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/factor",
+      "target": "bin/factor",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/false",
+      "target": "bin/false",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/fmt",
+      "target": "bin/fmt",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/fold",
+      "target": "bin/fold",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/groups",
+      "target": "bin/groups",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/head",
+      "target": "bin/head",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/hostid",
+      "target": "bin/hostid",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/id",
+      "target": "bin/id",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/install",
+      "target": "bin/install",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/join",
+      "target": "bin/join",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/kill",
+      "target": "bin/kill",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/link",
+      "target": "bin/link",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ln",
+      "target": "bin/ln",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/logname",
+      "target": "bin/logname",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ls",
+      "target": "bin/ls",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/md5sum",
+      "target": "bin/md5sum",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/mkdir",
+      "target": "bin/mkdir",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/mkfifo",
+      "target": "bin/mkfifo",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/mknod",
+      "target": "bin/mknod",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/mktemp",
+      "target": "bin/mktemp",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/mv",
+      "target": "bin/mv",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/nice",
+      "target": "bin/nice",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/nl",
+      "target": "bin/nl",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/nohup",
+      "target": "bin/nohup",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/nproc",
+      "target": "bin/nproc",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/numfmt",
+      "target": "bin/numfmt",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/od",
+      "target": "bin/od",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/paste",
+      "target": "bin/paste",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/pathchk",
+      "target": "bin/pathchk",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/pr",
+      "target": "bin/pr",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/printenv",
+      "target": "bin/printenv",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/printf",
+      "target": "bin/printf",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ptx",
+      "target": "bin/ptx",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/pwd",
+      "target": "bin/pwd",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/readlink",
+      "target": "bin/readlink",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/realpath",
+      "target": "bin/realpath",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/rm",
+      "target": "bin/rm",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/rmdir",
+      "target": "bin/rmdir",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/runcon",
+      "target": "bin/runcon",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/seq",
+      "target": "bin/seq",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sha1sum",
+      "target": "bin/sha1sum",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sha224sum",
+      "target": "bin/sha224sum",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sha256sum",
+      "target": "bin/sha256sum",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sha384sum",
+      "target": "bin/sha384sum",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sha512sum",
+      "target": "bin/sha512sum",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/shred",
+      "target": "bin/shred",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/shuf",
+      "target": "bin/shuf",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sleep",
+      "target": "bin/sleep",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sort",
+      "target": "bin/sort",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/split",
+      "target": "bin/split",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/stat",
+      "target": "bin/stat",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/stty",
+      "target": "bin/stty",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sum",
+      "target": "bin/sum",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sync",
+      "target": "bin/sync",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/tac",
+      "target": "bin/tac",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/tail",
+      "target": "bin/tail",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/tee",
+      "target": "bin/tee",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/test",
+      "target": "bin/test",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/timeout",
+      "target": "bin/timeout",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/touch",
+      "target": "bin/touch",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/tr",
+      "target": "bin/tr",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/true",
+      "target": "bin/true",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/truncate",
+      "target": "bin/truncate",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/tsort",
+      "target": "bin/tsort",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/tty",
+      "target": "bin/tty",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/uname",
+      "target": "bin/uname",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/unexpand",
+      "target": "bin/unexpand",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/uniq",
+      "target": "bin/uniq",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/unlink",
+      "target": "bin/unlink",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/vdir",
+      "target": "bin/vdir",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/wc",
+      "target": "bin/wc",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/whoami",
+      "target": "bin/whoami",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/yes",
+      "target": "bin/yes",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/coreutils.info",
+      "target": "share/info/coreutils.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/arch.1",
+      "target": "share/man/man1/arch.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/b2sum.1",
+      "target": "share/man/man1/b2sum.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/base32.1",
+      "target": "share/man/man1/base32.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/base64.1",
+      "target": "share/man/man1/base64.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/basename.1",
+      "target": "share/man/man1/basename.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/basenc.1",
+      "target": "share/man/man1/basenc.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/cat.1",
+      "target": "share/man/man1/cat.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/chcon.1",
+      "target": "share/man/man1/chcon.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/chgrp.1",
+      "target": "share/man/man1/chgrp.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/chmod.1",
+      "target": "share/man/man1/chmod.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/chown.1",
+      "target": "share/man/man1/chown.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/chroot.1",
+      "target": "share/man/man1/chroot.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/cksum.1",
+      "target": "share/man/man1/cksum.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/comm.1",
+      "target": "share/man/man1/comm.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/coreutils.1",
+      "target": "share/man/man1/coreutils.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/cp.1",
+      "target": "share/man/man1/cp.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/csplit.1",
+      "target": "share/man/man1/csplit.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/cut.1",
+      "target": "share/man/man1/cut.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/date.1",
+      "target": "share/man/man1/date.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/dd.1",
+      "target": "share/man/man1/dd.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/df.1",
+      "target": "share/man/man1/df.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/dir.1",
+      "target": "share/man/man1/dir.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/dircolors.1",
+      "target": "share/man/man1/dircolors.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/dirname.1",
+      "target": "share/man/man1/dirname.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/du.1",
+      "target": "share/man/man1/du.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/echo.1",
+      "target": "share/man/man1/echo.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/env.1",
+      "target": "share/man/man1/env.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/expand.1",
+      "target": "share/man/man1/expand.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/expr.1",
+      "target": "share/man/man1/expr.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/factor.1",
+      "target": "share/man/man1/factor.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/false.1",
+      "target": "share/man/man1/false.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/fmt.1",
+      "target": "share/man/man1/fmt.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/fold.1",
+      "target": "share/man/man1/fold.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/groups.1",
+      "target": "share/man/man1/groups.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/head.1",
+      "target": "share/man/man1/head.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/hostid.1",
+      "target": "share/man/man1/hostid.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/id.1",
+      "target": "share/man/man1/id.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/install.1",
+      "target": "share/man/man1/install.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/join.1",
+      "target": "share/man/man1/join.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/kill.1",
+      "target": "share/man/man1/kill.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/link.1",
+      "target": "share/man/man1/link.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/ln.1",
+      "target": "share/man/man1/ln.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/logname.1",
+      "target": "share/man/man1/logname.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/ls.1",
+      "target": "share/man/man1/ls.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/md5sum.1",
+      "target": "share/man/man1/md5sum.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/mkdir.1",
+      "target": "share/man/man1/mkdir.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/mkfifo.1",
+      "target": "share/man/man1/mkfifo.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/mknod.1",
+      "target": "share/man/man1/mknod.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/mktemp.1",
+      "target": "share/man/man1/mktemp.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/mv.1",
+      "target": "share/man/man1/mv.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/nice.1",
+      "target": "share/man/man1/nice.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/nl.1",
+      "target": "share/man/man1/nl.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/nohup.1",
+      "target": "share/man/man1/nohup.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/nproc.1",
+      "target": "share/man/man1/nproc.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/numfmt.1",
+      "target": "share/man/man1/numfmt.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/od.1",
+      "target": "share/man/man1/od.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/paste.1",
+      "target": "share/man/man1/paste.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/pathchk.1",
+      "target": "share/man/man1/pathchk.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/pr.1",
+      "target": "share/man/man1/pr.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/printenv.1",
+      "target": "share/man/man1/printenv.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/printf.1",
+      "target": "share/man/man1/printf.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/ptx.1",
+      "target": "share/man/man1/ptx.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/pwd.1",
+      "target": "share/man/man1/pwd.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/readlink.1",
+      "target": "share/man/man1/readlink.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/realpath.1",
+      "target": "share/man/man1/realpath.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/rm.1",
+      "target": "share/man/man1/rm.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/rmdir.1",
+      "target": "share/man/man1/rmdir.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/runcon.1",
+      "target": "share/man/man1/runcon.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/seq.1",
+      "target": "share/man/man1/seq.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/sha1sum.1",
+      "target": "share/man/man1/sha1sum.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/sha224sum.1",
+      "target": "share/man/man1/sha224sum.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/sha256sum.1",
+      "target": "share/man/man1/sha256sum.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/sha384sum.1",
+      "target": "share/man/man1/sha384sum.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/sha512sum.1",
+      "target": "share/man/man1/sha512sum.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/shred.1",
+      "target": "share/man/man1/shred.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/shuf.1",
+      "target": "share/man/man1/shuf.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/sleep.1",
+      "target": "share/man/man1/sleep.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/sort.1",
+      "target": "share/man/man1/sort.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/split.1",
+      "target": "share/man/man1/split.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/stat.1",
+      "target": "share/man/man1/stat.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/stty.1",
+      "target": "share/man/man1/stty.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/sum.1",
+      "target": "share/man/man1/sum.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/sync.1",
+      "target": "share/man/man1/sync.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/tac.1",
+      "target": "share/man/man1/tac.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/tail.1",
+      "target": "share/man/man1/tail.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/tee.1",
+      "target": "share/man/man1/tee.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/test.1",
+      "target": "share/man/man1/test.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/timeout.1",
+      "target": "share/man/man1/timeout.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/touch.1",
+      "target": "share/man/man1/touch.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/tr.1",
+      "target": "share/man/man1/tr.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/true.1",
+      "target": "share/man/man1/true.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/truncate.1",
+      "target": "share/man/man1/truncate.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/tsort.1",
+      "target": "share/man/man1/tsort.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/tty.1",
+      "target": "share/man/man1/tty.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/uname.1",
+      "target": "share/man/man1/uname.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/unexpand.1",
+      "target": "share/man/man1/unexpand.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/uniq.1",
+      "target": "share/man/man1/uniq.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/unlink.1",
+      "target": "share/man/man1/unlink.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/vdir.1",
+      "target": "share/man/man1/vdir.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/wc.1",
+      "target": "share/man/man1/wc.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/whoami.1",
+      "target": "share/man/man1/whoami.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/yes.1",
+      "target": "share/man/man1/yes.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "coreutils",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/coreutils.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "9.6"
+}
