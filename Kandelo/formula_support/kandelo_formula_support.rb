@@ -440,6 +440,24 @@ module KandeloFormulaSupport
     chmod 0755, bin/bin_name
   end
 
+  def kandelo_run_texlive_pdftex(*arguments)
+    runner = Pathname(__dir__)/"build-texlive-pdftex.sh"
+    command = [
+      kandelo_host_tool("bash"), runner
+    ].map { |arg| Shellwords.escape(arg.to_s) }.join(" ")
+    command << " #{arguments.map { |arg| Shellwords.escape(arg.to_s) }.join(" ")}"
+    system kandelo_host_tool("bash"), "-c", command
+  end
+
+  def kandelo_generate_texlive_runtime_config(module_root, *arguments)
+    runner = Pathname(__dir__)/"generate-texlive-runtime-config.pl"
+    command = [
+      kandelo_host_tool("perl"), "-I#{module_root}", runner
+    ].map { |arg| Shellwords.escape(arg.to_s) }.join(" ")
+    command << " #{arguments.map { |arg| Shellwords.escape(arg.to_s) }.join(" ")}"
+    system kandelo_host_tool("bash"), "-c", command
+  end
+
   # Run a built `.wasm` under the Node kernel host and return its stdout. The
   # guest inherits the passed `env:`, matching how a real `brew test` exercises
   # behavior. `network: true` opts into Node's real external-TCP backend, while
