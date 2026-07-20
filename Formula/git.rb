@@ -387,10 +387,12 @@ class Git < Formula
     # git-mergetool and git-mergetool--lib enumerate every supported tool.
     # Their configuration and availability probes intentionally include
     # false and command-not-found results even though --tool-help succeeds.
+    # Running all 749 helpers needs a larger, still-bounded runtime deadline.
     mergetool_help_descendant_statuses =
       Array.new(471, 0) + Array.new(248, 1) + Array.new(30, 127)
     mergetool_help = run_git.call(
       ["-C", "clone", "mergetool", "--tool-help"],
+      guest_env:                         { "TIMEOUT" => "120000" },
       merge_stderr:                      true,
       expected_fork_descendant_statuses: mergetool_help_descendant_statuses,
     )
