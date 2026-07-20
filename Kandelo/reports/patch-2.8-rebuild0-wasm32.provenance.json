@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "016c30c0e0b66ae550d5505f38e785e4cf658cf5c3eb5701b4ebc16a37b3d6a0"
+      "sha256": "ab97c5ec7ec8b5ed9f4df1b786c59b3a0e29f895eb63dfeb62624526bf74d5e9"
     },
     "provenance_json": {
       "path": "Kandelo/reports/patch-2.8-rebuild0-wasm32.provenance.json",
-      "sha256": "a597a3b9da977f4b3864f8352e44a123b4007c0ab2839d6c206c7d8a8487e1c8"
+      "sha256": "5182aa4d3363e99e635fbf02534dda9d017d930809f0adde1c9309d805a3b0f7"
     }
   },
   "repositories": {

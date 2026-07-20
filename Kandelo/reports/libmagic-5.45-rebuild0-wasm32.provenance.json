@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "016c30c0e0b66ae550d5505f38e785e4cf658cf5c3eb5701b4ebc16a37b3d6a0"
+      "sha256": "ab97c5ec7ec8b5ed9f4df1b786c59b3a0e29f895eb63dfeb62624526bf74d5e9"
     },
     "provenance_json": {
       "path": "Kandelo/reports/libmagic-5.45-rebuild0-wasm32.provenance.json",
-      "sha256": "4717942f0946a4ec75dc46777347db2dfc9e9c926e33d0effa2d202652aa4568"
+      "sha256": "2946e5438d46dc815b92e258550cb2df48b974904b53f7723e02ec86aa1eb59e"
     }
   },
   "repositories": {
