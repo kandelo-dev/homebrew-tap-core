@@ -8,6 +8,7 @@ class Wget < Formula
   GUEST_OPENSSL_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/openssl".freeze
   GUEST_ZLIB_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/zlib".freeze
   GUEST_WGETRC = "#{GUEST_HOMEBREW_PREFIX}/etc/wgetrc".freeze
+  GUEST_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt".freeze
 
   desc "GNU network file retriever for Kandelo"
   homepage "https://www.gnu.org/software/wget/"
@@ -92,19 +93,29 @@ class Wget < Formula
 
     kandelo_install_bin(buildpath/"src", "wget", "wget")
     etc.install buildpath/"doc/sample.wgetrc" => "wgetrc"
+    (etc/"wgetrc").open("a") do |file|
+      file.write "\nca_certificate = #{GUEST_CA_BUNDLE}\n"
+    end
     info.install buildpath/"doc/wget.info"
     man1.install buildpath/"doc/wget.1"
   end
 
   test do
+    root = Pathname(kandelo_require_root!)
+    ca_bundle = root/"images/rootfs/etc/ssl/cert.pem"
     assert_path_exists etc/"wgetrc"
     assert_path_exists info/"wget.info"
     assert_path_exists man1/"wget.1"
+    assert_path_exists ca_bundle
+    assert_includes (etc/"wgetrc").read, "ca_certificate = #{GUEST_CA_BUNDLE}"
 
     test_wgetrc = testpath/"wgetrc"
     test_wgetrc.binwrite((etc/"wgetrc").binread + "\nquiet = on\n")
     version_guest_files = { GUEST_WGETRC => test_wgetrc }
-    guest_files = { GUEST_WGETRC => etc/"wgetrc" }
+    guest_files = {
+      GUEST_WGETRC    => etc/"wgetrc",
+      GUEST_CA_BUNDLE => ca_bundle,
+    }
     version_output = kandelo_run_wasm(
       bin/"wget", ["--version"], guest_files: version_guest_files
     )
