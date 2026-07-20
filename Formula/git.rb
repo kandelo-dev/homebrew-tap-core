@@ -70,7 +70,6 @@ class Git < Formula
     pre-rebase.sample
     prepare-commit-msg.sample
   ].freeze
-
   desc "Distributed version control system for Kandelo"
   homepage "https://git-scm.com/"
   url "https://www.kernel.org/pub/software/scm/git/git-2.47.1.tar.xz"
@@ -352,8 +351,13 @@ class Git < Formula
     )
     assert_match(/Cloning into 'clone'/, clone)
     assert_equal "Kandelo Git\n", (testpath/"clone/tracked.txt").read
+    # git-submodule is a shell implementation. Even with no configured
+    # submodules, its setup and status path launches 25 real helper processes
+    # through the reviewed runtime map. Keep the exact live count so missing
+    # execs, failed waits, and leaked helpers remain visible.
     assert_empty run_git.call(
-      ["-C", "clone", "submodule", "status"], merge_stderr: true, expected_fork_descendants: 1
+      ["-C", "clone", "submodule", "status"],
+      merge_stderr: true, expected_fork_descendants: 25,
     )
 
     shell_alias = <<~'SH'.chomp
@@ -380,10 +384,15 @@ class Git < Formula
     assert_match(/\b[0-9a-f]{7,}\b.*\binitial\b/, paged_log)
     assert_match(/\(END\)/, paged_log)
 
+    # git-mergetool and git-mergetool--lib enumerate every supported tool.
+    # Their configuration and availability probes intentionally include
+    # false and command-not-found results even though --tool-help succeeds.
+    mergetool_help_descendant_statuses =
+      Array.new(471, 0) + Array.new(248, 1) + Array.new(30, 127)
     mergetool_help = run_git.call(
       ["-C", "clone", "mergetool", "--tool-help"],
-      merge_stderr:              true,
-      expected_fork_descendants: 4,
+      merge_stderr:                      true,
+      expected_fork_descendant_statuses: mergetool_help_descendant_statuses,
     )
     assert_match(/git mergetool --tool=<tool>/, mergetool_help)
     assert_match(/vimdiff/, mergetool_help)
