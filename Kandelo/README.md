@@ -42,10 +42,13 @@ never rewrites them.
 Schema 2 also references `vfs-acceptance-shell.json`. The accepted Brewfile
 includes the published Dash bottle as an explicit root, and the exact composed
 image must start that VFS-owned shell in Chromium without downloading Kandelo's
-legacy shell assets. The selected `file-formula` command continues to prove the
-dependency-bearing bottle closure independently in Node and Chromium. It uses
-`file -Lb` so classification follows the Homebrew prefix symlink to the poured
-WebAssembly executable instead of reporting the symlink itself.
+legacy shell assets. The selected `python` command imports its keg-owned standard
+library and zlib module, reads the dependency bottle's header through its
+canonical `opt/zlib` link, and round-trips compressed bytes. It therefore proves
+the real Python-to-zlib bottle edge in the same composed image independently in
+Node and Chromium. Erlang's OTP tree is complete but keg-internal, so it remains
+covered by the Formula runtime tests rather than being misrepresented as the
+dependency-bearing root required by this VFS gate.
 
 ## Generation
 
