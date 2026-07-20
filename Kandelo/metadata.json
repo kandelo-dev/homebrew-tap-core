@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-20T10:16:01Z",
+  "generated_at": "2026-07-20T11:00:22Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "90bbf4e3a90a6d72305243ce10b04e26d471c0ac",
@@ -1564,6 +1564,50 @@
           "arch": "wasm32",
           "bottle_tag": "wasm32_kandelo",
           "browser_compatible": false,
+          "built_at": "2026-07-20T11:00:22Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29735613713",
+          "built_from": {
+            "formula_sha256": "f7a29e6202746b464e6542cbb770fd74ea2f16a7a4676e0f5123b6f3346e77c1",
+            "kandelo_commit": "90bbf4e3a90a6d72305243ce10b04e26d471c0ac",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "8fd1a93ef129fe8751a71d07b4e2e5dc50540f56",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 11162307,
+          "cache_key_sha": "ff498fc9596b823a5c135ec1eae6f1c65e2b47a34e87b1a6680cf397c174e57c",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/vim-9.2.0750-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "ff498fc9596b823a5c135ec1eae6f1c65e2b47a34e87b1a6680cf397c174e57c",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/vim/blobs/sha256:ff498fc9596b823a5c135ec1eae6f1c65e2b47a34e87b1a6680cf397c174e57c"
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "ncurses",
+          "version": "6.5"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/vim.json",
+      "formula_path": "Formula/vim.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/vim",
+      "name": "vim",
+      "version": "9.2.0750"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
           "built_at": "2026-07-20T10:16:01Z",
           "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29733089904",
           "built_from": {
@@ -1835,7 +1879,7 @@
   ],
   "release_tag": "bottles-abi-v41",
   "schema": 1,
-  "tap_commit": "0261b9c8bd7fad02b908b8c61445164f48f5fb85",
+  "tap_commit": "8fd1a93ef129fe8751a71d07b4e2e5dc50540f56",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }

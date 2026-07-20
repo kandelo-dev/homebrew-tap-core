@@ -293,4 +293,10 @@ class Vim < Formula
     assert_equal "4b616e64656c6f0a\n", hex
     assert_equal "Kandelo\n", kandelo_run_wasm(bin/"xxd", ["-r", "-p"], stdin: hex)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "ff498fc9596b823a5c135ec1eae6f1c65e2b47a34e87b1a6680cf397c174e57c"
+  end
+
 end
