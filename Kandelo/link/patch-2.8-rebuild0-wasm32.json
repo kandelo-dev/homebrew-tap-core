@@ -1,0 +1,38 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 196624,
+    "cache_key_sha": "c6fc1e3ce0735098a0e0163a08deaf4c9147aed1762b849a8c01cd2ef5d93111",
+    "payload_root": "patch/2.8",
+    "sha256": "c6fc1e3ce0735098a0e0163a08deaf4c9147aed1762b849a8c01cd2ef5d93111",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/patch/blobs/sha256:c6fc1e3ce0735098a0e0163a08deaf4c9147aed1762b849a8c01cd2ef5d93111"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/patch/2.8",
+  "links": [
+    {
+      "source": "bin/patch",
+      "target": "bin/patch",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/patch.1",
+      "target": "share/man/man1/patch.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "patch",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/patch.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "2.8"
+}

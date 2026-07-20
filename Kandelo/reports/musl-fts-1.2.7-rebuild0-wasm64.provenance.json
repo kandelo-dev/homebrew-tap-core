@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm64_kandelo",
+    "bytes": 17056,
+    "cache_key_sha": "4958ac4e1464bd2226ca6d83627ca165a462335963db5b45cfbf298fecd3329d",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "4958ac4e1464bd2226ca6d83627ca165a462335963db5b45cfbf298fecd3329d",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/musl-fts/blobs/sha256:4958ac4e1464bd2226ca6d83627ca165a462335963db5b45cfbf298fecd3329d"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724873174",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "8280423357f484f1b2e58b884904a989cd72c48dff0cde47764f13426d8f9fb4"
+  },
+  "formula": {
+    "path": "Formula/musl-fts.rb",
+    "sha256": "c4b78ab85162ac9b943eff0d96660ae0b8f15da989cd84c8c93d32cc77f60f79"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/musl-fts.json",
+      "sha256": "bc30fc30e719cc3ca7a542e66bbc22055072bb0f91d2fa9234969b021a1e88b0"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/musl-fts-1.2.7-rebuild0-wasm64.json",
+      "sha256": "882d3a67c583a14bbcdd8127bf7eeb1252bc86d947530f6fd656cf86032f4b20"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "892aee9ae42c8db9b5adfb100416aa7ca7348574ad52127a208f49a7677bfc39"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/musl-fts-1.2.7-rebuild0-wasm64.provenance.json",
+      "sha256": "019a66d3c3c5f830bb793424b362d6392468ff5dc757fe3f0e7ed7fbce7d8511"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm64",
+    "bottle_rebuild": 0,
+    "kandelo_abi": 41,
+    "package": "musl-fts",
+    "version": "1.2.7"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/musl-fts.json",
+          "Kandelo/link/musl-fts-1.2.7-rebuild0-wasm64.json",
+          "Kandelo/reports/musl-fts-1.2.7-rebuild0-wasm64.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured musl-fts from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: 4958ac4e1464bd2226ca6d83627ca165a462335963db5b45cfbf298fecd3329d"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

@@ -27,6 +27,33 @@
       "sha256": "d8a7a49c269a651b66be6a8b2d371f4f0a740e8a5db587f147a7ee437360bf83",
       "status": "success",
       "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/sqlite/blobs/sha256:d8a7a49c269a651b66be6a8b2d371f4f0a740e8a5db587f147a7ee437360bf83"
+    },
+    {
+      "arch": "wasm64",
+      "bottle_tag": "wasm64_kandelo",
+      "browser_compatible": false,
+      "built_at": "2026-07-20T07:52:00Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724873724",
+      "built_from": {
+        "formula_sha256": "e61de4f47208b05e356762a8888278ae7152eecf8a50d50eaf3d43c5f3afb72d",
+        "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "bytes": 1509360,
+      "cache_key_sha": "e5b06a7fee3e85b98095ce06144aba3ed5b7cbced77af1420115507d6a878f44",
+      "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+      "fork_instrumentation": "not-required",
+      "kandelo_abi": 41,
+      "link_manifest": "Kandelo/link/sqlite-3.49.1_1-rebuild0-wasm64.json",
+      "prefix": "/home/linuxbrew/.linuxbrew",
+      "runtime_support": [
+        "node"
+      ],
+      "sha256": "e5b06a7fee3e85b98095ce06144aba3ed5b7cbced77af1420115507d6a878f44",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/sqlite/blobs/sha256:e5b06a7fee3e85b98095ce06144aba3ed5b7cbced77af1420115507d6a878f44"
     }
   ],
   "dependencies": [],
@@ -37,7 +64,7 @@
   "name": "sqlite",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "a4acc690e090f2dba6623da6bb403ca4defe4521",
+  "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "3.49.1_1"

@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm64_kandelo",
+    "bytes": 2699093,
+    "cache_key_sha": "57992ef202791d64763875310d2704151525d7190aa4db2404fa96837b13fdd3",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "57992ef202791d64763875310d2704151525d7190aa4db2404fa96837b13fdd3",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libcxx/blobs/sha256:57992ef202791d64763875310d2704151525d7190aa4db2404fa96837b13fdd3"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724873475",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "8280423357f484f1b2e58b884904a989cd72c48dff0cde47764f13426d8f9fb4"
+  },
+  "formula": {
+    "path": "Formula/libcxx.rb",
+    "sha256": "3f775fd7a8b34e9bd586a966d31cd3cb242dce325e9b4da95f52a1b000847489"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/libcxx.json",
+      "sha256": "076cf14a7d021d49c02d5eda6ec12a557684db67a39b9c0b83e810f71e567f46"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/libcxx-21.1.7_1-rebuild0-wasm64.json",
+      "sha256": "53305e49ace1cf49ba5a0a9864865e759867947634996ae6616c25149bd801a1"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "892aee9ae42c8db9b5adfb100416aa7ca7348574ad52127a208f49a7677bfc39"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/libcxx-21.1.7_1-rebuild0-wasm64.provenance.json",
+      "sha256": "84cc3c69ca42d2c5a851f8c18e97feedc18b05105326085f7eaf5d676ca85d98"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm64",
+    "bottle_rebuild": 0,
+    "kandelo_abi": 41,
+    "package": "libcxx",
+    "version": "21.1.7_1"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/libcxx.json",
+          "Kandelo/link/libcxx-21.1.7_1-rebuild0-wasm64.json",
+          "Kandelo/reports/libcxx-21.1.7_1-rebuild0-wasm64.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured libcxx from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: 57992ef202791d64763875310d2704151525d7190aa4db2404fa96837b13fdd3"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 359962,
+    "cache_key_sha": "19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libpng/blobs/sha256:19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724870782",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
+  },
+  "formula": {
+    "path": "Formula/libpng.rb",
+    "sha256": "1405ca0b04ed4f8109d8039f63165a5478fcadf1ebd604997955ee17e8b917ec"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/libpng.json",
+      "sha256": "71c90fb0fa86ee914a97adb0b892710f4dc18cdd9b4ea2470da76a6ec5269f61"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/libpng-1.6.43-rebuild0-wasm32.json",
+      "sha256": "7c6d40f6abc82310b2838be642f35c602f3138053d94ee8b8cf413e3ff65c6c0"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "892aee9ae42c8db9b5adfb100416aa7ca7348574ad52127a208f49a7677bfc39"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/libpng-1.6.43-rebuild0-wasm32.provenance.json",
+      "sha256": "adc0977b9d963d819cb61da3ffbdea5b09e099681e27eeb209fb4a59c91357b3"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 0,
+    "kandelo_abi": 41,
+    "package": "libpng",
+    "version": "1.6.43"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/libpng.json",
+          "Kandelo/link/libpng-1.6.43-rebuild0-wasm32.json",
+          "Kandelo/reports/libpng-1.6.43-rebuild0-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured libpng from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: 19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

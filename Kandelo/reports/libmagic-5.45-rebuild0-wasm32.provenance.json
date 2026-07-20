@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 1111744,
+    "cache_key_sha": "6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libmagic/blobs/sha256:6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724870328",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
+  },
+  "formula": {
+    "path": "Formula/libmagic.rb",
+    "sha256": "5e31ed21afff0c3f8b9562807493bf2dde6570373f203619491099b2f67adff9"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/libmagic.json",
+      "sha256": "5aae5b5c499d48e92a2a14995e77618201d905f8fa7e15c2ab1766c54faca1cc"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/libmagic-5.45-rebuild0-wasm32.json",
+      "sha256": "b9c27405c4327ba2d6aa6356dfe7fb3c3d13d34a386a36927e72ed34f89ca766"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "892aee9ae42c8db9b5adfb100416aa7ca7348574ad52127a208f49a7677bfc39"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/libmagic-5.45-rebuild0-wasm32.provenance.json",
+      "sha256": "81526cb03dcbe03cfa6916e6208dcd4abde70a42361828f8e83d8939511bde1d"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 0,
+    "kandelo_abi": 41,
+    "package": "libmagic",
+    "version": "5.45"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/libmagic.json",
+          "Kandelo/link/libmagic-5.45-rebuild0-wasm32.json",
+          "Kandelo/reports/libmagic-5.45-rebuild0-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured libmagic from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: 6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

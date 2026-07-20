@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 518954,
+    "cache_key_sha": "d9b6c0240a7727c6d306cdd3ab56bacdb6229e5688490bb6c8dea58d5f2672bb",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "d9b6c0240a7727c6d306cdd3ab56bacdb6229e5688490bb6c8dea58d5f2672bb",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/diffutils/blobs/sha256:d9b6c0240a7727c6d306cdd3ab56bacdb6229e5688490bb6c8dea58d5f2672bb"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724869477",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
+  },
+  "formula": {
+    "path": "Formula/diffutils.rb",
+    "sha256": "634ddde30189d5328a91fa4ce427be1c1fda6cc9b04b6d9be915c54621022cb2"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/diffutils.json",
+      "sha256": "b25051c3ed87496d03a3e97021da8b7004b638c1f1a19ae72b3fc225e0279cee"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/diffutils-3.12-rebuild0-wasm32.json",
+      "sha256": "d8007d3986bde589e27b3048b3149766fbe09347cc10142a6960dd12956e1b19"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "892aee9ae42c8db9b5adfb100416aa7ca7348574ad52127a208f49a7677bfc39"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/diffutils-3.12-rebuild0-wasm32.provenance.json",
+      "sha256": "3ebeecd29493aefc838a570332009cc15c4f0dc7542cef020030d613c8583cd7"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 0,
+    "kandelo_abi": 41,
+    "package": "diffutils",
+    "version": "3.12"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/diffutils.json",
+          "Kandelo/link/diffutils-3.12-rebuild0-wasm32.json",
+          "Kandelo/reports/diffutils-3.12-rebuild0-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured diffutils from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_pty_wasm",
+          "exact bottle sha256: d9b6c0240a7727c6d306cdd3ab56bacdb6229e5688490bb6c8dea58d5f2672bb"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

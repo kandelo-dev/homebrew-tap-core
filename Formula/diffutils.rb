@@ -133,4 +133,10 @@ class Diffutils < Formula
     )
     assert_equal "alpha\nedited\ngamma\n", (testpath/"edited.txt").read
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "d9b6c0240a7727c6d306cdd3ab56bacdb6229e5688490bb6c8dea58d5f2672bb"
+  end
+
 end

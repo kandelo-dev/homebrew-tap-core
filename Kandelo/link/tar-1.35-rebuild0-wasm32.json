@@ -1,0 +1,63 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1058565,
+    "cache_key_sha": "18a020ab36b0354d2fda2bded59d5c25d1d83efd228ac9965668382a0ce979af",
+    "payload_root": "tar/1.35",
+    "sha256": "18a020ab36b0354d2fda2bded59d5c25d1d83efd228ac9965668382a0ce979af",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/tar/blobs/sha256:18a020ab36b0354d2fda2bded59d5c25d1d83efd228ac9965668382a0ce979af"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/tar/1.35",
+  "links": [
+    {
+      "source": "bin/tar",
+      "target": "bin/tar",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/tar.info",
+      "target": "share/info/tar.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/tar.info-1",
+      "target": "share/info/tar.info-1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/tar.info-2",
+      "target": "share/info/tar.info-2",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/tar.info-3",
+      "target": "share/info/tar.info-3",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/tar.1",
+      "target": "share/man/man1/tar.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man8/rmt.8",
+      "target": "share/man/man8/rmt.8",
+      "type": "symlink"
+    }
+  ],
+  "package": "tar",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/tar.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.35"
+}

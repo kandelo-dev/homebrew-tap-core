@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 467527,
+    "cache_key_sha": "239ed19d15ff5514bb37cc57366e0d25d3b81f7b9b20bdfba17af6f44829c9c6",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "239ed19d15ff5514bb37cc57366e0d25d3b81f7b9b20bdfba17af6f44829c9c6",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/m4/blobs/sha256:239ed19d15ff5514bb37cc57366e0d25d3b81f7b9b20bdfba17af6f44829c9c6"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724871153",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
+  },
+  "formula": {
+    "path": "Formula/m4.rb",
+    "sha256": "0f01474a3ee1991e18437c5e96ae360b16cd12c7fa2edeeaf5ce12bad8b77e25"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/m4.json",
+      "sha256": "24ababffa2d8a1994c05fb41b1099fc3614b5b3babc6a0dd47a299e3a98a575b"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/m4-1.4.21-rebuild0-wasm32.json",
+      "sha256": "5b9f49458cf22f72bd6447061630edefaba563c4c359deabc201140c6bd6a284"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "892aee9ae42c8db9b5adfb100416aa7ca7348574ad52127a208f49a7677bfc39"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/m4-1.4.21-rebuild0-wasm32.provenance.json",
+      "sha256": "9674aa9edaa7c15d9a3a5b69ab4e9ee97fdb8289aae801d0226dc70f30168fc1"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 0,
+    "kandelo_abi": 41,
+    "package": "m4",
+    "version": "1.4.21"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/m4.json",
+          "Kandelo/link/m4-1.4.21-rebuild0-wasm32.json",
+          "Kandelo/reports/m4-1.4.21-rebuild0-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured m4 from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: 239ed19d15ff5514bb37cc57366e0d25d3b81f7b9b20bdfba17af6f44829c9c6"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

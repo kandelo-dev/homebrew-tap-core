@@ -182,6 +182,7 @@ class Libzip < Formula
       int main(void) {
         static const char payload[] = "Kandelo libzip deflate round trip";
         static const char comment[] = "kandelo-libzip";
+        static const char archive_path[] = "/work/libzip-smoke.zip";
         char output[sizeof(payload)] = { 0 };
         zip_t *archive;
         zip_source_t *source;
@@ -192,7 +193,7 @@ class Libzip < Formula
         const char *actual_comment;
         int error = 0;
 
-        archive = zip_open("libzip-smoke.zip", ZIP_CREATE | ZIP_TRUNCATE, &error);
+        archive = zip_open(archive_path, ZIP_CREATE | ZIP_TRUNCATE, &error);
         if (archive == NULL) return 1;
         source = zip_source_buffer(archive, payload, sizeof(payload), 0);
         if (source == NULL) return 2;
@@ -203,7 +204,7 @@ class Libzip < Formula
         if (zip_set_archive_comment(archive, comment, sizeof(comment) - 1) != 0) return 6;
         if (zip_close(archive) != 0) return 7;
 
-        archive = zip_open("libzip-smoke.zip", ZIP_RDONLY, &error);
+        archive = zip_open(archive_path, ZIP_RDONLY, &error);
         if (archive == NULL || zip_get_num_entries(archive, 0) != 1) return 8;
         zip_stat_init(&stat);
         if (zip_stat_index(archive, 0, 0, &stat) != 0) return 9;
@@ -232,7 +233,9 @@ class Libzip < Formula
       %w[-lzip -lz].each { |flag| assert_includes flags, flag }
       system kandelo_cc, source, *flags, "-o", wasm
     end
-    assert_equal "libzip #{version} roundtrip-ok\n", kandelo_run_wasm(wasm, [])
+    assert_equal "libzip #{version} roundtrip-ok\n",
+      kandelo_run_wasm(wasm, [], writable_host_directories: { "/work" => testpath })
+    assert_path_exists testpath/"libzip-smoke.zip"
 
     cmake_source.mkpath
     (cmake_source/"main.c").write <<~C
@@ -259,6 +262,7 @@ class Libzip < Formula
     kandelo_wasm_build do |root|
       sysroot = Pathname(ENV.fetch("WASM_POSIX_SYSROOT"))
       system "cmake", "-S", cmake_source, "-B", cmake_build, "-G", "Ninja",
+        "-DCMAKE_MAKE_PROGRAM=#{formula_opt_bin("ninja")/"ninja"}",
         "-DCMAKE_SYSTEM_NAME=Generic",
         "-DCMAKE_SYSTEM_PROCESSOR=wasm32",
         "-DCMAKE_C_COMPILER=#{kandelo_cc(root)}",
@@ -328,4 +332,10 @@ class Libzip < Formula
       refute_includes contents, "/nix/store/"
     end
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "1f2355418103ed61307abc977dd82768414bff331f502dded7fafbe06e7c3d7c"
+  end
+
 end

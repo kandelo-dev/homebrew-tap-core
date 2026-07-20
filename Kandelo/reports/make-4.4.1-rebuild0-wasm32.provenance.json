@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 487549,
+    "cache_key_sha": "4333ceb2dbb77ea96b652ec17ef8894e06c2f3d20f298b8a09d62d099259c4ef",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "4333ceb2dbb77ea96b652ec17ef8894e06c2f3d20f298b8a09d62d099259c4ef",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/make/blobs/sha256:4333ceb2dbb77ea96b652ec17ef8894e06c2f3d20f298b8a09d62d099259c4ef"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724871469",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
+  },
+  "formula": {
+    "path": "Formula/make.rb",
+    "sha256": "9f9d3f79b06eadf6ea0c9bc8843d36a1c42eda9444977b75922eaf7d51ab1513"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/make.json",
+      "sha256": "cd4aefb3934a223bbc95fd3350b778aa37d6197307ff11a98d55ee81573c8ea1"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/make-4.4.1-rebuild0-wasm32.json",
+      "sha256": "78c21adc77f159fa9378e1e420ac0b20def958cb7b92eaa5c0ea8f705990b83d"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "892aee9ae42c8db9b5adfb100416aa7ca7348574ad52127a208f49a7677bfc39"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/make-4.4.1-rebuild0-wasm32.provenance.json",
+      "sha256": "7664335614a7c06641fcea232378f02e621e5f7505ecbd39b6cb2bbafc907fff"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 0,
+    "kandelo_abi": 41,
+    "package": "make",
+    "version": "4.4.1"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/make.json",
+          "Kandelo/link/make-4.4.1-rebuild0-wasm32.json",
+          "Kandelo/reports/make-4.4.1-rebuild0-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured make from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: 4333ceb2dbb77ea96b652ec17ef8894e06c2f3d20f298b8a09d62d099259c4ef"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 354381,
+    "cache_key_sha": "c28a0fb31eba5991fd3a3ee0e000a163c319d7a42a8f7c305fc4c1d4371ff65c",
+    "payload_root": "zip/3.0",
+    "sha256": "c28a0fb31eba5991fd3a3ee0e000a163c319d7a42a8f7c305fc4c1d4371ff65c",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/zip/blobs/sha256:c28a0fb31eba5991fd3a3ee0e000a163c319d7a42a8f7c305fc4c1d4371ff65c"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/zip/3.0",
+  "links": [
+    {
+      "source": "bin/zip",
+      "target": "bin/zip",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/zipcloak",
+      "target": "bin/zipcloak",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/zipnote",
+      "target": "bin/zipnote",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/zipsplit",
+      "target": "bin/zipsplit",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/zip.1",
+      "target": "share/man/man1/zip.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/zipcloak.1",
+      "target": "share/man/man1/zipcloak.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/zipnote.1",
+      "target": "share/man/man1/zipnote.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/zipsplit.1",
+      "target": "share/man/man1/zipsplit.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "zip",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/zip.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "3.0"
+}
