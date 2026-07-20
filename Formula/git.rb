@@ -343,8 +343,12 @@ class Git < Formula
     assert_equal "initial\n",
       run_git.call(["-C", "repo", "log", "-1", "--format=%s"])
 
+    # A file-transport clone has four real descendants: upload-pack, its
+    # pack-objects worker, the receiving unpack-objects worker, and the final
+    # rev-list connectivity check. Keep the exact count so this test still
+    # catches missing execs, failed waits, and leaked processes.
     clone = run_git.call(
-      ["clone", "file:///work/repo", "clone"], merge_stderr: true, expected_fork_descendants: 1
+      ["clone", "file:///work/repo", "clone"], merge_stderr: true, expected_fork_descendants: 4
     )
     assert_match(/Cloning into 'clone'/, clone)
     assert_equal "Kandelo Git\n", (testpath/"clone/tracked.txt").read
