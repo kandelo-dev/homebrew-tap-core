@@ -500,11 +500,21 @@ module KandeloFormulaSupport
     if isolated_runner
       guest_env = JSON.generate(env.transform_values(&:to_s))
       guest_exec_programs = JSON.generate(exec_programs.transform_values(&:to_s))
-      staged_guest_files = JSON.generate(guest_files.transform_values(&:to_s))
+      guest_files_manifest = if guest_files.any?
+        # Guest runtimes such as Vim contain thousands of files. Keep that map
+        # out of the process environment so host ARG_MAX never limits valid VFS
+        # staging. The manifest lives in Homebrew's ephemeral Formula testpath;
+        # the runner still validates every guest path and host file as before.
+        manifest = testpath/".#{wasm_path.basename}.guest-files.json"
+        File.binwrite(manifest, JSON.generate(guest_files.transform_values(&:to_s)))
+        manifest
+      end
       writable_mounts = JSON.generate(writable_host_directories.transform_values(&:to_s))
       command << "KANDELO_FORMULA_GUEST_ENV_JSON=#{Shellwords.escape(guest_env)} "
       command << "KANDELO_FORMULA_EXEC_PROGRAMS_JSON=#{Shellwords.escape(guest_exec_programs)} "
-      command << "KANDELO_FORMULA_GUEST_FILES_JSON=#{Shellwords.escape(staged_guest_files)} "
+      if guest_files_manifest
+        command << "KANDELO_FORMULA_GUEST_FILES_MANIFEST=#{Shellwords.escape(guest_files_manifest.to_s)} "
+      end
       command << "KANDELO_FORMULA_WRITABLE_HOST_DIRS_JSON=#{Shellwords.escape(writable_mounts)} "
       command << "KANDELO_FORMULA_ARGV0=#{Shellwords.escape(argv0.to_s)} " if argv0
       command << "KANDELO_FORMULA_ENABLE_NETWORK=#{network ? 1 : 0} "

@@ -131,7 +131,9 @@ Kandelo's reviewed binary resolver. The publisher materializes the wasm32 Dash
 base-system artifact for every target architecture, including wasm64 Formula
 builds, and a missing or stale artifact fails the test. An explicit `/bin/sh`
 entry in `exec_programs:` remains authoritative for tests that deliberately
-exercise another shell.
+exercise another shell. Guest-file maps are written to an ephemeral testpath
+manifest, and only that bounded path crosses the host process environment; the
+runner still validates and stages every declared guest path individually.
 
 ## Publication State
 

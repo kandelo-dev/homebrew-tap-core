@@ -222,10 +222,12 @@ class Vim < Formula
     libcall_source = testpath/"vim-libcall.c"
     libcall_module = testpath/"vim-libcall.so"
     guest_runtime = "#{guest_opt_prefix}/share/vim/vim92"
-    runtime_files = {}
+    # The shared Node runner carries this large map in a file-backed manifest,
+    # keeping the host command bounded while retaining per-file VFS validation.
+    runtime_guest_files = {}
     runtime.glob("**/*").select(&:file?).each do |file|
       relative = file.relative_path_from(runtime)
-      runtime_files["#{guest_runtime}/#{relative}"] = runtime/relative
+      runtime_guest_files["#{guest_runtime}/#{relative}"] = runtime/relative
     end
     source.write("alpha\nbeta\n")
     libcall_source.write <<~C
@@ -271,7 +273,7 @@ class Vim < Formula
       bin/"vim",
       ["-Nu", "NONE", "-n", "-es", "-S", startup_commands.basename],
       env:                       vim_env,
-      guest_files:               runtime_files,
+      guest_files:               runtime_guest_files,
       merge_stderr:              true,
       writable_host_directories: { "/work" => testpath },
     )
@@ -281,7 +283,7 @@ class Vim < Formula
       env:                       vim_env,
       exec_programs:             { "/bin/sh" => formula_opt_bin("kandelo-dev/tap-core/dash")/"dash" },
       expected_fork_descendants: 1,
-      guest_files:               runtime_files,
+      guest_files:               runtime_guest_files,
       merge_stderr:              true,
       writable_host_directories: { "/work" => testpath },
     )

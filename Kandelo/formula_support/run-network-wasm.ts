@@ -66,6 +66,22 @@ function writeGuestFile(
   }
 }
 
+function readGuestFilesManifest(path: string | undefined): Record<string, string> {
+  if (!path) return {};
+
+  const manifest = resolve(path);
+  const value = JSON.parse(readFileSync(manifest, "utf8")) as unknown;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("formula guest-files manifest must be an object");
+  }
+  if (!Object.entries(value).every(
+    ([guestPath, hostPath]) => guestPath.length > 0 && typeof hostPath === "string",
+  )) {
+    throw new Error("formula guest-files manifest values must be host paths");
+  }
+  return value as Record<string, string>;
+}
+
 async function main(): Promise<void> {
   const [root, programPath, ...args] = process.argv.slice(2);
   if (!root || !programPath) {
@@ -84,9 +100,9 @@ async function main(): Promise<void> {
     const { resolveBinary } = await import(binaryResolverUrl);
     addDefaultBaseExecPrograms(execPrograms, resolveBinary);
   }
-  const guestFiles = JSON.parse(
-    process.env.KANDELO_FORMULA_GUEST_FILES_JSON ?? "{}",
-  ) as Record<string, string>;
+  const guestFiles = readGuestFilesManifest(
+    process.env.KANDELO_FORMULA_GUEST_FILES_MANIFEST,
+  );
   const writableHostDirectories = JSON.parse(
     process.env.KANDELO_FORMULA_WRITABLE_HOST_DIRS_JSON ?? "{}",
   ) as Record<string, string>;
