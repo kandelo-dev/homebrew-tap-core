@@ -133,10 +133,12 @@ class Vim < Formula
       odie "Vim path diagnostics lost the guest ncurses identity" unless
         pathdef_contents.include?(guest_ncurses)
       forbidden_paths = [
-        buildpath, root, prefix, opt_prefix, ncurses, llvm_prefix,
-        HOMEBREW_PREFIX, Dir.home, "/nix/store/", "/private/tmp/",
+        buildpath, root, prefix, llvm_prefix, Dir.home, "/nix/store/", "/private/tmp/",
         "/private/var/", "/Users/"
       ]
+      forbidden_paths << opt_prefix if opt_prefix.to_s != guest_opt_prefix
+      forbidden_paths << ncurses if ncurses.to_s != guest_ncurses
+      forbidden_paths << HOMEBREW_PREFIX if HOMEBREW_PREFIX.to_s != guest_brew_prefix
       forbidden_paths.compact.map(&:to_s).reject(&:empty?).uniq.each do |path|
         odie "Vim path diagnostics retain builder path #{path}" if pathdef_contents.include?(path)
       end
