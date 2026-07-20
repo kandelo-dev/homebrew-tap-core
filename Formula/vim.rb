@@ -143,7 +143,12 @@ class Vim < Formula
         odie "Vim path diagnostics retain builder path #{path}" if pathdef_contents.include?(path)
       end
 
-      system "make", "-j#{ENV.make_jobs}"
+      # Vim's link.sh deletes and regenerates auto/pathdef.c when it decides a
+      # library can be omitted. Use its direct-link mode so the intentional
+      # -ldl dependency and the normalized diagnostics above remain intact.
+      system "make", "-j#{ENV.make_jobs}", "LINK_AS_NEEDED=yes"
+      odie "Vim regenerated normalized path diagnostics during link" if
+        pathdef.binread != pathdef_contents
 
       instrumented = buildpath/"src/vim.instrumented"
       system "#{root}/scripts/run-wasm-fork-instrument.sh",
