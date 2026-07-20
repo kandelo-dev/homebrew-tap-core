@@ -185,8 +185,12 @@ gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
 
 The first-party catalog rollout uses one Formula per write dispatch, even
 though the reusable workflow supports a comma-separated Formula list for other
-controlled operations. Keep no more than six write-publication runs queued or
-in progress at once. Dispatch only a dependency-ready Formula: every required
+controlled operations. Keep no more than eight write-publication runs queued or
+in progress at once. This is a soft operator batch limit, not a correctness
+boundary: Formula-scoped index concurrency serializes same-Formula OCI index
+writers, and the tap-wide `homebrew-tap-publish` state lock serializes
+finalizers; excess runner work may queue. Dispatch only a dependency-ready
+Formula: every required
 same-tap build, test, and runtime dependency must already have a successful
 bottle on tap `main` for the selected architecture, current Kandelo ABI, and
 repository-rooted bottle namespace. A failed Formula blocks its downstream
