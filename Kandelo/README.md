@@ -156,11 +156,11 @@ cd /path/to/kandelo
 scripts/dev-shell.sh npx tsx images/vfs/scripts/build-homebrew-vfs-image.ts \
   --metadata /path/to/homebrew-tap-core/Kandelo/metadata.json \
   --tap-root /path/to/homebrew-tap-core \
-  --package hello \
+  --package what \
   --arch wasm32 \
   --runtime node \
-  --out target/homebrew-hello.vfs.zst \
-  --report target/homebrew-hello.vfs-report.json
+  --out target/homebrew-what.vfs.zst \
+  --report target/homebrew-what.vfs-report.json
 ```
 
 The builder consumes only `metadata.json`, link manifests, and bottle tarballs.

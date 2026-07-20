@@ -18,7 +18,6 @@ and runtime-test mechanics live in
 
 Formula source currently present in this repository includes:
 
-- `hello`, the original publication control;
 - `zlib` and `ruby`, the first dependency and heavy-runtime Formulae;
 - `sqlite`, including the library and real command-line shell, plus the `bzip2`/`xz`
   compression tools and static libraries from the dependency-first source-build pilot;
@@ -142,8 +141,7 @@ Bottle metadata must be generated from the same trusted build that produces
 the bottle bytes. Do not hand-write placeholder hashes or reuse bottle data
 across Kandelo ABI versions. The repository-rooted native Homebrew Open
 Container Initiative (OCI) publisher is implemented, and the first-party
-bottle catalog rollout is in progress. The retained `hello` provenance report
-is historical publication evidence. User-facing installation instructions
+bottle catalog rollout is in progress. User-facing installation instructions
 remain gated on real stock-guest Homebrew validation in `Automattic/kandelo`.
 
 Bottle operations use `repository_dispatch`, so GitHub always loads the small
