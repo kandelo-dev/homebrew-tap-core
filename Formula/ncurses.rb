@@ -109,6 +109,9 @@ class Ncurses < Formula
         # Do not inherit the build host's compressed manpage convention. The
         # Kandelo guest image expects ordinary files at stable man3 paths.
         "--with-manpage-format=normal",
+        # ncurses otherwise detects Debian-family build hosts and silently
+        # renames section 3x pages to distribution-specific 3ncurses names.
+        "--with-manpage-renames=no",
         "--with-termlib",
         "--with-debug",
         "--without-profile",
