@@ -45,4 +45,11 @@ class Hello < Formula
     output = kandelo_run_wasm(hello, ["--version"])
     assert_match "hello (GNU Hello) #{version}", output
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "539f017d01ee92902107a3474c1383858e06136a176b96c6da3d6549df7d80f2"
+  end
+
 end
