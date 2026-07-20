@@ -435,7 +435,7 @@ class Bash < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b2fd049f7856fe963a51e9044ba6ec8fadb5ee1d7c4c3705ebb4e14f390a7b51"
+    rebuild 3
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "39f3e7e8c44d3e6d99bc2c409ef785ca2cc37ee3c9d6949322f29bd3682c1501"
   end
 end
