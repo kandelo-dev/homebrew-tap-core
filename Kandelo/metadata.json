@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-07-19T23:59:27Z",
+  "generated_at": "2026-07-20T00:30:37Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
-  "kandelo_commit": "f739ed70cc622cdbc7b49cf25e6d734784d7bf26",
+  "kandelo_commit": "c15cbbbddaf2b1a9cc176b61dc4768af93940380",
   "kandelo_repository": "Automattic/kandelo",
   "packages": [
     {
@@ -597,6 +597,45 @@
           "arch": "wasm32",
           "bottle_tag": "wasm32_kandelo",
           "browser_compatible": false,
+          "built_at": "2026-07-20T00:30:37Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29709093205",
+          "built_from": {
+            "formula_sha256": "91e64eb9a232877e878592c727c106fc2425688edadc0a7e41f5c5adb152c214",
+            "kandelo_commit": "c15cbbbddaf2b1a9cc176b61dc4768af93940380",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "a4acc690e090f2dba6623da6bb403ca4defe4521",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 16551,
+          "cache_key_sha": "171e1444444b810b2985b83a54c6415f091093d8ac5e94e3d5843665ce046301",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/musl-fts-1.2.7-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "171e1444444b810b2985b83a54c6415f091093d8ac5e94e3d5843665ce046301",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/musl-fts/blobs/sha256:171e1444444b810b2985b83a54c6415f091093d8ac5e94e3d5843665ce046301"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/musl-fts.json",
+      "formula_path": "Formula/musl-fts.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/musl-fts",
+      "name": "musl-fts",
+      "version": "1.2.7"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
           "built_at": "2026-07-19T22:59:54Z",
           "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706558640",
           "built_from": {
@@ -1061,7 +1100,7 @@
   ],
   "release_tag": "bottles-abi-v41",
   "schema": 1,
-  "tap_commit": "12ce3cdff72b89d9bdde1d58aee430199f4bc1b2",
+  "tap_commit": "a4acc690e090f2dba6623da6bb403ca4defe4521",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }

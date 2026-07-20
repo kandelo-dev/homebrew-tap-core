@@ -37,7 +37,7 @@
   "name": "grep",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "12ce3cdff72b89d9bdde1d58aee430199f4bc1b2",
+  "tap_commit": "a4acc690e090f2dba6623da6bb403ca4defe4521",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "3.11"

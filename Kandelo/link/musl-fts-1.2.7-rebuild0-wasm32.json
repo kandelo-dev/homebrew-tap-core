@@ -1,0 +1,39 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 16551,
+    "cache_key_sha": "171e1444444b810b2985b83a54c6415f091093d8ac5e94e3d5843665ce046301",
+    "payload_root": "musl-fts/1.2.7",
+    "sha256": "171e1444444b810b2985b83a54c6415f091093d8ac5e94e3d5843665ce046301",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/musl-fts/blobs/sha256:171e1444444b810b2985b83a54c6415f091093d8ac5e94e3d5843665ce046301"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {},
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/musl-fts/1.2.7",
+  "links": [
+    {
+      "source": "include/fts.h",
+      "target": "include/fts.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libfts.a",
+      "target": "lib/libfts.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/musl-fts.pc",
+      "target": "lib/pkgconfig/musl-fts.pc",
+      "type": "symlink"
+    }
+  ],
+  "package": "musl-fts",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/musl-fts.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.2.7"
+}
