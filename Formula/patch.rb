@@ -116,4 +116,10 @@ class Patch < Formula
     )
     assert_equal "ONE\nthree\nfour\n", (workspace/"ed-target.txt").read
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "c6fc1e3ce0735098a0e0163a08deaf4c9147aed1762b849a8c01cd2ef5d93111"
+  end
+
 end
