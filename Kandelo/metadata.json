@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-20T07:52:56Z",
+  "generated_at": "2026-07-20T07:53:22Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
@@ -733,6 +733,50 @@
       "full_name": "kandelo-dev/tap-core/libxml2",
       "name": "libxml2",
       "version": "2.13.8_2"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-20T07:53:22Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724871153",
+          "built_from": {
+            "formula_sha256": "0f01474a3ee1991e18437c5e96ae360b16cd12c7fa2edeeaf5ce12bad8b77e25",
+            "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 467527,
+          "cache_key_sha": "239ed19d15ff5514bb37cc57366e0d25d3b81f7b9b20bdfba17af6f44829c9c6",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/m4-1.4.21-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "239ed19d15ff5514bb37cc57366e0d25d3b81f7b9b20bdfba17af6f44829c9c6",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/m4/blobs/sha256:239ed19d15ff5514bb37cc57366e0d25d3b81f7b9b20bdfba17af6f44829c9c6"
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "dash",
+          "version": "0.5.12"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/m4.json",
+      "formula_path": "Formula/m4.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/m4",
+      "name": "m4",
+      "version": "1.4.21"
     },
     {
       "bottle_rebuild": 0,
