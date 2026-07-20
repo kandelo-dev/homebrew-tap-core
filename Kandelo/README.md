@@ -24,6 +24,7 @@ link-manifest.schema.json
 provenance.schema.json
 vfs-acceptance.json                                # optional tap-owned gate selection
 vfs-acceptance.Brewfile                           # optional selected static roots
+vfs-acceptance-shell.json                         # optional reviewed image shell policy
 
 metadata.json                                      # generated tap state
 formula/<name>.json                               # generated tap state
@@ -37,6 +38,12 @@ validator development. It is not published metadata.
 `vfs-acceptance.json` and its referenced Brewfile are reviewed tap policy, not
 generated sidecars. The publisher reads them from the exact tap commit and
 never rewrites them.
+
+Schema 2 also references `vfs-acceptance-shell.json`. The accepted Brewfile
+includes the published Dash bottle as an explicit root, and the exact composed
+image must start that VFS-owned shell in Chromium without downloading Kandelo's
+legacy shell assets. The selected `file-formula` command continues to prove the
+dependency-bearing bottle closure independently in Node and Chromium.
 
 ## Generation
 
