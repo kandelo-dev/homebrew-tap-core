@@ -201,7 +201,11 @@ class Libzip < Formula
         if (zip_set_file_compression(archive, index, ZIP_CM_DEFLATE, 0) != 0) return 4;
         if (zip_file_set_mtime(archive, index, (time_t)1700000000, 0) != 0) return 5;
         if (zip_set_archive_comment(archive, comment, sizeof(comment) - 1) != 0) return 6;
-        if (zip_close(archive) != 0) return 7;
+        if (zip_close(archive) != 0) {
+          fprintf(stderr, "libzip-smoke first zip_close failed: %s\\n", zip_strerror(archive));
+          zip_discard(archive);
+          return 7;
+        }
 
         archive = zip_open("libzip-smoke.zip", ZIP_RDONLY, &error);
         if (archive == NULL || zip_get_num_entries(archive, 0) != 1) return 8;
