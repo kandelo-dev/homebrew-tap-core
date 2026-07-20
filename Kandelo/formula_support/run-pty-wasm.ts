@@ -22,6 +22,7 @@ const O_CREAT = 0x0040;
 const O_TRUNC = 0x0200;
 const S_IFMT = 0xf000;
 const S_IFDIR = 0x4000;
+const MAX_PTY_CONFIG_BYTES = 16 * 1024 * 1024;
 
 interface PtyConfig {
   argv0?: string | null;
@@ -115,13 +116,29 @@ async function main(): Promise<void> {
     throw new Error("usage: run-pty-wasm.ts KANDELO_ROOT PROGRAM [ARGS...]");
   }
 
-  const config = JSON.parse(
-    process.env.KANDELO_FORMULA_PTY_CONFIG_JSON ?? "{}",
-  ) as PtyConfig;
-  if (!Array.isArray(config.inputs)) {
+  const configPath = process.env.KANDELO_FORMULA_PTY_CONFIG_PATH;
+  if (!configPath) {
+    throw new Error("KANDELO_FORMULA_PTY_CONFIG_PATH is required");
+  }
+  let configStat: ReturnType<typeof statSync>;
+  try {
+    configStat = statSync(configPath);
+  } catch (error) {
+    throw new Error(`PTY config file is unavailable: ${String(error)}`);
+  }
+  if (!configStat.isFile() || configStat.size <= 0 || configStat.size > MAX_PTY_CONFIG_BYTES) {
     throw new Error(
-      "KANDELO_FORMULA_PTY_CONFIG_JSON must contain an inputs array",
+      `PTY config file must be a nonempty regular file no larger than ${MAX_PTY_CONFIG_BYTES} bytes`,
     );
+  }
+  let config: PtyConfig;
+  try {
+    config = JSON.parse(readFileSync(configPath, "utf8")) as PtyConfig;
+  } catch (error) {
+    throw new Error(`PTY config JSON is malformed: ${String(error)}`);
+  }
+  if (!Array.isArray(config.inputs)) {
+    throw new Error("PTY config JSON must contain an inputs array");
   }
   if (config.rerunInputs != null && !Array.isArray(config.rerunInputs)) {
     throw new Error("rerunInputs must be an array when present");

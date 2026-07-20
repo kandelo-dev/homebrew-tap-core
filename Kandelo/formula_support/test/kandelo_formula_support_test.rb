@@ -19,7 +19,8 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     attr_accessor :build_path, :dependency_formulae, :homebrew_prefix_path, :nix_path, :prefix_path, :root_path,
                   :runtime_formulae, :shell_result, :test_path
-    attr_reader :command, :expected_status, :recorded_launcher, :system_args, :system_calls
+    attr_reader :command, :expected_status, :pty_config, :pty_config_mode, :pty_config_path,
+                :recorded_launcher, :system_args, :system_calls
 
     def kandelo_require_root!
       root_path || "/tmp/kandelo root"
@@ -60,6 +61,14 @@ class KandeloFormulaSupportTest < Minitest::Test
     def shell_output(command, expected_status = 0)
       @command = command
       @expected_status = expected_status
+      config_assignment = Shellwords.shellsplit(command).find do |token|
+        token.start_with?("KANDELO_FORMULA_PTY_CONFIG_PATH=")
+      end
+      if config_assignment
+        @pty_config_path = Pathname(config_assignment.delete_prefix("KANDELO_FORMULA_PTY_CONFIG_PATH="))
+        @pty_config_mode = @pty_config_path.stat.mode & 0777
+        @pty_config = JSON.parse(@pty_config_path.read)
+      end
       shell_result || "runtime-ok\n"
     end
 
@@ -1191,7 +1200,7 @@ class KandeloFormulaSupportTest < Minitest::Test
   def test_browser_execution_accepts_expected_nonzero_status_and_merged_stderr
     Dir.mktmpdir("kandelo-formula-support") do |dir|
       harness = Harness.new
-      harness.root_path = Pathname(dir)/"kandelo root"
+      harness.root_path = (Pathname(dir)/"kandelo root").to_s
       harness.test_path = Pathname(dir)/"formula test"
       harness.test_path.mkpath
       command = Pathname(dir)/"getconf"
@@ -1261,6 +1270,8 @@ class KandeloFormulaSupportTest < Minitest::Test
 
       harness = Harness.new
       harness.root_path = root.to_s
+      harness.test_path = Pathname(dir)/"formula test"
+      harness.test_path.mkpath
       output = harness.kandelo_run_pty_wasm(
         "program.wasm", ["note.txt"],
         argv0:                      "/home/linuxbrew/.linuxbrew/opt/program/bin/program",
@@ -1277,28 +1288,68 @@ class KandeloFormulaSupportTest < Minitest::Test
 
       assert_equal "runtime-ok\n", output
       assert_includes harness.command, "run-pty-wasm.ts"
-      assert_includes harness.command, "KANDELO_FORMULA_PTY_CONFIG_JSON="
-      assert_includes harness.command, "/home/linuxbrew/.linuxbrew/opt/program/bin/program"
+      refute_includes harness.command, "KANDELO_FORMULA_PTY_CONFIG_JSON="
+      assert_includes harness.command, "KANDELO_FORMULA_PTY_CONFIG_PATH="
       assert_includes harness.command, "note.txt"
-      assert_includes harness.command, "beta"
-      assert_includes harness.command, "rerunInputs"
-      assert_includes harness.command, "/opt/program/bin/helper"
-      assert_includes harness.command, "/formula/helper"
-      assert_includes harness.command, "/etc/program.conf"
-      assert_includes harness.command, "/home/linuxbrew/.linuxbrew/var/program"
-      assert_includes harness.command, "writableGuestDirectories"
-      assert_includes harness.command, "writableHostDirectories"
-      assert_includes harness.command, "/work"
-      assert_includes harness.command, "/formula/test\\ output"
       assert_includes harness.command, "program.wasm"
-      config_assignment = Shellwords.shellsplit(harness.command).find do |token|
-        token.start_with?("KANDELO_FORMULA_PTY_CONFIG_JSON=")
-      end
-      refute_nil config_assignment
-      config = JSON.parse(config_assignment.delete_prefix("KANDELO_FORMULA_PTY_CONFIG_JSON="))
+      config = harness.pty_config
+      assert_equal 0600, harness.pty_config_mode
+      refute_path_exists harness.pty_config_path
+      assert_equal "/home/linuxbrew/.linuxbrew/opt/program/bin/program", config.fetch("argv0")
+      assert_equal ["\u001c", "beta", "\r"], config.fetch("inputs")
+      assert_equal ["\u0018"], config.fetch("rerunInputs")
+      assert_equal({ "/opt/program/bin/helper" => "/formula/helper" }, config.fetch("execPrograms"))
+      assert_equal({ "/etc/program.conf" => "/formula/program.conf" }, config.fetch("guestFiles"))
+      assert_equal ["/home/linuxbrew/.linuxbrew/var/program"],
+        config.fetch("writableGuestDirectories")
+      assert_equal({ "/work" => "/formula/test output" }, config.fetch("writableHostDirectories"))
       assert_equal 2, config.fetch("expectedForkDescendants")
       assert_equal "kandelo_run_pty_wasm", harness.recorded_launcher
       refute_path_exists host_dist
+    end
+  end
+
+  def test_pty_execution_keeps_large_runtime_maps_out_of_the_process_environment
+    Dir.mktmpdir("kandelo-formula-support") do |dir|
+      harness = Harness.new
+      harness.root_path = (Pathname(dir)/"kandelo root").to_s
+      harness.test_path = Pathname(dir)/"formula test"
+      harness.test_path.mkpath
+      guest_files = (0...4_000).to_h do |index|
+        ["/usr/share/vim/runtime/file-#{index}", "/host/vim/runtime/file-#{index}"]
+      end
+
+      harness.kandelo_run_pty_wasm("program.wasm", [], inputs: [":wq\r"], guest_files:)
+
+      config_bytes = JSON.generate(harness.pty_config).bytesize
+      assert_operator config_bytes, :>, 128 * 1024
+      assert_operator harness.command.bytesize, :<, 4 * 1024
+      refute_includes harness.command, "/usr/share/vim/runtime/file-3999"
+      assert_equal 0600, harness.pty_config_mode
+      refute_path_exists harness.pty_config_path
+      assert_equal guest_files, harness.pty_config.fetch("guestFiles")
+    end
+  end
+
+  def test_pty_execution_removes_config_after_runner_failure
+    Dir.mktmpdir("kandelo-formula-support") do |dir|
+      harness_class = Class.new(Harness) do
+        def shell_output(command, expected_status = 0)
+          super
+          raise "runner failed"
+        end
+      end
+      harness = harness_class.new
+      harness.root_path = (Pathname(dir)/"kandelo root").to_s
+      harness.test_path = Pathname(dir)/"formula test"
+      harness.test_path.mkpath
+
+      error = assert_raises(RuntimeError) do
+        harness.kandelo_run_pty_wasm("program.wasm", [], inputs: [])
+      end
+
+      assert_equal "runner failed", error.message
+      refute_path_exists harness.pty_config_path
     end
   end
 
