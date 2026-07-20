@@ -374,7 +374,15 @@ class Git < Formula
     paged_log = kandelo_run_pty_wasm(
       bin/"git", ["-C", "clone", "--paginate", "-c", "color.ui=false", "log", "--oneline"],
       argv0:                     "#{GUEST_GIT_BIN}/git",
-      env:                       env.merge("HOME" => "/work", "LESS" => "RX", "TERM" => "xterm-256color"),
+      # A cold Git + less launch can exceed the generic 30-second guest
+      # deadline before the queued quit input is observed. Keep this
+      # interactive proof bounded while allowing the real pager to start.
+      env:                       env.merge(
+        "HOME" => "/work",
+        "LESS" => "RX",
+        "TERM" => "xterm-256color",
+        "TIMEOUT" => "120000",
+      ),
       exec_programs:             runtime_programs,
       guest_files:               runtime_files,
       inputs:                    ["q"],
