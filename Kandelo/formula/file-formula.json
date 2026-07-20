@@ -1,0 +1,65 @@
+{
+  "bottle_rebuild": 2,
+  "bottles": [
+    {
+      "arch": "wasm32",
+      "bottle_tag": "wasm32_kandelo",
+      "browser_compatible": false,
+      "built_at": "2026-07-20T22:43:25Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29783233707",
+      "built_from": {
+        "formula_sha256": "4fead2d632beb5ade15c26ffa21c3e17af351be18ff615e99d712eedeafb1147",
+        "kandelo_commit": "110619f8e7e5d51ec85b62f526176535462cd3bd",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "dfea689bb93aebcd4583e0a26d7c1e68ed2bd441",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "bytes": 323535,
+      "cache_key_sha": "4d0efc5bcfc677fb07142d5766f1fe628e98ecff4cba3d2786844947eae1c7e9",
+      "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+      "fork_instrumentation": "required",
+      "kandelo_abi": 41,
+      "link_manifest": "Kandelo/link/file-formula-5.45-rebuild2-wasm32.json",
+      "prefix": "/home/linuxbrew/.linuxbrew",
+      "runtime_support": [
+        "node"
+      ],
+      "sha256": "4d0efc5bcfc677fb07142d5766f1fe628e98ecff4cba3d2786844947eae1c7e9",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/file-formula/blobs/sha256:4d0efc5bcfc677fb07142d5766f1fe628e98ecff4cba3d2786844947eae1c7e9"
+    }
+  ],
+  "dependencies": [
+    {
+      "full_name": "kandelo-dev/tap-core/bzip2",
+      "name": "bzip2",
+      "version": "1.0.8_2"
+    },
+    {
+      "full_name": "kandelo-dev/tap-core/libmagic",
+      "name": "libmagic",
+      "version": "5.45"
+    },
+    {
+      "full_name": "kandelo-dev/tap-core/xz",
+      "name": "xz",
+      "version": "5.6.2_1"
+    },
+    {
+      "full_name": "kandelo-dev/tap-core/zlib",
+      "name": "zlib",
+      "version": "1.3.1_4"
+    }
+  ],
+  "formula_path": "Formula/file-formula.rb",
+  "formula_revision": 0,
+  "full_name": "kandelo-dev/tap-core/file-formula",
+  "kandelo_abi": 41,
+  "name": "file-formula",
+  "schema": 1,
+  "source_metadata": "Kandelo/metadata.json",
+  "tap_commit": "dfea689bb93aebcd4583e0a26d7c1e68ed2bd441",
+  "tap_name": "kandelo-dev/tap-core",
+  "tap_repository": "kandelo-dev/homebrew-tap-core",
+  "version": "5.45"
+}

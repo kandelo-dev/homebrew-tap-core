@@ -140,6 +140,6 @@ class FileFormula < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 2
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "dbf37755f59dffcff7dec1c0717bb6a034f2f3a6f5787b0bf8569fa9db16a603"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "4d0efc5bcfc677fb07142d5766f1fe628e98ecff4cba3d2786844947eae1c7e9"
   end
 end
