@@ -4,6 +4,7 @@
 require "fileutils"
 require "json"
 require "shellwords"
+require "tempfile"
 
 # KandeloFormulaSupport is the single place Kandelo-specific mechanics live so
 # that formula bodies stay idiomatic Homebrew. It owns SDK/toolchain activation
@@ -679,21 +680,36 @@ module KandeloFormulaSupport
       rows:                     rows,
       expectedForkDescendants:  expected_fork_descendants,
     })
-
     # Compiled host output shadows TypeScript source under tsx. PTY formula
     # tests must exercise the checkout supplied by HOMEBREW_KANDELO_ROOT.
     FileUtils.rm_rf(Pathname(root)/"host/dist")
 
     runner = Pathname(__dir__)/"run-pty-wasm.ts"
-    command = "cd #{Shellwords.escape(root)} && "
-    command << "KANDELO_FORMULA_PTY_CONFIG_JSON=#{Shellwords.escape(config)} "
-    command << "node --experimental-wasm-exnref --import tsx/esm "
+    command = +"node --experimental-wasm-exnref --import tsx/esm "
     command << "#{Shellwords.escape(runner.to_s)} #{Shellwords.escape(root)} "
     command << Shellwords.escape(wasm_path.to_s)
     argv.each { |arg| command << " #{Shellwords.escape(arg.to_s)}" }
     command << " 2>&1"
 
-    output = shell_output(command, expected_status)
+    # Editor runtimes can contribute thousands of mapped files. Keep that
+    # bounded data out of argv and the process environment so the host's
+    # ARG_MAX limit cannot prevent Node from starting. Only the small path to
+    # a mode-0600 temporary file crosses the process boundary.
+    config_file = Tempfile.new(["kandelo-pty-config-", ".json"], testpath.to_s)
+    begin
+      config_file.chmod(0600)
+      config_file.binmode
+      config_file.write(config)
+      config_file.flush
+
+      invocation = "cd #{Shellwords.escape(root)} && "
+      invocation << "KANDELO_FORMULA_PTY_CONFIG_PATH=#{Shellwords.escape(config_file.path)} "
+      invocation << command
+
+      output = shell_output(invocation, expected_status)
+    ensure
+      config_file.close!
+    end
     kandelo_record_node_execution!(wasm_path, argv, launcher: "kandelo_run_pty_wasm")
     output
   end
