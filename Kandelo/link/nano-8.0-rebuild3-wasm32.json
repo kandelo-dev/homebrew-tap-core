@@ -1,0 +1,293 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 522108,
+    "cache_key_sha": "a436b8a2d03dae2558c78985a90e49ae3343cdf9581d62b3f73c96da5aa22673",
+    "payload_root": "nano/8.0",
+    "sha256": "a436b8a2d03dae2558c78985a90e49ae3343cdf9581d62b3f73c96da5aa22673",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nano/blobs/sha256:a436b8a2d03dae2558c78985a90e49ae3343cdf9581d62b3f73c96da5aa22673"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/nano/8.0",
+  "links": [
+    {
+      "source": "bin/nano",
+      "target": "bin/nano",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/rnano",
+      "target": "bin/rnano",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/nano/faq.html",
+      "target": "share/doc/nano/faq.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/nano/nano.html",
+      "target": "share/doc/nano/nano.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/nano.info",
+      "target": "share/info/nano.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/nano.1",
+      "target": "share/man/man1/nano.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/rnano.1",
+      "target": "share/man/man1/rnano.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man5/nanorc.5",
+      "target": "share/man/man5/nanorc.5",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/asm.nanorc",
+      "target": "share/nano/asm.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/autoconf.nanorc",
+      "target": "share/nano/autoconf.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/awk.nanorc",
+      "target": "share/nano/awk.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/c.nanorc",
+      "target": "share/nano/c.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/changelog.nanorc",
+      "target": "share/nano/changelog.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/cmake.nanorc",
+      "target": "share/nano/cmake.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/css.nanorc",
+      "target": "share/nano/css.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/default.nanorc",
+      "target": "share/nano/default.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/elisp.nanorc",
+      "target": "share/nano/elisp.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/email.nanorc",
+      "target": "share/nano/email.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/extra/ada.nanorc",
+      "target": "share/nano/extra/ada.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/extra/fortran.nanorc",
+      "target": "share/nano/extra/fortran.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/extra/haskell.nanorc",
+      "target": "share/nano/extra/haskell.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/extra/povray.nanorc",
+      "target": "share/nano/extra/povray.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/extra/spec.nanorc",
+      "target": "share/nano/extra/spec.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/go.nanorc",
+      "target": "share/nano/go.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/groff.nanorc",
+      "target": "share/nano/groff.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/guile.nanorc",
+      "target": "share/nano/guile.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/html.nanorc",
+      "target": "share/nano/html.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/java.nanorc",
+      "target": "share/nano/java.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/javascript.nanorc",
+      "target": "share/nano/javascript.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/json.nanorc",
+      "target": "share/nano/json.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/lua.nanorc",
+      "target": "share/nano/lua.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/makefile.nanorc",
+      "target": "share/nano/makefile.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/man.nanorc",
+      "target": "share/nano/man.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/markdown.nanorc",
+      "target": "share/nano/markdown.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/nanohelp.nanorc",
+      "target": "share/nano/nanohelp.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/nanorc.nanorc",
+      "target": "share/nano/nanorc.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/nftables.nanorc",
+      "target": "share/nano/nftables.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/objc.nanorc",
+      "target": "share/nano/objc.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/ocaml.nanorc",
+      "target": "share/nano/ocaml.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/patch.nanorc",
+      "target": "share/nano/patch.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/perl.nanorc",
+      "target": "share/nano/perl.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/php.nanorc",
+      "target": "share/nano/php.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/po.nanorc",
+      "target": "share/nano/po.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/python.nanorc",
+      "target": "share/nano/python.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/ruby.nanorc",
+      "target": "share/nano/ruby.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/rust.nanorc",
+      "target": "share/nano/rust.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/sh.nanorc",
+      "target": "share/nano/sh.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/sql.nanorc",
+      "target": "share/nano/sql.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/tcl.nanorc",
+      "target": "share/nano/tcl.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/tex.nanorc",
+      "target": "share/nano/tex.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/texinfo.nanorc",
+      "target": "share/nano/texinfo.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/xml.nanorc",
+      "target": "share/nano/xml.nanorc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nano/yaml.nanorc",
+      "target": "share/nano/yaml.nanorc",
+      "type": "symlink"
+    }
+  ],
+  "package": "nano",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/nano.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "8.0"
+}

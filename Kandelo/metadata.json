@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-20T17:35:19Z",
+  "generated_at": "2026-07-20T17:35:24Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "f3aad8f124750525365e7019db5abf05ddf14c10",
@@ -1170,6 +1170,51 @@
       "full_name": "kandelo-dev/tap-core/musl-fts",
       "name": "musl-fts",
       "version": "1.2.7"
+    },
+    {
+      "bottle_rebuild": 3,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-20T17:35:24Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29762946547",
+          "built_from": {
+            "formula_sha256": "97d619db39570f2f7e3b9d1b1d908daac26bce3d6f9b1f0804a27360735d8498",
+            "kandelo_commit": "f3aad8f124750525365e7019db5abf05ddf14c10",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "f9bb6d0e1b70e326e339afcded8403703f28462b",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 522108,
+          "cache_key_sha": "a436b8a2d03dae2558c78985a90e49ae3343cdf9581d62b3f73c96da5aa22673",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/nano-8.0-rebuild3-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "a436b8a2d03dae2558c78985a90e49ae3343cdf9581d62b3f73c96da5aa22673",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nano/blobs/sha256:a436b8a2d03dae2558c78985a90e49ae3343cdf9581d62b3f73c96da5aa22673"
+        }
+      ],
+      "dependencies": [
+        {
+          "full_name": "kandelo-dev/tap-core/ncurses",
+          "name": "ncurses",
+          "version": "6.5"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/nano.json",
+      "formula_path": "Formula/nano.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/nano",
+      "name": "nano",
+      "version": "8.0"
     },
     {
       "bottle_rebuild": 0,
