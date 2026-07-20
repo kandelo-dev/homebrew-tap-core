@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/make.json",
-      "sha256": "41eace99a7fdf6d67620e7f93b76657b00e4068d1bc34ce8ed4d87d2c5cd5db5"
+      "sha256": "58f759214108e5b9b34fd9630112aec8f7c2d9eb55efd528ab438a3ba769b056"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/make-4.4.1-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "f16c6aadf89fd278b409ccdb72d0c0668d20188fa90581f946cc378a7f22e786"
+      "sha256": "b32c80ad6421ec18d0be7d154cfbb7d9fc9607c38b2738cdc324bb6605c9bc30"
     },
     "provenance_json": {
       "path": "Kandelo/reports/make-4.4.1-rebuild0-wasm32.provenance.json",
-      "sha256": "ea8b309220d5400a1908170c876160bdb6c6dc75865782617160d4f1a086e155"
+      "sha256": "e6b89d51d4b3f8d7021d0a26e77ad96e09c1b2c424ab013ddb278852689b1e35"
     }
   },
   "repositories": {

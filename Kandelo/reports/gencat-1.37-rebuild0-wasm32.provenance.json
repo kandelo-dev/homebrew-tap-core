@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/gencat.json",
-      "sha256": "722805708a27cde6cbe07583ae69047ad28452a3ca22bbad8278d3d249276a4e"
+      "sha256": "853f9830a3613f9af015f0f8c780c61a259304e1429c10a404d84cee4abe04ff"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/gencat-1.37-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "f16c6aadf89fd278b409ccdb72d0c0668d20188fa90581f946cc378a7f22e786"
+      "sha256": "b32c80ad6421ec18d0be7d154cfbb7d9fc9607c38b2738cdc324bb6605c9bc30"
     },
     "provenance_json": {
       "path": "Kandelo/reports/gencat-1.37-rebuild0-wasm32.provenance.json",
-      "sha256": "c2fe4b89d2b84825376497213aca8561c4588fc12795a1fe46db38cade023ba3"
+      "sha256": "b85bb906f85624cde6d3df19d1d7dbe0b10ab583bfb2c7a1e2f3ab5429b65856"
     }
   },
   "repositories": {
