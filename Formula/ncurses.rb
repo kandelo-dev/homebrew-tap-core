@@ -440,4 +440,10 @@ class Ncurses < Formula
     cxx_output = kandelo_run_wasm(cxx_wasm, [], env: fallback_env.merge("TERM" => "dumb"))
     assert_includes cxx_output, "ncurses-cxx-ok\n"
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "f5fe23515865c3733ebc72b51468669f63a78041d4caabdef2d2f7bc32b81bc2"
+  end
+
 end
