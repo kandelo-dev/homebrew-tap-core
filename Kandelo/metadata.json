@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-20T07:50:14Z",
+  "generated_at": "2026-07-20T07:50:28Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
@@ -589,6 +589,58 @@
       "full_name": "kandelo-dev/tap-core/libiconv",
       "name": "libiconv",
       "version": "1.19"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-20T07:50:28Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724870328",
+          "built_from": {
+            "formula_sha256": "5e31ed21afff0c3f8b9562807493bf2dde6570373f203619491099b2f67adff9",
+            "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 1111744,
+          "cache_key_sha": "6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/libmagic-5.45-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libmagic/blobs/sha256:6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e"
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "bzip2",
+          "version": "1.0.8_2"
+        },
+        {
+          "name": "xz",
+          "version": "5.6.2_1"
+        },
+        {
+          "name": "zlib",
+          "version": "1.3.1_4"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/libmagic.json",
+      "formula_path": "Formula/libmagic.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/libmagic",
+      "name": "libmagic",
+      "version": "5.45"
     },
     {
       "bottle_rebuild": 0,

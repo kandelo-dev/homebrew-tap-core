@@ -1,0 +1,1764 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1111744,
+    "cache_key_sha": "6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e",
+    "payload_root": "libmagic/5.45",
+    "sha256": "6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libmagic/blobs/sha256:6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {},
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/libmagic/5.45",
+  "links": [
+    {
+      "source": "include/magic.h",
+      "target": "include/magic.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libmagic.a",
+      "target": "lib/libmagic.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/libmagic.pc",
+      "target": "lib/pkgconfig/libmagic.pc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man3/libmagic.3",
+      "target": "share/man/man3/libmagic.3",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man5/magic.5",
+      "target": "share/man/man5/magic.5",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic.mgc",
+      "target": "share/misc/magic.mgc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/Header",
+      "target": "share/misc/magic/Header",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/Localstuff",
+      "target": "share/misc/magic/Localstuff",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/acorn",
+      "target": "share/misc/magic/acorn",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/adi",
+      "target": "share/misc/magic/adi",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/adventure",
+      "target": "share/misc/magic/adventure",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/aes",
+      "target": "share/misc/magic/aes",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/algol68",
+      "target": "share/misc/magic/algol68",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/allegro",
+      "target": "share/misc/magic/allegro",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/alliant",
+      "target": "share/misc/magic/alliant",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/amanda",
+      "target": "share/misc/magic/amanda",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/amigaos",
+      "target": "share/misc/magic/amigaos",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/android",
+      "target": "share/misc/magic/android",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/animation",
+      "target": "share/misc/magic/animation",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/aout",
+      "target": "share/misc/magic/aout",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/apache",
+      "target": "share/misc/magic/apache",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/apl",
+      "target": "share/misc/magic/apl",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/apple",
+      "target": "share/misc/magic/apple",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/application",
+      "target": "share/misc/magic/application",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/applix",
+      "target": "share/misc/magic/applix",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/apt",
+      "target": "share/misc/magic/apt",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/archive",
+      "target": "share/misc/magic/archive",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/aria",
+      "target": "share/misc/magic/aria",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/arm",
+      "target": "share/misc/magic/arm",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/asf",
+      "target": "share/misc/magic/asf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/assembler",
+      "target": "share/misc/magic/assembler",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/asterix",
+      "target": "share/misc/magic/asterix",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/att3b",
+      "target": "share/misc/magic/att3b",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/audio",
+      "target": "share/misc/magic/audio",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/avm",
+      "target": "share/misc/magic/avm",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/basis",
+      "target": "share/misc/magic/basis",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/beetle",
+      "target": "share/misc/magic/beetle",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ber",
+      "target": "share/misc/magic/ber",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/bflt",
+      "target": "share/misc/magic/bflt",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/bhl",
+      "target": "share/misc/magic/bhl",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/bioinformatics",
+      "target": "share/misc/magic/bioinformatics",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/biosig",
+      "target": "share/misc/magic/biosig",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/blackberry",
+      "target": "share/misc/magic/blackberry",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/blcr",
+      "target": "share/misc/magic/blcr",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/blender",
+      "target": "share/misc/magic/blender",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/blit",
+      "target": "share/misc/magic/blit",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/bm",
+      "target": "share/misc/magic/bm",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/bout",
+      "target": "share/misc/magic/bout",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/bsdi",
+      "target": "share/misc/magic/bsdi",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/bsi",
+      "target": "share/misc/magic/bsi",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/btsnoop",
+      "target": "share/misc/magic/btsnoop",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/burp",
+      "target": "share/misc/magic/burp",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/bytecode",
+      "target": "share/misc/magic/bytecode",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/c-lang",
+      "target": "share/misc/magic/c-lang",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/c64",
+      "target": "share/misc/magic/c64",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/cad",
+      "target": "share/misc/magic/cad",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/cafebabe",
+      "target": "share/misc/magic/cafebabe",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/cbor",
+      "target": "share/misc/magic/cbor",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ccf",
+      "target": "share/misc/magic/ccf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/cddb",
+      "target": "share/misc/magic/cddb",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/chord",
+      "target": "share/misc/magic/chord",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/cisco",
+      "target": "share/misc/magic/cisco",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/citrus",
+      "target": "share/misc/magic/citrus",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/clarion",
+      "target": "share/misc/magic/clarion",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/claris",
+      "target": "share/misc/magic/claris",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/clipper",
+      "target": "share/misc/magic/clipper",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/clojure",
+      "target": "share/misc/magic/clojure",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/coff",
+      "target": "share/misc/magic/coff",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/commands",
+      "target": "share/misc/magic/commands",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/communications",
+      "target": "share/misc/magic/communications",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/compress",
+      "target": "share/misc/magic/compress",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/console",
+      "target": "share/misc/magic/console",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/convex",
+      "target": "share/misc/magic/convex",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/coverage",
+      "target": "share/misc/magic/coverage",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/cracklib",
+      "target": "share/misc/magic/cracklib",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/crypto",
+      "target": "share/misc/magic/crypto",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ctags",
+      "target": "share/misc/magic/ctags",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ctf",
+      "target": "share/misc/magic/ctf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/cubemap",
+      "target": "share/misc/magic/cubemap",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/cups",
+      "target": "share/misc/magic/cups",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/dact",
+      "target": "share/misc/magic/dact",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/database",
+      "target": "share/misc/magic/database",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/dataone",
+      "target": "share/misc/magic/dataone",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/dbpf",
+      "target": "share/misc/magic/dbpf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/der",
+      "target": "share/misc/magic/der",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/diamond",
+      "target": "share/misc/magic/diamond",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/dif",
+      "target": "share/misc/magic/dif",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/diff",
+      "target": "share/misc/magic/diff",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/digital",
+      "target": "share/misc/magic/digital",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/dolby",
+      "target": "share/misc/magic/dolby",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/dump",
+      "target": "share/misc/magic/dump",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/dwarfs",
+      "target": "share/misc/magic/dwarfs",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/dyadic",
+      "target": "share/misc/magic/dyadic",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ebml",
+      "target": "share/misc/magic/ebml",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/edid",
+      "target": "share/misc/magic/edid",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/editors",
+      "target": "share/misc/magic/editors",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/efi",
+      "target": "share/misc/magic/efi",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/elf",
+      "target": "share/misc/magic/elf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/encore",
+      "target": "share/misc/magic/encore",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/epoc",
+      "target": "share/misc/magic/epoc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/erlang",
+      "target": "share/misc/magic/erlang",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/espressif",
+      "target": "share/misc/magic/espressif",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/esri",
+      "target": "share/misc/magic/esri",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/fcs",
+      "target": "share/misc/magic/fcs",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/filesystems",
+      "target": "share/misc/magic/filesystems",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/finger",
+      "target": "share/misc/magic/finger",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/firmware",
+      "target": "share/misc/magic/firmware",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/flash",
+      "target": "share/misc/magic/flash",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/flif",
+      "target": "share/misc/magic/flif",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/fonts",
+      "target": "share/misc/magic/fonts",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/forth",
+      "target": "share/misc/magic/forth",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/fortran",
+      "target": "share/misc/magic/fortran",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/frame",
+      "target": "share/misc/magic/frame",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/freebsd",
+      "target": "share/misc/magic/freebsd",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/fsav",
+      "target": "share/misc/magic/fsav",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/fusecompress",
+      "target": "share/misc/magic/fusecompress",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/games",
+      "target": "share/misc/magic/games",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/gcc",
+      "target": "share/misc/magic/gcc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/gconv",
+      "target": "share/misc/magic/gconv",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/gentoo",
+      "target": "share/misc/magic/gentoo",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/geo",
+      "target": "share/misc/magic/geo",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/geos",
+      "target": "share/misc/magic/geos",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/gimp",
+      "target": "share/misc/magic/gimp",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/git",
+      "target": "share/misc/magic/git",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/glibc",
+      "target": "share/misc/magic/glibc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/gnome",
+      "target": "share/misc/magic/gnome",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/gnu",
+      "target": "share/misc/magic/gnu",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/gnumeric",
+      "target": "share/misc/magic/gnumeric",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/gpt",
+      "target": "share/misc/magic/gpt",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/gpu",
+      "target": "share/misc/magic/gpu",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/grace",
+      "target": "share/misc/magic/grace",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/graphviz",
+      "target": "share/misc/magic/graphviz",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/gringotts",
+      "target": "share/misc/magic/gringotts",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/hardware",
+      "target": "share/misc/magic/hardware",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/hitachi-sh",
+      "target": "share/misc/magic/hitachi-sh",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/hp",
+      "target": "share/misc/magic/hp",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/human68k",
+      "target": "share/misc/magic/human68k",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ibm370",
+      "target": "share/misc/magic/ibm370",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ibm6000",
+      "target": "share/misc/magic/ibm6000",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/icc",
+      "target": "share/misc/magic/icc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/iff",
+      "target": "share/misc/magic/iff",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/images",
+      "target": "share/misc/magic/images",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/inform",
+      "target": "share/misc/magic/inform",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/intel",
+      "target": "share/misc/magic/intel",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/interleaf",
+      "target": "share/misc/magic/interleaf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/island",
+      "target": "share/misc/magic/island",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ispell",
+      "target": "share/misc/magic/ispell",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/isz",
+      "target": "share/misc/magic/isz",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/java",
+      "target": "share/misc/magic/java",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/javascript",
+      "target": "share/misc/magic/javascript",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/jpeg",
+      "target": "share/misc/magic/jpeg",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/karma",
+      "target": "share/misc/magic/karma",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/kde",
+      "target": "share/misc/magic/kde",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/keepass",
+      "target": "share/misc/magic/keepass",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/kerberos",
+      "target": "share/misc/magic/kerberos",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/kicad",
+      "target": "share/misc/magic/kicad",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/kml",
+      "target": "share/misc/magic/kml",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/lammps",
+      "target": "share/misc/magic/lammps",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/lecter",
+      "target": "share/misc/magic/lecter",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/lex",
+      "target": "share/misc/magic/lex",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/lif",
+      "target": "share/misc/magic/lif",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/linux",
+      "target": "share/misc/magic/linux",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/lisp",
+      "target": "share/misc/magic/lisp",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/llvm",
+      "target": "share/misc/magic/llvm",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/locoscript",
+      "target": "share/misc/magic/locoscript",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/lua",
+      "target": "share/misc/magic/lua",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/luks",
+      "target": "share/misc/magic/luks",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/m4",
+      "target": "share/misc/magic/m4",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mach",
+      "target": "share/misc/magic/mach",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/macintosh",
+      "target": "share/misc/magic/macintosh",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/macos",
+      "target": "share/misc/magic/macos",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/magic",
+      "target": "share/misc/magic/magic",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mail.news",
+      "target": "share/misc/magic/mail.news",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/make",
+      "target": "share/misc/magic/make",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/map",
+      "target": "share/misc/magic/map",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/maple",
+      "target": "share/misc/magic/maple",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/marc21",
+      "target": "share/misc/magic/marc21",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mathcad",
+      "target": "share/misc/magic/mathcad",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mathematica",
+      "target": "share/misc/magic/mathematica",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/matroska",
+      "target": "share/misc/magic/matroska",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mcrypt",
+      "target": "share/misc/magic/mcrypt",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/measure",
+      "target": "share/misc/magic/measure",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mercurial",
+      "target": "share/misc/magic/mercurial",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/metastore",
+      "target": "share/misc/magic/metastore",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/meteorological",
+      "target": "share/misc/magic/meteorological",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/microfocus",
+      "target": "share/misc/magic/microfocus",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mime",
+      "target": "share/misc/magic/mime",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mips",
+      "target": "share/misc/magic/mips",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mirage",
+      "target": "share/misc/magic/mirage",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/misctools",
+      "target": "share/misc/magic/misctools",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mkid",
+      "target": "share/misc/magic/mkid",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mlssa",
+      "target": "share/misc/magic/mlssa",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mmdf",
+      "target": "share/misc/magic/mmdf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/modem",
+      "target": "share/misc/magic/modem",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/modulefile",
+      "target": "share/misc/magic/modulefile",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/motorola",
+      "target": "share/misc/magic/motorola",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mozilla",
+      "target": "share/misc/magic/mozilla",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/msdos",
+      "target": "share/misc/magic/msdos",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/msooxml",
+      "target": "share/misc/magic/msooxml",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/msvc",
+      "target": "share/misc/magic/msvc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/msx",
+      "target": "share/misc/magic/msx",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/mup",
+      "target": "share/misc/magic/mup",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/music",
+      "target": "share/misc/magic/music",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/nasa",
+      "target": "share/misc/magic/nasa",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/natinst",
+      "target": "share/misc/magic/natinst",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ncr",
+      "target": "share/misc/magic/ncr",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/netbsd",
+      "target": "share/misc/magic/netbsd",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/netscape",
+      "target": "share/misc/magic/netscape",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/netware",
+      "target": "share/misc/magic/netware",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/news",
+      "target": "share/misc/magic/news",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/nifty",
+      "target": "share/misc/magic/nifty",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/nim-lang",
+      "target": "share/misc/magic/nim-lang",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/nitpicker",
+      "target": "share/misc/magic/nitpicker",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/numpy",
+      "target": "share/misc/magic/numpy",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/oasis",
+      "target": "share/misc/magic/oasis",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ocaml",
+      "target": "share/misc/magic/ocaml",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/octave",
+      "target": "share/misc/magic/octave",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ole2compounddocs",
+      "target": "share/misc/magic/ole2compounddocs",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/olf",
+      "target": "share/misc/magic/olf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/openfst",
+      "target": "share/misc/magic/openfst",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/opentimestamps",
+      "target": "share/misc/magic/opentimestamps",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/oric",
+      "target": "share/misc/magic/oric",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/os2",
+      "target": "share/misc/magic/os2",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/os400",
+      "target": "share/misc/magic/os400",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/os9",
+      "target": "share/misc/magic/os9",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/osf1",
+      "target": "share/misc/magic/osf1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/palm",
+      "target": "share/misc/magic/palm",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/parix",
+      "target": "share/misc/magic/parix",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/parrot",
+      "target": "share/misc/magic/parrot",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pascal",
+      "target": "share/misc/magic/pascal",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pbf",
+      "target": "share/misc/magic/pbf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pbm",
+      "target": "share/misc/magic/pbm",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pc88",
+      "target": "share/misc/magic/pc88",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pc98",
+      "target": "share/misc/magic/pc98",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pci_ids",
+      "target": "share/misc/magic/pci_ids",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pcjr",
+      "target": "share/misc/magic/pcjr",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pdf",
+      "target": "share/misc/magic/pdf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pdp",
+      "target": "share/misc/magic/pdp",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/perl",
+      "target": "share/misc/magic/perl",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pgf",
+      "target": "share/misc/magic/pgf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pgp",
+      "target": "share/misc/magic/pgp",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pgp-binary-keys",
+      "target": "share/misc/magic/pgp-binary-keys",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pkgadd",
+      "target": "share/misc/magic/pkgadd",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/plan9",
+      "target": "share/misc/magic/plan9",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/playdate",
+      "target": "share/misc/magic/playdate",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/plus5",
+      "target": "share/misc/magic/plus5",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pmem",
+      "target": "share/misc/magic/pmem",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/polyml",
+      "target": "share/misc/magic/polyml",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/printer",
+      "target": "share/misc/magic/printer",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/project",
+      "target": "share/misc/magic/project",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/psdbms",
+      "target": "share/misc/magic/psdbms",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/psl",
+      "target": "share/misc/magic/psl",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pulsar",
+      "target": "share/misc/magic/pulsar",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/puzzle",
+      "target": "share/misc/magic/puzzle",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pwsafe",
+      "target": "share/misc/magic/pwsafe",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/pyramid",
+      "target": "share/misc/magic/pyramid",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/python",
+      "target": "share/misc/magic/python",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/qt",
+      "target": "share/misc/magic/qt",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/revision",
+      "target": "share/misc/magic/revision",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/riff",
+      "target": "share/misc/magic/riff",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ringdove",
+      "target": "share/misc/magic/ringdove",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/rpi",
+      "target": "share/misc/magic/rpi",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/rpm",
+      "target": "share/misc/magic/rpm",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/rpmsg",
+      "target": "share/misc/magic/rpmsg",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/rst",
+      "target": "share/misc/magic/rst",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/rtf",
+      "target": "share/misc/magic/rtf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ruby",
+      "target": "share/misc/magic/ruby",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/rust",
+      "target": "share/misc/magic/rust",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sc",
+      "target": "share/misc/magic/sc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sccs",
+      "target": "share/misc/magic/sccs",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/scientific",
+      "target": "share/misc/magic/scientific",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/securitycerts",
+      "target": "share/misc/magic/securitycerts",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/selinux",
+      "target": "share/misc/magic/selinux",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sendmail",
+      "target": "share/misc/magic/sendmail",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sequent",
+      "target": "share/misc/magic/sequent",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sereal",
+      "target": "share/misc/magic/sereal",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sgi",
+      "target": "share/misc/magic/sgi",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sgml",
+      "target": "share/misc/magic/sgml",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sharc",
+      "target": "share/misc/magic/sharc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sinclair",
+      "target": "share/misc/magic/sinclair",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sisu",
+      "target": "share/misc/magic/sisu",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sketch",
+      "target": "share/misc/magic/sketch",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/smalltalk",
+      "target": "share/misc/magic/smalltalk",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/smile",
+      "target": "share/misc/magic/smile",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sniffer",
+      "target": "share/misc/magic/sniffer",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/softquad",
+      "target": "share/misc/magic/softquad",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sosi",
+      "target": "share/misc/magic/sosi",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/spec",
+      "target": "share/misc/magic/spec",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/spectrum",
+      "target": "share/misc/magic/spectrum",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sql",
+      "target": "share/misc/magic/sql",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ssh",
+      "target": "share/misc/magic/ssh",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ssl",
+      "target": "share/misc/magic/ssl",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/statistics",
+      "target": "share/misc/magic/statistics",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/subtitle",
+      "target": "share/misc/magic/subtitle",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sun",
+      "target": "share/misc/magic/sun",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/svf",
+      "target": "share/misc/magic/svf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sylk",
+      "target": "share/misc/magic/sylk",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/symbos",
+      "target": "share/misc/magic/symbos",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/sysex",
+      "target": "share/misc/magic/sysex",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/tcl",
+      "target": "share/misc/magic/tcl",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/teapot",
+      "target": "share/misc/magic/teapot",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/terminfo",
+      "target": "share/misc/magic/terminfo",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/tex",
+      "target": "share/misc/magic/tex",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/tgif",
+      "target": "share/misc/magic/tgif",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/ti-8x",
+      "target": "share/misc/magic/ti-8x",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/timezone",
+      "target": "share/misc/magic/timezone",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/tplink",
+      "target": "share/misc/magic/tplink",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/troff",
+      "target": "share/misc/magic/troff",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/tuxedo",
+      "target": "share/misc/magic/tuxedo",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/typeset",
+      "target": "share/misc/magic/typeset",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/uf2",
+      "target": "share/misc/magic/uf2",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/unicode",
+      "target": "share/misc/magic/unicode",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/unisig",
+      "target": "share/misc/magic/unisig",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/unknown",
+      "target": "share/misc/magic/unknown",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/usd",
+      "target": "share/misc/magic/usd",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/uterus",
+      "target": "share/misc/magic/uterus",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/uuencode",
+      "target": "share/misc/magic/uuencode",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/vacuum-cleaner",
+      "target": "share/misc/magic/vacuum-cleaner",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/varied.out",
+      "target": "share/misc/magic/varied.out",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/varied.script",
+      "target": "share/misc/magic/varied.script",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/vax",
+      "target": "share/misc/magic/vax",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/vicar",
+      "target": "share/misc/magic/vicar",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/virtual",
+      "target": "share/misc/magic/virtual",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/virtutech",
+      "target": "share/misc/magic/virtutech",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/visx",
+      "target": "share/misc/magic/visx",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/vms",
+      "target": "share/misc/magic/vms",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/vmware",
+      "target": "share/misc/magic/vmware",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/vorbis",
+      "target": "share/misc/magic/vorbis",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/vxl",
+      "target": "share/misc/magic/vxl",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/warc",
+      "target": "share/misc/magic/warc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/weak",
+      "target": "share/misc/magic/weak",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/web",
+      "target": "share/misc/magic/web",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/webassembly",
+      "target": "share/misc/magic/webassembly",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/windows",
+      "target": "share/misc/magic/windows",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/wireless",
+      "target": "share/misc/magic/wireless",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/wordprocessors",
+      "target": "share/misc/magic/wordprocessors",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/wsdl",
+      "target": "share/misc/magic/wsdl",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/x68000",
+      "target": "share/misc/magic/x68000",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/xdelta",
+      "target": "share/misc/magic/xdelta",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/xenix",
+      "target": "share/misc/magic/xenix",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/xilinx",
+      "target": "share/misc/magic/xilinx",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/xo65",
+      "target": "share/misc/magic/xo65",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/xwindows",
+      "target": "share/misc/magic/xwindows",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/yara",
+      "target": "share/misc/magic/yara",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/zfs",
+      "target": "share/misc/magic/zfs",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/zilog",
+      "target": "share/misc/magic/zilog",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/zip",
+      "target": "share/misc/magic/zip",
+      "type": "symlink"
+    },
+    {
+      "source": "share/misc/magic/zyxel",
+      "target": "share/misc/magic/zyxel",
+      "type": "symlink"
+    }
+  ],
+  "package": "libmagic",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/libmagic.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "5.45"
+}

@@ -203,4 +203,10 @@ class Libmagic < Formula
     assert_match(/^pdf=PDF document/, output)
     %w[zlib bzip2 xz].each { |format| assert_match(/^#{format}=ASCII text/, output) }
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e"
+  end
+
 end
