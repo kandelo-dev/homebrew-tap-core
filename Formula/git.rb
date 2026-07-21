@@ -426,6 +426,7 @@ class Git < Formula
       exec_programs:             runtime_programs,
       guest_files:               editor_runtime_files,
       inputs:                    ["i", "editor commit", "\e", ":wq\r"],
+      input_ready_text:           "COMMIT_EDITMSG",
       writable_host_directories: mount,
       expected_fork_descendants: 1
     )
