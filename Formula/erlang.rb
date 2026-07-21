@@ -3,17 +3,17 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Erlang < Formula
   include KandeloFormulaSupport
 
+  KANDELO_REGISTRY_BRIDGE = true
+
   ERTS_VERSION = "16.1.2".freeze
   GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/erlang".freeze
   GUEST_OTP_ROOT = "#{GUEST_OPT_PREFIX}/lib/erlang".freeze
   GUEST_ERTS_BIN = "#{GUEST_OTP_ROOT}/erts-#{ERTS_VERSION}/bin".freeze
-  SOURCE_URL = "https://github.com/erlang/otp/archive/refs/tags/OTP-28.2.tar.gz".freeze
-  SOURCE_SHA256 = "b984f9e02bb61637997a35daa9070ae8f41cea1667676416438c467fda3d141f".freeze
-
   desc "Embedded Erlang/OTP runtime for Kandelo"
   homepage "https://www.erlang.org/"
-  url SOURCE_URL
-  sha256 SOURCE_SHA256
+  url "https://github.com/erlang/otp/archive/refs/tags/OTP-28.2.tar.gz"
+  version "28.2"
+  sha256 "b984f9e02bb61637997a35daa9070ae8f41cea1667676416438c467fda3d141f"
   license "Apache-2.0"
 
   depends_on "binaryen" => :build
@@ -39,7 +39,7 @@ class Erlang < Formula
     kandelo_prepend_path! formula_opt_bin("gnu-tar")
     kandelo_prepend_path! formula_opt_bin("zstd")
 
-    out_dir = kandelo_build_package("erlang", "build-erlang.sh", SOURCE_URL, SOURCE_SHA256)
+    out_dir = kandelo_build_package(script_env: {})
     kandelo_validate_wasm_artifact(out_dir/"erlang.wasm", fork: :required)
     libexec.install out_dir/"erlang.wasm"
 

@@ -3,16 +3,17 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Python < Formula
   include KandeloFormulaSupport
 
+  KANDELO_REGISTRY_BRIDGE = true
+
   PYTHON_MAJOR_MINOR = "3.13".freeze
   GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/python".freeze
   GUEST_RUNTIME = "#{GUEST_OPT_PREFIX}/lib/python3.13".freeze
-  SOURCE_URL = "https://www.python.org/ftp/python/3.13.3/Python-3.13.3.tar.xz".freeze
-  SOURCE_SHA256 = "40f868bcbdeb8149a3149580bb9bfd407b3321cd48f0be631af955ac92c0e041".freeze
 
   desc "CPython interpreter and standard library for Kandelo"
   homepage "https://www.python.org/"
-  url SOURCE_URL
-  sha256 SOURCE_SHA256
+  url "https://www.python.org/ftp/python/3.13.3/Python-3.13.3.tar.xz"
+  version "3.13.3"
+  sha256 "40f868bcbdeb8149a3149580bb9bfd407b3321cd48f0be631af955ac92c0e041"
   license "Python-2.0"
 
   depends_on "binaryen" => :build
@@ -26,10 +27,7 @@ class Python < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_package(
-      "cpython",
-      "build-cpython.sh",
-      SOURCE_URL,
-      SOURCE_SHA256,
+      package:    "cpython",
       script_env: {
         "WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX,
         "WASM_POSIX_DEP_ZLIB_DIR"     => formula_opt_prefix("kandelo-dev/tap-core/zlib"),
