@@ -20,6 +20,7 @@ class Nethack < Formula
 
   def install
     kandelo_require_arch!("wasm32")
+    ENV.deparallelize
     source_dir = kandelo_stage_verified_formula_source
 
     # Transitional Tier-2 bridge: NetHack's registry recipe still owns the
