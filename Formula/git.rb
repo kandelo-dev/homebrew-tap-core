@@ -8,6 +8,7 @@ class Git < Formula
   GUEST_GIT_BIN = "#{GUEST_OPT_PREFIX}/bin".freeze
   GUEST_GIT_EXEC_PATH = "#{GUEST_OPT_PREFIX}/libexec/git-core".freeze
   GUEST_GIT_TEMPLATES = "#{GUEST_OPT_PREFIX}/share/git-core/templates".freeze
+  GUEST_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt".freeze
   GUEST_COREUTILS_BIN = "#{GUEST_HOMEBREW_PREFIX}/opt/coreutils/bin".freeze
   GUEST_DASH = "#{GUEST_HOMEBREW_PREFIX}/opt/dash/bin/dash".freeze
   GUEST_DIFFUTILS_BIN = "#{GUEST_HOMEBREW_PREFIX}/opt/diffutils/bin".freeze
@@ -214,6 +215,9 @@ class Git < Formula
   end
 
   test do
+    root = Pathname(kandelo_require_root!)
+    ca_bundle = root/"images/rootfs/etc/ssl/cert.pem"
+    assert_path_exists ca_bundle
     assert_match(/^git version 2\.47\.1$/, kandelo_run_wasm(bin/"git", ["--version"]))
     assert_equal "#{GUEST_GIT_EXEC_PATH}\n", kandelo_run_wasm(bin/"git", ["--exec-path"])
 
@@ -245,7 +249,7 @@ class Git < Formula
       assert_equal "#!#{GUEST_DASH}\n", script.lines.first
       runtime_programs["#{GUEST_GIT_EXEC_PATH}/#{program}"] = git_core/program
     end
-    runtime_files = {}
+    runtime_files = { GUEST_CA_BUNDLE => ca_bundle }
     SHELL_LIBRARIES.each do |program|
       runtime_files["#{GUEST_GIT_EXEC_PATH}/#{program}"] = git_core/program
     end
