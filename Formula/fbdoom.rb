@@ -62,7 +62,10 @@ class Fbdoom < Formula
   end
 
   test do
-    wad = resource("doom-shareware").cached_download
+    # A poured bottle does not fetch source resources. Stage the verified test
+    # IWAD explicitly so source builds and anonymous bottle tests are peers.
+    resource("doom-shareware").stage testpath
+    wad = testpath/"doom1.wad"
     guest_files = { "/doom1.wad" => wad }
     output = kandelo_run_pty_wasm(
       bin/"fbdoom", ["-iwad", "/doom1.wad", "-timedemo", "demo1", "-nodraw", "-nogui"],
