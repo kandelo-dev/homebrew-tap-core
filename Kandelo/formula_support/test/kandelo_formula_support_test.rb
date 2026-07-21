@@ -543,14 +543,29 @@ class KandeloFormulaSupportTest < Minitest::Test
       document = tier2_loader_attestation(fixture)
       write_tier2_loader_attestation(fixture, JSON.generate(document))
       mutations = {
-        "missing authoritative root" => { "HOMEBREW_KANDELO_ROOT" => nil },
-        "missing authoritative arch" => { "HOMEBREW_KANDELO_ARCH" => nil },
-        "conflicting root alias" => {
-          "KANDELO_HOMEBREW_KANDELO_ROOT" => fixture.fetch(:base).to_s,
-        },
-        "conflicting arch alias" => { "KANDELO_HOMEBREW_ARCH" => "wasm64" },
+        "missing authoritative root" => [
+          { "HOMEBREW_KANDELO_ROOT" => nil },
+          "publisher root or architecture environment is inconsistent",
+        ],
+        "missing authoritative arch" => [
+          { "HOMEBREW_KANDELO_ARCH" => nil },
+          "publisher root or architecture environment is inconsistent",
+        ],
+        "conflicting root alias" => [
+          { "KANDELO_HOMEBREW_KANDELO_ROOT" => fixture.fetch(:base).to_s },
+          "publisher root or architecture environment is inconsistent",
+        ],
+        "conflicting arch alias" => [
+          { "KANDELO_HOMEBREW_ARCH" => "wasm64" },
+          "publisher root or architecture environment is inconsistent",
+        ],
+        "conflicting sysroot alias" => [
+          { "WASM_POSIX_SYSROOT" => fixture.fetch(:root).to_s },
+          "publisher sysroot environment is inconsistent",
+        ],
       }
-      mutations.each do |label, environment|
+      mutations.each do |label, mutation|
+        environment, error_fragment = mutation
         marker = fixture.fetch(:base)/"#{label.tr(" ", "-")}-evaluated"
         _stdout, stderr, status = run_tier2_support_load(
           fixture,
@@ -559,7 +574,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         )
 
         refute status.success?, label
-        assert_includes stderr, "publisher root or architecture environment is inconsistent", label
+        assert_includes stderr, error_fragment, label
         refute_path_exists marker, label
       end
     end
