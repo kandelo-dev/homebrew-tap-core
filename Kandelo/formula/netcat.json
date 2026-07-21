@@ -1,0 +1,44 @@
+{
+  "bottle_rebuild": 0,
+  "bottles": [
+    {
+      "arch": "wasm32",
+      "bottle_tag": "wasm32_kandelo",
+      "browser_compatible": false,
+      "built_at": "2026-07-21T04:59:40Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29801863180",
+      "built_from": {
+        "formula_sha256": "a581caf8169ace0a132a5cfa84c1a6cc71453a9e5a7a5fa48c5e8f316abb7927",
+        "kandelo_commit": "a1a34cd5cda8b72fa708aa5462bdc6e44677f676",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "44ff77f86aefa08ad4e696f292009c33ed4a0dba",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "bytes": 71560,
+      "cache_key_sha": "c91ab7e7944a79927cc609fe78dffe789e77172f777852f964cb36242370ec9d",
+      "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+      "fork_instrumentation": "not-required",
+      "kandelo_abi": 41,
+      "link_manifest": "Kandelo/link/netcat-0.7.1-rebuild0-wasm32.json",
+      "prefix": "/home/linuxbrew/.linuxbrew",
+      "runtime_support": [
+        "node"
+      ],
+      "sha256": "c91ab7e7944a79927cc609fe78dffe789e77172f777852f964cb36242370ec9d",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/netcat/blobs/sha256:c91ab7e7944a79927cc609fe78dffe789e77172f777852f964cb36242370ec9d"
+    }
+  ],
+  "dependencies": [],
+  "formula_path": "Formula/netcat.rb",
+  "formula_revision": 0,
+  "full_name": "kandelo-dev/tap-core/netcat",
+  "kandelo_abi": 41,
+  "name": "netcat",
+  "schema": 1,
+  "source_metadata": "Kandelo/metadata.json",
+  "tap_commit": "44ff77f86aefa08ad4e696f292009c33ed4a0dba",
+  "tap_name": "kandelo-dev/tap-core",
+  "tap_repository": "kandelo-dev/homebrew-tap-core",
+  "version": "0.7.1"
+}

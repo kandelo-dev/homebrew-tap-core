@@ -33,4 +33,10 @@ class Netcat < Formula
     output = kandelo_run_wasm(bin/"nc", ["--version"], merge_stderr: true)
     assert_match(/netcat \(The GNU Netcat\) 0\.7\.1/i, output)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "c91ab7e7944a79927cc609fe78dffe789e77172f777852f964cb36242370ec9d"
+  end
+
 end
