@@ -419,6 +419,8 @@ class Git < Formula
       "runtime autoload/paste.vim",
       "if !exists('*paste#Paste') | cquit | endif",
     ].join(" | ")
+    # Git's real Vim editor path creates three fork descendants. Keep the
+    # observed count exact so missing or leaked editor helpers fail the test.
     editor_commit = kandelo_run_pty_wasm(
       bin/"git", ["-C", "clone", "commit"],
       argv0:                     "#{GUEST_GIT_BIN}/git",
@@ -432,7 +434,7 @@ class Git < Formula
       inputs:                    ["i", "editor commit", "\e", ":wq\r"],
       input_ready_text:           "COMMIT_EDITMSG",
       writable_host_directories: mount,
-      expected_fork_descendants: 1
+      expected_fork_descendants: 3
     )
     assert_match(/\[master [0-9a-f]+\] editor commit/, editor_commit)
     assert_equal "editor commit\n", run_git.call(["-C", "clone", "log", "-1", "--format=%s"])
