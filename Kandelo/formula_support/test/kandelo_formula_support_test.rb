@@ -256,7 +256,7 @@ class KandeloFormulaSupportTest < Minitest::Test
     path
   end
 
-  def run_tier2_support_load(fixture, after_require)
+  def run_tier2_support_load(fixture, after_require, environment: {}, homebrew_filtered: false)
     env = {
       "HOMEBREW_PREFIX"                 => fixture.fetch(:prefix).to_s,
       "HOMEBREW_KANDELO_ARCH"           => "wasm32",
@@ -265,12 +265,20 @@ class KandeloFormulaSupportTest < Minitest::Test
       "KANDELO_HOMEBREW_ARCH"           => "wasm32",
       "KANDELO_HOMEBREW_KANDELO_ROOT"   => fixture.fetch(:root).to_s,
       "WASM_POSIX_SYSROOT"              => fixture.fetch(:sysroot).to_s,
-    }
+    }.merge(environment)
     source = <<~RUBY
       require #{fixture.fetch(:support_path).to_s.inspect}
       #{after_require}
     RUBY
-    Open3.capture3(env, RbConfig.ruby, "-e", source)
+    if homebrew_filtered
+      # `bin/brew` rebuilds Formula evaluation's environment from a fixed
+      # allowlist plus every HOMEBREW_* value. None of this fixture's fixed
+      # allowlist values carry publisher authority, so retain only that prefix.
+      env = env.select { |key, _value| key.start_with?("HOMEBREW_") }
+      Open3.capture3(env, RbConfig.ruby, "-e", source, unsetenv_others: true)
+    else
+      Open3.capture3(env, RbConfig.ruby, "-e", source)
+    end
   end
 
   def with_tier2_build_fixture(script_env: nil)
@@ -497,6 +505,63 @@ class KandeloFormulaSupportTest < Minitest::Test
 
       assert status.success?, stderr
       assert_equal "kandelo-dev/tap-core/hello\n", stdout
+    end
+  end
+
+  def test_support_load_accepts_homebrew_filtered_aliases_and_synthesizes_compatibility_values
+    with_tier2_loader_fixture do |fixture|
+      document = tier2_loader_attestation(fixture)
+      write_tier2_loader_attestation(fixture, JSON.generate(document))
+      assertion = <<~'RUBY'
+        trusted = KandeloFormulaSupport::KANDELO_TIER2_RUNTIME.fetch("trusted_env")
+        expected_root = ENV.fetch("HOMEBREW_KANDELO_ROOT")
+        expected_arch = ENV.fetch("HOMEBREW_KANDELO_ARCH")
+        expected_sysroot = ENV.fetch("HOMEBREW_KANDELO_SYSROOT")
+        abort "authoritative root changed" unless trusted.fetch("HOMEBREW_KANDELO_ROOT") == expected_root
+        abort "authoritative arch changed" unless trusted.fetch("HOMEBREW_KANDELO_ARCH") == expected_arch
+        abort "authoritative sysroot changed" unless
+          trusted.fetch("HOMEBREW_KANDELO_SYSROOT") == expected_sysroot
+        abort "filtered root alias was not synthesized" unless
+          trusted.fetch("KANDELO_HOMEBREW_KANDELO_ROOT") == expected_root
+        abort "filtered arch alias was not synthesized" unless
+          trusted.fetch("KANDELO_HOMEBREW_ARCH") == expected_arch
+        abort "filtered sysroot alias was not synthesized" unless
+          trusted.fetch("WASM_POSIX_SYSROOT") == expected_sysroot
+      RUBY
+      _stdout, stderr, status = run_tier2_support_load(
+        fixture,
+        assertion,
+        homebrew_filtered: true,
+      )
+
+      assert status.success?, stderr
+    end
+  end
+
+  def test_support_load_rejects_missing_authority_and_conflicting_legacy_aliases
+    with_tier2_loader_fixture do |fixture|
+      document = tier2_loader_attestation(fixture)
+      write_tier2_loader_attestation(fixture, JSON.generate(document))
+      mutations = {
+        "missing authoritative root" => { "HOMEBREW_KANDELO_ROOT" => nil },
+        "missing authoritative arch" => { "HOMEBREW_KANDELO_ARCH" => nil },
+        "conflicting root alias" => {
+          "KANDELO_HOMEBREW_KANDELO_ROOT" => fixture.fetch(:base).to_s,
+        },
+        "conflicting arch alias" => { "KANDELO_HOMEBREW_ARCH" => "wasm64" },
+      }
+      mutations.each do |label, environment|
+        marker = fixture.fetch(:base)/"#{label.tr(" ", "-")}-evaluated"
+        _stdout, stderr, status = run_tier2_support_load(
+          fixture,
+          "File.binwrite(#{marker.to_s.inspect}, \"evaluated\\n\")",
+          environment:,
+        )
+
+        refute status.success?, label
+        assert_includes stderr, "publisher root or architecture environment is inconsistent", label
+        refute_path_exists marker, label
+      end
     end
   end
 
