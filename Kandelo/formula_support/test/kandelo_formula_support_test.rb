@@ -1277,6 +1277,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         argv0:                      "/home/linuxbrew/.linuxbrew/opt/program/bin/program",
         env:                        { "KERNEL_CWD" => "/tmp/formula test" },
         inputs:                     ["\u001c", "beta", "\r"],
+        input_ready_text:           "editor ready",
         rerun_inputs:               ["\u0018"],
         exec_programs:              { "/opt/program/bin/helper" => "/formula/helper" },
         guest_files:                { "/etc/program.conf" => "/formula/program.conf" },
@@ -1297,6 +1298,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       refute_path_exists harness.pty_config_path
       assert_equal "/home/linuxbrew/.linuxbrew/opt/program/bin/program", config.fetch("argv0")
       assert_equal ["\u001c", "beta", "\r"], config.fetch("inputs")
+      assert_equal "editor ready", config.fetch("inputReadyText")
       assert_equal ["\u0018"], config.fetch("rerunInputs")
       assert_equal({ "/opt/program/bin/helper" => "/formula/helper" }, config.fetch("execPrograms"))
       assert_equal({ "/etc/program.conf" => "/formula/program.conf" }, config.fetch("guestFiles"))
@@ -1362,6 +1364,19 @@ class KandeloFormulaSupportTest < Minitest::Test
       end
 
       assert_includes error.message, "expected fork descendant count must be a nonnegative integer"
+    end
+  end
+
+  def test_pty_execution_rejects_invalid_input_readiness_text
+    ["", "x" * 4_097, 17].each do |ready_text|
+      error = assert_raises(RuntimeError) do
+        Harness.new.kandelo_run_pty_wasm(
+          "program.wasm", [], inputs: [], input_ready_text: ready_text
+        )
+      end
+
+      assert_includes error.message,
+        "input readiness text must be a nonempty string no larger than 4096 bytes"
     end
   end
 

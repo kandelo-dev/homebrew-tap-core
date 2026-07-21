@@ -646,13 +646,17 @@ module KandeloFormulaSupport
   def kandelo_run_pty_wasm(
     bin_path, argv, inputs:, argv0: nil, env: {}, exec_programs: {}, guest_files: {},
     guest_directories: [], writable_guest_directories: [], writable_host_directories: {},
-    rerun_inputs: nil, expected_fork_descendants: 0, expected_status: 0,
+    input_ready_text: nil, rerun_inputs: nil, expected_fork_descendants: 0, expected_status: 0,
     initial_delay_ms: 500, input_delay_ms: 180, cols: 100, rows: 30
   )
     root = kandelo_require_root!
     kandelo_validate_guest_argv0!(argv0)
     valid_descendant_count = expected_fork_descendants.is_a?(Integer) && expected_fork_descendants >= 0
     odie "expected fork descendant count must be a nonnegative integer" unless valid_descendant_count
+    valid_ready_text = input_ready_text.nil? ||
+                       (input_ready_text.is_a?(String) && !input_ready_text.empty? &&
+                        input_ready_text.bytesize <= 4 * 1024)
+    odie "input readiness text must be a nonempty string no larger than 4096 bytes" unless valid_ready_text
     if (node = ENV.fetch("HOMEBREW_KANDELO_NODE", nil)).to_s != ""
       ENV.prepend_path "PATH", File.dirname(node)
     end
@@ -668,6 +672,7 @@ module KandeloFormulaSupport
       argv0:                    argv0,
       env:                      env,
       inputs:                   inputs,
+      inputReadyText:           input_ready_text,
       rerunInputs:              rerun_inputs,
       execPrograms:             exec_programs.transform_values(&:to_s),
       guestFiles:               guest_files.transform_values(&:to_s),

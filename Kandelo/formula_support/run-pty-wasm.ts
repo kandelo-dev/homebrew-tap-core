@@ -15,6 +15,10 @@ import {
   parseExpectedForkDescendants,
   type ProcessEvent,
 } from "./fork-descendant-statuses.ts";
+import {
+  createPtyOutputReadiness,
+  type PtyOutputReadiness,
+} from "./pty-output-readiness.ts";
 import { rootfsSizeForStagedBytes, validateGuestPath } from "./rootfs-size.ts";
 
 const O_WRONLY = 0x0001;
@@ -23,11 +27,13 @@ const O_TRUNC = 0x0200;
 const S_IFMT = 0xf000;
 const S_IFDIR = 0x4000;
 const MAX_PTY_CONFIG_BYTES = 16 * 1024 * 1024;
+const MAX_INPUT_READY_TEXT_BYTES = 4 * 1024;
 
 interface PtyConfig {
   argv0?: string | null;
   env: Record<string, string>;
   inputs: string[];
+  inputReadyText?: string | null;
   rerunInputs?: string[] | null;
   execPrograms?: Record<string, string>;
   guestFiles?: Record<string, string>;
@@ -140,6 +146,17 @@ async function main(): Promise<void> {
   if (!Array.isArray(config.inputs)) {
     throw new Error("PTY config JSON must contain an inputs array");
   }
+  if (
+    config.inputReadyText != null &&
+    (typeof config.inputReadyText !== "string" ||
+      config.inputReadyText.length === 0 ||
+      new TextEncoder().encode(config.inputReadyText).byteLength >
+        MAX_INPUT_READY_TEXT_BYTES)
+  ) {
+    throw new Error(
+      `inputReadyText must be a nonempty string no larger than ${MAX_INPUT_READY_TEXT_BYTES} bytes`,
+    );
+  }
   if (config.rerunInputs != null && !Array.isArray(config.rerunInputs)) {
     throw new Error("rerunInputs must be an array when present");
   }
@@ -147,6 +164,7 @@ async function main(): Promise<void> {
     String(config.expectedForkDescendants ?? 0),
     undefined,
   );
+  const inputReadyText = config.inputReadyText ?? undefined;
 
   const configuredArgv0 = config.argv0 ?? undefined;
   if (configuredArgv0 !== undefined) validateGuestPath(configuredArgv0, []);
@@ -399,13 +417,16 @@ async function main(): Promise<void> {
     }
 
     let forkDescendants = createForkDescendantTracker();
+    let activeOutputReadiness: PtyOutputReadiness | undefined;
     const host = new NodeKernelHost({
       maxWorkers: 4,
       execPrograms,
       rootfsImage,
       extraMounts,
-      onPtyOutput: (_pid: number, data: Uint8Array) =>
-        process.stdout.write(data),
+      onPtyOutput: (_pid: number, data: Uint8Array) => {
+        activeOutputReadiness?.observe(data);
+        process.stdout.write(data);
+      },
       onStderr: (_pid: number, data: Uint8Array) => process.stderr.write(data),
       onProcessEvent: (event: ProcessEvent) =>
         forkDescendants.onProcessEvent(event),
@@ -420,6 +441,16 @@ async function main(): Promise<void> {
       const run = async (inputs: string[]): Promise<number> => {
         forkDescendants = createForkDescendantTracker();
         const deadline = Date.now() + timeoutMs;
+        activeOutputReadiness = inputReadyText
+          ? createPtyOutputReadiness(inputReadyText)
+          : undefined;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<number>((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`process timed out after ${timeoutMs}ms`)),
+            timeoutMs,
+          );
+        });
         const exit = host.spawn(program, [argv0, ...args], {
           cwd: guestEnv.KERNEL_CWD ?? (rootfsImage ? "/" : process.cwd()),
           env,
@@ -427,19 +458,16 @@ async function main(): Promise<void> {
           ptyCols: config.cols ?? 100,
           ptyRows: config.rows ?? 30,
           onStarted: async (pid: number) => {
-            await delay(config.initialDelayMs ?? 500);
+            if (activeOutputReadiness) {
+              await Promise.race([activeOutputReadiness.wait(), timeout]);
+            } else {
+              await delay(config.initialDelayMs ?? 500);
+            }
             for (const input of inputs) {
               host.ptyWrite(pid, new TextEncoder().encode(input));
               await delay(config.inputDelayMs ?? 180);
             }
           },
-        });
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const timeout = new Promise<number>((_resolve, reject) => {
-          timer = setTimeout(
-            () => reject(new Error(`process timed out after ${timeoutMs}ms`)),
-            timeoutMs,
-          );
         });
         try {
           const status = await Promise.race([exit, timeout]);
@@ -452,6 +480,7 @@ async function main(): Promise<void> {
           return status;
         } finally {
           if (timer) clearTimeout(timer);
+          activeOutputReadiness = undefined;
         }
       };
 
