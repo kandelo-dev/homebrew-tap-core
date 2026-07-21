@@ -542,11 +542,13 @@ class KandeloFormulaSupportTest < Minitest::Test
     ENV.replace(original) if original
   end
 
-  def test_ruby_declares_rust_as_a_native_build_dependency
+  def test_ruby_declares_its_native_build_dependencies
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
     rust_declarations = formula.lines.grep(/^\s*depends_on "rust"/)
+    wabt_declarations = formula.lines.grep(/^\s*depends_on "wabt"/)
 
     assert_equal [%(  depends_on "rust" => :build\n)], rust_declarations
+    assert_equal [%(  depends_on "wabt" => :build\n)], wabt_declarations
   end
 
   def test_sdk_activation_cannot_reintroduce_the_global_homebrew_path
