@@ -34,10 +34,10 @@ for the exact immutable-input boundary and revision rules.
 
 Registry-bridged build scripts must declare every native tool they execute as a
 direct build dependency. The sealed publisher removes ambient host tools and
-retains only declared native dependency paths. For example, Ruby declares
-`depends_on "rust" => :build` because its bridge resolves the host target with
-`rustc` and builds `wasm-local-root-spill` with `cargo` and `rustc` inside
-caller-owned scratch space.
+retains only declared native dependency paths. For example, Ruby declares both
+`rust` and `wabt` as build dependencies because its bridge resolves the host
+target with `rustc`, builds `wasm-local-root-spill` with `cargo` and `rustc`
+inside caller-owned scratch space, and inspects the result with `wasm-objdump`.
 
 Final linked programs must declare WABT and Binaryen as build dependencies and
 call `kandelo_validate_wasm_artifact` after their last optimizer or fork

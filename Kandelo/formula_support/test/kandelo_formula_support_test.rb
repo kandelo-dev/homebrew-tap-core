@@ -1127,11 +1127,30 @@ class KandeloFormulaSupportTest < Minitest::Test
     ENV.replace(original) if original
   end
 
-  def test_ruby_declares_rust_as_a_native_build_dependency
+  def test_ruby_declares_every_registry_script_native_build_dependency
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
-    rust_declarations = formula.lines.grep(/^\s*depends_on "rust"/)
+    native_declarations = formula.lines.grep(/^\s*depends_on "(?:rust|wabt)"/)
 
-    assert_equal [%Q(  depends_on "rust" => :build\n)], rust_declarations
+    assert_equal [
+      %Q(  depends_on "rust" => :build\n),
+      %Q(  depends_on "wabt" => :build\n),
+    ], native_declarations
+  end
+
+  def test_nethack_declares_its_canonical_dotted_version
+    formula = File.read(File.expand_path("../../../Formula/nethack.rb", __dir__))
+    version_declarations = formula.lines.grep(/^\s*version /)
+
+    assert_equal [%Q(  version "3.6.7"\n)], version_declarations
+  end
+
+  def test_changed_tier2_formulae_advance_their_finalized_bottle_identity
+    %w[bc fbdoom lsof modeset netcat posix-utils-lite].each do |name|
+      formula = File.read(File.expand_path("../../../Formula/#{name}.rb", __dir__))
+      rebuild_declarations = formula.lines.grep(/^\s*rebuild /)
+
+      assert_equal [%Q(    rebuild 1\n)], rebuild_declarations, name
+    end
   end
 
   def test_sdk_activation_cannot_reintroduce_the_global_homebrew_path
