@@ -20,6 +20,9 @@ require "tempfile"
 # whose 49 KB `build-<name>.sh` is not yet decomposed into idiomatic steps.
 module KandeloFormulaSupport
   KANDELO_TAP_FORMULA_PREFIX = "kandelo-dev/tap-core/"
+  KANDELO_REGISTRY_PACKAGE_NAME = /\A[a-z0-9][a-z0-9._-]*\z/
+  KANDELO_REGISTRY_PACKAGE_VERSION = /\A[A-Za-z0-9][A-Za-z0-9._+,-]{0,255}\z/
+  KANDELO_REGISTRY_MANIFEST_MAX_BYTES = 65_536
 
   # Homebrew's formula_opt_* helpers discard the tap name and resolve through
   # HOMEBREW_PREFIX/opt. A native formula alias can therefore redirect a
@@ -434,6 +437,7 @@ module KandeloFormulaSupport
   # deviation.
   def kandelo_build_package(name, script, source_url, source_sha256, script_env: {})
     root = kandelo_activate_sdk!
+    kandelo_validate_registry_package_version!(root, name)
 
     out_dir = buildpath/"kandelo-package-out"
     ENV["WASM_POSIX_DEP_NAME"] = name
@@ -448,6 +452,93 @@ module KandeloFormulaSupport
     system "bash", "#{root}/packages/registry/#{name}/#{script}"
 
     out_dir
+  end
+
+  # A Tier-2 Formula delegates its actual build to one Kandelo registry recipe.
+  # Keep that relationship exact: Homebrew's URL parser can infer a plausible
+  # but wrong version (for example, `nethack-367-src.tgz` becomes `367`). A
+  # mismatch would otherwise be embedded in the bottle filename, Cellar path,
+  # sidecars, and public package index before the migration consumer notices.
+  def kandelo_validate_registry_package_version!(root, registry_name)
+    manifest = kandelo_registry_package_manifest(root, registry_name)
+    identity = kandelo_registry_package_identity(manifest)
+    resolved_version = version.to_s
+    formula_name = respond_to?(:name) ? name.to_s : self.class.name
+
+    return identity.fetch(:version) if resolved_version == identity.fetch(:version)
+
+    odie <<~EOS.chomp
+      Formula #{formula_name} resolved Homebrew version #{resolved_version.inspect}, but mapped Kandelo registry package #{registry_name.inspect} declares authoritative version #{identity.fetch(:version).inspect} in #{manifest}. Add or correct the Formula version before building the registry recipe.
+    EOS
+  end
+
+  def kandelo_registry_package_manifest(root, registry_name)
+    registry_name = registry_name.to_s
+    unless registry_name.match?(KANDELO_REGISTRY_PACKAGE_NAME)
+      odie "invalid mapped Kandelo registry package name: #{registry_name.inspect}"
+    end
+
+    registry_root = Pathname(root)/"packages/registry"
+    begin
+      registry_root = registry_root.realpath
+    rescue SystemCallError => e
+      odie "Kandelo registry root is unavailable at #{registry_root}: #{e.message}"
+    end
+    manifest = registry_root/registry_name/"package.toml"
+    manifest_is_regular = manifest.file? && !manifest.symlink?
+    unless manifest_is_regular
+      odie "mapped Kandelo registry package #{registry_name.inspect} must have " \
+           "a regular non-symlink manifest at #{manifest}"
+    end
+
+    begin
+      real_manifest = manifest.realpath
+      package_root = (registry_root/registry_name).realpath
+    rescue SystemCallError => e
+      odie "cannot resolve mapped Kandelo registry package #{registry_name.inspect} at #{manifest}: #{e.message}"
+    end
+    escapes_registry = real_manifest.dirname != package_root || package_root.dirname != registry_root
+    if escapes_registry
+      odie "mapped Kandelo registry package #{registry_name.inspect} escapes #{registry_root}: #{real_manifest}"
+    end
+    real_manifest
+  end
+
+  def kandelo_registry_package_identity(manifest)
+    source = manifest.binread
+    if source.empty? || source.bytesize > KANDELO_REGISTRY_MANIFEST_MAX_BYTES
+      odie "mapped Kandelo registry package manifest must contain 1 to " \
+           "#{KANDELO_REGISTRY_MANIFEST_MAX_BYTES} bytes: #{manifest}"
+    end
+    source.force_encoding(Encoding::UTF_8)
+    odie "mapped Kandelo registry package manifest is not UTF-8: #{manifest}" unless source.valid_encoding?
+
+    fields = {}
+    source.each_line do |line|
+      break if line.lstrip.start_with?("[")
+
+      match = line.match(/\A\s*(name|version)\s*=\s*"([^"\\]*)"\s*(?:#.*)?\z/)
+      next if match.nil?
+
+      key = match[1].to_sym
+      odie "mapped Kandelo registry package manifest repeats #{match[1]}: #{manifest}" if fields.key?(key)
+      fields[key] = match[2]
+    end
+
+    manifest_name = fields[:name]
+    manifest_version = fields[:version]
+    expected_name = manifest.dirname.basename.to_s
+    valid_manifest_name = manifest_name == expected_name && manifest_name&.match?(KANDELO_REGISTRY_PACKAGE_NAME)
+    unless valid_manifest_name
+      odie "mapped Kandelo registry package manifest has a missing or invalid " \
+           "name for #{expected_name.inspect}: #{manifest}"
+    end
+    unless manifest_version&.match?(KANDELO_REGISTRY_PACKAGE_VERSION)
+      odie "mapped Kandelo registry package #{manifest_name.inspect} has a missing " \
+           "or invalid authoritative version in #{manifest}"
+    end
+
+    { name: manifest_name, version: manifest_version }
   end
 
   # Install a built `.wasm` from an out dir as an executable `bin/<bin_name>`.

@@ -9,8 +9,14 @@ class Nethack < Formula
   desc "Classic dungeon exploration game for Kandelo"
   homepage "https://www.nethack.org/"
   url "https://www.nethack.org/download/3.6.7/nethack-367-src.tgz"
+  version "3.6.7"
   sha256 "98cf67df6debf9668a61745aa84c09bcab362e5d33f5b944ec5155d44d2aacb2"
   license :cannot_represent
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771"
+  end
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
@@ -69,10 +75,4 @@ class Nethack < Formula
     )
     refute_match(/Cannot (?:chdir|open record file)/i, scores)
   end
-
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771"
-  end
-
 end
