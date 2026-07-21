@@ -31,6 +31,6 @@ class Netcat < Formula
 
   test do
     output = kandelo_run_wasm(bin/"nc", ["--version"], merge_stderr: true)
-    assert_match(/GNU netcat 0\.7\.1/i, output)
+    assert_match(/netcat \(The GNU Netcat\) 0\.7\.1/i, output)
   end
 end

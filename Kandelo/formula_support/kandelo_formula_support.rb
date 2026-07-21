@@ -659,12 +659,14 @@ module KandeloFormulaSupport
   # isolated mounts that survive every spawn in this run, while
   # `writable_host_directories:` exposes caller-owned output directories.
   # `expected_fork_descendants:` requires exactly that many fork descendants to
-  # exit successfully before each PTY run is considered complete.
+  # exit successfully before each PTY run is considered complete. `timeout_ms:`
+  # sets a bounded host-side deadline without leaking runner policy into the
+  # guest environment.
   def kandelo_run_pty_wasm(
     bin_path, argv, inputs:, argv0: nil, env: {}, exec_programs: {}, guest_files: {},
     guest_directories: [], writable_guest_directories: [], writable_host_directories: {},
     input_ready_text: nil, rerun_inputs: nil, expected_fork_descendants: 0, expected_status: 0,
-    initial_delay_ms: 500, input_delay_ms: 180, cols: 100, rows: 30
+    initial_delay_ms: 500, input_delay_ms: 180, cols: 100, rows: 30, timeout_ms: nil
   )
     root = kandelo_require_root!
     kandelo_validate_guest_argv0!(argv0)
@@ -674,6 +676,8 @@ module KandeloFormulaSupport
                        (input_ready_text.is_a?(String) && !input_ready_text.empty? &&
                         input_ready_text.bytesize <= 4 * 1024)
     odie "input readiness text must be a nonempty string no larger than 4096 bytes" unless valid_ready_text
+    valid_timeout = timeout_ms.nil? || (timeout_ms.is_a?(Integer) && timeout_ms.positive?)
+    odie "PTY timeout must be a positive integer number of milliseconds" unless valid_timeout
     if (node = ENV.fetch("HOMEBREW_KANDELO_NODE", nil)).to_s != ""
       ENV.prepend_path "PATH", File.dirname(node)
     end
@@ -700,6 +704,7 @@ module KandeloFormulaSupport
       inputDelayMs:             input_delay_ms,
       cols:                     cols,
       rows:                     rows,
+      timeoutMs:                timeout_ms,
       expectedForkDescendants:  expected_fork_descendants,
     })
     # Compiled host output shadows TypeScript source under tsx. PTY formula
