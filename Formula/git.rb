@@ -451,9 +451,11 @@ class Git < Formula
     assert_match(/^option\n/, capabilities)
     assert_match(/^object-format\n/, capabilities)
 
+    # transport-helper launches `git remote-https`, which in turn launches the
+    # dashed `git-remote-https` helper. Require both successful descendants.
     remote_head = run_git.call(
       ["ls-remote", "https://github.com/git/git.git", "HEAD"],
-      network: true, expected_fork_descendants: 1,
+      network: true, expected_fork_descendants: 2,
     )
     assert_match(/\A[0-9a-f]{40}\tHEAD\n\z/, remote_head)
   end
