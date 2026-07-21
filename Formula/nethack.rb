@@ -37,7 +37,7 @@ class Nethack < Formula
         "NETHACK_HACKDIR"                 => GUEST_HACKDIR,
       }
     )
-    kandelo_validate_wasm_artifact(out_dir/"nethack.wasm", fork: :forbidden)
+    kandelo_validate_wasm_artifact(out_dir/"nethack.wasm", fork: :required)
     kandelo_install_bin(out_dir, "nethack.wasm", "nethack")
     (share/"nethack").install Dir["#{out_dir}/runtime/share/nethack/*"]
   end
