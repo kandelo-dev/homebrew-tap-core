@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/less.json",
-      "sha256": "889fd25e8d410e209f57fdb83d0d490d080793eebea7b2bb910b66b09fe7e400"
+      "sha256": "d77fc2394f142405414e715ed74d0c7470b64bf77648830e1a482f1ca4e3e88f"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/less-668_1-rebuild3-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "e64033522bf899f596f0094247f6ba38398be44a3d665223aef6ac89e2af3523"
+      "sha256": "39410d75bf2406f1b6c33d0f33df8cf8107a5e2451db40ce1a196515643d3ba8"
     },
     "provenance_json": {
       "path": "Kandelo/reports/less-668_1-rebuild3-wasm32.provenance.json",
-      "sha256": "8df0abad61c63f58f239ecf83b376725f4e38c00600bf3c912314e0059066063"
+      "sha256": "64dbccc007e4cace95f76b788b5df6e578f0b90ff4d7353d4fe4f4cc22d23cf2"
     }
   },
   "repositories": {

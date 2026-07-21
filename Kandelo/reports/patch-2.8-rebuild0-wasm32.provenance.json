@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/patch.json",
-      "sha256": "9de63e1a7314f35cef43291c25b7941ec2d578cf133371cb4b81df010e3619a5"
+      "sha256": "52b040f5f9abe0912c5dfe4f6b969f4744b922bd38e9bee40b0a6c707b83cb22"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/patch-2.8-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "e64033522bf899f596f0094247f6ba38398be44a3d665223aef6ac89e2af3523"
+      "sha256": "39410d75bf2406f1b6c33d0f33df8cf8107a5e2451db40ce1a196515643d3ba8"
     },
     "provenance_json": {
       "path": "Kandelo/reports/patch-2.8-rebuild0-wasm32.provenance.json",
-      "sha256": "9474e52d7352912aa3db63fe9939c52be1757442b528e930ff79c59ce855cb0b"
+      "sha256": "57684e411d47e28bc7a208d31bf4ab9da570c8bc4774c600e82ecdcb2ad388c4"
     }
   },
   "repositories": {

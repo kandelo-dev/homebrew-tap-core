@@ -42,7 +42,7 @@
   "name": "m4",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "2d9cfb7554c24d19c61951ad211ba99e8ff6bf41",
+  "tap_commit": "6d0691de45a9b9dfab741ac42804d3e2ab58b8bc",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.4.21"

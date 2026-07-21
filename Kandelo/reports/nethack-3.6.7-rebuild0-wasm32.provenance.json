@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/nethack.json",
-      "sha256": "c23c7980f261ad1392a6e0494d1545630a8bbc2d41ea508bd1a343696f21a8c9"
+      "sha256": "5cea5e4a81c98913da33300e9f07fcfcffb0b765916f7101206e871b1a438d6d"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/nethack-3.6.7-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "e64033522bf899f596f0094247f6ba38398be44a3d665223aef6ac89e2af3523"
+      "sha256": "39410d75bf2406f1b6c33d0f33df8cf8107a5e2451db40ce1a196515643d3ba8"
     },
     "provenance_json": {
       "path": "Kandelo/reports/nethack-3.6.7-rebuild0-wasm32.provenance.json",
-      "sha256": "b4fadc715a4f46849b3f2ed529a1683bf45590fe198e2a43e938c62647d92aa8"
+      "sha256": "35552cf059804b517ffda22f51083531ef9f7c94d7744fd59f237c68db511084"
     }
   },
   "repositories": {

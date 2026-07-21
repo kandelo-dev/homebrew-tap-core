@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/posix-utils-lite.json",
-      "sha256": "5fa7543b698ca19d26a0c1a817dff0721dd827e7e8c28ec330bf5195f13f4093"
+      "sha256": "2f98ed08ba42c90434f6999201be44be5dd6f524c2459be77ac24702ebb2cfd9"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/posix-utils-lite-0.1.0-rebuild1-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "e64033522bf899f596f0094247f6ba38398be44a3d665223aef6ac89e2af3523"
+      "sha256": "39410d75bf2406f1b6c33d0f33df8cf8107a5e2451db40ce1a196515643d3ba8"
     },
     "provenance_json": {
       "path": "Kandelo/reports/posix-utils-lite-0.1.0-rebuild1-wasm32.provenance.json",
-      "sha256": "c1cfd00dd5439672a2c12926e10775e06a3521c34595bbf3b629ef6d7809d811"
+      "sha256": "66e8ce34551491b68491252cb7f15bde3ade3966a05bf8b7995552bedec2b66f"
     }
   },
   "repositories": {
