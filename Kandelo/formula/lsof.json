@@ -1,32 +1,32 @@
 {
-  "bottle_rebuild": 0,
+  "bottle_rebuild": 1,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-21T04:58:47Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29801862766",
+      "built_at": "2026-07-21T09:24:36Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29816776065",
       "built_from": {
-        "formula_sha256": "901e7f41d77e6bf1b1aceaee38029eaa131e1f27b22a4da89a8b8050cac48f74",
-        "kandelo_commit": "a1a34cd5cda8b72fa708aa5462bdc6e44677f676",
+        "formula_sha256": "0f5f82a3e98ba78ca9dc2e851cab45f7e1e223195baf80df674376cb16fa4baf",
+        "kandelo_commit": "ac1c16ee3e5b3a248f5ab7e55db8172060c1b0d6",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "44ff77f86aefa08ad4e696f292009c33ed4a0dba",
+        "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 20618,
-      "cache_key_sha": "2073d789b743be35cfe8d7d91fadde98f2ff93c4788f1ab5a836da1a87009f66",
+      "bytes": 20522,
+      "cache_key_sha": "0571fa00405e33efd7113d471d0b2ba739c696cfc8e6284c552393f36f60ceef",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
       "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/lsof-0.1.0-rebuild0-wasm32.json",
+      "link_manifest": "Kandelo/link/lsof-0.1.0-rebuild1-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "2073d789b743be35cfe8d7d91fadde98f2ff93c4788f1ab5a836da1a87009f66",
+      "sha256": "0571fa00405e33efd7113d471d0b2ba739c696cfc8e6284c552393f36f60ceef",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/lsof/blobs/sha256:2073d789b743be35cfe8d7d91fadde98f2ff93c4788f1ab5a836da1a87009f66"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/lsof/blobs/sha256:0571fa00405e33efd7113d471d0b2ba739c696cfc8e6284c552393f36f60ceef"
     }
   ],
   "dependencies": [],
@@ -37,7 +37,7 @@
   "name": "lsof",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "44ff77f86aefa08ad4e696f292009c33ed4a0dba",
+  "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "0.1.0"

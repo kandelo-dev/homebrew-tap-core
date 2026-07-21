@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/libmagic.json",
-      "sha256": "7c76f88c32f151c71b6d1f9442e02cfba6e97d2e02c4b21b3459dec44f6782b0"
+      "sha256": "56a243fa4bd055c804d8a94595804037281096c29f403c94c9414ca39c1fad6f"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/libmagic-5.45-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "846459095e968493142eb8968f6626fa5d9d0ff2b53dccc30592cda2f0eeea57"
+      "sha256": "7ecba2321afa87abc0fdb25e136ebde74a7c322b2877b36edd679371d3dd0149"
     },
     "provenance_json": {
       "path": "Kandelo/reports/libmagic-5.45-rebuild0-wasm32.provenance.json",
-      "sha256": "2678182b79f829bfed3a366194e98f8f7740cfb65ab843a7c5fc7527740e409d"
+      "sha256": "3c6ac157906c897bbb3c1b22e9451d7b551e4adf228e592b7f2d00076663843f"
     }
   },
   "repositories": {

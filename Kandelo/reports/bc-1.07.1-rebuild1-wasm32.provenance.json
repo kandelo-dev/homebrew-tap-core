@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 60581,
+    "cache_key_sha": "1eb1d3486fc3befaedd8b8d4ccd08589d11d9e1f9492f4c7fc8b8d0999512825",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "1eb1d3486fc3befaedd8b8d4ccd08589d11d9e1f9492f4c7fc8b8d0999512825",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/bc/blobs/sha256:1eb1d3486fc3befaedd8b8d4ccd08589d11d9e1f9492f4c7fc8b8d0999512825"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29816774661",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
+  },
+  "formula": {
+    "path": "Formula/bc.rb",
+    "sha256": "b322860c9d24808fa1df3e82a62a209b7c79c1df88467fce894746a23405cdd5"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/bc.json",
+      "sha256": "8b2f06c4376a3515733c938ed2bfa34c23c50c221a8b7de2be88440580b26488"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/bc-1.07.1-rebuild1-wasm32.json",
+      "sha256": "2b23923b75153f80729af015ad28c6a327252fa165ab7eb787058081146a4729"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "7ecba2321afa87abc0fdb25e136ebde74a7c322b2877b36edd679371d3dd0149"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/bc-1.07.1-rebuild1-wasm32.provenance.json",
+      "sha256": "9ba89d0aea011e8f81d71cecc6dff47c0a09d74baae688c1da1c837f43aa6ea3"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "ac1c16ee3e5b3a248f5ab7e55db8172060c1b0d6",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 1,
+    "kandelo_abi": 41,
+    "package": "bc",
+    "version": "1.07.1"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/bc.json",
+          "Kandelo/link/bc-1.07.1-rebuild1-wasm32.json",
+          "Kandelo/reports/bc-1.07.1-rebuild1-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured bc from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: 1eb1d3486fc3befaedd8b8d4ccd08589d11d9e1f9492f4c7fc8b8d0999512825"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

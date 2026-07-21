@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 1982626,
+    "cache_key_sha": "fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nethack/blobs/sha256:fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29816775036",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
+  },
+  "formula": {
+    "path": "Formula/nethack.rb",
+    "sha256": "706684f9e4dcd494f352e9d4eca7fa380272754c9a6c0cef3c29e88a40955471"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/nethack.json",
+      "sha256": "43182ef4acd2bc05a2e69a25024c3dcfccda998213b35fb40aef2e443fb58bc1"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/nethack-3.6.7-rebuild0-wasm32.json",
+      "sha256": "57900be8efaebfda2231905b5945ecd2d547442c7f23a9c4c0108fa39c8eb642"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "7ecba2321afa87abc0fdb25e136ebde74a7c322b2877b36edd679371d3dd0149"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/nethack-3.6.7-rebuild0-wasm32.provenance.json",
+      "sha256": "d96cb9e68f64271d7fb7ee309d79bcb06a28517c4008cfad7e4806592c66bfe2"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "ac1c16ee3e5b3a248f5ab7e55db8172060c1b0d6",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 0,
+    "kandelo_abi": 41,
+    "package": "nethack",
+    "version": "3.6.7"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/nethack.json",
+          "Kandelo/link/nethack-3.6.7-rebuild0-wasm32.json",
+          "Kandelo/reports/nethack-3.6.7-rebuild0-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured nethack from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

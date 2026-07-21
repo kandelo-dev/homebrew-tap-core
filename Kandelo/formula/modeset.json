@@ -1,32 +1,32 @@
 {
-  "bottle_rebuild": 0,
+  "bottle_rebuild": 1,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-21T05:02:10Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29801862887",
+      "built_at": "2026-07-21T09:24:18Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29816775446",
       "built_from": {
-        "formula_sha256": "e97838b0d8ccce6930f63b36814d900f959d13cf0474ca56210807f34ef1341a",
-        "kandelo_commit": "a1a34cd5cda8b72fa708aa5462bdc6e44677f676",
+        "formula_sha256": "25b28bc2917d5e50344ea92346e29370dffcb46014b2f37bc7210d8d86309631",
+        "kandelo_commit": "ac1c16ee3e5b3a248f5ab7e55db8172060c1b0d6",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "44ff77f86aefa08ad4e696f292009c33ed4a0dba",
+        "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 27577,
-      "cache_key_sha": "5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536",
+      "bytes": 27485,
+      "cache_key_sha": "30171effab671b29d6dab42b437bcff6a15e1dee2636e29ddcb114e5aa28f8c4",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
       "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/modeset-0.1.0-rebuild0-wasm32.json",
+      "link_manifest": "Kandelo/link/modeset-0.1.0-rebuild1-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536",
+      "sha256": "30171effab671b29d6dab42b437bcff6a15e1dee2636e29ddcb114e5aa28f8c4",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/modeset/blobs/sha256:5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/modeset/blobs/sha256:30171effab671b29d6dab42b437bcff6a15e1dee2636e29ddcb114e5aa28f8c4"
     }
   ],
   "dependencies": [],
@@ -37,7 +37,7 @@
   "name": "modeset",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "44ff77f86aefa08ad4e696f292009c33ed4a0dba",
+  "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "0.1.0"

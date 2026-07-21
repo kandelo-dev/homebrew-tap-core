@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/ncompress.json",
-      "sha256": "2e8f1708ec4a88051f78f9dc7253c6888e9fc63155f06220e0464f46213af213"
+      "sha256": "eb12e68d6b4f53a4ca20d8a8c915c8d1098e9df486fc5a671636a5f8421010c0"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/ncompress-5.0_1-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "846459095e968493142eb8968f6626fa5d9d0ff2b53dccc30592cda2f0eeea57"
+      "sha256": "7ecba2321afa87abc0fdb25e136ebde74a7c322b2877b36edd679371d3dd0149"
     },
     "provenance_json": {
       "path": "Kandelo/reports/ncompress-5.0_1-rebuild0-wasm32.provenance.json",
-      "sha256": "8fc902667ecf18dd40fcee14228ce593104c9232ffdf85d518fdbecbd45c4319"
+      "sha256": "570b57297b6df7315215ee4482900881fe55210c0ab571f1059e290ef8ff170e"
     }
   },
   "repositories": {

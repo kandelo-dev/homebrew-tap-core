@@ -46,7 +46,7 @@
   "name": "diffutils",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "44ff77f86aefa08ad4e696f292009c33ed4a0dba",
+  "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "3.12"

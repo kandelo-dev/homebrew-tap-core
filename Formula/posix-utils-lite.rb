@@ -48,7 +48,7 @@ class PosixUtilsLite < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "0f8a5192f8d45cd6ac488be4fcdddd3631e01a4b3f6093778afef6d165bfbc59"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "00f5d975d41a5af97c7534b46f08c40bfc296c45a385156a36b4bace4a01c345"
   end
 
 end

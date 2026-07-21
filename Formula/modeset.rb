@@ -35,7 +35,7 @@ class Modeset < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "30171effab671b29d6dab42b437bcff6a15e1dee2636e29ddcb114e5aa28f8c4"
   end
 
 end

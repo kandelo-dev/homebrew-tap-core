@@ -1,0 +1,33 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 27485,
+    "cache_key_sha": "30171effab671b29d6dab42b437bcff6a15e1dee2636e29ddcb114e5aa28f8c4",
+    "payload_root": "modeset/0.1.0",
+    "sha256": "30171effab671b29d6dab42b437bcff6a15e1dee2636e29ddcb114e5aa28f8c4",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/modeset/blobs/sha256:30171effab671b29d6dab42b437bcff6a15e1dee2636e29ddcb114e5aa28f8c4"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/modeset/0.1.0",
+  "links": [
+    {
+      "source": "bin/modeset",
+      "target": "bin/modeset",
+      "type": "symlink"
+    }
+  ],
+  "package": "modeset",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/modeset.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "0.1.0"
+}

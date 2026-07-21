@@ -1,0 +1,33 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 56184,
+    "cache_key_sha": "e9bd9050f4c0ecc924aaf03521e963e71294b9e711822c62f767c5147944cee1",
+    "payload_root": "netcat/0.7.1",
+    "sha256": "e9bd9050f4c0ecc924aaf03521e963e71294b9e711822c62f767c5147944cee1",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/netcat/blobs/sha256:e9bd9050f4c0ecc924aaf03521e963e71294b9e711822c62f767c5147944cee1"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/netcat/0.7.1",
+  "links": [
+    {
+      "source": "bin/nc",
+      "target": "bin/nc",
+      "type": "symlink"
+    }
+  ],
+  "package": "netcat",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/netcat.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "0.7.1"
+}
