@@ -1,0 +1,33 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 60665,
+    "cache_key_sha": "484d182ae361f26b54b52b546cead7ac58ebdf1b0b6d5b7730c8c83da0bff979",
+    "payload_root": "bc/1.07.1",
+    "sha256": "484d182ae361f26b54b52b546cead7ac58ebdf1b0b6d5b7730c8c83da0bff979",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/bc/blobs/sha256:484d182ae361f26b54b52b546cead7ac58ebdf1b0b6d5b7730c8c83da0bff979"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/bc/1.07.1",
+  "links": [
+    {
+      "source": "bin/bc",
+      "target": "bin/bc",
+      "type": "symlink"
+    }
+  ],
+  "package": "bc",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/bc.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.07.1"
+}
