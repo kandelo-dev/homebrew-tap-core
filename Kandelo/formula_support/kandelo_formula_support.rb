@@ -1257,7 +1257,7 @@ module KandeloFormulaSupport
     odie "PTY timeout must be a positive integer number of milliseconds" unless valid_timeout
     valid_completion_output = completion_output.nil? ||
                               (completion_output.is_a?(String) && !completion_output.empty? &&
-                               completion_output.bytesize <= 4096 && completion_output.exclude?("\0"))
+                               completion_output.bytesize <= 4096 && completion_output.index("\0").nil?)
     unless valid_completion_output
       odie "PTY completion output must be a nonempty string of at most 4096 bytes without NUL"
     end
