@@ -291,7 +291,8 @@ module KandeloFormulaSupport
     end
     unless bridge.nil?
       script_env_keys = bridge["script_env_keys"]
-      valid_bridge = bridge["package"] == formula &&
+      valid_bridge = bridge["package"].is_a?(String) &&
+                     bridge["package"].match?(/\A[a-z0-9][a-z0-9._-]{0,254}\z/) &&
                      bridge["version"].is_a?(String) &&
                      bridge["version"].match?(/\A[A-Za-z0-9][A-Za-z0-9._+,-]{0,254}\z/) &&
                      bridge["script"].is_a?(String) &&
@@ -920,12 +921,12 @@ module KandeloFormulaSupport
   # Transitional Tier-2 bridge (spec §6 deviation). Every source, identity,
   # registry, environment, and execution input is bound to the publisher's
   # frozen attestation before the SDK is activated or a build script runs.
-  def kandelo_build_package(script_env: {})
+  def kandelo_build_package(package: nil, script_env: {})
     runtime = kandelo_tier2_runtime!
     attestation = runtime.fetch("attestation")
     bridge = attestation.fetch("tier2_bridge")
-    formula_env = kandelo_tier2_script_env(bridge, script_env)
-    package = bridge.fetch("package")
+    attested_package = bridge.fetch("package")
+    requested_package = package.nil? ? name.to_s : package
 
     formula_name = name.to_s
     formula_full_name = respond_to?(:full_name) ? full_name.to_s : "kandelo-dev/tap-core/#{formula_name}"
@@ -939,6 +940,11 @@ module KandeloFormulaSupport
            formula_sha256 == bridge.fetch("source_sha256")
       odie "Kandelo Tier-2 Formula identity differs from the publisher attestation"
     end
+    unless requested_package.is_a?(String) && requested_package == attested_package
+      odie "Kandelo Tier-2 registry package differs from the publisher attestation"
+    end
+    formula_env = kandelo_tier2_script_env(bridge, script_env)
+    package = attested_package
 
     formula_path = Pathname(path).realpath
     support_path = Pathname(runtime.fetch("support_path"))
