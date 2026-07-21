@@ -79,4 +79,10 @@ class Fbdoom < Formula
       guest_files: guest_files, min_writes: 1, min_nonblank_pixels: 1_000
     )
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "e66d8f942018e02268bb50387216d7d907e1fdf1cee96d8fa5a032b04e0a79c4"
+  end
+
 end
