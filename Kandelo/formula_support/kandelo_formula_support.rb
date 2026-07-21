@@ -33,12 +33,16 @@ module KandeloFormulaSupport
   KANDELO_TIER2_ATTESTATION_BASENAME = ".kandelo-publisher-tier2-attestation.json"
   KANDELO_TIER2_ATTESTATION_MAX_BYTES = 16_384
   KANDELO_TIER2_SOURCE_MAX_BYTES = 1_048_576
+  KANDELO_SUPPORT_RUNTIME_MAX_FILES = 128
+  KANDELO_SUPPORT_RUNTIME_FILE_MAX_BYTES = 1_048_576
+  KANDELO_SUPPORT_RUNTIME_MAX_BYTES = 16_777_216
   KANDELO_TIER2_SCRIPT_ENV_MAX_KEYS = 64
   KANDELO_TIER2_SCRIPT_ENV_KEY_MAX_BYTES = 4_096
   KANDELO_TIER2_SCRIPT_ENV_VALUE_MAX_BYTES = 4_096
   KANDELO_TIER2_SCRIPT_ENV_VALUE_TOTAL_BYTES = 16_384
   KANDELO_TIER2_TOP_KEYS = %w[
-    arch formula formula_sha256 full_name schema support_sha256 tap tier2_bridge
+    arch formula formula_sha256 full_name schema support_runtime_sha256
+    support_sha256 tap tier2_bridge
   ].freeze
   KANDELO_TIER2_BRIDGE_KEYS = %w[
     build_toml_sha256 package package_toml_sha256 script script_env_keys
@@ -59,7 +63,8 @@ module KandeloFormulaSupport
   # this file and retain an inert nil authority.
   def self.kandelo_load_tier2_runtime!
     support_path = Pathname(__FILE__).realpath
-    secure_read = lambda do |path, max_bytes, label, expected_uid: nil, expected_mode: nil|
+    secure_read = lambda do |path, max_bytes, label, expected_uid: nil, expected_mode: nil,
+                            allow_empty: false, utf8: true|
       begin
         before = path.lstat
       rescue SystemCallError => e
@@ -91,11 +96,15 @@ module KandeloFormulaSupport
           raise "#{label} changed while it was read: #{path}"
         end
       end
-      unless bytes&.bytesize&.between?(1, max_bytes)
-        raise "#{label} must contain 1 to #{max_bytes} bytes: #{path}"
+      bytes = +"".b if allow_empty && bytes.nil?
+      minimum_bytes = allow_empty ? 0 : 1
+      unless bytes&.bytesize&.between?(minimum_bytes, max_bytes)
+        raise "#{label} must contain #{minimum_bytes} to #{max_bytes} bytes: #{path}"
       end
-      bytes.force_encoding(Encoding::UTF_8)
-      raise "#{label} is not UTF-8: #{path}" unless bytes.valid_encoding?
+      if utf8
+        bytes.force_encoding(Encoding::UTF_8)
+        raise "#{label} is not UTF-8: #{path}" unless bytes.valid_encoding?
+      end
 
       bytes
     end
@@ -144,6 +153,39 @@ module KandeloFormulaSupport
       support_path, KANDELO_TIER2_SOURCE_MAX_BYTES, "Kandelo Formula support"
     )
     support_sha256 = Digest::SHA256.hexdigest(support_source)
+    support_runtime_files = {}
+    support_runtime_bytes = 0
+    support_dir.each_child do |entry|
+      basename = entry.basename.to_s
+      if basename == "test"
+        exact_directory.call(entry, "Kandelo Formula support test path")
+        next
+      end
+      unless basename.match?(/\A[A-Za-z0-9][A-Za-z0-9._-]*\z/) &&
+             entry.parent == support_dir
+        raise "Kandelo Formula support runtime entry has a noncanonical path: #{entry}"
+      end
+      if support_runtime_files.length >= KANDELO_SUPPORT_RUNTIME_MAX_FILES
+        raise "Kandelo Formula support runtime exceeds #{KANDELO_SUPPORT_RUNTIME_MAX_FILES} files: #{support_dir}"
+      end
+      entry_source = secure_read.call(
+        entry,
+        KANDELO_SUPPORT_RUNTIME_FILE_MAX_BYTES,
+        "Kandelo Formula support runtime entry",
+        allow_empty: true,
+        utf8: false,
+      )
+      support_runtime_bytes += entry_source.bytesize
+      if support_runtime_bytes > KANDELO_SUPPORT_RUNTIME_MAX_BYTES
+        raise "Kandelo Formula support runtime exceeds the byte limit: #{support_dir}"
+      end
+      support_runtime_files[basename] = Digest::SHA256.hexdigest(entry_source)
+    end
+    support_runtime_files = support_runtime_files.sort.to_h
+    unless support_runtime_files.fetch(support_path.basename.to_s, nil) == support_sha256
+      raise "Kandelo Formula support changed while its runtime tree was read: #{support_path}"
+    end
+    support_runtime_sha256 = Digest::SHA256.hexdigest(JSON.generate(support_runtime_files))
 
     prefix_value = if defined?(HOMEBREW_PREFIX)
       HOMEBREW_PREFIX.to_s
@@ -164,6 +206,7 @@ module KandeloFormulaSupport
       "attestation_path" => attestation_path&.to_s,
       "formula_path" => nil,
       "support_path" => support_path.to_s,
+      "support_runtime_sha256" => support_runtime_sha256,
       "support_sha256" => support_sha256,
       "trusted_env" => trusted_env,
     }
@@ -275,7 +318,7 @@ module KandeloFormulaSupport
     unless document.is_a?(Hash) && document.keys.sort == KANDELO_TIER2_TOP_KEYS
       raise "Tier-2 attestation must use the exact top-level schema"
     end
-    unless document["schema"] == 1
+    unless document["schema"] == 2
       raise "Tier-2 attestation uses an unsupported schema"
     end
     tap_identity = document["tap"]
@@ -284,6 +327,7 @@ module KandeloFormulaSupport
     arch = document["arch"]
     formula_sha256 = document["formula_sha256"]
     attested_support_sha256 = document["support_sha256"]
+    attested_support_runtime_sha256 = document["support_runtime_sha256"]
     bridge = document["tier2_bridge"]
     valid_sha256 = lambda do |value|
       value.is_a?(String) && value.match?(/\A[0-9a-f]{64}\z/)
@@ -292,7 +336,9 @@ module KandeloFormulaSupport
            formula.is_a?(String) && formula.match?(/\A[a-z0-9][a-z0-9._-]{0,254}\z/) &&
            full_name == "#{tap_identity}/#{formula}" && ["wasm32", "wasm64"].include?(arch) &&
            valid_sha256.call(formula_sha256) &&
-           (attested_support_sha256.nil? || valid_sha256.call(attested_support_sha256))
+           ((attested_support_sha256.nil? && attested_support_runtime_sha256.nil?) ||
+             (valid_sha256.call(attested_support_sha256) &&
+              valid_sha256.call(attested_support_runtime_sha256)))
       raise "Tier-2 attestation has an invalid target identity"
     end
     unless bridge.nil? || (bridge.is_a?(Hash) && bridge.keys.sort == KANDELO_TIER2_BRIDGE_KEYS)
@@ -338,6 +384,10 @@ module KandeloFormulaSupport
     end
     if !attested_support_sha256.nil? && support_sha256 != attested_support_sha256
       raise "loaded Kandelo Formula support differs from the Tier-2 attestation"
+    end
+    if !attested_support_runtime_sha256.nil? &&
+       support_runtime_sha256 != attested_support_runtime_sha256
+      raise "loaded Kandelo Formula support runtime differs from the Tier-2 attestation"
     end
     formula_path = primary_tap_root/"Formula"/"#{formula}.rb"
     formula_source = secure_read.call(

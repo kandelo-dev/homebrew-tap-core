@@ -241,15 +241,25 @@ class KandeloFormulaSupportTest < Minitest::Test
       }
     end
     {
-      "schema"            => 1,
-      "arch"              => "wasm32",
-      "tap"               => fixture.fetch(:tap_name),
-      "formula"           => "hello",
-      "full_name"         => "#{fixture.fetch(:tap_name)}/hello",
-      "formula_sha256"    => Digest::SHA256.file(fixture.fetch(:formula_path)).hexdigest,
-      "support_sha256"    => Digest::SHA256.file(fixture.fetch(:support_path)).hexdigest,
-      "tier2_bridge"      => nested,
+      "schema"                 => 2,
+      "arch"                   => "wasm32",
+      "tap"                    => fixture.fetch(:tap_name),
+      "formula"                => "hello",
+      "full_name"              => "#{fixture.fetch(:tap_name)}/hello",
+      "formula_sha256"         => Digest::SHA256.file(fixture.fetch(:formula_path)).hexdigest,
+      "support_runtime_sha256" => support_runtime_sha256(fixture.fetch(:support_path).dirname),
+      "support_sha256"         => Digest::SHA256.file(fixture.fetch(:support_path)).hexdigest,
+      "tier2_bridge"           => nested,
     }
+  end
+
+  def support_runtime_sha256(support_dir)
+    entries = support_dir.children.each_with_object({}) do |entry, runtime|
+      next if entry.basename.to_s == "test"
+
+      runtime[entry.basename.to_s] = Digest::SHA256.file(entry).hexdigest
+    end
+    Digest::SHA256.hexdigest(JSON.generate(entries.sort.to_h))
   end
 
   def write_tier2_loader_attestation(fixture, contents)
@@ -294,6 +304,12 @@ class KandeloFormulaSupportTest < Minitest::Test
         dependency_tap_root/"Kandelo/formula_support/kandelo_formula_support.rb"
       dependency_support_path.dirname.mkpath
       FileUtils.cp(fixture.fetch(:support_path), dependency_support_path)
+      primary_test_root = fixture.fetch(:support_path).dirname/"test"
+      dependency_test_root = dependency_support_path.dirname/"test"
+      primary_test_root.mkpath
+      dependency_test_root.mkpath
+      (primary_test_root/"tap-local.txt").binwrite("primary-only test bytes\n")
+      (dependency_test_root/"tap-local.txt").binwrite("dependency-only test bytes\n")
       yield fixture.merge(dependency_support_path:, dependency_tap_root:)
     end
   end
@@ -547,6 +563,11 @@ class KandeloFormulaSupportTest < Minitest::Test
             runtime.fetch("formula_path") == #{fixture.fetch(:formula_path).realpath.to_s.inspect}
           abort "first support copy did not own the module" unless
             runtime.fetch("support_path") == #{expected_loaded_support.inspect}
+          abort "first support runtime digest was not frozen" unless
+            runtime.fetch("support_runtime_sha256").frozen?
+          abort "first support runtime digest changed with load order" unless
+            runtime.fetch("support_runtime_sha256") ==
+              #{document.fetch("support_runtime_sha256").inspect}
           abort "primary tap authority changed" unless
             runtime.fetch("trusted_env").fetch("HOMEBREW_KANDELO_PRIMARY_TAP_ROOT") ==
               #{fixture.fetch(:tap_root).to_s.inspect}
@@ -587,13 +608,132 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
+  def test_first_loaded_cross_tap_support_rejects_runtime_helper_drift
+    [:primary, :dependency].each do |first_copy|
+      with_cross_tap_loader_fixture do |fixture|
+        primary = fixture.fetch(:support_path)
+        dependency = fixture.fetch(:dependency_support_path)
+        primary_helper = primary.dirname/"runtime-helper.ts"
+        dependency_helper = dependency.dirname/"runtime-helper.ts"
+        primary_helper.binwrite("export const reviewed = true;\n")
+        FileUtils.cp(primary_helper, dependency_helper)
+        document = tier2_loader_attestation(fixture)
+        write_tier2_loader_attestation(fixture, JSON.generate(document))
+
+        first = first_copy == :primary ? primary : dependency
+        second = first_copy == :primary ? dependency : primary
+        first_helper = first.dirname/"runtime-helper.ts"
+        first_helper.open("ab") { |file| file.write("export const drift = true;\n") }
+        marker = fixture.fetch(:base)/"#{first_copy}-runtime-drift-evaluated"
+        _stdout, stderr, status = run_tier2_support_load(
+          fixture,
+          "File.binwrite(#{marker.to_s.inspect}, \"evaluated\\n\")",
+          environment: { "KANDELO_TEST_SUPPORT_PATHS" => [first, second] },
+        )
+
+        refute status.success?, first_copy
+        assert_includes stderr, "support runtime differs from the Tier-2 attestation", first_copy
+        refute_path_exists marker, first_copy
+      end
+    end
+  end
+
+  def test_first_loaded_support_rejects_added_and_removed_runtime_helpers
+    [:added, :removed].each do |mutation|
+      with_tier2_loader_fixture do |fixture|
+        helper = fixture.fetch(:support_path).dirname/"runtime-helper.ts"
+        helper.binwrite("export const reviewed = true;\n") if mutation == :removed
+        document = tier2_loader_attestation(fixture)
+        write_tier2_loader_attestation(fixture, JSON.generate(document))
+        if mutation == :added
+          helper.binwrite("export const added = true;\n")
+        else
+          helper.delete
+        end
+        marker = fixture.fetch(:base)/"#{mutation}-helper-evaluated"
+        _stdout, stderr, status = run_tier2_support_load(
+          fixture, "File.binwrite(#{marker.to_s.inspect}, \"evaluated\\n\")"
+        )
+
+        refute status.success?, mutation
+        assert_includes stderr, "support runtime differs from the Tier-2 attestation", mutation
+        refute_path_exists marker, mutation
+      end
+    end
+  end
+
+  def test_first_loaded_support_rejects_a_symlinked_runtime_helper
+    with_tier2_loader_fixture do |fixture|
+      document = tier2_loader_attestation(fixture)
+      write_tier2_loader_attestation(fixture, JSON.generate(document))
+      helper = fixture.fetch(:support_path).dirname/"runtime-helper.ts"
+      helper.make_symlink(fixture.fetch(:formula_path))
+      marker = fixture.fetch(:base)/"symlinked-helper-evaluated"
+
+      _stdout, stderr, status = run_tier2_support_load(
+        fixture, "File.binwrite(#{marker.to_s.inspect}, \"evaluated\\n\")"
+      )
+
+      refute status.success?
+      assert_includes stderr, "must be a regular non-symlink file with one link"
+      refute_path_exists marker
+    end
+  end
+
+  def test_first_loaded_support_enforces_runtime_file_count_and_byte_limits
+    mutations = {
+      "file count" => lambda do |support_dir|
+        KandeloFormulaSupport::KANDELO_SUPPORT_RUNTIME_MAX_FILES.times do |index|
+          (support_dir/format("helper-%03d.ts", index)).binwrite("")
+        end
+      end,
+      "per-file bytes" => lambda do |support_dir|
+        (support_dir/"oversized-helper.ts").binwrite(
+          "x" * (KandeloFormulaSupport::KANDELO_SUPPORT_RUNTIME_FILE_MAX_BYTES + 1),
+        )
+      end,
+      "total bytes" => lambda do |support_dir|
+        16.times do |index|
+          (support_dir/format("large-helper-%02d.ts", index)).binwrite(
+            "x" * KandeloFormulaSupport::KANDELO_SUPPORT_RUNTIME_FILE_MAX_BYTES,
+          )
+        end
+      end,
+    }
+    mutations.each do |label, mutate|
+      with_tier2_loader_fixture do |fixture|
+        document = tier2_loader_attestation(fixture)
+        write_tier2_loader_attestation(fixture, JSON.generate(document))
+        mutate.call(fixture.fetch(:support_path).dirname)
+        marker = fixture.fetch(:base)/"#{label.tr(" ", "-")}-evaluated"
+        _stdout, stderr, status = run_tier2_support_load(
+          fixture, "File.binwrite(#{marker.to_s.inspect}, \"evaluated\\n\")"
+        )
+
+        refute status.success?, label
+        expected = case label
+        when "file count"
+          "exceeds 128 files"
+        when "per-file bytes"
+          "must contain 0 to 1048576 bytes"
+        else
+          "exceeds the byte limit"
+        end
+        assert_includes stderr, expected, label
+        refute_path_exists marker, label
+      end
+    end
+  end
+
   def test_support_load_validates_and_recursively_freezes_an_active_attestation
     with_tier2_loader_fixture do |fixture|
       document = tier2_loader_attestation(fixture)
       write_tier2_loader_attestation(fixture, JSON.generate(document))
       assertion = <<~'RUBY'
         runtime = KandeloFormulaSupport::KANDELO_TIER2_RUNTIME
-        values = [runtime, runtime["attestation"], runtime["attestation"]["tier2_bridge"],
+        values = [runtime, runtime["support_runtime_sha256"], runtime["attestation"],
+                  runtime["attestation"]["support_runtime_sha256"],
+                  runtime["attestation"]["tier2_bridge"],
                   runtime["attestation"]["tier2_bridge"]["script_env_keys"],
                   runtime["attestation"]["tier2_bridge"]["source_url"],
                   runtime["trusted_env"]]
@@ -738,17 +878,21 @@ class KandeloFormulaSupportTest < Minitest::Test
       invalid_bridge_type.fetch("tier2_bridge")["script_env_keys"] = "HELLO_VALUE"
       invalid_bridge_package = JSON.parse(valid_json)
       invalid_bridge_package.fetch("tier2_bridge")["package"] = "../hello"
+      missing_support_runtime = valid.dup
+      missing_support_runtime.delete("support_runtime_sha256")
       mutations = {
-        "duplicate key"       => valid_json.sub('"schema":1', '"schema":1,"schema":1'),
+        "duplicate key"       => valid_json.sub('"schema":2', '"schema":2,"schema":2'),
         "missing top key"     => JSON.generate(missing_top),
+        "missing runtime hash" => JSON.generate(missing_support_runtime),
         "unknown top key"     => JSON.generate(valid.merge("unknown" => true)),
         "missing bridge key"  => JSON.generate(missing_bridge),
         "unknown bridge key"  => JSON.generate(unknown_bridge),
         "bridge value type"   => JSON.generate(invalid_bridge_type),
         "bridge package"      => JSON.generate(invalid_bridge_package),
-        "schema"              => JSON.generate(valid.merge("schema" => 2)),
+        "schema"              => JSON.generate(valid.merge("schema" => 1)),
         "formula hash"        => JSON.generate(valid.merge("formula_sha256" => "f" * 64)),
         "support hash"        => JSON.generate(valid.merge("support_sha256" => "f" * 64)),
+        "support runtime hash" => JSON.generate(valid.merge("support_runtime_sha256" => "f" * 64)),
         "trailing JSON value" => "#{valid_json} true",
       }
       mutations.each do |label, contents|
