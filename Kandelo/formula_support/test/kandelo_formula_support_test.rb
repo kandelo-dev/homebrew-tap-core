@@ -1271,12 +1271,33 @@ class KandeloFormulaSupportTest < Minitest::Test
 
   def test_ruby_declares_every_registry_script_native_build_dependency
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
-    native_declarations = formula.lines.grep(/^\s*depends_on "(?:rust|wabt)"/)
+    native_declarations = formula.lines.grep(/^\s*depends_on "(?:rust|unzip|wabt)"/)
 
     assert_equal [
       %Q(  depends_on "rust" => :build\n),
+      %Q(  depends_on "unzip" => :build\n),
       %Q(  depends_on "wabt" => :build\n),
     ], native_declarations
+  end
+
+  def test_ruby_exercises_the_installed_guest_runtime_without_rubylib
+    formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
+
+    assert_includes formula, "  revision 1\n"
+    assert_includes formula, '"WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX'
+    assert_includes formula, "guest_files: runtime_files"
+    assert_includes formula, "raise 'RUBYLIB leaked into installed runtime test'"
+    assert_includes formula, 'browser_program = program.sub("ruby-runtime-ok", "ruby-browser-runtime-ok")'
+    assert_includes formula, "kandelo_run_browser_wasm("
+    assert_includes formula, "allow_stderr: false"
+    assert_includes(
+      formula,
+      'assert_equal "ruby-browser-runtime-ok:4.0.5:rubygems-4.0.10:bundler-4.0.10\\n", browser_output',
+    )
+    %w[gem bundle bundler].each do |command|
+      assert_match(/"#{Regexp.escape(command)}"\s*=>/, formula)
+    end
+    refute_match(/"RUBYLIB"\s*=>/, formula)
   end
 
   def test_nethack_declares_its_canonical_dotted_version
