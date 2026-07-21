@@ -1,57 +1,57 @@
 {
   "bottle": {
-    "bottle_tag": "wasm64_kandelo",
-    "bytes": 108821,
-    "cache_key_sha": "a7c228222c9fb27d7058e7872f1e0bbee69ea3fc892e58f6d3d7cf5b57c9feea",
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 27577,
+    "cache_key_sha": "5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536",
     "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
     "prefix": "/home/linuxbrew/.linuxbrew",
-    "sha256": "a7c228222c9fb27d7058e7872f1e0bbee69ea3fc892e58f6d3d7cf5b57c9feea",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/zlib/blobs/sha256:a7c228222c9fb27d7058e7872f1e0bbee69ea3fc892e58f6d3d7cf5b57c9feea"
+    "sha256": "5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/modeset/blobs/sha256:5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536"
   },
   "build": {
     "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
     "dev_shell": "scripts/dev-shell.sh",
-    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29731335304",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29801862887",
     "job": "verify-bottle",
     "runner_os": "Linux",
     "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
-    "sysroot_fingerprint": "8280423357f484f1b2e58b884904a989cd72c48dff0cde47764f13426d8f9fb4"
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
   },
   "formula": {
-    "path": "Formula/zlib.rb",
-    "sha256": "c714f282f4be7caae55396ff2e683976d828119dfc0ad68b76393d805df399e9"
+    "path": "Formula/modeset.rb",
+    "sha256": "e97838b0d8ccce6930f63b36814d900f959d13cf0474ca56210807f34ef1341a"
   },
   "metadata": {
     "formula_json": {
-      "path": "Kandelo/formula/zlib.json",
-      "sha256": "43a167b7d724cfbfdae008a9964ad577bfafa630c99b6d5343327da99c027acb"
+      "path": "Kandelo/formula/modeset.json",
+      "sha256": "a7f08d899fe25160bc909105898ad8a6c8f94d72e2e36edc46d80b08fb96a630"
     },
     "link_manifest_json": {
-      "path": "Kandelo/link/zlib-1.3.1_4-rebuild1-wasm64.json",
-      "sha256": "699c05f342a901900557e04f9e043e81b8b23d89a80086ce23253a66c453675f"
+      "path": "Kandelo/link/modeset-0.1.0-rebuild0-wasm32.json",
+      "sha256": "9e4bc9e78ac33861c9dbaaa0c12271e7299904005350c4408bb47ea16f89602b"
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
       "sha256": "4d111a632aaaa16d32f50e733525b33ebda822e08493e269c9b299622deb9109"
     },
     "provenance_json": {
-      "path": "Kandelo/reports/zlib-1.3.1_4-rebuild1-wasm64.provenance.json",
-      "sha256": "8a4e545d973d9a3f504f5cad60e1efdfb64720d9b56ea9a0c10c9bef75dc4cd7"
+      "path": "Kandelo/reports/modeset-0.1.0-rebuild0-wasm32.provenance.json",
+      "sha256": "2cf0bfcfa73c1a5f2a94b10f3a909bdb7a32b85a7ad8d0c60816fc51792f3af5"
     }
   },
   "repositories": {
-    "kandelo_commit": "90bbf4e3a90a6d72305243ce10b04e26d471c0ac",
+    "kandelo_commit": "a1a34cd5cda8b72fa708aa5462bdc6e44677f676",
     "kandelo_repository": "Automattic/kandelo",
-    "tap_commit": "a0a6728e88b8d914eac71a0bc81330fc9a60a1e2",
+    "tap_commit": "44ff77f86aefa08ad4e696f292009c33ed4a0dba",
     "tap_repository": "kandelo-dev/homebrew-tap-core"
   },
   "schema": 1,
   "subject": {
-    "arch": "wasm64",
-    "bottle_rebuild": 1,
+    "arch": "wasm32",
+    "bottle_rebuild": 0,
     "kandelo_abi": 41,
-    "package": "zlib",
-    "version": "1.3.1_4"
+    "package": "modeset",
+    "version": "0.1.0"
   },
   "validation": {
     "outcome_lists": [
@@ -60,9 +60,9 @@
         "name": "schema",
         "passed": [
           "Kandelo/metadata.json",
-          "Kandelo/formula/zlib.json",
-          "Kandelo/link/zlib-1.3.1_4-rebuild1-wasm64.json",
-          "Kandelo/reports/zlib-1.3.1_4-rebuild1-wasm64.provenance.json"
+          "Kandelo/formula/modeset.json",
+          "Kandelo/link/modeset-0.1.0-rebuild0-wasm32.json",
+          "Kandelo/reports/modeset-0.1.0-rebuild0-wasm32.provenance.json"
         ],
         "skipped": [],
         "status": "success"
@@ -93,9 +93,9 @@
         "failed": [],
         "name": "node_smoke",
         "passed": [
-          "Homebrew force-poured zlib from anonymous-public-readback",
-          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
-          "exact bottle sha256: a7c228222c9fb27d7058e7872f1e0bbee69ea3fc892e58f6d3d7cf5b57c9feea"
+          "Homebrew force-poured modeset from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_kms_wasm",
+          "exact bottle sha256: 5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536"
         ],
         "skipped": [],
         "status": "success"
