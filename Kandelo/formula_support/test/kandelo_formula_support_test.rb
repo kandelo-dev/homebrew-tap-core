@@ -17,8 +17,8 @@ class KandeloFormulaSupportTest < Minitest::Test
   class Harness
     include KandeloFormulaSupport
 
-    attr_accessor :build_path, :dependency_formulae, :homebrew_prefix_path, :nix_path, :prefix_path, :root_path,
-                  :runtime_formulae, :shell_result, :test_path
+    attr_accessor :build_path, :dependency_formulae, :formula_name, :formula_version, :homebrew_prefix_path,
+                  :nix_path, :prefix_path, :root_path, :runtime_formulae, :shell_result, :test_path
     attr_reader :command, :expected_status, :pty_config, :pty_config_mode, :pty_config_path,
                 :recorded_launcher, :system_args, :system_calls
 
@@ -32,6 +32,14 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     def buildpath
       build_path || testpath
+    end
+
+    def name
+      formula_name || "test-formula"
+    end
+
+    def version
+      formula_version || "1.0"
     end
 
     def prefix
@@ -234,6 +242,86 @@ class KandeloFormulaSupportTest < Minitest::Test
 
       error = assert_raises(RuntimeError) { harness.kandelo_stage_verified_formula_source }
       assert_includes error.message, "did not stage Formula source"
+    end
+  end
+
+  def test_registry_bridge_accepts_the_authoritative_package_version
+    Dir.mktmpdir("kandelo-registry-version") do |dir|
+      root = Pathname(dir)
+      manifest = root/"packages/registry/nethack/package.toml"
+      manifest.dirname.mkpath
+      manifest.write("name = \"nethack\"\nversion = \"3.6.7\"\n\n[build]\n")
+      harness = Harness.new
+      harness.formula_name = "nethack"
+      harness.formula_version = "3.6.7"
+
+      assert_equal "3.6.7", harness.kandelo_validate_registry_package_version!(root, "nethack")
+    end
+  end
+
+  def test_registry_bridge_rejects_an_ambiguous_url_version_before_building
+    Dir.mktmpdir("kandelo-registry-version") do |dir|
+      root = Pathname(dir)
+      manifest = root/"packages/registry/nethack/package.toml"
+      manifest.dirname.mkpath
+      manifest.write("name = \"nethack\"\nversion = \"3.6.7\"\n")
+      harness = Harness.new
+      harness.formula_name = "nethack"
+      harness.formula_version = "367"
+      harness.define_singleton_method(:kandelo_activate_sdk!) { root.to_s }
+
+      error = assert_raises(RuntimeError) do
+        harness.kandelo_build_package("nethack", "build-nethack.sh", "https://example.test/src", "a" * 64)
+      end
+      assert_includes error.message, "Formula nethack resolved Homebrew version \"367\""
+      assert_includes error.message, "mapped Kandelo registry package \"nethack\""
+      assert_includes error.message, "authoritative version \"3.6.7\""
+      assert_includes error.message, manifest.to_s
+      assert_nil harness.system_calls
+    end
+  end
+
+  def test_registry_bridge_requires_the_mapped_package_manifest
+    Dir.mktmpdir("kandelo-registry-version") do |dir|
+      root = Pathname(dir)
+      (root/"packages/registry").mkpath
+      harness = Harness.new
+
+      error = assert_raises(RuntimeError) do
+        harness.kandelo_validate_registry_package_version!(root, "missing-package")
+      end
+      assert_includes error.message, "mapped Kandelo registry package \"missing-package\""
+      assert_includes error.message, "packages/registry/missing-package/package.toml"
+    end
+  end
+
+  def test_registry_bridge_rejects_a_malformed_authoritative_version
+    Dir.mktmpdir("kandelo-registry-version") do |dir|
+      root = Pathname(dir)
+      manifest = root/"packages/registry/nethack/package.toml"
+      manifest.dirname.mkpath
+      manifest.write("name = \"nethack\"\nversion = \"3.6.7/../../other\"\n")
+      harness = Harness.new
+
+      error = assert_raises(RuntimeError) do
+        harness.kandelo_validate_registry_package_version!(root, "nethack")
+      end
+      assert_includes error.message, "missing or invalid authoritative version"
+      assert_includes error.message, manifest.to_s
+    end
+  end
+
+  def test_registry_bridge_supports_an_intentional_formula_name_mapping
+    Dir.mktmpdir("kandelo-registry-version") do |dir|
+      root = Pathname(dir)
+      manifest = root/"packages/registry/file/package.toml"
+      manifest.dirname.mkpath
+      manifest.write("name = \"file\"\nversion = \"5.45\"\n")
+      harness = Harness.new
+      harness.formula_name = "file-formula"
+      harness.formula_version = "5.45"
+
+      assert_equal "5.45", harness.kandelo_validate_registry_package_version!(root, "file")
     end
   end
 
@@ -1337,8 +1425,10 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_equal ["\u0018"], config.fetch("rerunInputs")
       assert_equal({ "/opt/program/bin/helper" => "/formula/helper" }, config.fetch("execPrograms"))
       assert_equal({ "/etc/program.conf" => "/formula/program.conf" }, config.fetch("guestFiles"))
-      assert_equal ["/home/linuxbrew/.linuxbrew/var/program"],
-        config.fetch("writableGuestDirectories")
+      assert_equal(
+        ["/home/linuxbrew/.linuxbrew/var/program"],
+        config.fetch("writableGuestDirectories"),
+      )
       assert_equal({ "/work" => "/formula/test output" }, config.fetch("writableHostDirectories"))
       assert_equal 2, config.fetch("expectedForkDescendants")
       assert_equal 120_000, config.fetch("timeoutMs")
@@ -1373,8 +1463,8 @@ class KandeloFormulaSupportTest < Minitest::Test
   def test_pty_execution_removes_config_after_runner_failure
     Dir.mktmpdir("kandelo-formula-support") do |dir|
       harness_class = Class.new(Harness) do
-        def shell_output(command, expected_status = 0)
-          super
+        define_method(:shell_output) do |command, expected_status = 0|
+          super(command, expected_status)
           raise "runner failed"
         end
       end
@@ -1412,8 +1502,10 @@ class KandeloFormulaSupportTest < Minitest::Test
         )
       end
 
-      assert_includes error.message,
-        "input readiness text must be a nonempty string no larger than 4096 bytes"
+      assert_includes(
+        error.message,
+        "input readiness text must be a nonempty string no larger than 4096 bytes",
+      )
     end
   end
 
