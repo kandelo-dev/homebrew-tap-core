@@ -15,6 +15,7 @@ class Python < Formula
   version "3.13.3"
   sha256 "40f868bcbdeb8149a3149580bb9bfd407b3321cd48f0be631af955ac92c0e041"
   license "Python-2.0"
+  revision 1
 
   depends_on "binaryen" => :build
   depends_on "unzip" => :build
@@ -46,12 +47,22 @@ class Python < Formula
     odie "CPython runtime archive has no license" unless runtime_license.file?
 
     lib.install stdlib
+    # CPython's getpath initialization requires this installed-prefix directory
+    # even when every supported extension module is statically linked. Retain a
+    # marker so Homebrew's bottle cannot discard the otherwise empty directory.
+    lib_dynload = lib/"python#{PYTHON_MAJOR_MINOR}/lib-dynload"
+    lib_dynload.mkpath
+    (lib_dynload/"README.txt").write <<~EOS
+      Kandelo CPython builds supported extension modules into the interpreter.
+      This directory is intentionally retained for CPython prefix discovery.
+    EOS
     (share/"licenses/cpython").install runtime_license
   end
 
   test do
     stdlib = lib/"python#{PYTHON_MAJOR_MINOR}"
     assert_path_exists stdlib/"json/__init__.py"
+    assert_path_exists stdlib/"lib-dynload/README.txt"
     assert_path_exists share/"licenses/cpython/LICENSE"
     %w[python python3 python3.13].each { |command| assert_path_exists bin/command }
 
@@ -64,29 +75,34 @@ class Python < Formula
     env = {
       "HOME"                    => "/tmp",
       "PYTHONDONTWRITEBYTECODE" => "1",
-      "PYTHONHOME"              => GUEST_OPT_PREFIX,
     }
     program = <<~PYTHON
       import json
+      import site
       import sys
       import zlib
       assert sys.version_info[:3] == (3, 13, 3)
+      assert sys.prefix == "#{GUEST_OPT_PREFIX}"
+      assert "#{GUEST_RUNTIME}/site-packages" in site.getsitepackages()
       assert json.loads('{"kandelo": [3, 1, 3]}') == {"kandelo": [3, 1, 3]}
       assert zlib.decompress(zlib.compress(b"kandelo-python")) == b"kandelo-python"
       print("python-node-ok:3.13.3")
     PYTHON
     assert_equal "python-node-ok:3.13.3\n", kandelo_run_wasm(
-      bin/"python3", ["-c", program], env: env, guest_files: runtime_files
+      bin/"python3", ["-c", program],
+      argv0: GUEST_OPT_PREFIX + "/bin/python3", env: env,
+      guest_files: runtime_files, merge_stderr: true
     )
 
     browser_program = program.sub("python-node-ok", "python-browser-ok")
     assert_equal "python-browser-ok:3.13.3\n", kandelo_run_browser_wasm(
       bin/"python3",
       ["-c", browser_program],
-      argv0:       "python3",
-      env:         env,
-      guest_files: runtime_files,
-      timeout_ms:  180_000,
+      argv0:              "python3",
+      guest_program_path: GUEST_OPT_PREFIX + "/bin/python3",
+      env:                env,
+      guest_files:        runtime_files,
+      timeout_ms:         180_000,
     )
   end
 end
