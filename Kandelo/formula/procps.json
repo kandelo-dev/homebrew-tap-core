@@ -37,7 +37,7 @@
   "name": "procps",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "0c1282173f37966c118ae21ce86c04c46468b5fd",
+  "tap_commit": "44ff77f86aefa08ad4e696f292009c33ed4a0dba",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "4.0.6"

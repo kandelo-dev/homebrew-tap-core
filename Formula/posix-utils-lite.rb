@@ -49,4 +49,10 @@ class PosixUtilsLite < Formula
     assert_equal "C\nPOSIX\nC.UTF-8\n",
       kandelo_run_wasm(bin/"locale", ["-a"], preserve_argv0: true)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "0f8a5192f8d45cd6ac488be4fcdddd3631e01a4b3f6093778afef6d165bfbc59"
+  end
+
 end

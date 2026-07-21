@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/asa.json",
-      "sha256": "13bc2ffb9c0175135018d1bcbb1fc6f2a19e19f2ed82ad730fca1f9965357620"
+      "sha256": "02e364cb57ed9936bbcee7df6942e0435b0e12e95ccb6856e2c66bc0a3a223f0"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/asa-15.0.0-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "b246e475c9c16485dbeb54a7621b3b3a63a523732307b452a3ebc7f133adb149"
+      "sha256": "2afa882e22a05819ef1c70e306a05d08c3edeff36bcbf500291c8ec6d8459460"
     },
     "provenance_json": {
       "path": "Kandelo/reports/asa-15.0.0-rebuild0-wasm32.provenance.json",
-      "sha256": "06a1c84554447e41583f30007a6de36043ea2419ec5935c6506f0776ef359595"
+      "sha256": "f11a78c17d2e5ef5324d6707d2daa6460001a348cbd92f8493d0ec529a36be6c"
     }
   },
   "repositories": {
