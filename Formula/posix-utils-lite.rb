@@ -12,9 +12,9 @@ class PosixUtilsLite < Formula
 
   desc "Compact POSIX utility set for Kandelo"
   homepage "https://github.com/Automattic/kandelo"
-  url "https://github.com/Automattic/kandelo/archive/110619f8e7e5d51ec85b62f526176535462cd3bd.tar.gz"
+  url "https://github.com/Automattic/kandelo/archive/1a83af5de608c10f485082c6ef0efa845f747436.tar.gz"
   version "0.1.0"
-  sha256 "c082b12eafdcb81e7162b79d22dc329bf1ba5184ce09b0d446c7419d51eb0009"
+  sha256 "07e7a7ebff8003114f6b4bef1ccdc2e9b15ecfbd5e6ccc3bf8563107b8151fde"
   license "GPL-2.0-or-later"
 
   depends_on "binaryen" => :build

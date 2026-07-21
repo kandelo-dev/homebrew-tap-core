@@ -25,7 +25,7 @@ class Netcat < Formula
       "netcat", "build-netcat.sh", stable.url, stable.checksum.hexdigest,
       script_env: { "WASM_POSIX_INSTALL_LOCAL_MIRROR" => "0" }
     )
-    kandelo_validate_wasm_artifact(out_dir/"nc.wasm", fork: :required)
+    kandelo_validate_wasm_artifact(out_dir/"nc.wasm", fork: :forbidden)
     kandelo_install_bin(out_dir, "nc.wasm", "nc")
   end
 

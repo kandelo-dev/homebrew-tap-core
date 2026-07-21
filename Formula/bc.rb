@@ -12,6 +12,7 @@ class Bc < Formula
   depends_on "binaryen" => :build
   depends_on "bison" => :build
   depends_on "flex" => :build
+  depends_on "m4" => :build
   depends_on "wabt" => :build
 
   skip_clean "bin/bc"
