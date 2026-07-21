@@ -199,10 +199,11 @@ class KandeloFormulaSupportTest < Minitest::Test
     ENV.replace(original) if original
   end
 
-  def with_tier2_loader_fixture
+  def with_tier2_loader_fixture(tap_name: "kandelo-dev/tap-core")
     Dir.mktmpdir("kandelo-tier2-loader") do |dir|
       base = Pathname(dir).realpath
-      tap_root = base/"kandelo-dev/homebrew-tap-core"
+      owner, short_tap = tap_name.split("/", 2)
+      tap_root = base/owner/"homebrew-#{short_tap}"
       support_path = tap_root/"Kandelo/formula_support/kandelo_formula_support.rb"
       formula_path = tap_root/"Formula/hello.rb"
       prefix = base/"prefix"
@@ -218,6 +219,8 @@ class KandeloFormulaSupportTest < Minitest::Test
         root:,
         support_path:,
         sysroot:,
+        tap_name:,
+        tap_root:,
       })
     end
   end
@@ -240,9 +243,9 @@ class KandeloFormulaSupportTest < Minitest::Test
     {
       "schema"            => 1,
       "arch"              => "wasm32",
-      "tap"               => "kandelo-dev/tap-core",
+      "tap"               => fixture.fetch(:tap_name),
       "formula"           => "hello",
-      "full_name"         => "kandelo-dev/tap-core/hello",
+      "full_name"         => "#{fixture.fetch(:tap_name)}/hello",
       "formula_sha256"    => Digest::SHA256.file(fixture.fetch(:formula_path)).hexdigest,
       "support_sha256"    => Digest::SHA256.file(fixture.fetch(:support_path)).hexdigest,
       "tier2_bridge"      => nested,
@@ -257,19 +260,22 @@ class KandeloFormulaSupportTest < Minitest::Test
   end
 
   def run_tier2_support_load(fixture, after_require, environment: {}, homebrew_filtered: false)
+    support_paths = environment.fetch("KANDELO_TEST_SUPPORT_PATHS", [fixture.fetch(:support_path)])
+    environment = environment.reject { |key, _value| key == "KANDELO_TEST_SUPPORT_PATHS" }
     env = {
       "HOMEBREW_PREFIX"                 => fixture.fetch(:prefix).to_s,
       "HOMEBREW_KANDELO_ARCH"           => "wasm32",
+      "HOMEBREW_KANDELO_PRIMARY_TAP_ROOT" => fixture.fetch(:tap_root).to_s,
       "HOMEBREW_KANDELO_ROOT"           => fixture.fetch(:root).to_s,
       "HOMEBREW_KANDELO_SYSROOT"        => fixture.fetch(:sysroot).to_s,
       "KANDELO_HOMEBREW_ARCH"           => "wasm32",
       "KANDELO_HOMEBREW_KANDELO_ROOT"   => fixture.fetch(:root).to_s,
       "WASM_POSIX_SYSROOT"              => fixture.fetch(:sysroot).to_s,
     }.merge(environment)
-    source = <<~RUBY
-      require #{fixture.fetch(:support_path).to_s.inspect}
-      #{after_require}
-    RUBY
+    source = [
+      *support_paths.map { |path| "require #{path.to_s.inspect}" },
+      after_require,
+    ].join("\n")
     if homebrew_filtered
       # `bin/brew` rebuilds Formula evaluation's environment from a fixed
       # allowlist plus every HOMEBREW_* value. None of this fixture's fixed
@@ -278,6 +284,17 @@ class KandeloFormulaSupportTest < Minitest::Test
       Open3.capture3(env, RbConfig.ruby, "-e", source, unsetenv_others: true)
     else
       Open3.capture3(env, RbConfig.ruby, "-e", source)
+    end
+  end
+
+  def with_cross_tap_loader_fixture
+    with_tier2_loader_fixture(tap_name: "brandonpayton/kandelo-canary") do |fixture|
+      dependency_tap_root = fixture.fetch(:base)/"kandelo-dev/homebrew-tap-core"
+      dependency_support_path =
+        dependency_tap_root/"Kandelo/formula_support/kandelo_formula_support.rb"
+      dependency_support_path.dirname.mkpath
+      FileUtils.cp(fixture.fetch(:support_path), dependency_support_path)
+      yield fixture.merge(dependency_support_path:, dependency_tap_root:)
     end
   end
 
@@ -488,6 +505,88 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
+  def test_identical_cross_tap_support_is_idempotent_without_an_attestation
+    with_cross_tap_loader_fixture do |fixture|
+      primary = fixture.fetch(:support_path)
+      dependency = fixture.fetch(:dependency_support_path)
+      [
+        [primary, dependency],
+        [dependency, primary],
+      ].each do |support_paths|
+        assertion = <<~'RUBY'
+          runtime = KandeloFormulaSupport::KANDELO_TIER2_RUNTIME
+          abort "ordinary evaluation gained authority" unless runtime.fetch("attestation").nil?
+          abort "support API version changed" unless
+            KandeloFormulaSupport::KANDELO_FORMULA_SUPPORT_API_VERSION == 1
+        RUBY
+        _stdout, stderr, status = run_tier2_support_load(
+          fixture,
+          assertion,
+          environment: { "KANDELO_TEST_SUPPORT_PATHS" => support_paths },
+        )
+
+        assert status.success?, "#{support_paths.map(&:to_s).join(" -> ")}: #{stderr}"
+      end
+    end
+  end
+
+  def test_identical_cross_tap_support_preserves_primary_attestation_in_both_load_orders
+    with_cross_tap_loader_fixture do |fixture|
+      document = tier2_loader_attestation(fixture)
+      write_tier2_loader_attestation(fixture, JSON.generate(document))
+      primary = fixture.fetch(:support_path)
+      dependency = fixture.fetch(:dependency_support_path)
+      [
+        [primary, dependency],
+        [dependency, primary],
+      ].each do |support_paths|
+        expected_loaded_support = support_paths.first.realpath.to_s
+        assertion = <<~RUBY
+          runtime = KandeloFormulaSupport::KANDELO_TIER2_RUNTIME
+          abort "attested Formula moved with support load order" unless
+            runtime.fetch("formula_path") == #{fixture.fetch(:formula_path).realpath.to_s.inspect}
+          abort "first support copy did not own the module" unless
+            runtime.fetch("support_path") == #{expected_loaded_support.inspect}
+          abort "primary tap authority changed" unless
+            runtime.fetch("trusted_env").fetch("HOMEBREW_KANDELO_PRIMARY_TAP_ROOT") ==
+              #{fixture.fetch(:tap_root).to_s.inspect}
+        RUBY
+        _stdout, stderr, status = run_tier2_support_load(
+          fixture,
+          assertion,
+          environment: { "KANDELO_TEST_SUPPORT_PATHS" => support_paths },
+        )
+
+        assert status.success?, "#{support_paths.map(&:to_s).join(" -> ")}: #{stderr}"
+      end
+    end
+  end
+
+  def test_cross_tap_support_rejects_mismatched_bytes_in_both_load_orders
+    with_cross_tap_loader_fixture do |fixture|
+      document = tier2_loader_attestation(fixture)
+      write_tier2_loader_attestation(fixture, JSON.generate(document))
+      primary = fixture.fetch(:support_path)
+      dependency = fixture.fetch(:dependency_support_path)
+      dependency.open("ab") { |file| file.write("# incompatible copy\n") }
+      [
+        [[primary, dependency], "support copies are incompatible"],
+        [[dependency, primary], "differs from the Tier-2 attestation"],
+      ].each do |support_paths, expected_error|
+        marker = fixture.fetch(:base)/"mismatch-#{support_paths.first == primary ? "primary" : "dependency"}"
+        _stdout, stderr, status = run_tier2_support_load(
+          fixture,
+          "File.binwrite(#{marker.to_s.inspect}, \"evaluated\\n\")",
+          environment: { "KANDELO_TEST_SUPPORT_PATHS" => support_paths },
+        )
+
+        refute status.success?
+        assert_includes stderr, expected_error
+        refute_path_exists marker
+      end
+    end
+  end
+
   def test_support_load_validates_and_recursively_freezes_an_active_attestation
     with_tier2_loader_fixture do |fixture|
       document = tier2_loader_attestation(fixture)
@@ -567,6 +666,10 @@ class KandeloFormulaSupportTest < Minitest::Test
         "missing authoritative arch" => [
           { "HOMEBREW_KANDELO_ARCH" => nil },
           "publisher root or architecture environment is inconsistent",
+        ],
+        "missing primary tap root" => [
+          { "HOMEBREW_KANDELO_PRIMARY_TAP_ROOT" => nil },
+          "did not identify the selected primary tap root",
         ],
         "conflicting root alias" => [
           { "KANDELO_HOMEBREW_KANDELO_ROOT" => fixture.fetch(:base).to_s },
