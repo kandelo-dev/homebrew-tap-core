@@ -8,6 +8,7 @@ class Git < Formula
   GUEST_GIT_BIN = "#{GUEST_OPT_PREFIX}/bin".freeze
   GUEST_GIT_EXEC_PATH = "#{GUEST_OPT_PREFIX}/libexec/git-core".freeze
   GUEST_GIT_TEMPLATES = "#{GUEST_OPT_PREFIX}/share/git-core/templates".freeze
+  GUEST_GIT_SYSTEM_CONFIG = "/etc/gitconfig".freeze
   GUEST_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt".freeze
   GUEST_COREUTILS_BIN = "#{GUEST_HOMEBREW_PREFIX}/opt/coreutils/bin".freeze
   GUEST_DASH = "#{GUEST_HOMEBREW_PREFIX}/opt/dash/bin/dash".freeze
@@ -83,6 +84,7 @@ class Git < Formula
     "BSD-3-Clause",
     "MIT",
   ]
+  revision 1
 
   depends_on "binaryen" => :build
   depends_on "pkgconf" => :build
@@ -149,6 +151,7 @@ class Git < Formula
       make_args = [
         "uname_S=Wasm32",
         "prefix=#{GUEST_HOMEBREW_PREFIX}",
+        "sysconfdir=/etc",
         "gitexecdir=#{GUEST_GIT_EXEC_PATH}",
         "template_dir=#{GUEST_GIT_TEMPLATES}",
         "SHELL_PATH=/bin/sh",
@@ -220,6 +223,21 @@ class Git < Formula
     assert_path_exists ca_bundle
     assert_match(/^git version 2\.47\.1$/, kandelo_run_wasm(bin/"git", ["--version"]))
     assert_equal "#{GUEST_GIT_EXEC_PATH}\n", kandelo_run_wasm(bin/"git", ["--exec-path"])
+
+    system_config = testpath/"system.gitconfig"
+    system_config.write <<~EOS
+      [user]
+        name = Kandelo System Config
+    EOS
+    clean_config_files = { GUEST_GIT_SYSTEM_CONFIG => system_config }
+    assert_equal "Kandelo System Config\n", kandelo_run_wasm(
+      bin/"git", ["config", "--system", "--get", "user.name"],
+      env: {}, guest_files: clean_config_files
+    )
+    assert_equal "Kandelo System Config\n", kandelo_run_wasm(
+      bin/"git", ["config", "--get", "user.name"],
+      env: {}, guest_files: clean_config_files
+    )
 
     git_core = libexec/"git-core"
     coreutils_bin = formula_opt_bin("kandelo-dev/tap-core/coreutils")
