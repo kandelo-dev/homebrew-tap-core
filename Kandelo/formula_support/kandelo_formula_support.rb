@@ -1398,14 +1398,15 @@ module KandeloFormulaSupport
   # intentionally separate from the Node runner: browser worker startup,
   # SharedArrayBuffer isolation, Wasm memory, and process teardown are distinct
   # platform contracts. `argv0:` controls the guest command name for multicall
-  # runtimes whose behavior depends on argv[0]. `exec_programs:` stages
-  # executable Wasm programs for spawn/exec behavior, while immutable
-  # `guest_files:` use the same absolute-path and bounded-rootfs contract as
-  # Node formula tests. `expected_status:` and `merge_stderr:` permit exact
-  # negative-path checks without converting a guest failure into a
-  # browser-runner failure.
+  # runtimes whose behavior depends on argv[0]. `guest_program_path:` stages
+  # the primary executable at an installed absolute guest path when runtime
+  # prefix discovery depends on that path. `exec_programs:` stages executable
+  # Wasm programs for spawn/exec behavior, while immutable `guest_files:` use
+  # the same absolute-path and bounded-rootfs contract as Node formula tests.
+  # `expected_status:` and `merge_stderr:` permit exact negative-path checks
+  # without converting a guest failure into a browser-runner failure.
   def kandelo_run_browser_wasm(
-    bin_path, argv, argv0: nil, env: {}, exec_programs: {}, guest_files: {},
+    bin_path, argv, argv0: nil, guest_program_path: nil, env: {}, exec_programs: {}, guest_files: {},
     timeout_ms: 120_000, allow_stderr: false, merge_stderr: false, expected_status: 0
   )
     root = kandelo_require_root!
@@ -1420,8 +1421,9 @@ module KandeloFormulaSupport
     invalid_command_name = command_name.empty? || command_name.include?("/") ||
                            command_name.include?("\0") || [".", ".."].include?(command_name)
     odie "invalid browser guest command name: #{command_name}" if invalid_command_name
+    kandelo_validate_guest_argv0!(guest_program_path)
 
-    config = JSON.generate({
+    config_values = {
       argv:           argv.map(&:to_s),
       argv0:          command_name,
       env:            env.transform_values(&:to_s),
@@ -1429,7 +1431,9 @@ module KandeloFormulaSupport
       allowStderr:    allow_stderr,
       mergeStderr:    merge_stderr,
       expectedStatus: expected_status,
-    })
+    }
+    config_values[:guestProgram] = guest_program_path unless guest_program_path.nil?
+    config = JSON.generate(config_values)
     guest_files_manifest = testpath/"#{wasm_path.basename}.browser-guest-files.json"
     File.binwrite(
       guest_files_manifest,

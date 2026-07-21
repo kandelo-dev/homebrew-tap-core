@@ -1905,7 +1905,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       guest_executable.binwrite("\0asm")
       output = harness.kandelo_run_browser_wasm(
         command, ["-e", "console.log(42)"],
-        argv0: "node", env: { "HOME" => "/root" },
+        argv0: "node", guest_program_path: "/opt/node/bin/node", env: { "HOME" => "/root" },
         exec_programs: { "/opt/formula/bin/helper" => guest_executable },
         guest_files: { "/opt/formula/format.dat" => guest_file }, timeout_ms: 5_000
       )
@@ -1919,6 +1919,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_includes harness.command, "expectedStatus"
       assert_includes harness.command, "mergeStderr"
       assert_includes harness.command, "node"
+      assert_includes harness.command, 'guestProgram\":\"/opt/node/bin/node'
       manifest = harness.test_path/"node.browser-guest-files.json"
       assert_equal({ "/opt/formula/format.dat" => guest_file.to_s }, JSON.parse(manifest.read))
       assert_includes harness.command, manifest.to_s.shellescape
@@ -1996,6 +1997,33 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
 
     assert_equal "invalid browser guest command name: ..", error.message
+  end
+
+  def test_browser_execution_rejects_nonabsolute_guest_program_path
+    error = assert_raises(RuntimeError) do
+      Harness.new.kandelo_run_browser_wasm(
+        "program.wasm", [], argv0: "program", guest_program_path: "opt/program/bin/program"
+      )
+    end
+
+    assert_equal(
+      'guest argv0 must be a nonempty normalized absolute path: "opt/program/bin/program"',
+      error.message,
+    )
+  end
+
+  def test_browser_execution_rejects_unnormalized_guest_program_path
+    error = assert_raises(RuntimeError) do
+      Harness.new.kandelo_run_browser_wasm(
+        "program.wasm", [],
+        argv0: "program", guest_program_path: "/opt/program/../bin/program"
+      )
+    end
+
+    assert_equal(
+      'guest argv0 must be a nonempty normalized absolute path: "/opt/program/../bin/program"',
+      error.message,
+    )
   end
 
   def test_pty_execution_uses_tap_owned_runner_and_removes_stale_host_dist

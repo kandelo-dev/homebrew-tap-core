@@ -24,6 +24,7 @@ import {
 interface RunnerConfig {
   argv: string[];
   argv0: string;
+  guestProgram?: string;
   env: Record<string, string>;
   timeoutMs: number;
   allowStderr: boolean;
@@ -41,6 +42,20 @@ interface BrowserSmokeResult {
 interface PageRunnerConfig extends RunnerConfig {
   guestProgram: string;
   vfsUrl: string;
+}
+
+export function resolveGuestProgram(
+  config: Pick<RunnerConfig, "argv0" | "guestProgram">,
+  overlaidRoots: readonly string[],
+  guestFiles: Readonly<Record<string, string>>,
+  execPrograms: Readonly<Record<string, string>>,
+): string {
+  const guestProgram = config.guestProgram ?? `/usr/local/bin/${config.argv0}`;
+  validateGuestPath(guestProgram, overlaidRoots);
+  if (guestProgram in guestFiles || guestProgram in execPrograms) {
+    throw new Error(`guest path is both the formula executable and a staged file: ${guestProgram}`);
+  }
+  return guestProgram;
 }
 
 const supportDir = dirname(fileURLToPath(import.meta.url));
@@ -92,6 +107,9 @@ function parseConfig(text: string): RunnerConfig {
     value.argv0 === ".."
   ) {
     throw new Error(`invalid formula browser argv0: ${String(value.argv0)}`);
+  }
+  if (value.guestProgram !== undefined && typeof value.guestProgram !== "string") {
+    throw new Error("formula browser guestProgram must be a string");
   }
   if (!value.env || typeof value.env !== "object" || Array.isArray(value.env)) {
     throw new Error("formula browser env must be an object");
@@ -330,10 +348,7 @@ async function main(): Promise<void> {
         throw new Error(`guest path is both a file and executable: ${guestPath}`);
       }
     }
-    const guestProgram = `/usr/local/bin/${config.argv0}`;
-    if (guestProgram in guestFiles || guestProgram in execPrograms) {
-      throw new Error(`guest path is both the formula executable and a staged file: ${guestProgram}`);
-    }
+    const guestProgram = resolveGuestProgram(config, overlaidRoots, guestFiles, execPrograms);
     const kernelWasm = await resolveArtifact(root, [
       "resolve:kernel.wasm", "local-binaries/kernel.wasm", "binaries/kernel.wasm",
       "host/wasm/kernel.wasm", "host/wasm/kandelo-kernel.wasm",
@@ -431,7 +446,10 @@ async function main(): Promise<void> {
   }
 }
 
-void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
-  process.exitCode = 1;
-});
+const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : "";
+if (import.meta.url === invokedPath) {
+  void main().catch((error: unknown) => {
+    console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
+    process.exitCode = 1;
+  });
+}
