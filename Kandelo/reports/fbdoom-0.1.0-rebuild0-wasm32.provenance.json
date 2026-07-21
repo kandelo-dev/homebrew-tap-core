@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "4d111a632aaaa16d32f50e733525b33ebda822e08493e269c9b299622deb9109"
+      "sha256": "846459095e968493142eb8968f6626fa5d9d0ff2b53dccc30592cda2f0eeea57"
     },
     "provenance_json": {
       "path": "Kandelo/reports/fbdoom-0.1.0-rebuild0-wasm32.provenance.json",
-      "sha256": "b46f2269794cba0b3bc695e58c660b33f3b1b29b9552057af17f44b353c1ccef"
+      "sha256": "f79a18cd99190cf8b0b4e7c4612b6c019a717a92ad1566a13f815caf193fce22"
     }
   },
   "repositories": {

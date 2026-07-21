@@ -1,0 +1,48 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1982720,
+    "cache_key_sha": "a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771",
+    "payload_root": "nethack/367",
+    "sha256": "a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nethack/blobs/sha256:a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/nethack/367",
+  "links": [
+    {
+      "source": "bin/nethack",
+      "target": "bin/nethack",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nethack/license",
+      "target": "share/nethack/license",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nethack/nhdat",
+      "target": "share/nethack/nhdat",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nethack/symbols",
+      "target": "share/nethack/symbols",
+      "type": "symlink"
+    }
+  ],
+  "package": "nethack",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/nethack.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "367"
+}

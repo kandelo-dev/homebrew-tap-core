@@ -1,42 +1,42 @@
 {
   "bottle": {
     "bottle_tag": "wasm32_kandelo",
-    "bytes": 60482,
-    "cache_key_sha": "0f8a5192f8d45cd6ac488be4fcdddd3631e01a4b3f6093778afef6d165bfbc59",
+    "bytes": 1982720,
+    "cache_key_sha": "a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771",
     "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
     "prefix": "/home/linuxbrew/.linuxbrew",
-    "sha256": "0f8a5192f8d45cd6ac488be4fcdddd3631e01a4b3f6093778afef6d165bfbc59",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/posix-utils-lite/blobs/sha256:0f8a5192f8d45cd6ac488be4fcdddd3631e01a4b3f6093778afef6d165bfbc59"
+    "sha256": "a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nethack/blobs/sha256:a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771"
   },
   "build": {
     "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
     "dev_shell": "scripts/dev-shell.sh",
-    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29801862875",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29801862838",
     "job": "verify-bottle",
     "runner_os": "Linux",
     "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
     "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
   },
   "formula": {
-    "path": "Formula/posix-utils-lite.rb",
-    "sha256": "de307435559af5dace214f3e2f93e9dce928aa15f5f454efdb50eb66db2285b0"
+    "path": "Formula/nethack.rb",
+    "sha256": "a46a8de4fd63e801958700c928d7a33c7c22004b77a49eb07a4094d3ae4317f8"
   },
   "metadata": {
     "formula_json": {
-      "path": "Kandelo/formula/posix-utils-lite.json",
-      "sha256": "0c5a41d0ae30c3511b27147ec1fe231fa4c3d9b822472a6cdfba02ee3020331e"
+      "path": "Kandelo/formula/nethack.json",
+      "sha256": "8158fabb6cd1b495894312fca13fd56b0fb4d1127c92fe6292d7674a9080481b"
     },
     "link_manifest_json": {
-      "path": "Kandelo/link/posix-utils-lite-0.1.0-rebuild0-wasm32.json",
-      "sha256": "e1daa58fcf9c3f161ac570af36ba1cc3d23ecb407acdd875991aef027ae1204c"
+      "path": "Kandelo/link/nethack-367-rebuild0-wasm32.json",
+      "sha256": "b0253f72a1487d1280c3a47a786107876c804aa6d292d020809fc649c366c71d"
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
       "sha256": "846459095e968493142eb8968f6626fa5d9d0ff2b53dccc30592cda2f0eeea57"
     },
     "provenance_json": {
-      "path": "Kandelo/reports/posix-utils-lite-0.1.0-rebuild0-wasm32.provenance.json",
-      "sha256": "7a0f796e0db0afc42f5bb19e9f347ad1fca4a40aab66f2ac0b575846b40d50a1"
+      "path": "Kandelo/reports/nethack-367-rebuild0-wasm32.provenance.json",
+      "sha256": "de6c381cc989ffa433259345f1cc9a273677e1d40c3d00c8d54042500b941efc"
     }
   },
   "repositories": {
@@ -50,8 +50,8 @@
     "arch": "wasm32",
     "bottle_rebuild": 0,
     "kandelo_abi": 41,
-    "package": "posix-utils-lite",
-    "version": "0.1.0"
+    "package": "nethack",
+    "version": "367"
   },
   "validation": {
     "outcome_lists": [
@@ -60,9 +60,9 @@
         "name": "schema",
         "passed": [
           "Kandelo/metadata.json",
-          "Kandelo/formula/posix-utils-lite.json",
-          "Kandelo/link/posix-utils-lite-0.1.0-rebuild0-wasm32.json",
-          "Kandelo/reports/posix-utils-lite-0.1.0-rebuild0-wasm32.provenance.json"
+          "Kandelo/formula/nethack.json",
+          "Kandelo/link/nethack-367-rebuild0-wasm32.json",
+          "Kandelo/reports/nethack-367-rebuild0-wasm32.provenance.json"
         ],
         "skipped": [],
         "status": "success"
@@ -93,9 +93,9 @@
         "failed": [],
         "name": "node_smoke",
         "passed": [
-          "Homebrew force-poured posix-utils-lite from anonymous-public-readback",
+          "Homebrew force-poured nethack from anonymous-public-readback",
           "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
-          "exact bottle sha256: 0f8a5192f8d45cd6ac488be4fcdddd3631e01a4b3f6093778afef6d165bfbc59"
+          "exact bottle sha256: a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771"
         ],
         "skipped": [],
         "status": "success"

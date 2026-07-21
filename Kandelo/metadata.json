@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-21T05:02:10Z",
+  "generated_at": "2026-07-21T05:01:45Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "a1a34cd5cda8b72fa708aa5462bdc6e44677f676",
@@ -1725,6 +1725,51 @@
       "full_name": "kandelo-dev/tap-core/netcat",
       "name": "netcat",
       "version": "0.7.1"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-21T05:01:45Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29801862838",
+          "built_from": {
+            "formula_sha256": "a46a8de4fd63e801958700c928d7a33c7c22004b77a49eb07a4094d3ae4317f8",
+            "kandelo_commit": "a1a34cd5cda8b72fa708aa5462bdc6e44677f676",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "44ff77f86aefa08ad4e696f292009c33ed4a0dba",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 1982720,
+          "cache_key_sha": "a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/nethack-367-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nethack/blobs/sha256:a6c10be29d4053f31e73108d1fe661f8cd2140f89c58d8da464ce199a9ec3771"
+        }
+      ],
+      "dependencies": [
+        {
+          "full_name": "kandelo-dev/tap-core/ncurses",
+          "name": "ncurses",
+          "version": "6.5"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/nethack.json",
+      "formula_path": "Formula/nethack.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/nethack",
+      "name": "nethack",
+      "version": "367"
     },
     {
       "bottle_rebuild": 1,
