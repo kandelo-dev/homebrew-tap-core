@@ -1256,6 +1256,45 @@
           "arch": "wasm32",
           "bottle_tag": "wasm32_kandelo",
           "browser_compatible": false,
+          "built_at": "2026-07-21T04:58:47Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29801862766",
+          "built_from": {
+            "formula_sha256": "901e7f41d77e6bf1b1aceaee38029eaa131e1f27b22a4da89a8b8050cac48f74",
+            "kandelo_commit": "a1a34cd5cda8b72fa708aa5462bdc6e44677f676",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "44ff77f86aefa08ad4e696f292009c33ed4a0dba",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 20618,
+          "cache_key_sha": "2073d789b743be35cfe8d7d91fadde98f2ff93c4788f1ab5a836da1a87009f66",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/lsof-0.1.0-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "2073d789b743be35cfe8d7d91fadde98f2ff93c4788f1ab5a836da1a87009f66",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/lsof/blobs/sha256:2073d789b743be35cfe8d7d91fadde98f2ff93c4788f1ab5a836da1a87009f66"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/lsof.json",
+      "formula_path": "Formula/lsof.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/lsof",
+      "name": "lsof",
+      "version": "0.1.0"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
           "built_at": "2026-07-20T07:53:22Z",
           "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724871153",
           "built_from": {

@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "2afa882e22a05819ef1c70e306a05d08c3edeff36bcbf500291c8ec6d8459460"
+      "sha256": "9657a4a30589ce2616524f5972dadc6c98d44605546c5247e91f8287b5e286c5"
     },
     "provenance_json": {
       "path": "Kandelo/reports/texlive-20250308-rebuild0-wasm32.provenance.json",
-      "sha256": "a723a6aa2b902e865ba4eddc6bc66161232cb0b2ed25ed5f683332cfff623a67"
+      "sha256": "0174b4921fbc0a78965d4c82ca114cb091de06a0bdfe46639d7cf8074c46c8de"
     }
   },
   "repositories": {

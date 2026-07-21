@@ -36,4 +36,10 @@ class Lsof < Formula
     assert_equal "Usage: lsof [-p pid] [-c command] [file]\n",
       kandelo_run_wasm(bin/"lsof", ["--help"])
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "2073d789b743be35cfe8d7d91fadde98f2ff93c4788f1ab5a836da1a87009f66"
+  end
+
 end
