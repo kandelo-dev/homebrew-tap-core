@@ -5,6 +5,7 @@ require "minitest/autorun"
 require "open3"
 # Standalone Ruby does not preload Homebrew's Pathname helper.
 require "pathname" # rubocop:disable Lint/RedundantRequireStatement
+require "rbconfig"
 require "tmpdir"
 require_relative "../kandelo_formula_support"
 
@@ -12,15 +13,18 @@ require_relative "../kandelo_formula_support"
 class KandeloFormulaSupportTest < Minitest::Test
   DependencyFormula = Struct.new(:full_name, :opt_bin, :opt_sbin, :opt_libexec, keyword_init: true)
   InstalledFormula = Struct.new(:rack, :pkg_version, keyword_init: true)
+  StableSpec = Struct.new(:url, :checksum, keyword_init: true)
+  StableChecksum = Struct.new(:hexdigest, keyword_init: true)
 
   # Minimal Formula double for command-construction tests.
   class Harness
     include KandeloFormulaSupport
 
-    attr_accessor :build_path, :dependency_formulae, :formula_name, :formula_version, :homebrew_prefix_path,
-                  :nix_path, :prefix_path, :root_path, :runtime_formulae, :shell_result, :test_path
+    attr_accessor :build_path, :dependency_formulae, :formula_full_name, :formula_name, :formula_path,
+                  :formula_version, :homebrew_prefix_path, :nix_path, :prefix_path, :root_path,
+                  :runtime_formulae, :shell_result, :stable_spec, :test_path, :tier2_runtime
     attr_reader :command, :expected_status, :pty_config, :pty_config_mode, :pty_config_path,
-                :recorded_launcher, :system_args, :system_calls
+                :recorded_launcher, :system_args, :system_calls, :system_environment
 
     def kandelo_require_root!
       root_path || "/tmp/kandelo root"
@@ -40,6 +44,27 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     def version
       formula_version || "1.0"
+    end
+
+    def full_name
+      formula_full_name || "kandelo-dev/tap-core/#{name}"
+    end
+
+    def path
+      formula_path || Pathname("/tmp/formula.rb")
+    end
+
+    def stable
+      stable_spec || StableSpec.new(
+        url: "https://example.test/test-formula-1.0.tar.gz",
+        checksum: StableChecksum.new(hexdigest: "a" * 64),
+      )
+    end
+
+    def kandelo_tier2_runtime!
+      return tier2_runtime unless tier2_runtime.nil?
+
+      super
     end
 
     def prefix
@@ -90,6 +115,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       @system_calls ||= []
       @system_calls << args
       @system_args = args
+      @system_environment = ENV.to_hash
       if (output_index = args.index("-o"))
         File.binwrite(args.fetch(output_index + 1), "instrumented")
       end
@@ -173,6 +199,203 @@ class KandeloFormulaSupportTest < Minitest::Test
     ENV.replace(original) if original
   end
 
+  def with_tier2_loader_fixture
+    Dir.mktmpdir("kandelo-tier2-loader") do |dir|
+      base = Pathname(dir).realpath
+      tap_root = base/"kandelo-dev/homebrew-tap-core"
+      support_path = tap_root/"Kandelo/formula_support/kandelo_formula_support.rb"
+      formula_path = tap_root/"Formula/hello.rb"
+      prefix = base/"prefix"
+      root = base/"kandelo-root"
+      sysroot = root/"sysroot"
+      [support_path.dirname, formula_path.dirname, prefix, sysroot].each(&:mkpath)
+      FileUtils.cp(File.expand_path("../kandelo_formula_support.rb", __dir__), support_path)
+      formula_path.binwrite("class Hello < Formula\nend\n")
+      yield({
+        base:,
+        formula_path:,
+        prefix:,
+        root:,
+        support_path:,
+        sysroot:,
+      })
+    end
+  end
+
+  def tier2_loader_attestation(fixture, bridge: true)
+    nested = if bridge
+      {
+        "build_toml_sha256"   => "b" * 64,
+        "package"             => "hello",
+        "package_toml_sha256" => "c" * 64,
+        "script"              => "build-hello.sh",
+        "script_env_keys"     => [],
+        "script_sha256"       => "d" * 64,
+        "source_mode"         => "exact",
+        "source_sha256"       => "e" * 64,
+        "source_url"          => "https://example.test/hello-1.0.tar.gz",
+        "version"             => "1.0",
+      }
+    end
+    {
+      "schema"            => 1,
+      "arch"              => "wasm32",
+      "tap"               => "kandelo-dev/tap-core",
+      "formula"           => "hello",
+      "full_name"         => "kandelo-dev/tap-core/hello",
+      "formula_sha256"    => Digest::SHA256.file(fixture.fetch(:formula_path)).hexdigest,
+      "support_sha256"    => Digest::SHA256.file(fixture.fetch(:support_path)).hexdigest,
+      "tier2_bridge"      => nested,
+    }
+  end
+
+  def write_tier2_loader_attestation(fixture, contents)
+    path = fixture.fetch(:prefix)/KandeloFormulaSupport::KANDELO_TIER2_ATTESTATION_BASENAME
+    path.binwrite(contents)
+    path.chmod(0444)
+    path
+  end
+
+  def run_tier2_support_load(fixture, after_require)
+    env = {
+      "HOMEBREW_PREFIX"                 => fixture.fetch(:prefix).to_s,
+      "HOMEBREW_KANDELO_ARCH"           => "wasm32",
+      "HOMEBREW_KANDELO_ROOT"           => fixture.fetch(:root).to_s,
+      "HOMEBREW_KANDELO_SYSROOT"        => fixture.fetch(:sysroot).to_s,
+      "KANDELO_HOMEBREW_ARCH"           => "wasm32",
+      "KANDELO_HOMEBREW_KANDELO_ROOT"   => fixture.fetch(:root).to_s,
+      "WASM_POSIX_SYSROOT"              => fixture.fetch(:sysroot).to_s,
+    }
+    source = <<~RUBY
+      require #{fixture.fetch(:support_path).to_s.inspect}
+      #{after_require}
+    RUBY
+    Open3.capture3(env, RbConfig.ruby, "-e", source)
+  end
+
+  def with_tier2_build_fixture(script_env: nil)
+    original = ENV.to_hash
+    Dir.mktmpdir("kandelo-tier2-build") do |dir|
+      base = Pathname(dir).realpath
+      root = base/"kandelo-root"
+      registry_root = root/"packages/registry"
+      package_root = registry_root/"hello"
+      sysroot = root/"sysroot"
+      build_path = base/"formula-build"
+      formula_path = base/"hello.rb"
+      support_path = base/"kandelo_formula_support.rb"
+      [package_root, sysroot, build_path].each(&:mkpath)
+      package_toml = package_root/"package.toml"
+      build_toml = package_root/"build.toml"
+      script = package_root/"build-hello.sh"
+      package_toml.binwrite("name = \"hello\"\nversion = \"1.0\"\n")
+      build_toml.binwrite("script_path = \"packages/registry/hello/build-hello.sh\"\n")
+      script.binwrite("#!/usr/bin/env bash\nset -euo pipefail\n")
+      formula_path.binwrite("class Hello < Formula\nend\n")
+      FileUtils.cp(File.expand_path("../kandelo_formula_support.rb", __dir__), support_path)
+      (build_path/"upstream.c").binwrite("int main(void) { return 0; }\n")
+      resource_dir = build_path/"kandelo-package-resources"
+      (resource_dir/"resource").mkpath
+      (resource_dir/"resource/input.txt").binwrite("verified resource\n")
+      script_env ||= {
+        "HELLO_RESOURCE"                    => resource_dir/"resource",
+        "WASM_POSIX_DEP_PKG_CONFIG_PATH"    => "/formula/pkgconfig",
+      }
+      bridge = {
+        "build_toml_sha256"   => Digest::SHA256.file(build_toml).hexdigest,
+        "package"             => "hello",
+        "package_toml_sha256" => Digest::SHA256.file(package_toml).hexdigest,
+        "script"              => "build-hello.sh",
+        "script_env_keys"     => script_env.keys.sort,
+        "script_sha256"       => Digest::SHA256.file(script).hexdigest,
+        "source_mode"         => "exact",
+        "source_sha256"       => "a" * 64,
+        "source_url"          => "https://example.test/hello-1.0.tar.gz",
+        "version"             => "1.0",
+      }
+      attestation = {
+        "schema"          => 1,
+        "arch"            => "wasm32",
+        "tap"             => "kandelo-dev/tap-core",
+        "formula"         => "hello",
+        "full_name"       => "kandelo-dev/tap-core/hello",
+        "formula_sha256"  => Digest::SHA256.file(formula_path).hexdigest,
+        "support_sha256"  => Digest::SHA256.file(support_path).hexdigest,
+        "tier2_bridge"    => bridge,
+      }
+      trusted_env = KandeloFormulaSupport::KANDELO_TIER2_TRUSTED_ENV_KEYS.to_h { |key| [key, nil] }
+      trusted_env.merge!({
+        "HOMEBREW_KANDELO_ARCH"         => "wasm32",
+        "HOMEBREW_KANDELO_ROOT"         => root.to_s,
+        "HOMEBREW_KANDELO_SYSROOT"      => sysroot.to_s,
+        "KANDELO_HOMEBREW_ARCH"         => "wasm32",
+        "KANDELO_HOMEBREW_KANDELO_ROOT" => root.to_s,
+        "WASM_POSIX_SYSROOT"            => sysroot.to_s,
+      })
+      runtime = {
+        "attestation"     => attestation,
+        "attestation_path" => (base/"attestation.json").to_s,
+        "formula_path"    => formula_path.to_s,
+        "support_path"    => support_path.to_s,
+        "support_sha256"  => attestation.fetch("support_sha256"),
+        "trusted_env"     => trusted_env,
+      }
+      activation_calls = []
+      harness = Harness.new
+      harness.build_path = build_path
+      harness.formula_name = "hello"
+      harness.formula_full_name = "kandelo-dev/tap-core/hello"
+      harness.formula_path = formula_path
+      harness.formula_version = "1.0"
+      harness.root_path = root.to_s
+      harness.stable_spec = StableSpec.new(
+        url: bridge.fetch("source_url"),
+        checksum: StableChecksum.new(hexdigest: bridge.fetch("source_sha256")),
+      )
+      harness.tier2_runtime = runtime
+      harness.define_singleton_method(:kandelo_activate_sdk!) do
+        activation_calls << :sdk
+        ENV["WASM_POSIX_DEP_PKG_CONFIG_PATH"] = "/sdk/overwrote-formula-value"
+        root.to_s
+      end
+      harness.define_singleton_method(:kandelo_activate_sysroot!) do |activated_root|
+        activation_calls << :sysroot
+        raise "wrong activation root" unless activated_root == root.to_s
+
+        ENV["WASM_POSIX_SYSROOT"] = sysroot.to_s
+        activated_root
+      end
+
+      yield({
+        activation_calls:,
+        bridge:,
+        build_path:,
+        build_toml:,
+        formula_path:,
+        harness:,
+        package_toml:,
+        resource_dir:,
+        root:,
+        script:,
+        script_env:,
+        support_path:,
+      })
+    end
+  ensure
+    ENV.replace(original) if original
+  end
+
+  def assert_tier2_rejected_before_activation(fixture, script_env: fixture.fetch(:script_env))
+    error = assert_raises(RuntimeError) do
+      fixture.fetch(:harness).kandelo_build_package(script_env:)
+    end
+    assert_empty fixture.fetch(:activation_calls)
+    assert_nil fixture.fetch(:harness).system_calls
+    assert_path_exists fixture.fetch(:build_path)/"upstream.c"
+    refute_path_exists fixture.fetch(:build_path)/"kandelo-package-source"
+    error
+  end
+
   def test_node_execution_receipt_is_optional
     previous = ENV.delete("HOMEBREW_KANDELO_NODE_RECEIPT_PATH")
 
@@ -245,83 +468,315 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
-  def test_registry_bridge_accepts_the_authoritative_package_version
-    Dir.mktmpdir("kandelo-registry-version") do |dir|
-      root = Pathname(dir)
-      manifest = root/"packages/registry/nethack/package.toml"
-      manifest.dirname.mkpath
-      manifest.write("name = \"nethack\"\nversion = \"3.6.7\"\n\n[build]\n")
-      harness = Harness.new
-      harness.formula_name = "nethack"
-      harness.formula_version = "3.6.7"
+  def test_support_load_succeeds_without_a_publisher_attestation
+    with_tier2_loader_fixture do |fixture|
+      marker = fixture.fetch(:base)/"formula-evaluated"
+      _stdout, stderr, status = run_tier2_support_load(
+        fixture, "File.binwrite(#{marker.to_s.inspect}, \"evaluated\\n\")"
+      )
 
-      assert_equal "3.6.7", harness.kandelo_validate_registry_package_version!(root, "nethack")
+      assert status.success?, stderr
+      assert_equal "evaluated\n", marker.binread
     end
   end
 
-  def test_registry_bridge_rejects_an_ambiguous_url_version_before_building
-    Dir.mktmpdir("kandelo-registry-version") do |dir|
-      root = Pathname(dir)
-      manifest = root/"packages/registry/nethack/package.toml"
-      manifest.dirname.mkpath
-      manifest.write("name = \"nethack\"\nversion = \"3.6.7\"\n")
-      harness = Harness.new
-      harness.formula_name = "nethack"
-      harness.formula_version = "367"
-      harness.define_singleton_method(:kandelo_activate_sdk!) { root.to_s }
+  def test_support_load_validates_and_recursively_freezes_an_active_attestation
+    with_tier2_loader_fixture do |fixture|
+      document = tier2_loader_attestation(fixture)
+      write_tier2_loader_attestation(fixture, JSON.generate(document))
+      assertion = <<~'RUBY'
+        runtime = KandeloFormulaSupport::KANDELO_TIER2_RUNTIME
+        values = [runtime, runtime["attestation"], runtime["attestation"]["tier2_bridge"],
+                  runtime["attestation"]["tier2_bridge"]["script_env_keys"],
+                  runtime["attestation"]["tier2_bridge"]["source_url"],
+                  runtime["trusted_env"]]
+        abort "runtime authority is not recursively frozen" unless values.all?(&:frozen?)
+        puts runtime["attestation"]["full_name"]
+      RUBY
+      stdout, stderr, status = run_tier2_support_load(fixture, assertion)
+
+      assert status.success?, stderr
+      assert_equal "kandelo-dev/tap-core/hello\n", stdout
+    end
+  end
+
+  def test_null_attestation_loads_but_cannot_authorize_the_tier2_helper
+    with_tier2_loader_fixture do |fixture|
+      document = tier2_loader_attestation(fixture, bridge: false)
+      write_tier2_loader_attestation(fixture, JSON.generate(document))
+      assertion = <<~'RUBY'
+        harness = Class.new do
+          include KandeloFormulaSupport
+          def odie(message)
+            raise message
+          end
+        end.new
+        begin
+          harness.kandelo_build_package(script_env: {})
+          abort "null Tier-2 authority unexpectedly built"
+        rescue RuntimeError => error
+          abort error.message unless error.message.include?("require a valid publisher attestation")
+        end
+      RUBY
+      _stdout, stderr, status = run_tier2_support_load(fixture, assertion)
+
+      assert status.success?, stderr
+    end
+  end
+
+  def test_invalid_attestations_abort_before_formula_evaluation
+    with_tier2_loader_fixture do |fixture|
+      valid = tier2_loader_attestation(fixture)
+      valid_json = JSON.generate(valid)
+      missing_top = valid.dup
+      missing_top.delete("formula_sha256")
+      missing_bridge = JSON.parse(valid_json)
+      missing_bridge.fetch("tier2_bridge").delete("script_sha256")
+      unknown_bridge = JSON.parse(valid_json)
+      unknown_bridge.fetch("tier2_bridge")["unknown"] = true
+      invalid_bridge_type = JSON.parse(valid_json)
+      invalid_bridge_type.fetch("tier2_bridge")["script_env_keys"] = "HELLO_VALUE"
+      mutations = {
+        "duplicate key"       => valid_json.sub('"schema":1', '"schema":1,"schema":1'),
+        "missing top key"     => JSON.generate(missing_top),
+        "unknown top key"     => JSON.generate(valid.merge("unknown" => true)),
+        "missing bridge key"  => JSON.generate(missing_bridge),
+        "unknown bridge key"  => JSON.generate(unknown_bridge),
+        "bridge value type"   => JSON.generate(invalid_bridge_type),
+        "schema"              => JSON.generate(valid.merge("schema" => 2)),
+        "formula hash"        => JSON.generate(valid.merge("formula_sha256" => "f" * 64)),
+        "support hash"        => JSON.generate(valid.merge("support_sha256" => "f" * 64)),
+        "trailing JSON value" => "#{valid_json} true",
+      }
+      mutations.each do |label, contents|
+        marker = fixture.fetch(:base)/"#{label.tr(" ", "-")}-evaluated"
+        path = write_tier2_loader_attestation(fixture, contents)
+        _stdout, _stderr, status = run_tier2_support_load(
+          fixture, "File.binwrite(#{marker.to_s.inspect}, \"evaluated\\n\")"
+        )
+
+        refute status.success?, label
+        refute_path_exists marker, label
+        path.chmod(0644)
+      end
+    end
+  end
+
+  def test_attestation_file_mode_and_identity_abort_before_formula_evaluation
+    with_tier2_loader_fixture do |fixture|
+      contents = JSON.generate(tier2_loader_attestation(fixture))
+      path = write_tier2_loader_attestation(fixture, contents)
+      path.chmod(0644)
+      mode_marker = fixture.fetch(:base)/"mode-evaluated"
+
+      _stdout, _stderr, status = run_tier2_support_load(
+        fixture, "File.binwrite(#{mode_marker.to_s.inspect}, \"evaluated\\n\")"
+      )
+
+      refute status.success?
+      refute_path_exists mode_marker
+
+      path.delete
+      target = fixture.fetch(:base)/"attestation-target.json"
+      target.binwrite(contents)
+      target.chmod(0444)
+      path.make_symlink(target)
+      symlink_marker = fixture.fetch(:base)/"symlink-evaluated"
+
+      _stdout, _stderr, status = run_tier2_support_load(
+        fixture, "File.binwrite(#{symlink_marker.to_s.inspect}, \"evaluated\\n\")"
+      )
+
+      refute status.success?
+      refute_path_exists symlink_marker
+    end
+  end
+
+  def test_absent_runtime_authority_rejects_before_sdk_activation_or_process_execution
+    harness = Harness.new
+    activated = false
+    harness.define_singleton_method(:kandelo_activate_sdk!) do
+      activated = true
+      "/tmp/kandelo"
+    end
+
+    error = assert_raises(RuntimeError) { harness.kandelo_build_package(script_env: {}) }
+
+    assert_includes error.message, "require a valid publisher attestation"
+    refute activated
+    assert_nil harness.system_calls
+  end
+
+  def test_tier2_helper_executes_the_exact_attested_script_with_authoritative_environment
+    with_tier2_build_fixture do |fixture|
+      ENV["HELLO_RESOURCE"] = "/ambient/resource"
+      ENV["WASM_POSIX_BINARY_INDEX_URL"] = "https://ambient.invalid/index.toml"
+      ENV["WASM_POSIX_DEFAULT_ARCH"] = "wasm64"
+      ENV["WASM_POSIX_DEP_NAME"] = "ambient-name"
+      ENV["WASM_POSIX_INSTALL_LOCAL_MIRROR"] = "1"
+      ENV["HELLO_AMBIENT"] = "must-be-removed"
+
+      out_dir = fixture.fetch(:harness).kandelo_build_package(
+        script_env: fixture.fetch(:script_env)
+      )
+
+      assert_equal fixture.fetch(:build_path)/"kandelo-package-out", out_dir
+      assert_equal [:sdk, :sysroot], fixture.fetch(:activation_calls)
+      assert_equal ["/usr/bin/bash", fixture.fetch(:script).to_s], fixture.fetch(:harness).system_args
+      environment = fixture.fetch(:harness).system_environment
+      assert_equal fixture.fetch(:resource_dir).join("resource").to_s, environment.fetch("HELLO_RESOURCE")
+      assert_equal "/formula/pkgconfig", environment.fetch("WASM_POSIX_DEP_PKG_CONFIG_PATH")
+      assert_equal "hello", environment.fetch("WASM_POSIX_DEP_NAME")
+      assert_equal "1.0", environment.fetch("WASM_POSIX_DEP_VERSION")
+      assert_equal "wasm32", environment.fetch("WASM_POSIX_DEP_TARGET_ARCH")
+      assert_equal "0", environment.fetch("WASM_POSIX_INSTALL_LOCAL_MIRROR")
+      assert_equal fixture.fetch(:root).to_s, environment.fetch("HOMEBREW_KANDELO_ROOT")
+      refute environment.key?("WASM_POSIX_BINARY_INDEX_URL")
+      refute environment.key?("WASM_POSIX_DEFAULT_ARCH")
+      refute environment.key?("HELLO_AMBIENT")
+      assert_path_exists fixture.fetch(:resource_dir)/"resource/input.txt"
+      assert_path_exists fixture.fetch(:build_path)/"kandelo-package-source/upstream.c"
+    end
+  end
+
+  def test_tier2_helper_rejects_every_formula_identity_mismatch_before_activation
+    mutations = {
+      "name" => lambda do |fixture|
+        fixture.fetch(:harness).formula_name = "other"
+      end,
+      "full name" => lambda do |fixture|
+        fixture.fetch(:harness).formula_full_name = "other/tap/hello"
+      end,
+      "version" => lambda do |fixture|
+        fixture.fetch(:harness).formula_version = "367"
+      end,
+      "source URL" => lambda do |fixture|
+        fixture.fetch(:harness).stable_spec = StableSpec.new(
+          url: "https://example.test/other.tar.gz",
+          checksum: StableChecksum.new(hexdigest: fixture.fetch(:bridge).fetch("source_sha256")),
+        )
+      end,
+      "source checksum" => lambda do |fixture|
+        fixture.fetch(:harness).stable_spec = StableSpec.new(
+          url: fixture.fetch(:bridge).fetch("source_url"),
+          checksum: StableChecksum.new(hexdigest: "f" * 64),
+        )
+      end,
+      "path" => lambda do |fixture|
+        other = fixture.fetch(:build_path).parent/"other.rb"
+        other.binwrite(fixture.fetch(:formula_path).binread)
+        fixture.fetch(:harness).formula_path = other
+      end,
+    }
+    mutations.each do |label, mutate|
+      with_tier2_build_fixture do |fixture|
+        mutate.call(fixture)
+        error = assert_tier2_rejected_before_activation(fixture)
+        assert_match(/Formula (?:identity|path) differs/, error.message, label)
+      end
+    end
+  end
+
+  def test_tier2_helper_rejects_formula_support_and_registry_hash_drift_before_activation
+    paths = {
+      "Formula"               => :formula_path,
+      "Formula support"       => :support_path,
+      "registry package.toml" => :package_toml,
+      "registry build.toml"   => :build_toml,
+      "registry build script" => :script,
+    }
+    paths.each do |label, key|
+      with_tier2_build_fixture do |fixture|
+        fixture.fetch(key).open("ab") { |file| file.write("# drift\n") }
+        error = assert_tier2_rejected_before_activation(fixture)
+        assert_includes error.message, label
+      end
+    end
+  end
+
+  def test_tier2_helper_rechecks_the_script_immediately_before_execution
+    with_tier2_build_fixture do |fixture|
+      harness = fixture.fetch(:harness)
+      root = fixture.fetch(:root)
+      sysroot = root/"sysroot"
+      script = fixture.fetch(:script)
+      harness.define_singleton_method(:kandelo_activate_sysroot!) do |activated_root|
+        fixture.fetch(:activation_calls) << :sysroot
+        ENV["WASM_POSIX_SYSROOT"] = sysroot.to_s
+        script.open("ab") { |file| file.write("# late drift\n") }
+        activated_root
+      end
 
       error = assert_raises(RuntimeError) do
-        harness.kandelo_build_package("nethack", "build-nethack.sh", "https://example.test/src", "a" * 64)
+        harness.kandelo_build_package(script_env: fixture.fetch(:script_env))
       end
-      assert_includes error.message, "Formula nethack resolved Homebrew version \"367\""
-      assert_includes error.message, "mapped Kandelo registry package \"nethack\""
-      assert_includes error.message, "authoritative version \"3.6.7\""
-      assert_includes error.message, manifest.to_s
+
+      assert_includes error.message, "registry build script differs"
+      assert_equal [:sdk, :sysroot], fixture.fetch(:activation_calls)
       assert_nil harness.system_calls
     end
   end
 
-  def test_registry_bridge_requires_the_mapped_package_manifest
-    Dir.mktmpdir("kandelo-registry-version") do |dir|
-      root = Pathname(dir)
-      (root/"packages/registry").mkpath
-      harness = Harness.new
-
-      error = assert_raises(RuntimeError) do
-        harness.kandelo_validate_registry_package_version!(root, "missing-package")
+  def test_tier2_helper_rejects_script_env_shape_and_value_boundaries_before_activation
+    cases = {
+      "exact keys" => ->(env) { env.reject { |key, _value| key == "HELLO_RESOURCE" } },
+      "key type"   => ->(env) { env.merge(1 => "bad") },
+      "value type" => ->(env) { env.merge("HELLO_RESOURCE" => 1) },
+      "NUL"        => ->(env) { env.merge("HELLO_RESOURCE" => "bad\0value") },
+      "value size" => ->(env) { env.merge("HELLO_RESOURCE" => "x" * 4_097) },
+    }
+    cases.each do |label, mutate|
+      with_tier2_build_fixture do |fixture|
+        error = assert_tier2_rejected_before_activation(
+          fixture, script_env: mutate.call(fixture.fetch(:script_env))
+        )
+        assert_match(/script_env/, error.message, label)
       end
-      assert_includes error.message, "mapped Kandelo registry package \"missing-package\""
-      assert_includes error.message, "packages/registry/missing-package/package.toml"
+    end
+
+    aggregate_env = (0...5).to_h { |index| ["HELLO_VALUE_#{index}", "x" * 4_096] }
+    with_tier2_build_fixture(script_env: aggregate_env) do |fixture|
+      error = assert_tier2_rejected_before_activation(fixture)
+      assert_includes error.message, "differs from the publisher attestation"
+    end
+
+    {
+      "reserved"  => { "WASM_POSIX_DEP_NAME" => "hello" },
+      "namespace" => { "UNRELATED_VALUE" => "hello" },
+    }.each do |label, env|
+      with_tier2_build_fixture(script_env: env) do |fixture|
+        error = assert_tier2_rejected_before_activation(fixture)
+        assert_match(/(?:helper-owned|approved namespace)/, error.message, label)
+      end
     end
   end
 
-  def test_registry_bridge_rejects_a_malformed_authoritative_version
-    Dir.mktmpdir("kandelo-registry-version") do |dir|
-      root = Pathname(dir)
-      manifest = root/"packages/registry/nethack/package.toml"
-      manifest.dirname.mkpath
-      manifest.write("name = \"nethack\"\nversion = \"3.6.7/../../other\"\n")
-      harness = Harness.new
-
-      error = assert_raises(RuntimeError) do
-        harness.kandelo_validate_registry_package_version!(root, "nethack")
+  def test_tier2_helper_rejects_stale_and_symlinked_build_roots_before_activation
+    mutations = {
+      "source" => lambda do |fixture|
+        (fixture.fetch(:build_path)/"kandelo-package-source").mkpath
+      end,
+      "work" => lambda do |fixture|
+        (fixture.fetch(:build_path)/"kandelo-package-work").make_symlink(fixture.fetch(:root))
+      end,
+      "out" => lambda do |fixture|
+        (fixture.fetch(:build_path)/"kandelo-package-out").binwrite("stale\n")
+      end,
+      "resource" => lambda do |fixture|
+        FileUtils.rm_rf(fixture.fetch(:resource_dir))
+        fixture.fetch(:resource_dir).make_symlink(fixture.fetch(:root))
+      end,
+    }
+    mutations.each do |label, mutate|
+      with_tier2_build_fixture do |fixture|
+        mutate.call(fixture)
+        error = assert_raises(RuntimeError) do
+          fixture.fetch(:harness).kandelo_build_package(script_env: fixture.fetch(:script_env))
+        end
+        assert_empty fixture.fetch(:activation_calls)
+        assert_nil fixture.fetch(:harness).system_calls
+        assert_match(/(?:build root|resource root|already staged)/, error.message, label)
       end
-      assert_includes error.message, "missing or invalid authoritative version"
-      assert_includes error.message, manifest.to_s
-    end
-  end
-
-  def test_registry_bridge_supports_an_intentional_formula_name_mapping
-    Dir.mktmpdir("kandelo-registry-version") do |dir|
-      root = Pathname(dir)
-      manifest = root/"packages/registry/file/package.toml"
-      manifest.dirname.mkpath
-      manifest.write("name = \"file\"\nversion = \"5.45\"\n")
-      harness = Harness.new
-      harness.formula_name = "file-formula"
-      harness.formula_version = "5.45"
-
-      assert_equal "5.45", harness.kandelo_validate_registry_package_version!(root, "file")
     end
   end
 

@@ -1,8 +1,10 @@
 # typed: strict
 # frozen_string_literal: true
 
+require "digest"
 require "fileutils"
 require "json"
+require "pathname"
 require "shellwords"
 require "tempfile"
 
@@ -20,9 +22,350 @@ require "tempfile"
 # whose 49 KB `build-<name>.sh` is not yet decomposed into idiomatic steps.
 module KandeloFormulaSupport
   KANDELO_TAP_FORMULA_PREFIX = "kandelo-dev/tap-core/"
-  KANDELO_REGISTRY_PACKAGE_NAME = /\A[a-z0-9][a-z0-9._-]*\z/
-  KANDELO_REGISTRY_PACKAGE_VERSION = /\A[A-Za-z0-9][A-Za-z0-9._+,-]{0,255}\z/
-  KANDELO_REGISTRY_MANIFEST_MAX_BYTES = 65_536
+  KANDELO_TIER2_ATTESTATION_BASENAME = ".kandelo-publisher-tier2-attestation.json"
+  KANDELO_TIER2_ATTESTATION_MAX_BYTES = 16_384
+  KANDELO_TIER2_SOURCE_MAX_BYTES = 1_048_576
+  KANDELO_TIER2_SCRIPT_ENV_MAX_KEYS = 64
+  KANDELO_TIER2_SCRIPT_ENV_KEY_MAX_BYTES = 4_096
+  KANDELO_TIER2_SCRIPT_ENV_VALUE_MAX_BYTES = 4_096
+  KANDELO_TIER2_SCRIPT_ENV_VALUE_TOTAL_BYTES = 16_384
+  KANDELO_TIER2_TOP_KEYS = %w[
+    arch formula formula_sha256 full_name schema support_sha256 tap tier2_bridge
+  ].freeze
+  KANDELO_TIER2_BRIDGE_KEYS = %w[
+    build_toml_sha256 package package_toml_sha256 script script_env_keys
+    script_sha256 source_mode source_sha256 source_url version
+  ].freeze
+  KANDELO_TIER2_TRUSTED_ENV_KEYS = %w[
+    HOMEBREW_KANDELO_ARCH HOMEBREW_KANDELO_LLVM_BIN HOMEBREW_KANDELO_NODE
+    HOMEBREW_KANDELO_ROOT HOMEBREW_KANDELO_SYSROOT KANDELO_HOMEBREW_ARCH
+    KANDELO_HOMEBREW_KANDELO_ROOT LLVM_BIN WASM_POSIX_LLVM_DIR
+    WASM_POSIX_SYSROOT
+  ].freeze
+
+  # The publisher writes one root-owned, read-only attestation at a fixed path
+  # before Homebrew evaluates any Formula. Load it while this support module is
+  # required, validate the exact target Formula and support bytes, and freeze
+  # all authority before Formula class code can run. Ordinary pours do not have
+  # this file and retain an inert nil authority.
+  def self.kandelo_load_tier2_runtime!
+    support_path = Pathname(__FILE__).realpath
+    secure_read = lambda do |path, max_bytes, label, expected_uid: nil, expected_mode: nil|
+      begin
+        before = path.lstat
+      rescue SystemCallError => e
+        raise "#{label} is unavailable at #{path}: #{e.message}"
+      end
+      unless before.file? && !before.symlink? && before.nlink == 1
+        raise "#{label} must be a regular non-symlink file with one link: #{path}"
+      end
+      if !expected_uid.nil? && before.uid != expected_uid
+        raise "#{label} owner differs from its protected parent: #{path}"
+      end
+      if !expected_mode.nil? && (before.mode & 0777) != expected_mode
+        raise "#{label} must have mode #{format("%04o", expected_mode)}: #{path}"
+      end
+
+      bytes = nil
+      File.open(path, "rb") do |file|
+        opened_before = file.stat
+        identity = [before.dev, before.ino, before.size, before.nlink]
+        opened_identity = [opened_before.dev, opened_before.ino, opened_before.size, opened_before.nlink]
+        raise "#{label} changed before it was read: #{path}" unless opened_identity == identity
+
+        bytes = file.read(max_bytes + 1)
+        opened_after = file.stat
+        after = path.lstat
+        final_identity = [after.dev, after.ino, after.size, after.nlink]
+        opened_final_identity = [opened_after.dev, opened_after.ino, opened_after.size, opened_after.nlink]
+        unless final_identity == identity && opened_final_identity == identity
+          raise "#{label} changed while it was read: #{path}"
+        end
+      end
+      unless bytes&.bytesize&.between?(1, max_bytes)
+        raise "#{label} must contain 1 to #{max_bytes} bytes: #{path}"
+      end
+      bytes.force_encoding(Encoding::UTF_8)
+      raise "#{label} is not UTF-8: #{path}" unless bytes.valid_encoding?
+
+      bytes
+    end
+    exact_directory = lambda do |path, label|
+      expanded = path.expand_path.cleanpath
+      unless path.absolute? && path == expanded
+        raise "#{label} must be an absolute normalized path: #{path}"
+      end
+      begin
+        stat = path.lstat
+        resolved = path.realpath
+      rescue SystemCallError => e
+        raise "#{label} is unavailable at #{path}: #{e.message}"
+      end
+      unless stat.directory? && !stat.symlink? && resolved == path
+        raise "#{label} must be a canonical real directory: #{path}"
+      end
+      [resolved, stat]
+    end
+    deep_freeze = nil
+    deep_freeze = lambda do |value|
+      case value
+      when Hash
+        value.each do |key, child|
+          deep_freeze.call(key)
+          deep_freeze.call(child)
+        end
+      when Array
+        value.each { |child| deep_freeze.call(child) }
+      end
+      value.freeze
+    end
+
+    support_dir = support_path.dirname
+    kandelo_dir = support_dir.dirname
+    tap_root = kandelo_dir.dirname
+    unless support_path.basename.to_s == "kandelo_formula_support.rb" &&
+           support_dir.basename.to_s == "formula_support" &&
+           kandelo_dir.basename.to_s == "Kandelo"
+      raise "Kandelo Formula support has an unexpected path: #{support_path}"
+    end
+    [support_dir, kandelo_dir, tap_root].each do |directory|
+      exact_directory.call(directory, "Kandelo Formula support ancestor")
+    end
+    support_source = secure_read.call(
+      support_path, KANDELO_TIER2_SOURCE_MAX_BYTES, "Kandelo Formula support"
+    )
+    support_sha256 = Digest::SHA256.hexdigest(support_source)
+
+    prefix_value = if defined?(HOMEBREW_PREFIX)
+      HOMEBREW_PREFIX.to_s
+    else
+      ENV.fetch("HOMEBREW_PREFIX", "").to_s
+    end
+    attestation_path = if prefix_value.empty?
+      nil
+    else
+      Pathname(prefix_value)/KANDELO_TIER2_ATTESTATION_BASENAME
+    end
+    trusted_env = KANDELO_TIER2_TRUSTED_ENV_KEYS.to_h do |key|
+      value = ENV.fetch(key, nil)
+      [key, value.nil? ? nil : value.to_s]
+    end
+    runtime = {
+      "attestation" => nil,
+      "attestation_path" => attestation_path&.to_s,
+      "formula_path" => nil,
+      "support_path" => support_path.to_s,
+      "support_sha256" => support_sha256,
+      "trusted_env" => trusted_env,
+    }
+    unless attestation_path && (attestation_path.exist? || attestation_path.symlink?)
+      return deep_freeze.call(runtime)
+    end
+
+    prefix, prefix_stat = exact_directory.call(Pathname(prefix_value), "Homebrew prefix")
+    unless attestation_path.parent == prefix && attestation_path.basename.to_s == KANDELO_TIER2_ATTESTATION_BASENAME
+      raise "Tier-2 attestation path differs from the fixed Homebrew prefix child"
+    end
+    attestation_source = secure_read.call(
+      attestation_path, KANDELO_TIER2_ATTESTATION_MAX_BYTES, "Tier-2 attestation",
+      expected_uid: prefix_stat.uid, expected_mode: 0444
+    )
+
+    begin
+      index = 0
+      skip_whitespace = lambda do
+        index += 1 while index < attestation_source.bytesize &&
+                         [0x20, 0x09, 0x0a, 0x0d].include?(attestation_source.getbyte(index))
+      end
+      scan_string = lambda do
+        raise JSON::ParserError, "expected JSON string" unless attestation_source.getbyte(index) == 0x22
+
+        start = index
+        index += 1
+        loop do
+          raise JSON::ParserError, "unterminated JSON string" if index >= attestation_source.bytesize
+
+          byte = attestation_source.getbyte(index)
+          index += 1
+          if byte == 0x5c
+            raise JSON::ParserError, "unterminated JSON escape" if index >= attestation_source.bytesize
+
+            index += 1
+          elsif byte == 0x22
+            break
+          end
+        end
+        attestation_source.byteslice(start, index - start)
+      end
+      scan_value = nil
+      scan_value = lambda do
+        skip_whitespace.call
+        case attestation_source.getbyte(index)
+        when 0x7b
+          index += 1
+          keys = {}
+          skip_whitespace.call
+          unless attestation_source.getbyte(index) == 0x7d
+            loop do
+              literal = scan_string.call
+              key = JSON.parse(literal)
+              raise JSON::ParserError, "duplicate JSON object key #{key.inspect}" if keys.key?(key)
+
+              keys[key] = true
+              skip_whitespace.call
+              raise JSON::ParserError, "expected JSON object colon" unless attestation_source.getbyte(index) == 0x3a
+
+              index += 1
+              scan_value.call
+              skip_whitespace.call
+              separator = attestation_source.getbyte(index)
+              if separator == 0x7d
+                break
+              end
+              raise JSON::ParserError, "expected JSON object separator" unless separator == 0x2c
+
+              index += 1
+              skip_whitespace.call
+            end
+          end
+          index += 1
+        when 0x5b
+          index += 1
+          skip_whitespace.call
+          unless attestation_source.getbyte(index) == 0x5d
+            loop do
+              scan_value.call
+              skip_whitespace.call
+              separator = attestation_source.getbyte(index)
+              if separator == 0x5d
+                break
+              end
+              raise JSON::ParserError, "expected JSON array separator" unless separator == 0x2c
+
+              index += 1
+            end
+          end
+          index += 1
+        when 0x22
+          scan_string.call
+        else
+          start = index
+          index += 1 while index < attestation_source.bytesize &&
+                           ![0x20, 0x09, 0x0a, 0x0d, 0x2c, 0x5d, 0x7d].include?(attestation_source.getbyte(index))
+          raise JSON::ParserError, "missing JSON value" if index == start
+        end
+      end
+      scan_value.call
+      skip_whitespace.call
+      raise JSON::ParserError, "trailing JSON content" unless index == attestation_source.bytesize
+
+      document = JSON.parse(attestation_source, create_additions: false)
+    rescue JSON::ParserError => e
+      raise "Tier-2 attestation is invalid JSON: #{e.message}"
+    end
+    unless document.is_a?(Hash) && document.keys.sort == KANDELO_TIER2_TOP_KEYS
+      raise "Tier-2 attestation must use the exact top-level schema"
+    end
+    unless document["schema"] == 1
+      raise "Tier-2 attestation uses an unsupported schema"
+    end
+    tap_identity = document["tap"]
+    formula = document["formula"]
+    full_name = document["full_name"]
+    arch = document["arch"]
+    formula_sha256 = document["formula_sha256"]
+    attested_support_sha256 = document["support_sha256"]
+    bridge = document["tier2_bridge"]
+    valid_sha256 = lambda do |value|
+      value.is_a?(String) && value.match?(/\A[0-9a-f]{64}\z/)
+    end
+    unless tap_identity.is_a?(String) && tap_identity.match?(/\A[a-z0-9._-]+\/[a-z0-9._-]+\z/) &&
+           formula.is_a?(String) && formula.match?(/\A[a-z0-9][a-z0-9._-]{0,254}\z/) &&
+           full_name == "#{tap_identity}/#{formula}" && ["wasm32", "wasm64"].include?(arch) &&
+           valid_sha256.call(formula_sha256) &&
+           (attested_support_sha256.nil? || valid_sha256.call(attested_support_sha256))
+      raise "Tier-2 attestation has an invalid target identity"
+    end
+    unless bridge.nil? || (bridge.is_a?(Hash) && bridge.keys.sort == KANDELO_TIER2_BRIDGE_KEYS)
+      raise "Tier-2 attestation must use the exact bridge schema"
+    end
+    unless bridge.nil?
+      script_env_keys = bridge["script_env_keys"]
+      valid_bridge = bridge["package"] == formula &&
+                     bridge["version"].is_a?(String) &&
+                     bridge["version"].match?(/\A[A-Za-z0-9][A-Za-z0-9._+,-]{0,254}\z/) &&
+                     bridge["script"].is_a?(String) &&
+                     bridge["script"].match?(/\A[A-Za-z0-9][A-Za-z0-9._-]{0,254}\z/) &&
+                     bridge["source_url"].is_a?(String) &&
+                     bridge["source_url"].bytesize.between?(9, 2048) &&
+                     bridge["source_url"].start_with?("https://") &&
+                     ["exact", "in-repository-source"].include?(bridge["source_mode"]) &&
+                     %w[
+                       build_toml_sha256 package_toml_sha256 script_sha256 source_sha256
+                     ].all? { |key| valid_sha256.call(bridge[key]) } &&
+                     script_env_keys.is_a?(Array) &&
+                     script_env_keys.all? do |key|
+                       key.is_a?(String) && key.match?(/\A[A-Z][A-Z0-9_]{0,254}\z/)
+                     end &&
+                     script_env_keys == script_env_keys.sort.uniq &&
+                     script_env_keys.length <= KANDELO_TIER2_SCRIPT_ENV_MAX_KEYS &&
+                     script_env_keys.sum(&:bytesize) <= KANDELO_TIER2_SCRIPT_ENV_KEY_MAX_BYTES &&
+                     valid_sha256.call(attested_support_sha256)
+      raise "Tier-2 attestation has invalid bridge values" unless valid_bridge
+    end
+
+    owner, short_tap = tap_identity.split("/", 2)
+    unless tap_root.basename.to_s == "homebrew-#{short_tap}" && tap_root.parent.basename.to_s == owner
+      raise "Tier-2 attestation tap identity differs from the loaded support path"
+    end
+    if !attested_support_sha256.nil? && support_sha256 != attested_support_sha256
+      raise "loaded Kandelo Formula support differs from the Tier-2 attestation"
+    end
+    formula_path = tap_root/"Formula"/"#{formula}.rb"
+    formula_source = secure_read.call(
+      formula_path, KANDELO_TIER2_SOURCE_MAX_BYTES, "Tier-2 Formula"
+    )
+    unless Digest::SHA256.hexdigest(formula_source) == formula_sha256
+      raise "loaded Formula differs from the Tier-2 attestation"
+    end
+
+    unless bridge.nil?
+      primary_root = trusted_env.fetch("HOMEBREW_KANDELO_ROOT").to_s
+      secondary_root = trusted_env.fetch("KANDELO_HOMEBREW_KANDELO_ROOT").to_s
+      primary_arch = trusted_env.fetch("HOMEBREW_KANDELO_ARCH").to_s
+      secondary_arch = trusted_env.fetch("KANDELO_HOMEBREW_ARCH").to_s
+      if primary_root.empty? || secondary_root != primary_root ||
+         primary_arch != arch || secondary_arch != arch
+        raise "Tier-2 publisher root or architecture environment is inconsistent"
+      end
+      root, = exact_directory.call(Pathname(primary_root), "Kandelo root")
+      sysroot_value = trusted_env.fetch("HOMEBREW_KANDELO_SYSROOT").to_s
+      wasm_sysroot_value = trusted_env.fetch("WASM_POSIX_SYSROOT").to_s
+      if !sysroot_value.empty? && !wasm_sysroot_value.empty? && sysroot_value != wasm_sysroot_value
+        raise "Tier-2 publisher sysroot environment is inconsistent"
+      end
+      if sysroot_value.empty?
+        sysroot_value = wasm_sysroot_value
+      end
+      if sysroot_value.empty?
+        sysroot_value = (root/(arch == "wasm64" ? "sysroot64" : "sysroot")).to_s
+      end
+      sysroot, = exact_directory.call(Pathname(sysroot_value), "Kandelo sysroot")
+      trusted_env["HOMEBREW_KANDELO_ROOT"] = root.to_s
+      trusted_env["KANDELO_HOMEBREW_KANDELO_ROOT"] = root.to_s
+      trusted_env["HOMEBREW_KANDELO_ARCH"] = arch
+      trusted_env["KANDELO_HOMEBREW_ARCH"] = arch
+      trusted_env["HOMEBREW_KANDELO_SYSROOT"] = sysroot.to_s
+      trusted_env["WASM_POSIX_SYSROOT"] = sysroot.to_s
+    end
+
+    runtime["attestation"] = document
+    runtime["attestation_path"] = attestation_path.realpath.to_s
+    runtime["formula_path"] = formula_path.realpath.to_s
+    deep_freeze.call(runtime)
+  end
+
+  KANDELO_TIER2_RUNTIME = kandelo_load_tier2_runtime!
 
   # Homebrew's formula_opt_* helpers discard the tap name and resolve through
   # HOMEBREW_PREFIX/opt. A native formula alias can therefore redirect a
@@ -411,134 +754,264 @@ module KandeloFormulaSupport
     wasm
   end
 
-  # Move Homebrew's checksum-verified source into a dedicated root before the
-  # Tier-2 bridge creates sibling work and output roots. Registry recipes copy
-  # this immutable input before changing source files or generating build state.
+  def kandelo_tier2_runtime!
+    runtime = KANDELO_TIER2_RUNTIME
+    bridge = runtime.dig("attestation", "tier2_bridge")
+    odie "Kandelo Tier-2 source builds require a valid publisher attestation" if bridge.nil?
+
+    runtime
+  end
+
+  def kandelo_tier2_read_attested_file(path, expected_sha256, max_bytes, label)
+    begin
+      before = path.lstat
+    rescue SystemCallError => e
+      odie "#{label} is unavailable at #{path}: #{e.message}"
+    end
+    unless before.file? && !before.symlink? && before.nlink == 1
+      odie "#{label} must be a regular non-symlink file with one link: #{path}"
+    end
+
+    bytes = nil
+    File.open(path, "rb") do |file|
+      opened_before = file.stat
+      identity = [before.dev, before.ino, before.size, before.nlink]
+      opened_identity = [opened_before.dev, opened_before.ino, opened_before.size, opened_before.nlink]
+      odie "#{label} changed before it was read: #{path}" unless opened_identity == identity
+
+      bytes = file.read(max_bytes + 1)
+      opened_after = file.stat
+      after = path.lstat
+      final_identity = [after.dev, after.ino, after.size, after.nlink]
+      opened_final_identity = [opened_after.dev, opened_after.ino, opened_after.size, opened_after.nlink]
+      unless final_identity == identity && opened_final_identity == identity
+        odie "#{label} changed while it was read: #{path}"
+      end
+    end
+    unless bytes&.bytesize&.between?(1, max_bytes)
+      odie "#{label} must contain 1 to #{max_bytes} bytes: #{path}"
+    end
+    bytes.force_encoding(Encoding::UTF_8)
+    odie "#{label} is not UTF-8: #{path}" unless bytes.valid_encoding?
+    unless Digest::SHA256.hexdigest(bytes) == expected_sha256
+      odie "#{label} differs from the publisher attestation: #{path}"
+    end
+
+    bytes
+  end
+
+  def kandelo_tier2_exact_directory(path, parent, label)
+    begin
+      stat = path.lstat
+      resolved = path.realpath
+    rescue SystemCallError => e
+      odie "#{label} is unavailable at #{path}: #{e.message}"
+    end
+    unless path.absolute? && path == path.expand_path.cleanpath &&
+           stat.directory? && !stat.symlink? && resolved == path && resolved.parent == parent
+      odie "#{label} must be one canonical real child of #{parent}: #{path}"
+    end
+    resolved
+  end
+
+  def kandelo_tier2_script_env(bridge, script_env)
+    odie "Kandelo Tier-2 script_env must be a Hash" unless script_env.instance_of?(Hash)
+
+    package = bridge.fetch("package")
+    package_prefix = "#{package.upcase.gsub(/[^A-Z0-9]/, "_")}_"
+    values = {}
+    script_env.each do |key, value|
+      unless key.is_a?(String) && key.match?(/\A[A-Z][A-Z0-9_]{0,254}\z/)
+        odie "Kandelo Tier-2 script_env has an invalid key: #{key.inspect}"
+      end
+      unless key.start_with?("WASM_POSIX_DEP_") || key.start_with?(package_prefix)
+        odie "Kandelo Tier-2 script_env key is outside the approved namespace: #{key.inspect}"
+      end
+      if %w[
+        WASM_POSIX_DEP_NAME WASM_POSIX_DEP_OUT_DIR WASM_POSIX_DEP_SOURCE_DIR
+        WASM_POSIX_DEP_SOURCE_SHA256 WASM_POSIX_DEP_SOURCE_URL
+        WASM_POSIX_DEP_TARGET_ARCH WASM_POSIX_DEP_VERSION WASM_POSIX_DEP_WORK_DIR
+        WASM_POSIX_INSTALL_LOCAL_MIRROR
+      ].include?(key)
+        odie "Kandelo Tier-2 script_env overrides a helper-owned key: #{key.inspect}"
+      end
+      unless value.is_a?(String) || value.is_a?(Pathname)
+        odie "Kandelo Tier-2 script_env value must be a String or Pathname: #{key.inspect}"
+      end
+      converted = value.to_s.dup
+      converted.force_encoding(Encoding::UTF_8)
+      unless converted.valid_encoding? && !converted.include?("\0") &&
+             converted.bytesize <= KANDELO_TIER2_SCRIPT_ENV_VALUE_MAX_BYTES
+        odie "Kandelo Tier-2 script_env value is invalid or oversized: #{key.inspect}"
+      end
+      values[key.dup.freeze] = converted.freeze
+    end
+    keys = values.keys.sort
+    unless keys == bridge.fetch("script_env_keys") &&
+           keys.length <= KANDELO_TIER2_SCRIPT_ENV_MAX_KEYS &&
+           keys.sum(&:bytesize) <= KANDELO_TIER2_SCRIPT_ENV_KEY_MAX_BYTES &&
+           values.values.sum(&:bytesize) <= KANDELO_TIER2_SCRIPT_ENV_VALUE_TOTAL_BYTES
+      odie "Kandelo Tier-2 script_env differs from the publisher attestation"
+    end
+    values.freeze
+  end
+
+  def kandelo_tier2_restore_environment!(runtime, package)
+    package_prefix = "#{package.upcase.gsub(/[^A-Z0-9]/, "_")}_"
+    explicit = %w[
+      HOMEBREW_KANDELO_ARCH HOMEBREW_KANDELO_ROOT HOMEBREW_KANDELO_SYSROOT
+      KANDELO_HOMEBREW_ARCH KANDELO_HOMEBREW_KANDELO_ROOT
+      WASM_POSIX_BINARY_INDEX_URL WASM_POSIX_DEFAULT_ARCH
+      WASM_POSIX_INSTALL_LOCAL_MIRROR WASM_POSIX_SYSROOT
+    ]
+    ENV.keys.each do |key|
+      ENV.delete(key) if key.start_with?("WASM_POSIX_DEP_") ||
+                         key.start_with?(package_prefix) || explicit.include?(key)
+    end
+    runtime.fetch("trusted_env").each do |key, value|
+      value.nil? ? ENV.delete(key) : ENV[key] = value
+    end
+  end
+
+  # Move Homebrew's checksum-verified primary source into a fixed root. A
+  # Formula may stage separately attested resource inputs under the one fixed
+  # resource directory; those inputs are deliberately not moved with the
+  # primary source.
   def kandelo_stage_verified_formula_source
     source_dir = buildpath/"kandelo-package-source"
-    odie "Kandelo Formula source was already staged at #{source_dir}" if source_dir.exist?
+    resource_dir = buildpath/"kandelo-package-resources"
+    reserved = [
+      source_dir,
+      buildpath/"kandelo-package-out",
+      buildpath/"kandelo-package-work",
+    ]
+    if source_dir.exist? || source_dir.symlink?
+      odie "Kandelo Formula source was already staged at #{source_dir}"
+    end
+    reserved.drop(1).each do |path|
+      odie "Kandelo Formula build root already exists: #{path}" if path.exist? || path.symlink?
+    end
+    if resource_dir.exist? || resource_dir.symlink?
+      begin
+        resource_stat = resource_dir.lstat
+      rescue SystemCallError => e
+        odie "Kandelo Formula resource root is unavailable: #{e.message}"
+      end
+      unless resource_stat.directory? && !resource_stat.symlink? && resource_dir.realpath == resource_dir
+        odie "Kandelo Formula resource root must be a canonical real directory: #{resource_dir}"
+      end
+    end
 
-    source_entries = buildpath.children
+    source_entries = buildpath.children.reject { |entry| entry == resource_dir }
     odie "Homebrew did not stage Formula source under #{buildpath}" if source_entries.empty?
 
-    source_dir.mkpath
+    source_dir.mkdir
     source_entries.each do |entry|
       FileUtils.mv(entry, source_dir/entry.basename)
     end
     source_dir
   end
 
-  # Transitional Tier-2 bridge (spec §6 deviation): activate the SDK, export the
-  # WASM_POSIX_DEP_* build-script contract, and shell out to the registry
-  # `build-<name>.sh`. Returns the out dir the script installed into.
-  #
-  # Deprecated by design: heavy ported formulae land through here before their
-  # `install` is decomposed into idiomatic steps. Every call is a tracked
-  # deviation.
-  def kandelo_build_package(name, script, source_url, source_sha256, script_env: {})
-    root = kandelo_activate_sdk!
-    kandelo_validate_registry_package_version!(root, name)
+  # Transitional Tier-2 bridge (spec §6 deviation). Every source, identity,
+  # registry, environment, and execution input is bound to the publisher's
+  # frozen attestation before the SDK is activated or a build script runs.
+  def kandelo_build_package(script_env: {})
+    runtime = kandelo_tier2_runtime!
+    attestation = runtime.fetch("attestation")
+    bridge = attestation.fetch("tier2_bridge")
+    formula_env = kandelo_tier2_script_env(bridge, script_env)
+    package = bridge.fetch("package")
 
+    formula_name = name.to_s
+    formula_full_name = respond_to?(:full_name) ? full_name.to_s : "kandelo-dev/tap-core/#{formula_name}"
+    formula_version = version.to_s
+    formula_url = stable.url.to_s
+    formula_sha256 = stable.checksum.hexdigest
+    unless formula_name == attestation.fetch("formula") &&
+           formula_full_name == attestation.fetch("full_name") &&
+           formula_version == bridge.fetch("version") &&
+           formula_url == bridge.fetch("source_url") &&
+           formula_sha256 == bridge.fetch("source_sha256")
+      odie "Kandelo Tier-2 Formula identity differs from the publisher attestation"
+    end
+
+    formula_path = Pathname(path).realpath
+    support_path = Pathname(runtime.fetch("support_path"))
+    unless formula_path.to_s == runtime.fetch("formula_path")
+      odie "Kandelo Tier-2 Formula path differs from the publisher attestation"
+    end
+    kandelo_tier2_read_attested_file(
+      formula_path, attestation.fetch("formula_sha256"), KANDELO_TIER2_SOURCE_MAX_BYTES,
+      "Tier-2 Formula"
+    )
+    kandelo_tier2_read_attested_file(
+      support_path, attestation.fetch("support_sha256"), KANDELO_TIER2_SOURCE_MAX_BYTES,
+      "Kandelo Formula support"
+    )
+
+    trusted_env = runtime.fetch("trusted_env")
+    root = Pathname(trusted_env.fetch("HOMEBREW_KANDELO_ROOT"))
+    arch = trusted_env.fetch("HOMEBREW_KANDELO_ARCH")
+    unless arch == attestation.fetch("arch")
+      odie "Kandelo Tier-2 architecture differs from the publisher attestation"
+    end
+    packages_root = kandelo_tier2_exact_directory(root/"packages", root, "Kandelo packages root")
+    registry_root = kandelo_tier2_exact_directory(
+      packages_root/"registry", packages_root, "Kandelo registry root"
+    )
+    package_root = kandelo_tier2_exact_directory(
+      registry_root/package, registry_root, "Tier-2 registry package"
+    )
+    package_toml = package_root/"package.toml"
+    build_toml = package_root/"build.toml"
+    script = package_root/bridge.fetch("script")
+    kandelo_tier2_read_attested_file(
+      package_toml, bridge.fetch("package_toml_sha256"), 65_536, "registry package.toml"
+    )
+    kandelo_tier2_read_attested_file(
+      build_toml, bridge.fetch("build_toml_sha256"), 65_536, "registry build.toml"
+    )
+    kandelo_tier2_read_attested_file(
+      script, bridge.fetch("script_sha256"), KANDELO_TIER2_SOURCE_MAX_BYTES,
+      "registry build script"
+    )
+
+    source_dir = kandelo_stage_verified_formula_source
+    work_dir = buildpath/"kandelo-package-work"
     out_dir = buildpath/"kandelo-package-out"
-    ENV["WASM_POSIX_DEP_NAME"] = name
-    ENV["WASM_POSIX_DEP_VERSION"] = version.to_s
-    ENV["WASM_POSIX_DEP_SOURCE_URL"] = source_url
-    ENV["WASM_POSIX_DEP_SOURCE_SHA256"] = source_sha256
-    ENV["WASM_POSIX_DEP_OUT_DIR"] = out_dir
-    ENV["WASM_POSIX_DEP_WORK_DIR"] = buildpath/"kandelo-package-work"
-    ENV["WASM_POSIX_DEP_TARGET_ARCH"] = kandelo_arch
-    script_env.each { |key, value| ENV[key] = value.to_s }
+    work_dir.mkdir
+    out_dir.mkdir
+    helper_env = {
+      "WASM_POSIX_DEP_NAME"                 => package,
+      "WASM_POSIX_DEP_OUT_DIR"              => out_dir,
+      "WASM_POSIX_DEP_SOURCE_DIR"           => source_dir,
+      "WASM_POSIX_DEP_SOURCE_SHA256"        => bridge.fetch("source_sha256"),
+      "WASM_POSIX_DEP_SOURCE_URL"           => bridge.fetch("source_url"),
+      "WASM_POSIX_DEP_TARGET_ARCH"          => arch,
+      "WASM_POSIX_DEP_VERSION"              => bridge.fetch("version"),
+      "WASM_POSIX_DEP_WORK_DIR"             => work_dir,
+      "WASM_POSIX_INSTALL_LOCAL_MIRROR"     => "0",
+    }
+    kandelo_tier2_restore_environment!(runtime, package)
+    activated_root = kandelo_activate_sdk!
+    unless Pathname(activated_root).realpath == root
+      odie "Kandelo SDK activation changed the attested root"
+    end
+    kandelo_activate_sysroot!(activated_root)
+    formula_env.each { |key, value| ENV[key] = value }
+    helper_env.each { |key, value| ENV[key] = value.to_s }
 
-    system "bash", "#{root}/packages/registry/#{name}/#{script}"
+    # Re-read the script immediately before the only process execution.
+    kandelo_tier2_read_attested_file(
+      script, bridge.fetch("script_sha256"), KANDELO_TIER2_SOURCE_MAX_BYTES,
+      "registry build script"
+    )
+    system "/usr/bin/bash", script.to_s
 
+    [source_dir, work_dir, out_dir].each do |directory|
+      kandelo_tier2_exact_directory(directory, buildpath.realpath, "Tier-2 build root")
+    end
     out_dir
-  end
-
-  # A Tier-2 Formula delegates its actual build to one Kandelo registry recipe.
-  # Keep that relationship exact: Homebrew's URL parser can infer a plausible
-  # but wrong version (for example, `nethack-367-src.tgz` becomes `367`). A
-  # mismatch would otherwise be embedded in the bottle filename, Cellar path,
-  # sidecars, and public package index before the migration consumer notices.
-  def kandelo_validate_registry_package_version!(root, registry_name)
-    manifest = kandelo_registry_package_manifest(root, registry_name)
-    identity = kandelo_registry_package_identity(manifest)
-    resolved_version = version.to_s
-    formula_name = respond_to?(:name) ? name.to_s : self.class.name
-
-    return identity.fetch(:version) if resolved_version == identity.fetch(:version)
-
-    odie <<~EOS.chomp
-      Formula #{formula_name} resolved Homebrew version #{resolved_version.inspect}, but mapped Kandelo registry package #{registry_name.inspect} declares authoritative version #{identity.fetch(:version).inspect} in #{manifest}. Add or correct the Formula version before building the registry recipe.
-    EOS
-  end
-
-  def kandelo_registry_package_manifest(root, registry_name)
-    registry_name = registry_name.to_s
-    unless registry_name.match?(KANDELO_REGISTRY_PACKAGE_NAME)
-      odie "invalid mapped Kandelo registry package name: #{registry_name.inspect}"
-    end
-
-    registry_root = Pathname(root)/"packages/registry"
-    begin
-      registry_root = registry_root.realpath
-    rescue SystemCallError => e
-      odie "Kandelo registry root is unavailable at #{registry_root}: #{e.message}"
-    end
-    manifest = registry_root/registry_name/"package.toml"
-    manifest_is_regular = manifest.file? && !manifest.symlink?
-    unless manifest_is_regular
-      odie "mapped Kandelo registry package #{registry_name.inspect} must have " \
-           "a regular non-symlink manifest at #{manifest}"
-    end
-
-    begin
-      real_manifest = manifest.realpath
-      package_root = (registry_root/registry_name).realpath
-    rescue SystemCallError => e
-      odie "cannot resolve mapped Kandelo registry package #{registry_name.inspect} at #{manifest}: #{e.message}"
-    end
-    escapes_registry = real_manifest.dirname != package_root || package_root.dirname != registry_root
-    if escapes_registry
-      odie "mapped Kandelo registry package #{registry_name.inspect} escapes #{registry_root}: #{real_manifest}"
-    end
-    real_manifest
-  end
-
-  def kandelo_registry_package_identity(manifest)
-    source = manifest.binread
-    if source.empty? || source.bytesize > KANDELO_REGISTRY_MANIFEST_MAX_BYTES
-      odie "mapped Kandelo registry package manifest must contain 1 to " \
-           "#{KANDELO_REGISTRY_MANIFEST_MAX_BYTES} bytes: #{manifest}"
-    end
-    source.force_encoding(Encoding::UTF_8)
-    odie "mapped Kandelo registry package manifest is not UTF-8: #{manifest}" unless source.valid_encoding?
-
-    fields = {}
-    source.each_line do |line|
-      break if line.lstrip.start_with?("[")
-
-      match = line.match(/\A\s*(name|version)\s*=\s*"([^"\\]*)"\s*(?:#.*)?\z/)
-      next if match.nil?
-
-      key = match[1].to_sym
-      odie "mapped Kandelo registry package manifest repeats #{match[1]}: #{manifest}" if fields.key?(key)
-      fields[key] = match[2]
-    end
-
-    manifest_name = fields[:name]
-    manifest_version = fields[:version]
-    expected_name = manifest.dirname.basename.to_s
-    valid_manifest_name = manifest_name == expected_name && manifest_name&.match?(KANDELO_REGISTRY_PACKAGE_NAME)
-    unless valid_manifest_name
-      odie "mapped Kandelo registry package manifest has a missing or invalid " \
-           "name for #{expected_name.inspect}: #{manifest}"
-    end
-    unless manifest_version&.match?(KANDELO_REGISTRY_PACKAGE_VERSION)
-      odie "mapped Kandelo registry package #{manifest_name.inspect} has a missing " \
-           "or invalid authoritative version in #{manifest}"
-    end
-
-    { name: manifest_name, version: manifest_version }
   end
 
   # Install a built `.wasm` from an out dir as an executable `bin/<bin_name>`.
