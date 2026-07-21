@@ -19,6 +19,12 @@ import {
   createPtyOutputReadiness,
   type PtyOutputReadiness,
 } from "./pty-output-readiness.ts";
+import {
+  createPtyCompletionOutputTracker,
+  validatePtyCompletionOutput,
+  waitForPtyCompletion,
+  type PtyCompletionOutputTracker,
+} from "./pty-completion-output.ts";
 import { rootfsSizeForStagedBytes, validateGuestPath } from "./rootfs-size.ts";
 
 const O_WRONLY = 0x0001;
@@ -45,6 +51,7 @@ interface PtyConfig {
   cols: number;
   rows: number;
   timeoutMs?: number | null;
+  completionOutput?: string | null;
   expectedForkDescendants?: number;
 }
 
@@ -167,6 +174,9 @@ async function main(): Promise<void> {
   ) {
     throw new Error("timeoutMs must be a positive integer");
   }
+  const completionOutput = validatePtyCompletionOutput(
+    config.completionOutput,
+  );
   const expectedForkDescendants = parseExpectedForkDescendants(
     String(config.expectedForkDescendants ?? 0),
     undefined,
@@ -425,6 +435,14 @@ async function main(): Promise<void> {
 
     let forkDescendants = createForkDescendantTracker();
     let activeOutputReadiness: PtyOutputReadiness | undefined;
+    let completionTracker: PtyCompletionOutputTracker | undefined;
+    const observeOutput = (
+      destination: NodeJS.WriteStream,
+      data: Uint8Array,
+    ): void => {
+      destination.write(data);
+      completionTracker?.observe(data);
+    };
     const host = new NodeKernelHost({
       maxWorkers: 4,
       execPrograms,
@@ -432,9 +450,10 @@ async function main(): Promise<void> {
       extraMounts,
       onPtyOutput: (_pid: number, data: Uint8Array) => {
         activeOutputReadiness?.observe(data);
-        process.stdout.write(data);
+        observeOutput(process.stdout, data);
       },
-      onStderr: (_pid: number, data: Uint8Array) => process.stderr.write(data),
+      onStderr: (_pid: number, data: Uint8Array) =>
+        observeOutput(process.stderr, data),
       onProcessEvent: (event: ProcessEvent) =>
         forkDescendants.onProcessEvent(event),
     });
@@ -446,6 +465,9 @@ async function main(): Promise<void> {
         Number.parseInt(guestEnv.TIMEOUT ?? process.env.TIMEOUT ?? "30000", 10);
       const run = async (inputs: string[]): Promise<number> => {
         forkDescendants = createForkDescendantTracker();
+        completionTracker = completionOutput
+          ? createPtyCompletionOutputTracker(completionOutput)
+          : undefined;
         const deadline = Date.now() + timeoutMs;
         activeOutputReadiness = inputReadyText
           ? createPtyOutputReadiness(inputReadyText)
@@ -476,7 +498,11 @@ async function main(): Promise<void> {
           },
         });
         try {
-          const status = await Promise.race([exit, timeout]);
+          const status = await waitForPtyCompletion(
+            exit,
+            timeout,
+            completionTracker,
+          );
           if (status === 0 && expectedForkDescendants.count > 0) {
             await Promise.race([
               forkDescendants.waitFor(expectedForkDescendants, deadline),
@@ -485,6 +511,7 @@ async function main(): Promise<void> {
           }
           return status;
         } finally {
+          completionTracker = undefined;
           if (timer) clearTimeout(timer);
           activeOutputReadiness = undefined;
         }
