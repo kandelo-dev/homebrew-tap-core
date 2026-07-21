@@ -58,7 +58,7 @@
   "name": "file-formula",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
+  "tap_commit": "2d9cfb7554c24d19c61951ad211ba99e8ff6bf41",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "5.45"

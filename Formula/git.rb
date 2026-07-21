@@ -480,7 +480,7 @@ class Git < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "469ed461a7e454332d62c70d776335a870e2a9d72271f6d258011465d3818fe9"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "1dafd6efd4d75570518fad71a5801ce9a570a8f96a70bbee2f5a5979d8a96e1f"
   end
 
 end

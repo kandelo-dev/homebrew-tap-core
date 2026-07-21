@@ -1,48 +1,48 @@
 {
   "bottle": {
     "bottle_tag": "wasm32_kandelo",
-    "bytes": 1982626,
-    "cache_key_sha": "fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051",
+    "bytes": 6815615,
+    "cache_key_sha": "1dafd6efd4d75570518fad71a5801ce9a570a8f96a70bbee2f5a5979d8a96e1f",
     "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
     "prefix": "/home/linuxbrew/.linuxbrew",
-    "sha256": "fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nethack/blobs/sha256:fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051"
+    "sha256": "1dafd6efd4d75570518fad71a5801ce9a570a8f96a70bbee2f5a5979d8a96e1f",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/git/blobs/sha256:1dafd6efd4d75570518fad71a5801ce9a570a8f96a70bbee2f5a5979d8a96e1f"
   },
   "build": {
     "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
     "dev_shell": "scripts/dev-shell.sh",
-    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29816775036",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29864106898",
     "job": "verify-bottle",
     "runner_os": "Linux",
     "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
     "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
   },
   "formula": {
-    "path": "Formula/nethack.rb",
-    "sha256": "706684f9e4dcd494f352e9d4eca7fa380272754c9a6c0cef3c29e88a40955471"
+    "path": "Formula/git.rb",
+    "sha256": "8ca293d2770d111639cedb545b5fc8fb2c816a339a1794c17c179f84a3e75e49"
   },
   "metadata": {
     "formula_json": {
-      "path": "Kandelo/formula/nethack.json",
-      "sha256": "c23c7980f261ad1392a6e0494d1545630a8bbc2d41ea508bd1a343696f21a8c9"
+      "path": "Kandelo/formula/git.json",
+      "sha256": "17d859c469d60cc8f2a44ae6548996eb74e197d9c8373cc461e94b808b2ac5cc"
     },
     "link_manifest_json": {
-      "path": "Kandelo/link/nethack-3.6.7-rebuild0-wasm32.json",
-      "sha256": "57900be8efaebfda2231905b5945ecd2d547442c7f23a9c4c0108fa39c8eb642"
+      "path": "Kandelo/link/git-2.47.1_1-rebuild0-wasm32.json",
+      "sha256": "8795d6b1e9805d761a97b4fdfe6b8b6dd69ab720d00ec01c7b744e3d13aff727"
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
       "sha256": "e64033522bf899f596f0094247f6ba38398be44a3d665223aef6ac89e2af3523"
     },
     "provenance_json": {
-      "path": "Kandelo/reports/nethack-3.6.7-rebuild0-wasm32.provenance.json",
-      "sha256": "b4fadc715a4f46849b3f2ed529a1683bf45590fe198e2a43e938c62647d92aa8"
+      "path": "Kandelo/reports/git-2.47.1_1-rebuild0-wasm32.provenance.json",
+      "sha256": "5f43669a9c5635e1ceba40207b8e16a00b0fbcee5249fb8c01d166d88d61ccb6"
     }
   },
   "repositories": {
-    "kandelo_commit": "ac1c16ee3e5b3a248f5ab7e55db8172060c1b0d6",
+    "kandelo_commit": "87a34d4837f2543600e10ac472490ab4e5e771d0",
     "kandelo_repository": "Automattic/kandelo",
-    "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
+    "tap_commit": "2d9cfb7554c24d19c61951ad211ba99e8ff6bf41",
     "tap_repository": "kandelo-dev/homebrew-tap-core"
   },
   "schema": 1,
@@ -50,8 +50,8 @@
     "arch": "wasm32",
     "bottle_rebuild": 0,
     "kandelo_abi": 41,
-    "package": "nethack",
-    "version": "3.6.7"
+    "package": "git",
+    "version": "2.47.1_1"
   },
   "validation": {
     "outcome_lists": [
@@ -60,9 +60,9 @@
         "name": "schema",
         "passed": [
           "Kandelo/metadata.json",
-          "Kandelo/formula/nethack.json",
-          "Kandelo/link/nethack-3.6.7-rebuild0-wasm32.json",
-          "Kandelo/reports/nethack-3.6.7-rebuild0-wasm32.provenance.json"
+          "Kandelo/formula/git.json",
+          "Kandelo/link/git-2.47.1_1-rebuild0-wasm32.json",
+          "Kandelo/reports/git-2.47.1_1-rebuild0-wasm32.provenance.json"
         ],
         "skipped": [],
         "status": "success"
@@ -93,9 +93,9 @@
         "failed": [],
         "name": "node_smoke",
         "passed": [
-          "Homebrew force-poured nethack from anonymous-public-readback",
+          "Homebrew force-poured git from anonymous-public-readback",
           "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
-          "exact bottle sha256: fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051"
+          "exact bottle sha256: 1dafd6efd4d75570518fad71a5801ce9a570a8f96a70bbee2f5a5979d8a96e1f"
         ],
         "skipped": [],
         "status": "success"
