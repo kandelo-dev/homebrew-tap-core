@@ -64,9 +64,9 @@ class Fbdoom < Formula
   test do
     wad = resource("doom-shareware").cached_download
     guest_files = { "/doom1.wad" => wad }
-    output = kandelo_run_wasm(
+    output = kandelo_run_pty_wasm(
       bin/"fbdoom", ["-iwad", "/doom1.wad", "-timedemo", "demo1", "-nogui"],
-      env: { "HOME" => "/home/doom" }, guest_files: guest_files, merge_stderr: true
+      inputs: [], env: { "HOME" => "/home/doom" }, guest_files: guest_files
     )
     assert_match(/timed .* gametics/i, output)
 
