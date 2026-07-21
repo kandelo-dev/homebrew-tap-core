@@ -281,25 +281,25 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
-  def with_tier2_build_fixture(script_env: nil)
+  def with_tier2_build_fixture(script_env: nil, formula_name: "hello", package_name: formula_name)
     original = ENV.to_hash
     Dir.mktmpdir("kandelo-tier2-build") do |dir|
       base = Pathname(dir).realpath
       root = base/"kandelo-root"
       registry_root = root/"packages/registry"
-      package_root = registry_root/"hello"
+      package_root = registry_root/package_name
       sysroot = root/"sysroot"
       build_path = base/"formula-build"
-      formula_path = base/"hello.rb"
+      formula_path = base/"#{formula_name}.rb"
       support_path = base/"kandelo_formula_support.rb"
       [package_root, sysroot, build_path].each(&:mkpath)
       package_toml = package_root/"package.toml"
       build_toml = package_root/"build.toml"
-      script = package_root/"build-hello.sh"
-      package_toml.binwrite("name = \"hello\"\nversion = \"1.0\"\n")
-      build_toml.binwrite("script_path = \"packages/registry/hello/build-hello.sh\"\n")
+      script = package_root/"build-#{package_name}.sh"
+      package_toml.binwrite("name = #{package_name.inspect}\nversion = \"1.0\"\n")
+      build_toml.binwrite("script_path = \"packages/registry/#{package_name}/build-#{package_name}.sh\"\n")
       script.binwrite("#!/usr/bin/env bash\nset -euo pipefail\n")
-      formula_path.binwrite("class Hello < Formula\nend\n")
+      formula_path.binwrite("class #{formula_name.capitalize} < Formula\nend\n")
       FileUtils.cp(File.expand_path("../kandelo_formula_support.rb", __dir__), support_path)
       (build_path/"upstream.c").binwrite("int main(void) { return 0; }\n")
       resource_dir = build_path/"kandelo-package-resources"
@@ -311,9 +311,9 @@ class KandeloFormulaSupportTest < Minitest::Test
       }
       bridge = {
         "build_toml_sha256"   => Digest::SHA256.file(build_toml).hexdigest,
-        "package"             => "hello",
+        "package"             => package_name,
         "package_toml_sha256" => Digest::SHA256.file(package_toml).hexdigest,
-        "script"              => "build-hello.sh",
+        "script"              => "build-#{package_name}.sh",
         "script_env_keys"     => script_env.keys.sort,
         "script_sha256"       => Digest::SHA256.file(script).hexdigest,
         "source_mode"         => "exact",
@@ -325,8 +325,8 @@ class KandeloFormulaSupportTest < Minitest::Test
         "schema"          => 1,
         "arch"            => "wasm32",
         "tap"             => "kandelo-dev/tap-core",
-        "formula"         => "hello",
-        "full_name"       => "kandelo-dev/tap-core/hello",
+        "formula"         => formula_name,
+        "full_name"       => "kandelo-dev/tap-core/#{formula_name}",
         "formula_sha256"  => Digest::SHA256.file(formula_path).hexdigest,
         "support_sha256"  => Digest::SHA256.file(support_path).hexdigest,
         "tier2_bridge"    => bridge,
@@ -351,8 +351,8 @@ class KandeloFormulaSupportTest < Minitest::Test
       activation_calls = []
       harness = Harness.new
       harness.build_path = build_path
-      harness.formula_name = "hello"
-      harness.formula_full_name = "kandelo-dev/tap-core/hello"
+      harness.formula_name = formula_name
+      harness.formula_full_name = "kandelo-dev/tap-core/#{formula_name}"
       harness.formula_path = formula_path
       harness.formula_version = "1.0"
       harness.root_path = root.to_s
@@ -508,6 +508,23 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
+  def test_support_load_accepts_a_distinct_valid_registry_package_identity
+    with_tier2_loader_fixture do |fixture|
+      document = tier2_loader_attestation(fixture)
+      document.fetch("tier2_bridge")["package"] = "cpython"
+      write_tier2_loader_attestation(fixture, JSON.generate(document))
+      assertion = <<~'RUBY'
+        runtime = KandeloFormulaSupport::KANDELO_TIER2_RUNTIME
+        abort "Formula identity changed" unless runtime.dig("attestation", "formula") == "hello"
+        abort "registry package mapping changed" unless
+          runtime.dig("attestation", "tier2_bridge", "package") == "cpython"
+      RUBY
+      _stdout, stderr, status = run_tier2_support_load(fixture, assertion)
+
+      assert status.success?, stderr
+    end
+  end
+
   def test_support_load_accepts_homebrew_filtered_aliases_and_synthesizes_compatibility_values
     with_tier2_loader_fixture do |fixture|
       document = tier2_loader_attestation(fixture)
@@ -616,6 +633,8 @@ class KandeloFormulaSupportTest < Minitest::Test
       unknown_bridge.fetch("tier2_bridge")["unknown"] = true
       invalid_bridge_type = JSON.parse(valid_json)
       invalid_bridge_type.fetch("tier2_bridge")["script_env_keys"] = "HELLO_VALUE"
+      invalid_bridge_package = JSON.parse(valid_json)
+      invalid_bridge_package.fetch("tier2_bridge")["package"] = "../hello"
       mutations = {
         "duplicate key"       => valid_json.sub('"schema":1', '"schema":1,"schema":1'),
         "missing top key"     => JSON.generate(missing_top),
@@ -623,6 +642,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         "missing bridge key"  => JSON.generate(missing_bridge),
         "unknown bridge key"  => JSON.generate(unknown_bridge),
         "bridge value type"   => JSON.generate(invalid_bridge_type),
+        "bridge package"      => JSON.generate(invalid_bridge_package),
         "schema"              => JSON.generate(valid.merge("schema" => 2)),
         "formula hash"        => JSON.generate(valid.merge("formula_sha256" => "f" * 64)),
         "support hash"        => JSON.generate(valid.merge("support_sha256" => "f" * 64)),
@@ -716,6 +736,48 @@ class KandeloFormulaSupportTest < Minitest::Test
       refute environment.key?("HELLO_AMBIENT")
       assert_path_exists fixture.fetch(:resource_dir)/"resource/input.txt"
       assert_path_exists fixture.fetch(:build_path)/"kandelo-package-source/upstream.c"
+    end
+  end
+
+  def test_tier2_helper_executes_an_explicit_attested_registry_package_mapping
+    script_env = { "WASM_POSIX_DEP_PKG_CONFIG_PATH" => "/formula/pkgconfig" }
+    with_tier2_build_fixture(
+      formula_name: "python", package_name: "cpython", script_env:
+    ) do |fixture|
+      out_dir = fixture.fetch(:harness).kandelo_build_package(
+        package: "cpython", script_env: fixture.fetch(:script_env)
+      )
+
+      assert_equal fixture.fetch(:build_path)/"kandelo-package-out", out_dir
+      assert_equal [:sdk, :sysroot], fixture.fetch(:activation_calls)
+      assert_equal ["/usr/bin/bash", fixture.fetch(:script).to_s], fixture.fetch(:harness).system_args
+      assert_equal "cpython", fixture.fetch(:harness).system_environment.fetch("WASM_POSIX_DEP_NAME")
+      assert_path_exists fixture.fetch(:build_path)/"kandelo-package-source/upstream.c"
+    end
+  end
+
+  def test_tier2_helper_rejects_unattested_registry_package_mappings_before_activation
+    script_env = { "WASM_POSIX_DEP_PKG_CONFIG_PATH" => "/formula/pkgconfig" }
+    with_tier2_build_fixture(
+      formula_name: "python", package_name: "cpython", script_env:
+    ) do |fixture|
+      attempts = {
+        "omitted mapping"  => -> { fixture.fetch(:harness).kandelo_build_package(script_env:) },
+        "wrong mapping"    => lambda do
+          fixture.fetch(:harness).kandelo_build_package(package: "python", script_env:)
+        end,
+        "non-string mapping" => lambda do
+          fixture.fetch(:harness).kandelo_build_package(package: 1, script_env:)
+        end,
+      }
+      attempts.each do |label, attempt|
+        error = assert_raises(RuntimeError, label, &attempt)
+        assert_includes error.message, "registry package differs", label
+        assert_empty fixture.fetch(:activation_calls), label
+        assert_nil fixture.fetch(:harness).system_calls, label
+        assert_path_exists fixture.fetch(:build_path)/"upstream.c", label
+        refute_path_exists fixture.fetch(:build_path)/"kandelo-package-source", label
+      end
     end
   end
 
