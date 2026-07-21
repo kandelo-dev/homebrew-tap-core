@@ -1318,7 +1318,8 @@ class KandeloFormulaSupportTest < Minitest::Test
         writable_guest_directories: ["/home/linuxbrew/.linuxbrew/var/program"],
         writable_host_directories:  { "/work" => "/formula/test output" },
         expected_fork_descendants:  2,
-        timeout_ms:                 120_000
+        timeout_ms:                 120_000,
+        completion_output:          "ready now"
       )
 
       assert_equal "runtime-ok\n", output
@@ -1341,6 +1342,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_equal({ "/work" => "/formula/test output" }, config.fetch("writableHostDirectories"))
       assert_equal 2, config.fetch("expectedForkDescendants")
       assert_equal 120_000, config.fetch("timeoutMs")
+      assert_equal "ready now", config.fetch("completionOutput")
       assert_equal "kandelo_run_pty_wasm", harness.recorded_launcher
       refute_path_exists host_dist
     end
@@ -1425,6 +1427,28 @@ class KandeloFormulaSupportTest < Minitest::Test
 
       assert_includes error.message, "PTY timeout must be a positive integer number of milliseconds"
     end
+  end
+
+  def test_pty_execution_rejects_invalid_completion_output
+    ["", "ready\0now", 1, "x" * 4097].each do |completion_output|
+      error = assert_raises(RuntimeError) do
+        Harness.new.kandelo_run_pty_wasm(
+          "program.wasm", [], inputs: [], completion_output: completion_output
+        )
+      end
+
+      assert_includes error.message, "PTY completion output must be a nonempty string"
+    end
+  end
+
+  def test_pty_execution_rejects_nonzero_expected_status_with_completion_output
+    error = assert_raises(RuntimeError) do
+      Harness.new.kandelo_run_pty_wasm(
+        "program.wasm", [], inputs: [], completion_output: "ready", expected_status: 1
+      )
+    end
+
+    assert_includes error.message, "PTY completion output requires expected status zero"
   end
 
   def test_pty_execution_rejects_an_empty_guest_argv0
