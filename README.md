@@ -87,10 +87,10 @@ Formula source currently present in this repository includes:
   external, integrity-checked demo asset); and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
 
-These seven exact-shell Formulae intentionally use the transitional
-`kandelo_build_package` bridge for their first bottle proof. Their Formulae
-pin source identity, declare native and target dependencies, retain every
-current shell output, validate final Wasm artifacts, and run through Kandelo.
+These seven exact-shell Formulae and Ruby intentionally use the transitional
+`kandelo_build_package` bridge for their first bottle proof. Their Formulae pin
+source identity, declare native and target dependencies, retain every current
+shell output, validate final Wasm artifacts, and run through Kandelo.
 The six recipes that accept already-extracted source isolate Homebrew's
 checksum-verified tree from sibling caller-owned work and output roots; neither
 the verified source nor the reviewed Kandelo checkout is a build destination.
@@ -109,9 +109,14 @@ not this source inventory, to decide whether a bottle is live.
 
 The SDK is not yet a Homebrew dependency. Trusted builds supply an
 `HOMEBREW_KANDELO_ROOT` checkout containing the SDK, sysroot, kernel, and Node
-host used by Formula `test do` blocks. Guest installation therefore requires a
-published Kandelo bottle; building from source is currently a maintainer and CI
-workflow.
+host used by Formula `test do` blocks. Registry-bridged source builds also
+require the trusted publisher's fixed, read-only Tier-2 attestation before
+Homebrew evaluates the Formula. The attestation binds the exact Formula,
+support module, package metadata, build script, source identity, architecture,
+and permitted script environment. It is absent from ordinary consumer
+installs, so those installs cannot use the bridge and require a published
+Kandelo bottle. This is an intentional fail-closed boundary, not general
+source-build support.
 
 During a source build, the shared Formula support removes Homebrew's global
 `bin`/`sbin` directories and Kandelo runtime dependency executable directories

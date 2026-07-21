@@ -10,7 +10,12 @@ wasm cross-compilation, and kernel-backed tests belong in the shared
 Simple packages build Homebrew's staged source directly in `install`. The
 transitional `kandelo_build_package` registry-script bridge is reserved for
 heavy ports whose build logic has not yet been decomposed, and each use remains
-explicit migration debt.
+explicit migration debt. That bridge is executable only in the protected
+publisher after it installs a fixed, read-only Tier-2 attestation binding the
+complete Formula and registry-build input closure. Ordinary `brew install`
+consumers do not receive that authority: they must pour a published bottle, and
+a registry-bridged Formula without a bottle must fail closed rather than fall
+back to source.
 
 Formula tests must execute produced Wasm through Kandelo. Formula `version`
 plus `revision` defines the Homebrew package version; a bottle `rebuild`
