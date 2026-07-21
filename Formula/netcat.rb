@@ -37,7 +37,7 @@ class Netcat < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "c91ab7e7944a79927cc609fe78dffe789e77172f777852f964cb36242370ec9d"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "e9bd9050f4c0ecc924aaf03521e963e71294b9e711822c62f767c5147944cee1"
   end
 
 end

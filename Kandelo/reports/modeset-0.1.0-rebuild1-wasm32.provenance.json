@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 27485,
+    "cache_key_sha": "30171effab671b29d6dab42b437bcff6a15e1dee2636e29ddcb114e5aa28f8c4",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "30171effab671b29d6dab42b437bcff6a15e1dee2636e29ddcb114e5aa28f8c4",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/modeset/blobs/sha256:30171effab671b29d6dab42b437bcff6a15e1dee2636e29ddcb114e5aa28f8c4"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29816775446",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
+  },
+  "formula": {
+    "path": "Formula/modeset.rb",
+    "sha256": "25b28bc2917d5e50344ea92346e29370dffcb46014b2f37bc7210d8d86309631"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/modeset.json",
+      "sha256": "556edf94b5a4ea37a4a7ca82ee7417c5404a6d6251dbae4f9102bae9cbffe7ef"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/modeset-0.1.0-rebuild1-wasm32.json",
+      "sha256": "81ccf9419fe3c991e2637d1bb21c2cbc450f713e116bcd3e67f2d3aec4f2bd87"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "7ecba2321afa87abc0fdb25e136ebde74a7c322b2877b36edd679371d3dd0149"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/modeset-0.1.0-rebuild1-wasm32.provenance.json",
+      "sha256": "db934787626d697ce04195d8f55eb411c625db4b66d8a4c460390bbc896006c1"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "ac1c16ee3e5b3a248f5ab7e55db8172060c1b0d6",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 1,
+    "kandelo_abi": 41,
+    "package": "modeset",
+    "version": "0.1.0"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/modeset.json",
+          "Kandelo/link/modeset-0.1.0-rebuild1-wasm32.json",
+          "Kandelo/reports/modeset-0.1.0-rebuild1-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured modeset from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_kms_wasm",
+          "exact bottle sha256: 30171effab671b29d6dab42b437bcff6a15e1dee2636e29ddcb114e5aa28f8c4"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

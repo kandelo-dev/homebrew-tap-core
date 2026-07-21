@@ -35,7 +35,7 @@ class Lsof < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "2073d789b743be35cfe8d7d91fadde98f2ff93c4788f1ab5a836da1a87009f66"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "0571fa00405e33efd7113d471d0b2ba739c696cfc8e6284c552393f36f60ceef"
   end
 
 end

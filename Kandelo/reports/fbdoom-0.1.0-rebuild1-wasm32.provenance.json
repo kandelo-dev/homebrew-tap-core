@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 186864,
+    "cache_key_sha": "632594489f1c89e77bf955daa33bcb651531a296e1d9eca1e34198cd80b81525",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "632594489f1c89e77bf955daa33bcb651531a296e1d9eca1e34198cd80b81525",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/fbdoom/blobs/sha256:632594489f1c89e77bf955daa33bcb651531a296e1d9eca1e34198cd80b81525"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29816774933",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "2e67ce1d1776b3ab8b2f8cc89f88bfa805369487f19b6a2eb154c4919dd1fe96"
+  },
+  "formula": {
+    "path": "Formula/fbdoom.rb",
+    "sha256": "a2d824945a009e1185fff886d058f78ed63a9a589c576e754499d9c5f8922ee1"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/fbdoom.json",
+      "sha256": "be02db0c4670810f9282454ea24a700207c661794221061634ee7abdc6d90f14"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/fbdoom-0.1.0-rebuild1-wasm32.json",
+      "sha256": "5bff69ce9aeb5c10ca64096f0d1b698a598a8792658b6f451dd6f8c9e35ef179"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "7ecba2321afa87abc0fdb25e136ebde74a7c322b2877b36edd679371d3dd0149"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/fbdoom-0.1.0-rebuild1-wasm32.provenance.json",
+      "sha256": "aa02151c974ff596495c11613f4efe8f1fb3a0d31aa716573793c8c52cefd7c1"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "ac1c16ee3e5b3a248f5ab7e55db8172060c1b0d6",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 1,
+    "kandelo_abi": 41,
+    "package": "fbdoom",
+    "version": "0.1.0"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/fbdoom.json",
+          "Kandelo/link/fbdoom-0.1.0-rebuild1-wasm32.json",
+          "Kandelo/reports/fbdoom-0.1.0-rebuild1-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured fbdoom from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_pty_wasm",
+          "exact bottle sha256: 632594489f1c89e77bf955daa33bcb651531a296e1d9eca1e34198cd80b81525"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

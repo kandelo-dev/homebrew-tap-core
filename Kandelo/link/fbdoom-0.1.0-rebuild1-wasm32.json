@@ -1,0 +1,33 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 186864,
+    "cache_key_sha": "632594489f1c89e77bf955daa33bcb651531a296e1d9eca1e34198cd80b81525",
+    "payload_root": "fbdoom/0.1.0",
+    "sha256": "632594489f1c89e77bf955daa33bcb651531a296e1d9eca1e34198cd80b81525",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/fbdoom/blobs/sha256:632594489f1c89e77bf955daa33bcb651531a296e1d9eca1e34198cd80b81525"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/fbdoom/0.1.0",
+  "links": [
+    {
+      "source": "bin/fbdoom",
+      "target": "bin/fbdoom",
+      "type": "symlink"
+    }
+  ],
+  "package": "fbdoom",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/fbdoom.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "0.1.0"
+}

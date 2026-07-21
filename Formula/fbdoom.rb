@@ -81,7 +81,7 @@ class Fbdoom < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "e66d8f942018e02268bb50387216d7d907e1fdf1cee96d8fa5a032b04e0a79c4"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "632594489f1c89e77bf955daa33bcb651531a296e1d9eca1e34198cd80b81525"
   end
 
 end
