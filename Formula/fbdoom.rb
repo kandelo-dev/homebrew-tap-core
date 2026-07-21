@@ -3,6 +3,8 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Fbdoom < Formula
   include KandeloFormulaSupport
 
+  KANDELO_REGISTRY_BRIDGE = true
+
   FBDOOM_COMMIT = "17280163bc95e5d954d2efaa0633489b763b4cd1".freeze
   CHOCOLATE_DOOM_COMMIT = "35fb1372d10756ca27eca05665bd8a7cebc71c05".freeze
   CHOCOLATE_DOOM_URL = "https://github.com/chocolate-doom/chocolate-doom/archive/#{CHOCOLATE_DOOM_COMMIT}.tar.gz".freeze
@@ -34,8 +36,9 @@ class Fbdoom < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-    source_dir = kandelo_stage_verified_formula_source
-    chocolate_source = buildpath/"kandelo-chocolate-doom-source"
+    resource_root = buildpath/"kandelo-package-resources"
+    chocolate_source = resource_root/"chocolate-doom"
+    resource_root.mkpath
 
     # Transitional Tier-2 bridge: preserve the registry recipe's reviewed
     # fbdev/input/audio patch set. Homebrew verifies both pinned archives; the
@@ -47,16 +50,11 @@ class Fbdoom < Formula
       end
     end
 
-    out_dir = kandelo_build_package(
-      "fbdoom", "build-fbdoom.sh", stable.url, stable.checksum.hexdigest,
-      script_env: {
-        "FBDOOM_CHOCOLATE_DOOM_SOURCE_DIR"    => chocolate_source,
-        "FBDOOM_CHOCOLATE_DOOM_SOURCE_SHA256" => CHOCOLATE_DOOM_SHA256,
-        "FBDOOM_CHOCOLATE_DOOM_SOURCE_URL"    => CHOCOLATE_DOOM_URL,
-        "WASM_POSIX_DEP_SOURCE_DIR"           => source_dir,
-        "WASM_POSIX_INSTALL_LOCAL_MIRROR"     => "0",
-      }
-    )
+    out_dir = kandelo_build_package(script_env: {
+      "FBDOOM_CHOCOLATE_DOOM_SOURCE_DIR"    => chocolate_source,
+      "FBDOOM_CHOCOLATE_DOOM_SOURCE_SHA256" => CHOCOLATE_DOOM_SHA256,
+      "FBDOOM_CHOCOLATE_DOOM_SOURCE_URL"    => CHOCOLATE_DOOM_URL,
+    })
     kandelo_validate_wasm_artifact(out_dir/"fbdoom.wasm", fork: :forbidden)
     kandelo_install_bin(out_dir, "fbdoom.wasm", "fbdoom")
   end
@@ -82,6 +80,7 @@ class Fbdoom < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "e66d8f942018e02268bb50387216d7d907e1fdf1cee96d8fa5a032b04e0a79c4"
   end
 

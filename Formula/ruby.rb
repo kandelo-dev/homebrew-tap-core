@@ -3,33 +3,35 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Ruby < Formula
   include KandeloFormulaSupport
 
+  KANDELO_REGISTRY_BRIDGE = true
+
   desc "Interpreter for the Ruby scripting language on Kandelo (with psych/YAML)"
   homepage "https://www.ruby-lang.org/"
   url "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.5.tar.gz"
+  version "4.0.5"
   sha256 "7d6149079a63f8ae1d326c9fa65c6019ba2dc3155eae7b39159817911c88958e"
   license any_of: ["Ruby", "BSD-2-Clause"]
 
   # No bottle block yet: bottles are machine-generated on publish (Track C) via
-  # brew bottle / pr-pull. Until then `brew install` builds from source. A
-  # hand-written placeholder sha would make a default install try to pour a
-  # nonexistent bottle and fail rather than build from source.
+  # brew bottle / pr-pull. Until then ordinary installs must fail rather than
+  # enter this protected publisher-only source bridge. A hand-written
+  # placeholder sha would make a default install try to pour a nonexistent
+  # bottle and obscure that publication boundary.
   # The registry bridge resolves its host target with rustc and builds
   # wasm-local-root-spill with cargo/rustc inside caller-owned scratch. Keep
   # that native toolchain explicit instead of depending on the publisher PATH.
   depends_on "rust" => :build
+  depends_on "wabt" => :build
   depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin"
   skip_clean "lib/ruby"
 
   def install
-    out_dir = kandelo_build_package("ruby", "build-ruby.sh",
-      "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.5.tar.gz",
-      "7d6149079a63f8ae1d326c9fa65c6019ba2dc3155eae7b39159817911c88958e",
-      script_env: {
-        "RUBY_VERSION"            => version.to_s,
-        "WASM_POSIX_DEP_ZLIB_DIR" => formula_opt_prefix("kandelo-dev/tap-core/zlib"),
-      })
+    out_dir = kandelo_build_package(script_env: {
+      "RUBY_VERSION"            => version.to_s,
+      "WASM_POSIX_DEP_ZLIB_DIR" => formula_opt_prefix("kandelo-dev/tap-core/zlib"),
+    })
     kandelo_install_bin(out_dir, "ruby.wasm", "ruby")
 
     runtime_stage = buildpath/"ruby-runtime-stage"

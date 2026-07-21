@@ -3,6 +3,8 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Modeset < Formula
   include KandeloFormulaSupport
 
+  KANDELO_REGISTRY_BRIDGE = true
+
   desc "DRM/KMS fluid simulation for Kandelo"
   homepage "https://github.com/Automattic/kandelo"
   url "https://github.com/Automattic/kandelo/archive/1a83af5de608c10f485082c6ef0efa845f747436.tar.gz"
@@ -17,17 +19,10 @@ class Modeset < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-    source_dir = kandelo_stage_verified_formula_source
 
     # Transitional Tier-2 bridge: the registry recipe binds the program to
     # Kandelo's ABI-coupled libdrm/GBM/EGL/GLES sysroot stubs.
-    out_dir = kandelo_build_package(
-      "modeset", "build-modeset.sh", stable.url, stable.checksum.hexdigest,
-      script_env: {
-        "WASM_POSIX_DEP_SOURCE_DIR"       => source_dir,
-        "WASM_POSIX_INSTALL_LOCAL_MIRROR" => "0",
-      }
-    )
+    out_dir = kandelo_build_package(script_env: {})
     kandelo_validate_wasm_artifact(out_dir/"modeset.wasm")
     kandelo_install_bin(out_dir, "modeset.wasm", "modeset")
   end
@@ -39,6 +34,7 @@ class Modeset < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536"
   end
 
