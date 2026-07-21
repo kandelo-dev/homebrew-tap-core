@@ -334,8 +334,13 @@ module KandeloFormulaSupport
       secondary_root = trusted_env.fetch("KANDELO_HOMEBREW_KANDELO_ROOT").to_s
       primary_arch = trusted_env.fetch("HOMEBREW_KANDELO_ARCH").to_s
       secondary_arch = trusted_env.fetch("KANDELO_HOMEBREW_ARCH").to_s
-      if primary_root.empty? || secondary_root != primary_root ||
-         primary_arch != arch || secondary_arch != arch
+      # Homebrew intentionally re-execs `brew` with only its fixed allowlist
+      # and HOMEBREW_* variables. The HOMEBREW_KANDELO_* values are therefore
+      # the authoritative Formula-evaluation bridge. Older direct callers may
+      # still provide the KANDELO_HOMEBREW_* aliases; accept their absence, but
+      # fail closed if a present alias conflicts with the authoritative value.
+      if primary_root.empty? || (!secondary_root.empty? && secondary_root != primary_root) ||
+         primary_arch != arch || (!secondary_arch.empty? && secondary_arch != arch)
         raise "Tier-2 publisher root or architecture environment is inconsistent"
       end
       root, = exact_directory.call(Pathname(primary_root), "Kandelo root")
