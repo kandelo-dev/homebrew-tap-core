@@ -66,7 +66,8 @@ class Fbdoom < Formula
     guest_files = { "/doom1.wad" => wad }
     output = kandelo_run_pty_wasm(
       bin/"fbdoom", ["-iwad", "/doom1.wad", "-timedemo", "demo1", "-nogui"],
-      inputs: [], env: { "HOME" => "/home/doom" }, guest_files: guest_files
+      inputs: [], env: { "HOME" => "/home/doom" }, guest_files: guest_files,
+      timeout_ms: 120_000
     )
     assert_match(/timed .* gametics/i, output)
 

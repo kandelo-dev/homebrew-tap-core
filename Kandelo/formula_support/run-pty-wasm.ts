@@ -44,6 +44,7 @@ interface PtyConfig {
   inputDelayMs: number;
   cols: number;
   rows: number;
+  timeoutMs?: number | null;
   expectedForkDescendants?: number;
 }
 
@@ -159,6 +160,12 @@ async function main(): Promise<void> {
   }
   if (config.rerunInputs != null && !Array.isArray(config.rerunInputs)) {
     throw new Error("rerunInputs must be an array when present");
+  }
+  if (
+    config.timeoutMs != null &&
+    (!Number.isSafeInteger(config.timeoutMs) || config.timeoutMs <= 0)
+  ) {
+    throw new Error("timeoutMs must be a positive integer");
   }
   const expectedForkDescendants = parseExpectedForkDescendants(
     String(config.expectedForkDescendants ?? 0),
@@ -434,10 +441,9 @@ async function main(): Promise<void> {
 
     try {
       await host.init();
-      const timeoutMs = Number.parseInt(
-        guestEnv.TIMEOUT ?? process.env.TIMEOUT ?? "30000",
-        10,
-      );
+      const timeoutMs =
+        config.timeoutMs ??
+        Number.parseInt(guestEnv.TIMEOUT ?? process.env.TIMEOUT ?? "30000", 10);
       const run = async (inputs: string[]): Promise<number> => {
         forkDescendants = createForkDescendantTracker();
         const deadline = Date.now() + timeoutMs;
