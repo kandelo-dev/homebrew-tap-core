@@ -459,6 +459,12 @@ class Git < Formula
     )
     assert_match(/\A[0-9a-f]{40}\tHEAD\n\z/, remote_head)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "469ed461a7e454332d62c70d776335a870e2a9d72271f6d258011465d3818fe9"
+  end
+
 end
 
 __END__
