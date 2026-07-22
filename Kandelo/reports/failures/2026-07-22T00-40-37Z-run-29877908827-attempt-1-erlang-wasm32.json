@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "formula": "erlang",
+  "arch": "wasm32",
+  "release_tag": "bottles-abi-v41",
+  "status": "failed",
+  "attempted_at": "2026-07-22T00:40:37Z",
+  "attempted_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29877908827",
+  "kandelo_commit": "9c4ad79f51bfdcc825eed38a658df5ca6d07e043",
+  "tap_commit": "8fde6caab88f68436dce6fba546a2d4111794a89",
+  "error": "publish-handoff=success; validate-payload=success; publish=failure",
+  "error_detail": "Preparing worktree (detached HEAD 8fde6ca)\nPreparing worktree (detached HEAD 8fde6ca)\nwarning: function `activate_index` is never used\n   --> tools/xtask/src/index_candidate.rs:165:4\n    |\n165 | fn activate_index(\n    |    ^^^^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nPreparing worktree (detached HEAD 8fde6ca)\nhomebrew-dependency-provenance.py: primary tap override has working-tree changes\n"
+}
