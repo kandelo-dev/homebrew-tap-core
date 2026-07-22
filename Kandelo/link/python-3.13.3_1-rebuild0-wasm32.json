@@ -1,0 +1,3768 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 7904045,
+    "cache_key_sha": "4389c20b2d0dcd71d8111f08c5e5d54add1af0ba51e7110549bc24a3cd07bdb2",
+    "payload_root": "python/3.13.3_1",
+    "sha256": "4389c20b2d0dcd71d8111f08c5e5d54add1af0ba51e7110549bc24a3cd07bdb2",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/python/blobs/sha256:4389c20b2d0dcd71d8111f08c5e5d54add1af0ba51e7110549bc24a3cd07bdb2"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/python/3.13.3_1",
+  "links": [
+    {
+      "source": "bin/python",
+      "target": "bin/python",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/python3",
+      "target": "bin/python3",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/python3.13",
+      "target": "bin/python3.13",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/__future__.py",
+      "target": "lib/python3.13/__future__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/__hello__.py",
+      "target": "lib/python3.13/__hello__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/__phello__/__init__.py",
+      "target": "lib/python3.13/__phello__/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/__phello__/ham/__init__.py",
+      "target": "lib/python3.13/__phello__/ham/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/__phello__/ham/eggs.py",
+      "target": "lib/python3.13/__phello__/ham/eggs.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/__phello__/spam.py",
+      "target": "lib/python3.13/__phello__/spam.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_aix_support.py",
+      "target": "lib/python3.13/_aix_support.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_android_support.py",
+      "target": "lib/python3.13/_android_support.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_apple_support.py",
+      "target": "lib/python3.13/_apple_support.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_collections_abc.py",
+      "target": "lib/python3.13/_collections_abc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_colorize.py",
+      "target": "lib/python3.13/_colorize.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_compat_pickle.py",
+      "target": "lib/python3.13/_compat_pickle.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_compression.py",
+      "target": "lib/python3.13/_compression.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_ios_support.py",
+      "target": "lib/python3.13/_ios_support.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_markupbase.py",
+      "target": "lib/python3.13/_markupbase.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_opcode_metadata.py",
+      "target": "lib/python3.13/_opcode_metadata.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_osx_support.py",
+      "target": "lib/python3.13/_osx_support.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_py_abc.py",
+      "target": "lib/python3.13/_py_abc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pydatetime.py",
+      "target": "lib/python3.13/_pydatetime.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pydecimal.py",
+      "target": "lib/python3.13/_pydecimal.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyio.py",
+      "target": "lib/python3.13/_pyio.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pylong.py",
+      "target": "lib/python3.13/_pylong.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/__init__.py",
+      "target": "lib/python3.13/_pyrepl/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/__main__.py",
+      "target": "lib/python3.13/_pyrepl/__main__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/_minimal_curses.py",
+      "target": "lib/python3.13/_pyrepl/_minimal_curses.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/_threading_handler.py",
+      "target": "lib/python3.13/_pyrepl/_threading_handler.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/commands.py",
+      "target": "lib/python3.13/_pyrepl/commands.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/completing_reader.py",
+      "target": "lib/python3.13/_pyrepl/completing_reader.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/console.py",
+      "target": "lib/python3.13/_pyrepl/console.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/curses.py",
+      "target": "lib/python3.13/_pyrepl/curses.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/fancy_termios.py",
+      "target": "lib/python3.13/_pyrepl/fancy_termios.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/historical_reader.py",
+      "target": "lib/python3.13/_pyrepl/historical_reader.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/input.py",
+      "target": "lib/python3.13/_pyrepl/input.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/keymap.py",
+      "target": "lib/python3.13/_pyrepl/keymap.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/main.py",
+      "target": "lib/python3.13/_pyrepl/main.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/mypy.ini",
+      "target": "lib/python3.13/_pyrepl/mypy.ini",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/pager.py",
+      "target": "lib/python3.13/_pyrepl/pager.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/reader.py",
+      "target": "lib/python3.13/_pyrepl/reader.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/readline.py",
+      "target": "lib/python3.13/_pyrepl/readline.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/simple_interact.py",
+      "target": "lib/python3.13/_pyrepl/simple_interact.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/trace.py",
+      "target": "lib/python3.13/_pyrepl/trace.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/types.py",
+      "target": "lib/python3.13/_pyrepl/types.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/unix_console.py",
+      "target": "lib/python3.13/_pyrepl/unix_console.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/unix_eventqueue.py",
+      "target": "lib/python3.13/_pyrepl/unix_eventqueue.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/utils.py",
+      "target": "lib/python3.13/_pyrepl/utils.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_pyrepl/windows_console.py",
+      "target": "lib/python3.13/_pyrepl/windows_console.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_sitebuiltins.py",
+      "target": "lib/python3.13/_sitebuiltins.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_strptime.py",
+      "target": "lib/python3.13/_strptime.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_threading_local.py",
+      "target": "lib/python3.13/_threading_local.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/_weakrefset.py",
+      "target": "lib/python3.13/_weakrefset.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/abc.py",
+      "target": "lib/python3.13/abc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/antigravity.py",
+      "target": "lib/python3.13/antigravity.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/argparse.py",
+      "target": "lib/python3.13/argparse.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ast.py",
+      "target": "lib/python3.13/ast.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/__init__.py",
+      "target": "lib/python3.13/asyncio/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/__main__.py",
+      "target": "lib/python3.13/asyncio/__main__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/base_events.py",
+      "target": "lib/python3.13/asyncio/base_events.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/base_futures.py",
+      "target": "lib/python3.13/asyncio/base_futures.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/base_subprocess.py",
+      "target": "lib/python3.13/asyncio/base_subprocess.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/base_tasks.py",
+      "target": "lib/python3.13/asyncio/base_tasks.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/constants.py",
+      "target": "lib/python3.13/asyncio/constants.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/coroutines.py",
+      "target": "lib/python3.13/asyncio/coroutines.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/events.py",
+      "target": "lib/python3.13/asyncio/events.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/exceptions.py",
+      "target": "lib/python3.13/asyncio/exceptions.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/format_helpers.py",
+      "target": "lib/python3.13/asyncio/format_helpers.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/futures.py",
+      "target": "lib/python3.13/asyncio/futures.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/locks.py",
+      "target": "lib/python3.13/asyncio/locks.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/log.py",
+      "target": "lib/python3.13/asyncio/log.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/mixins.py",
+      "target": "lib/python3.13/asyncio/mixins.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/proactor_events.py",
+      "target": "lib/python3.13/asyncio/proactor_events.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/protocols.py",
+      "target": "lib/python3.13/asyncio/protocols.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/queues.py",
+      "target": "lib/python3.13/asyncio/queues.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/runners.py",
+      "target": "lib/python3.13/asyncio/runners.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/selector_events.py",
+      "target": "lib/python3.13/asyncio/selector_events.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/sslproto.py",
+      "target": "lib/python3.13/asyncio/sslproto.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/staggered.py",
+      "target": "lib/python3.13/asyncio/staggered.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/streams.py",
+      "target": "lib/python3.13/asyncio/streams.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/subprocess.py",
+      "target": "lib/python3.13/asyncio/subprocess.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/taskgroups.py",
+      "target": "lib/python3.13/asyncio/taskgroups.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/tasks.py",
+      "target": "lib/python3.13/asyncio/tasks.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/threads.py",
+      "target": "lib/python3.13/asyncio/threads.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/timeouts.py",
+      "target": "lib/python3.13/asyncio/timeouts.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/transports.py",
+      "target": "lib/python3.13/asyncio/transports.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/trsock.py",
+      "target": "lib/python3.13/asyncio/trsock.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/unix_events.py",
+      "target": "lib/python3.13/asyncio/unix_events.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/windows_events.py",
+      "target": "lib/python3.13/asyncio/windows_events.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/asyncio/windows_utils.py",
+      "target": "lib/python3.13/asyncio/windows_utils.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/base64.py",
+      "target": "lib/python3.13/base64.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/bdb.py",
+      "target": "lib/python3.13/bdb.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/bisect.py",
+      "target": "lib/python3.13/bisect.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/bz2.py",
+      "target": "lib/python3.13/bz2.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/cProfile.py",
+      "target": "lib/python3.13/cProfile.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/calendar.py",
+      "target": "lib/python3.13/calendar.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/cmd.py",
+      "target": "lib/python3.13/cmd.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/code.py",
+      "target": "lib/python3.13/code.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/codecs.py",
+      "target": "lib/python3.13/codecs.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/codeop.py",
+      "target": "lib/python3.13/codeop.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/collections/__init__.py",
+      "target": "lib/python3.13/collections/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/colorsys.py",
+      "target": "lib/python3.13/colorsys.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/compileall.py",
+      "target": "lib/python3.13/compileall.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/concurrent/__init__.py",
+      "target": "lib/python3.13/concurrent/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/concurrent/futures/__init__.py",
+      "target": "lib/python3.13/concurrent/futures/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/concurrent/futures/_base.py",
+      "target": "lib/python3.13/concurrent/futures/_base.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/concurrent/futures/process.py",
+      "target": "lib/python3.13/concurrent/futures/process.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/concurrent/futures/thread.py",
+      "target": "lib/python3.13/concurrent/futures/thread.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/configparser.py",
+      "target": "lib/python3.13/configparser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/contextlib.py",
+      "target": "lib/python3.13/contextlib.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/contextvars.py",
+      "target": "lib/python3.13/contextvars.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/copy.py",
+      "target": "lib/python3.13/copy.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/copyreg.py",
+      "target": "lib/python3.13/copyreg.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/csv.py",
+      "target": "lib/python3.13/csv.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/__init__.py",
+      "target": "lib/python3.13/ctypes/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/_aix.py",
+      "target": "lib/python3.13/ctypes/_aix.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/_endian.py",
+      "target": "lib/python3.13/ctypes/_endian.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/macholib/README.ctypes",
+      "target": "lib/python3.13/ctypes/macholib/README.ctypes",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/macholib/__init__.py",
+      "target": "lib/python3.13/ctypes/macholib/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/macholib/dyld.py",
+      "target": "lib/python3.13/ctypes/macholib/dyld.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/macholib/dylib.py",
+      "target": "lib/python3.13/ctypes/macholib/dylib.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/macholib/fetch_macholib",
+      "target": "lib/python3.13/ctypes/macholib/fetch_macholib",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/macholib/fetch_macholib.bat",
+      "target": "lib/python3.13/ctypes/macholib/fetch_macholib.bat",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/macholib/framework.py",
+      "target": "lib/python3.13/ctypes/macholib/framework.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/util.py",
+      "target": "lib/python3.13/ctypes/util.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ctypes/wintypes.py",
+      "target": "lib/python3.13/ctypes/wintypes.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/curses/__init__.py",
+      "target": "lib/python3.13/curses/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/curses/ascii.py",
+      "target": "lib/python3.13/curses/ascii.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/curses/has_key.py",
+      "target": "lib/python3.13/curses/has_key.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/curses/panel.py",
+      "target": "lib/python3.13/curses/panel.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/curses/textpad.py",
+      "target": "lib/python3.13/curses/textpad.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/dataclasses.py",
+      "target": "lib/python3.13/dataclasses.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/datetime.py",
+      "target": "lib/python3.13/datetime.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/dbm/__init__.py",
+      "target": "lib/python3.13/dbm/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/dbm/dumb.py",
+      "target": "lib/python3.13/dbm/dumb.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/dbm/gnu.py",
+      "target": "lib/python3.13/dbm/gnu.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/dbm/ndbm.py",
+      "target": "lib/python3.13/dbm/ndbm.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/dbm/sqlite3.py",
+      "target": "lib/python3.13/dbm/sqlite3.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/decimal.py",
+      "target": "lib/python3.13/decimal.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/difflib.py",
+      "target": "lib/python3.13/difflib.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/dis.py",
+      "target": "lib/python3.13/dis.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/doctest.py",
+      "target": "lib/python3.13/doctest.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/__init__.py",
+      "target": "lib/python3.13/email/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/_encoded_words.py",
+      "target": "lib/python3.13/email/_encoded_words.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/_header_value_parser.py",
+      "target": "lib/python3.13/email/_header_value_parser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/_parseaddr.py",
+      "target": "lib/python3.13/email/_parseaddr.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/_policybase.py",
+      "target": "lib/python3.13/email/_policybase.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/architecture.rst",
+      "target": "lib/python3.13/email/architecture.rst",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/base64mime.py",
+      "target": "lib/python3.13/email/base64mime.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/charset.py",
+      "target": "lib/python3.13/email/charset.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/contentmanager.py",
+      "target": "lib/python3.13/email/contentmanager.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/encoders.py",
+      "target": "lib/python3.13/email/encoders.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/errors.py",
+      "target": "lib/python3.13/email/errors.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/feedparser.py",
+      "target": "lib/python3.13/email/feedparser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/generator.py",
+      "target": "lib/python3.13/email/generator.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/header.py",
+      "target": "lib/python3.13/email/header.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/headerregistry.py",
+      "target": "lib/python3.13/email/headerregistry.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/iterators.py",
+      "target": "lib/python3.13/email/iterators.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/message.py",
+      "target": "lib/python3.13/email/message.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/mime/__init__.py",
+      "target": "lib/python3.13/email/mime/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/mime/application.py",
+      "target": "lib/python3.13/email/mime/application.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/mime/audio.py",
+      "target": "lib/python3.13/email/mime/audio.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/mime/base.py",
+      "target": "lib/python3.13/email/mime/base.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/mime/image.py",
+      "target": "lib/python3.13/email/mime/image.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/mime/message.py",
+      "target": "lib/python3.13/email/mime/message.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/mime/multipart.py",
+      "target": "lib/python3.13/email/mime/multipart.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/mime/nonmultipart.py",
+      "target": "lib/python3.13/email/mime/nonmultipart.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/mime/text.py",
+      "target": "lib/python3.13/email/mime/text.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/parser.py",
+      "target": "lib/python3.13/email/parser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/policy.py",
+      "target": "lib/python3.13/email/policy.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/quoprimime.py",
+      "target": "lib/python3.13/email/quoprimime.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/email/utils.py",
+      "target": "lib/python3.13/email/utils.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/__init__.py",
+      "target": "lib/python3.13/encodings/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/aliases.py",
+      "target": "lib/python3.13/encodings/aliases.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/ascii.py",
+      "target": "lib/python3.13/encodings/ascii.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/base64_codec.py",
+      "target": "lib/python3.13/encodings/base64_codec.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/big5.py",
+      "target": "lib/python3.13/encodings/big5.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/big5hkscs.py",
+      "target": "lib/python3.13/encodings/big5hkscs.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/bz2_codec.py",
+      "target": "lib/python3.13/encodings/bz2_codec.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/charmap.py",
+      "target": "lib/python3.13/encodings/charmap.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp037.py",
+      "target": "lib/python3.13/encodings/cp037.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1006.py",
+      "target": "lib/python3.13/encodings/cp1006.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1026.py",
+      "target": "lib/python3.13/encodings/cp1026.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1125.py",
+      "target": "lib/python3.13/encodings/cp1125.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1140.py",
+      "target": "lib/python3.13/encodings/cp1140.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1250.py",
+      "target": "lib/python3.13/encodings/cp1250.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1251.py",
+      "target": "lib/python3.13/encodings/cp1251.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1252.py",
+      "target": "lib/python3.13/encodings/cp1252.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1253.py",
+      "target": "lib/python3.13/encodings/cp1253.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1254.py",
+      "target": "lib/python3.13/encodings/cp1254.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1255.py",
+      "target": "lib/python3.13/encodings/cp1255.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1256.py",
+      "target": "lib/python3.13/encodings/cp1256.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1257.py",
+      "target": "lib/python3.13/encodings/cp1257.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp1258.py",
+      "target": "lib/python3.13/encodings/cp1258.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp273.py",
+      "target": "lib/python3.13/encodings/cp273.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp424.py",
+      "target": "lib/python3.13/encodings/cp424.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp437.py",
+      "target": "lib/python3.13/encodings/cp437.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp500.py",
+      "target": "lib/python3.13/encodings/cp500.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp720.py",
+      "target": "lib/python3.13/encodings/cp720.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp737.py",
+      "target": "lib/python3.13/encodings/cp737.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp775.py",
+      "target": "lib/python3.13/encodings/cp775.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp850.py",
+      "target": "lib/python3.13/encodings/cp850.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp852.py",
+      "target": "lib/python3.13/encodings/cp852.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp855.py",
+      "target": "lib/python3.13/encodings/cp855.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp856.py",
+      "target": "lib/python3.13/encodings/cp856.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp857.py",
+      "target": "lib/python3.13/encodings/cp857.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp858.py",
+      "target": "lib/python3.13/encodings/cp858.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp860.py",
+      "target": "lib/python3.13/encodings/cp860.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp861.py",
+      "target": "lib/python3.13/encodings/cp861.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp862.py",
+      "target": "lib/python3.13/encodings/cp862.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp863.py",
+      "target": "lib/python3.13/encodings/cp863.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp864.py",
+      "target": "lib/python3.13/encodings/cp864.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp865.py",
+      "target": "lib/python3.13/encodings/cp865.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp866.py",
+      "target": "lib/python3.13/encodings/cp866.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp869.py",
+      "target": "lib/python3.13/encodings/cp869.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp874.py",
+      "target": "lib/python3.13/encodings/cp874.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp875.py",
+      "target": "lib/python3.13/encodings/cp875.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp932.py",
+      "target": "lib/python3.13/encodings/cp932.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp949.py",
+      "target": "lib/python3.13/encodings/cp949.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/cp950.py",
+      "target": "lib/python3.13/encodings/cp950.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/euc_jis_2004.py",
+      "target": "lib/python3.13/encodings/euc_jis_2004.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/euc_jisx0213.py",
+      "target": "lib/python3.13/encodings/euc_jisx0213.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/euc_jp.py",
+      "target": "lib/python3.13/encodings/euc_jp.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/euc_kr.py",
+      "target": "lib/python3.13/encodings/euc_kr.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/gb18030.py",
+      "target": "lib/python3.13/encodings/gb18030.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/gb2312.py",
+      "target": "lib/python3.13/encodings/gb2312.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/gbk.py",
+      "target": "lib/python3.13/encodings/gbk.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/hex_codec.py",
+      "target": "lib/python3.13/encodings/hex_codec.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/hp_roman8.py",
+      "target": "lib/python3.13/encodings/hp_roman8.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/hz.py",
+      "target": "lib/python3.13/encodings/hz.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/idna.py",
+      "target": "lib/python3.13/encodings/idna.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso2022_jp.py",
+      "target": "lib/python3.13/encodings/iso2022_jp.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso2022_jp_1.py",
+      "target": "lib/python3.13/encodings/iso2022_jp_1.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso2022_jp_2.py",
+      "target": "lib/python3.13/encodings/iso2022_jp_2.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso2022_jp_2004.py",
+      "target": "lib/python3.13/encodings/iso2022_jp_2004.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso2022_jp_3.py",
+      "target": "lib/python3.13/encodings/iso2022_jp_3.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso2022_jp_ext.py",
+      "target": "lib/python3.13/encodings/iso2022_jp_ext.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso2022_kr.py",
+      "target": "lib/python3.13/encodings/iso2022_kr.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_1.py",
+      "target": "lib/python3.13/encodings/iso8859_1.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_10.py",
+      "target": "lib/python3.13/encodings/iso8859_10.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_11.py",
+      "target": "lib/python3.13/encodings/iso8859_11.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_13.py",
+      "target": "lib/python3.13/encodings/iso8859_13.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_14.py",
+      "target": "lib/python3.13/encodings/iso8859_14.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_15.py",
+      "target": "lib/python3.13/encodings/iso8859_15.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_16.py",
+      "target": "lib/python3.13/encodings/iso8859_16.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_2.py",
+      "target": "lib/python3.13/encodings/iso8859_2.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_3.py",
+      "target": "lib/python3.13/encodings/iso8859_3.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_4.py",
+      "target": "lib/python3.13/encodings/iso8859_4.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_5.py",
+      "target": "lib/python3.13/encodings/iso8859_5.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_6.py",
+      "target": "lib/python3.13/encodings/iso8859_6.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_7.py",
+      "target": "lib/python3.13/encodings/iso8859_7.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_8.py",
+      "target": "lib/python3.13/encodings/iso8859_8.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/iso8859_9.py",
+      "target": "lib/python3.13/encodings/iso8859_9.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/johab.py",
+      "target": "lib/python3.13/encodings/johab.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/koi8_r.py",
+      "target": "lib/python3.13/encodings/koi8_r.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/koi8_t.py",
+      "target": "lib/python3.13/encodings/koi8_t.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/koi8_u.py",
+      "target": "lib/python3.13/encodings/koi8_u.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/kz1048.py",
+      "target": "lib/python3.13/encodings/kz1048.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/latin_1.py",
+      "target": "lib/python3.13/encodings/latin_1.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/mac_arabic.py",
+      "target": "lib/python3.13/encodings/mac_arabic.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/mac_croatian.py",
+      "target": "lib/python3.13/encodings/mac_croatian.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/mac_cyrillic.py",
+      "target": "lib/python3.13/encodings/mac_cyrillic.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/mac_farsi.py",
+      "target": "lib/python3.13/encodings/mac_farsi.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/mac_greek.py",
+      "target": "lib/python3.13/encodings/mac_greek.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/mac_iceland.py",
+      "target": "lib/python3.13/encodings/mac_iceland.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/mac_latin2.py",
+      "target": "lib/python3.13/encodings/mac_latin2.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/mac_roman.py",
+      "target": "lib/python3.13/encodings/mac_roman.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/mac_romanian.py",
+      "target": "lib/python3.13/encodings/mac_romanian.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/mac_turkish.py",
+      "target": "lib/python3.13/encodings/mac_turkish.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/mbcs.py",
+      "target": "lib/python3.13/encodings/mbcs.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/oem.py",
+      "target": "lib/python3.13/encodings/oem.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/palmos.py",
+      "target": "lib/python3.13/encodings/palmos.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/ptcp154.py",
+      "target": "lib/python3.13/encodings/ptcp154.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/punycode.py",
+      "target": "lib/python3.13/encodings/punycode.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/quopri_codec.py",
+      "target": "lib/python3.13/encodings/quopri_codec.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/raw_unicode_escape.py",
+      "target": "lib/python3.13/encodings/raw_unicode_escape.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/rot_13.py",
+      "target": "lib/python3.13/encodings/rot_13.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/shift_jis.py",
+      "target": "lib/python3.13/encodings/shift_jis.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/shift_jis_2004.py",
+      "target": "lib/python3.13/encodings/shift_jis_2004.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/shift_jisx0213.py",
+      "target": "lib/python3.13/encodings/shift_jisx0213.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/tis_620.py",
+      "target": "lib/python3.13/encodings/tis_620.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/undefined.py",
+      "target": "lib/python3.13/encodings/undefined.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/unicode_escape.py",
+      "target": "lib/python3.13/encodings/unicode_escape.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/utf_16.py",
+      "target": "lib/python3.13/encodings/utf_16.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/utf_16_be.py",
+      "target": "lib/python3.13/encodings/utf_16_be.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/utf_16_le.py",
+      "target": "lib/python3.13/encodings/utf_16_le.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/utf_32.py",
+      "target": "lib/python3.13/encodings/utf_32.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/utf_32_be.py",
+      "target": "lib/python3.13/encodings/utf_32_be.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/utf_32_le.py",
+      "target": "lib/python3.13/encodings/utf_32_le.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/utf_7.py",
+      "target": "lib/python3.13/encodings/utf_7.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/utf_8.py",
+      "target": "lib/python3.13/encodings/utf_8.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/utf_8_sig.py",
+      "target": "lib/python3.13/encodings/utf_8_sig.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/uu_codec.py",
+      "target": "lib/python3.13/encodings/uu_codec.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/encodings/zlib_codec.py",
+      "target": "lib/python3.13/encodings/zlib_codec.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ensurepip/__init__.py",
+      "target": "lib/python3.13/ensurepip/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ensurepip/__main__.py",
+      "target": "lib/python3.13/ensurepip/__main__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ensurepip/_bundled/pip-25.0.1-py3-none-any.whl",
+      "target": "lib/python3.13/ensurepip/_bundled/pip-25.0.1-py3-none-any.whl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ensurepip/_uninstall.py",
+      "target": "lib/python3.13/ensurepip/_uninstall.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/enum.py",
+      "target": "lib/python3.13/enum.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/filecmp.py",
+      "target": "lib/python3.13/filecmp.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/fileinput.py",
+      "target": "lib/python3.13/fileinput.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/fnmatch.py",
+      "target": "lib/python3.13/fnmatch.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/fractions.py",
+      "target": "lib/python3.13/fractions.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ftplib.py",
+      "target": "lib/python3.13/ftplib.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/functools.py",
+      "target": "lib/python3.13/functools.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/genericpath.py",
+      "target": "lib/python3.13/genericpath.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/getopt.py",
+      "target": "lib/python3.13/getopt.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/getpass.py",
+      "target": "lib/python3.13/getpass.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/gettext.py",
+      "target": "lib/python3.13/gettext.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/glob.py",
+      "target": "lib/python3.13/glob.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/graphlib.py",
+      "target": "lib/python3.13/graphlib.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/gzip.py",
+      "target": "lib/python3.13/gzip.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/hashlib.py",
+      "target": "lib/python3.13/hashlib.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/heapq.py",
+      "target": "lib/python3.13/heapq.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/hmac.py",
+      "target": "lib/python3.13/hmac.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/html/__init__.py",
+      "target": "lib/python3.13/html/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/html/entities.py",
+      "target": "lib/python3.13/html/entities.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/html/parser.py",
+      "target": "lib/python3.13/html/parser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/http/__init__.py",
+      "target": "lib/python3.13/http/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/http/client.py",
+      "target": "lib/python3.13/http/client.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/http/cookiejar.py",
+      "target": "lib/python3.13/http/cookiejar.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/http/cookies.py",
+      "target": "lib/python3.13/http/cookies.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/http/server.py",
+      "target": "lib/python3.13/http/server.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/CREDITS.txt",
+      "target": "lib/python3.13/idlelib/CREDITS.txt",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/ChangeLog",
+      "target": "lib/python3.13/idlelib/ChangeLog",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/HISTORY.txt",
+      "target": "lib/python3.13/idlelib/HISTORY.txt",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/README.txt",
+      "target": "lib/python3.13/idlelib/Icons/README.txt",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/folder.gif",
+      "target": "lib/python3.13/idlelib/Icons/folder.gif",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/idle.ico",
+      "target": "lib/python3.13/idlelib/Icons/idle.ico",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/idle_16.gif",
+      "target": "lib/python3.13/idlelib/Icons/idle_16.gif",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/idle_16.png",
+      "target": "lib/python3.13/idlelib/Icons/idle_16.png",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/idle_256.png",
+      "target": "lib/python3.13/idlelib/Icons/idle_256.png",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/idle_32.gif",
+      "target": "lib/python3.13/idlelib/Icons/idle_32.gif",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/idle_32.png",
+      "target": "lib/python3.13/idlelib/Icons/idle_32.png",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/idle_48.gif",
+      "target": "lib/python3.13/idlelib/Icons/idle_48.gif",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/idle_48.png",
+      "target": "lib/python3.13/idlelib/Icons/idle_48.png",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/minusnode.gif",
+      "target": "lib/python3.13/idlelib/Icons/minusnode.gif",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/openfolder.gif",
+      "target": "lib/python3.13/idlelib/Icons/openfolder.gif",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/plusnode.gif",
+      "target": "lib/python3.13/idlelib/Icons/plusnode.gif",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/python.gif",
+      "target": "lib/python3.13/idlelib/Icons/python.gif",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/Icons/tk.gif",
+      "target": "lib/python3.13/idlelib/Icons/tk.gif",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/NEWS2x.txt",
+      "target": "lib/python3.13/idlelib/NEWS2x.txt",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/News3.txt",
+      "target": "lib/python3.13/idlelib/News3.txt",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/README.txt",
+      "target": "lib/python3.13/idlelib/README.txt",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/TODO.txt",
+      "target": "lib/python3.13/idlelib/TODO.txt",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/__init__.py",
+      "target": "lib/python3.13/idlelib/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/__main__.py",
+      "target": "lib/python3.13/idlelib/__main__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/autocomplete.py",
+      "target": "lib/python3.13/idlelib/autocomplete.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/autocomplete_w.py",
+      "target": "lib/python3.13/idlelib/autocomplete_w.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/autoexpand.py",
+      "target": "lib/python3.13/idlelib/autoexpand.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/browser.py",
+      "target": "lib/python3.13/idlelib/browser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/calltip.py",
+      "target": "lib/python3.13/idlelib/calltip.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/calltip_w.py",
+      "target": "lib/python3.13/idlelib/calltip_w.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/codecontext.py",
+      "target": "lib/python3.13/idlelib/codecontext.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/colorizer.py",
+      "target": "lib/python3.13/idlelib/colorizer.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/config-extensions.def",
+      "target": "lib/python3.13/idlelib/config-extensions.def",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/config-highlight.def",
+      "target": "lib/python3.13/idlelib/config-highlight.def",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/config-keys.def",
+      "target": "lib/python3.13/idlelib/config-keys.def",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/config-main.def",
+      "target": "lib/python3.13/idlelib/config-main.def",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/config.py",
+      "target": "lib/python3.13/idlelib/config.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/config_key.py",
+      "target": "lib/python3.13/idlelib/config_key.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/configdialog.py",
+      "target": "lib/python3.13/idlelib/configdialog.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/debugger.py",
+      "target": "lib/python3.13/idlelib/debugger.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/debugger_r.py",
+      "target": "lib/python3.13/idlelib/debugger_r.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/debugobj.py",
+      "target": "lib/python3.13/idlelib/debugobj.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/debugobj_r.py",
+      "target": "lib/python3.13/idlelib/debugobj_r.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/delegator.py",
+      "target": "lib/python3.13/idlelib/delegator.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/dynoption.py",
+      "target": "lib/python3.13/idlelib/dynoption.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/editor.py",
+      "target": "lib/python3.13/idlelib/editor.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/extend.txt",
+      "target": "lib/python3.13/idlelib/extend.txt",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/filelist.py",
+      "target": "lib/python3.13/idlelib/filelist.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/format.py",
+      "target": "lib/python3.13/idlelib/format.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/grep.py",
+      "target": "lib/python3.13/idlelib/grep.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/help.html",
+      "target": "lib/python3.13/idlelib/help.html",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/help.py",
+      "target": "lib/python3.13/idlelib/help.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/help_about.py",
+      "target": "lib/python3.13/idlelib/help_about.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/history.py",
+      "target": "lib/python3.13/idlelib/history.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/hyperparser.py",
+      "target": "lib/python3.13/idlelib/hyperparser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle.bat",
+      "target": "lib/python3.13/idlelib/idle.bat",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle.py",
+      "target": "lib/python3.13/idlelib/idle.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle.pyw",
+      "target": "lib/python3.13/idlelib/idle.pyw",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/README.txt",
+      "target": "lib/python3.13/idlelib/idle_test/README.txt",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/__init__.py",
+      "target": "lib/python3.13/idlelib/idle_test/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/example_noext",
+      "target": "lib/python3.13/idlelib/idle_test/example_noext",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/example_stub.pyi",
+      "target": "lib/python3.13/idlelib/idle_test/example_stub.pyi",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/htest.py",
+      "target": "lib/python3.13/idlelib/idle_test/htest.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/mock_idle.py",
+      "target": "lib/python3.13/idlelib/idle_test/mock_idle.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/mock_tk.py",
+      "target": "lib/python3.13/idlelib/idle_test/mock_tk.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/template.py",
+      "target": "lib/python3.13/idlelib/idle_test/template.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_autocomplete.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_autocomplete.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_autocomplete_w.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_autocomplete_w.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_autoexpand.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_autoexpand.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_browser.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_browser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_calltip.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_calltip.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_calltip_w.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_calltip_w.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_codecontext.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_codecontext.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_colorizer.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_colorizer.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_config.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_config.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_config_key.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_config_key.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_configdialog.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_configdialog.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_debugger.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_debugger.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_debugger_r.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_debugger_r.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_debugobj.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_debugobj.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_debugobj_r.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_debugobj_r.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_delegator.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_delegator.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_editmenu.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_editmenu.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_editor.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_editor.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_filelist.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_filelist.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_format.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_format.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_grep.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_grep.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_help.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_help.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_help_about.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_help_about.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_history.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_history.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_hyperparser.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_hyperparser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_iomenu.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_iomenu.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_macosx.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_macosx.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_mainmenu.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_mainmenu.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_multicall.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_multicall.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_outwin.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_outwin.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_parenmatch.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_parenmatch.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_pathbrowser.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_pathbrowser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_percolator.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_percolator.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_pyparse.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_pyparse.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_pyshell.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_pyshell.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_query.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_query.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_redirector.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_redirector.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_replace.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_replace.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_rpc.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_rpc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_run.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_run.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_runscript.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_runscript.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_scrolledlist.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_scrolledlist.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_search.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_search.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_searchbase.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_searchbase.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_searchengine.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_searchengine.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_sidebar.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_sidebar.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_squeezer.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_squeezer.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_stackviewer.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_stackviewer.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_statusbar.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_statusbar.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_text.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_text.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_textview.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_textview.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_tooltip.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_tooltip.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_tree.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_tree.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_undo.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_undo.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_util.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_util.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_warning.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_warning.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_window.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_window.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_zoomheight.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_zoomheight.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/test_zzdummy.py",
+      "target": "lib/python3.13/idlelib/idle_test/test_zzdummy.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/idle_test/tkinter_testing_utils.py",
+      "target": "lib/python3.13/idlelib/idle_test/tkinter_testing_utils.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/iomenu.py",
+      "target": "lib/python3.13/idlelib/iomenu.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/macosx.py",
+      "target": "lib/python3.13/idlelib/macosx.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/mainmenu.py",
+      "target": "lib/python3.13/idlelib/mainmenu.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/multicall.py",
+      "target": "lib/python3.13/idlelib/multicall.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/outwin.py",
+      "target": "lib/python3.13/idlelib/outwin.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/parenmatch.py",
+      "target": "lib/python3.13/idlelib/parenmatch.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/pathbrowser.py",
+      "target": "lib/python3.13/idlelib/pathbrowser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/percolator.py",
+      "target": "lib/python3.13/idlelib/percolator.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/pyparse.py",
+      "target": "lib/python3.13/idlelib/pyparse.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/pyshell.py",
+      "target": "lib/python3.13/idlelib/pyshell.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/query.py",
+      "target": "lib/python3.13/idlelib/query.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/redirector.py",
+      "target": "lib/python3.13/idlelib/redirector.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/replace.py",
+      "target": "lib/python3.13/idlelib/replace.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/rpc.py",
+      "target": "lib/python3.13/idlelib/rpc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/run.py",
+      "target": "lib/python3.13/idlelib/run.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/runscript.py",
+      "target": "lib/python3.13/idlelib/runscript.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/scrolledlist.py",
+      "target": "lib/python3.13/idlelib/scrolledlist.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/search.py",
+      "target": "lib/python3.13/idlelib/search.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/searchbase.py",
+      "target": "lib/python3.13/idlelib/searchbase.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/searchengine.py",
+      "target": "lib/python3.13/idlelib/searchengine.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/sidebar.py",
+      "target": "lib/python3.13/idlelib/sidebar.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/squeezer.py",
+      "target": "lib/python3.13/idlelib/squeezer.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/stackviewer.py",
+      "target": "lib/python3.13/idlelib/stackviewer.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/statusbar.py",
+      "target": "lib/python3.13/idlelib/statusbar.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/textview.py",
+      "target": "lib/python3.13/idlelib/textview.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/tooltip.py",
+      "target": "lib/python3.13/idlelib/tooltip.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/tree.py",
+      "target": "lib/python3.13/idlelib/tree.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/undo.py",
+      "target": "lib/python3.13/idlelib/undo.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/util.py",
+      "target": "lib/python3.13/idlelib/util.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/window.py",
+      "target": "lib/python3.13/idlelib/window.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/zoomheight.py",
+      "target": "lib/python3.13/idlelib/zoomheight.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/idlelib/zzdummy.py",
+      "target": "lib/python3.13/idlelib/zzdummy.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/imaplib.py",
+      "target": "lib/python3.13/imaplib.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/__init__.py",
+      "target": "lib/python3.13/importlib/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/_abc.py",
+      "target": "lib/python3.13/importlib/_abc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/_bootstrap.py",
+      "target": "lib/python3.13/importlib/_bootstrap.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/_bootstrap_external.py",
+      "target": "lib/python3.13/importlib/_bootstrap_external.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/abc.py",
+      "target": "lib/python3.13/importlib/abc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/machinery.py",
+      "target": "lib/python3.13/importlib/machinery.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/metadata/__init__.py",
+      "target": "lib/python3.13/importlib/metadata/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/metadata/_adapters.py",
+      "target": "lib/python3.13/importlib/metadata/_adapters.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/metadata/_collections.py",
+      "target": "lib/python3.13/importlib/metadata/_collections.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/metadata/_functools.py",
+      "target": "lib/python3.13/importlib/metadata/_functools.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/metadata/_itertools.py",
+      "target": "lib/python3.13/importlib/metadata/_itertools.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/metadata/_meta.py",
+      "target": "lib/python3.13/importlib/metadata/_meta.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/metadata/_text.py",
+      "target": "lib/python3.13/importlib/metadata/_text.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/metadata/diagnose.py",
+      "target": "lib/python3.13/importlib/metadata/diagnose.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/readers.py",
+      "target": "lib/python3.13/importlib/readers.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/resources/__init__.py",
+      "target": "lib/python3.13/importlib/resources/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/resources/_adapters.py",
+      "target": "lib/python3.13/importlib/resources/_adapters.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/resources/_common.py",
+      "target": "lib/python3.13/importlib/resources/_common.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/resources/_functional.py",
+      "target": "lib/python3.13/importlib/resources/_functional.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/resources/_itertools.py",
+      "target": "lib/python3.13/importlib/resources/_itertools.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/resources/abc.py",
+      "target": "lib/python3.13/importlib/resources/abc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/resources/readers.py",
+      "target": "lib/python3.13/importlib/resources/readers.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/resources/simple.py",
+      "target": "lib/python3.13/importlib/resources/simple.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/simple.py",
+      "target": "lib/python3.13/importlib/simple.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/importlib/util.py",
+      "target": "lib/python3.13/importlib/util.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/inspect.py",
+      "target": "lib/python3.13/inspect.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/io.py",
+      "target": "lib/python3.13/io.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ipaddress.py",
+      "target": "lib/python3.13/ipaddress.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/json/__init__.py",
+      "target": "lib/python3.13/json/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/json/decoder.py",
+      "target": "lib/python3.13/json/decoder.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/json/encoder.py",
+      "target": "lib/python3.13/json/encoder.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/json/scanner.py",
+      "target": "lib/python3.13/json/scanner.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/json/tool.py",
+      "target": "lib/python3.13/json/tool.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/keyword.py",
+      "target": "lib/python3.13/keyword.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/lib-dynload/README.txt",
+      "target": "lib/python3.13/lib-dynload/README.txt",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/linecache.py",
+      "target": "lib/python3.13/linecache.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/locale.py",
+      "target": "lib/python3.13/locale.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/logging/__init__.py",
+      "target": "lib/python3.13/logging/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/logging/config.py",
+      "target": "lib/python3.13/logging/config.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/logging/handlers.py",
+      "target": "lib/python3.13/logging/handlers.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/lzma.py",
+      "target": "lib/python3.13/lzma.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/mailbox.py",
+      "target": "lib/python3.13/mailbox.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/mimetypes.py",
+      "target": "lib/python3.13/mimetypes.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/modulefinder.py",
+      "target": "lib/python3.13/modulefinder.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/__init__.py",
+      "target": "lib/python3.13/multiprocessing/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/connection.py",
+      "target": "lib/python3.13/multiprocessing/connection.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/context.py",
+      "target": "lib/python3.13/multiprocessing/context.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/dummy/__init__.py",
+      "target": "lib/python3.13/multiprocessing/dummy/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/dummy/connection.py",
+      "target": "lib/python3.13/multiprocessing/dummy/connection.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/forkserver.py",
+      "target": "lib/python3.13/multiprocessing/forkserver.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/heap.py",
+      "target": "lib/python3.13/multiprocessing/heap.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/managers.py",
+      "target": "lib/python3.13/multiprocessing/managers.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/pool.py",
+      "target": "lib/python3.13/multiprocessing/pool.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/popen_fork.py",
+      "target": "lib/python3.13/multiprocessing/popen_fork.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/popen_forkserver.py",
+      "target": "lib/python3.13/multiprocessing/popen_forkserver.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/popen_spawn_posix.py",
+      "target": "lib/python3.13/multiprocessing/popen_spawn_posix.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/popen_spawn_win32.py",
+      "target": "lib/python3.13/multiprocessing/popen_spawn_win32.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/process.py",
+      "target": "lib/python3.13/multiprocessing/process.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/queues.py",
+      "target": "lib/python3.13/multiprocessing/queues.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/reduction.py",
+      "target": "lib/python3.13/multiprocessing/reduction.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/resource_sharer.py",
+      "target": "lib/python3.13/multiprocessing/resource_sharer.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/resource_tracker.py",
+      "target": "lib/python3.13/multiprocessing/resource_tracker.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/shared_memory.py",
+      "target": "lib/python3.13/multiprocessing/shared_memory.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/sharedctypes.py",
+      "target": "lib/python3.13/multiprocessing/sharedctypes.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/spawn.py",
+      "target": "lib/python3.13/multiprocessing/spawn.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/synchronize.py",
+      "target": "lib/python3.13/multiprocessing/synchronize.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/multiprocessing/util.py",
+      "target": "lib/python3.13/multiprocessing/util.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/netrc.py",
+      "target": "lib/python3.13/netrc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ntpath.py",
+      "target": "lib/python3.13/ntpath.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/nturl2path.py",
+      "target": "lib/python3.13/nturl2path.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/numbers.py",
+      "target": "lib/python3.13/numbers.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/opcode.py",
+      "target": "lib/python3.13/opcode.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/operator.py",
+      "target": "lib/python3.13/operator.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/optparse.py",
+      "target": "lib/python3.13/optparse.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/os.py",
+      "target": "lib/python3.13/os.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pathlib/__init__.py",
+      "target": "lib/python3.13/pathlib/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pathlib/_abc.py",
+      "target": "lib/python3.13/pathlib/_abc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pathlib/_local.py",
+      "target": "lib/python3.13/pathlib/_local.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pdb.py",
+      "target": "lib/python3.13/pdb.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pickle.py",
+      "target": "lib/python3.13/pickle.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pickletools.py",
+      "target": "lib/python3.13/pickletools.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pkgutil.py",
+      "target": "lib/python3.13/pkgutil.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/platform.py",
+      "target": "lib/python3.13/platform.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/plistlib.py",
+      "target": "lib/python3.13/plistlib.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/poplib.py",
+      "target": "lib/python3.13/poplib.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/posixpath.py",
+      "target": "lib/python3.13/posixpath.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pprint.py",
+      "target": "lib/python3.13/pprint.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/profile.py",
+      "target": "lib/python3.13/profile.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pstats.py",
+      "target": "lib/python3.13/pstats.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pty.py",
+      "target": "lib/python3.13/pty.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/py_compile.py",
+      "target": "lib/python3.13/py_compile.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pyclbr.py",
+      "target": "lib/python3.13/pyclbr.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pydoc.py",
+      "target": "lib/python3.13/pydoc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pydoc_data/__init__.py",
+      "target": "lib/python3.13/pydoc_data/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pydoc_data/_pydoc.css",
+      "target": "lib/python3.13/pydoc_data/_pydoc.css",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/pydoc_data/topics.py",
+      "target": "lib/python3.13/pydoc_data/topics.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/queue.py",
+      "target": "lib/python3.13/queue.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/quopri.py",
+      "target": "lib/python3.13/quopri.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/random.py",
+      "target": "lib/python3.13/random.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/re/__init__.py",
+      "target": "lib/python3.13/re/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/re/_casefix.py",
+      "target": "lib/python3.13/re/_casefix.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/re/_compiler.py",
+      "target": "lib/python3.13/re/_compiler.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/re/_constants.py",
+      "target": "lib/python3.13/re/_constants.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/re/_parser.py",
+      "target": "lib/python3.13/re/_parser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/reprlib.py",
+      "target": "lib/python3.13/reprlib.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/rlcompleter.py",
+      "target": "lib/python3.13/rlcompleter.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/runpy.py",
+      "target": "lib/python3.13/runpy.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/sched.py",
+      "target": "lib/python3.13/sched.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/secrets.py",
+      "target": "lib/python3.13/secrets.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/selectors.py",
+      "target": "lib/python3.13/selectors.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/shelve.py",
+      "target": "lib/python3.13/shelve.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/shlex.py",
+      "target": "lib/python3.13/shlex.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/shutil.py",
+      "target": "lib/python3.13/shutil.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/signal.py",
+      "target": "lib/python3.13/signal.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/site-packages/README.txt",
+      "target": "lib/python3.13/site-packages/README.txt",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/site.py",
+      "target": "lib/python3.13/site.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/smtplib.py",
+      "target": "lib/python3.13/smtplib.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/socket.py",
+      "target": "lib/python3.13/socket.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/socketserver.py",
+      "target": "lib/python3.13/socketserver.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/sqlite3/__init__.py",
+      "target": "lib/python3.13/sqlite3/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/sqlite3/__main__.py",
+      "target": "lib/python3.13/sqlite3/__main__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/sqlite3/dbapi2.py",
+      "target": "lib/python3.13/sqlite3/dbapi2.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/sqlite3/dump.py",
+      "target": "lib/python3.13/sqlite3/dump.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/sre_compile.py",
+      "target": "lib/python3.13/sre_compile.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/sre_constants.py",
+      "target": "lib/python3.13/sre_constants.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/sre_parse.py",
+      "target": "lib/python3.13/sre_parse.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/ssl.py",
+      "target": "lib/python3.13/ssl.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/stat.py",
+      "target": "lib/python3.13/stat.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/statistics.py",
+      "target": "lib/python3.13/statistics.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/string.py",
+      "target": "lib/python3.13/string.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/stringprep.py",
+      "target": "lib/python3.13/stringprep.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/struct.py",
+      "target": "lib/python3.13/struct.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/subprocess.py",
+      "target": "lib/python3.13/subprocess.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/symtable.py",
+      "target": "lib/python3.13/symtable.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/sysconfig/__init__.py",
+      "target": "lib/python3.13/sysconfig/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/sysconfig/__main__.py",
+      "target": "lib/python3.13/sysconfig/__main__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tabnanny.py",
+      "target": "lib/python3.13/tabnanny.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tarfile.py",
+      "target": "lib/python3.13/tarfile.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tempfile.py",
+      "target": "lib/python3.13/tempfile.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/textwrap.py",
+      "target": "lib/python3.13/textwrap.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/this.py",
+      "target": "lib/python3.13/this.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/threading.py",
+      "target": "lib/python3.13/threading.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/timeit.py",
+      "target": "lib/python3.13/timeit.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/__init__.py",
+      "target": "lib/python3.13/tkinter/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/__main__.py",
+      "target": "lib/python3.13/tkinter/__main__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/colorchooser.py",
+      "target": "lib/python3.13/tkinter/colorchooser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/commondialog.py",
+      "target": "lib/python3.13/tkinter/commondialog.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/constants.py",
+      "target": "lib/python3.13/tkinter/constants.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/dialog.py",
+      "target": "lib/python3.13/tkinter/dialog.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/dnd.py",
+      "target": "lib/python3.13/tkinter/dnd.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/filedialog.py",
+      "target": "lib/python3.13/tkinter/filedialog.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/font.py",
+      "target": "lib/python3.13/tkinter/font.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/messagebox.py",
+      "target": "lib/python3.13/tkinter/messagebox.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/scrolledtext.py",
+      "target": "lib/python3.13/tkinter/scrolledtext.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/simpledialog.py",
+      "target": "lib/python3.13/tkinter/simpledialog.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tkinter/ttk.py",
+      "target": "lib/python3.13/tkinter/ttk.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/token.py",
+      "target": "lib/python3.13/token.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tokenize.py",
+      "target": "lib/python3.13/tokenize.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tomllib/__init__.py",
+      "target": "lib/python3.13/tomllib/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tomllib/_parser.py",
+      "target": "lib/python3.13/tomllib/_parser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tomllib/_re.py",
+      "target": "lib/python3.13/tomllib/_re.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tomllib/_types.py",
+      "target": "lib/python3.13/tomllib/_types.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/trace.py",
+      "target": "lib/python3.13/trace.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/traceback.py",
+      "target": "lib/python3.13/traceback.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tracemalloc.py",
+      "target": "lib/python3.13/tracemalloc.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/tty.py",
+      "target": "lib/python3.13/tty.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtle.py",
+      "target": "lib/python3.13/turtle.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/__init__.py",
+      "target": "lib/python3.13/turtledemo/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/__main__.py",
+      "target": "lib/python3.13/turtledemo/__main__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/bytedesign.py",
+      "target": "lib/python3.13/turtledemo/bytedesign.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/chaos.py",
+      "target": "lib/python3.13/turtledemo/chaos.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/clock.py",
+      "target": "lib/python3.13/turtledemo/clock.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/colormixer.py",
+      "target": "lib/python3.13/turtledemo/colormixer.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/forest.py",
+      "target": "lib/python3.13/turtledemo/forest.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/fractalcurves.py",
+      "target": "lib/python3.13/turtledemo/fractalcurves.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/lindenmayer.py",
+      "target": "lib/python3.13/turtledemo/lindenmayer.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/minimal_hanoi.py",
+      "target": "lib/python3.13/turtledemo/minimal_hanoi.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/nim.py",
+      "target": "lib/python3.13/turtledemo/nim.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/paint.py",
+      "target": "lib/python3.13/turtledemo/paint.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/peace.py",
+      "target": "lib/python3.13/turtledemo/peace.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/penrose.py",
+      "target": "lib/python3.13/turtledemo/penrose.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/planet_and_moon.py",
+      "target": "lib/python3.13/turtledemo/planet_and_moon.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/rosette.py",
+      "target": "lib/python3.13/turtledemo/rosette.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/round_dance.py",
+      "target": "lib/python3.13/turtledemo/round_dance.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/sorting_animate.py",
+      "target": "lib/python3.13/turtledemo/sorting_animate.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/tree.py",
+      "target": "lib/python3.13/turtledemo/tree.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/turtle.cfg",
+      "target": "lib/python3.13/turtledemo/turtle.cfg",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/two_canvases.py",
+      "target": "lib/python3.13/turtledemo/two_canvases.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/turtledemo/yinyang.py",
+      "target": "lib/python3.13/turtledemo/yinyang.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/types.py",
+      "target": "lib/python3.13/types.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/typing.py",
+      "target": "lib/python3.13/typing.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/__init__.py",
+      "target": "lib/python3.13/unittest/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/__main__.py",
+      "target": "lib/python3.13/unittest/__main__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/_log.py",
+      "target": "lib/python3.13/unittest/_log.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/async_case.py",
+      "target": "lib/python3.13/unittest/async_case.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/case.py",
+      "target": "lib/python3.13/unittest/case.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/loader.py",
+      "target": "lib/python3.13/unittest/loader.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/main.py",
+      "target": "lib/python3.13/unittest/main.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/mock.py",
+      "target": "lib/python3.13/unittest/mock.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/result.py",
+      "target": "lib/python3.13/unittest/result.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/runner.py",
+      "target": "lib/python3.13/unittest/runner.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/signals.py",
+      "target": "lib/python3.13/unittest/signals.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/suite.py",
+      "target": "lib/python3.13/unittest/suite.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/unittest/util.py",
+      "target": "lib/python3.13/unittest/util.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/urllib/__init__.py",
+      "target": "lib/python3.13/urllib/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/urllib/error.py",
+      "target": "lib/python3.13/urllib/error.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/urllib/parse.py",
+      "target": "lib/python3.13/urllib/parse.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/urllib/request.py",
+      "target": "lib/python3.13/urllib/request.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/urllib/response.py",
+      "target": "lib/python3.13/urllib/response.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/urllib/robotparser.py",
+      "target": "lib/python3.13/urllib/robotparser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/uuid.py",
+      "target": "lib/python3.13/uuid.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/venv/__init__.py",
+      "target": "lib/python3.13/venv/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/venv/__main__.py",
+      "target": "lib/python3.13/venv/__main__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/venv/scripts/common/Activate.ps1",
+      "target": "lib/python3.13/venv/scripts/common/Activate.ps1",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/venv/scripts/common/activate",
+      "target": "lib/python3.13/venv/scripts/common/activate",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/venv/scripts/common/activate.fish",
+      "target": "lib/python3.13/venv/scripts/common/activate.fish",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/venv/scripts/nt/activate.bat",
+      "target": "lib/python3.13/venv/scripts/nt/activate.bat",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/venv/scripts/nt/deactivate.bat",
+      "target": "lib/python3.13/venv/scripts/nt/deactivate.bat",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/venv/scripts/posix/activate.csh",
+      "target": "lib/python3.13/venv/scripts/posix/activate.csh",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/warnings.py",
+      "target": "lib/python3.13/warnings.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/wave.py",
+      "target": "lib/python3.13/wave.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/weakref.py",
+      "target": "lib/python3.13/weakref.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/webbrowser.py",
+      "target": "lib/python3.13/webbrowser.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/wsgiref/__init__.py",
+      "target": "lib/python3.13/wsgiref/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/wsgiref/handlers.py",
+      "target": "lib/python3.13/wsgiref/handlers.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/wsgiref/headers.py",
+      "target": "lib/python3.13/wsgiref/headers.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/wsgiref/simple_server.py",
+      "target": "lib/python3.13/wsgiref/simple_server.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/wsgiref/types.py",
+      "target": "lib/python3.13/wsgiref/types.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/wsgiref/util.py",
+      "target": "lib/python3.13/wsgiref/util.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/wsgiref/validate.py",
+      "target": "lib/python3.13/wsgiref/validate.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/__init__.py",
+      "target": "lib/python3.13/xml/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/dom/NodeFilter.py",
+      "target": "lib/python3.13/xml/dom/NodeFilter.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/dom/__init__.py",
+      "target": "lib/python3.13/xml/dom/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/dom/domreg.py",
+      "target": "lib/python3.13/xml/dom/domreg.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/dom/expatbuilder.py",
+      "target": "lib/python3.13/xml/dom/expatbuilder.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/dom/minicompat.py",
+      "target": "lib/python3.13/xml/dom/minicompat.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/dom/minidom.py",
+      "target": "lib/python3.13/xml/dom/minidom.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/dom/pulldom.py",
+      "target": "lib/python3.13/xml/dom/pulldom.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/dom/xmlbuilder.py",
+      "target": "lib/python3.13/xml/dom/xmlbuilder.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/etree/ElementInclude.py",
+      "target": "lib/python3.13/xml/etree/ElementInclude.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/etree/ElementPath.py",
+      "target": "lib/python3.13/xml/etree/ElementPath.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/etree/ElementTree.py",
+      "target": "lib/python3.13/xml/etree/ElementTree.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/etree/__init__.py",
+      "target": "lib/python3.13/xml/etree/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/etree/cElementTree.py",
+      "target": "lib/python3.13/xml/etree/cElementTree.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/parsers/__init__.py",
+      "target": "lib/python3.13/xml/parsers/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/parsers/expat.py",
+      "target": "lib/python3.13/xml/parsers/expat.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/sax/__init__.py",
+      "target": "lib/python3.13/xml/sax/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/sax/_exceptions.py",
+      "target": "lib/python3.13/xml/sax/_exceptions.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/sax/expatreader.py",
+      "target": "lib/python3.13/xml/sax/expatreader.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/sax/handler.py",
+      "target": "lib/python3.13/xml/sax/handler.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/sax/saxutils.py",
+      "target": "lib/python3.13/xml/sax/saxutils.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xml/sax/xmlreader.py",
+      "target": "lib/python3.13/xml/sax/xmlreader.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xmlrpc/__init__.py",
+      "target": "lib/python3.13/xmlrpc/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xmlrpc/client.py",
+      "target": "lib/python3.13/xmlrpc/client.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/xmlrpc/server.py",
+      "target": "lib/python3.13/xmlrpc/server.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/zipapp.py",
+      "target": "lib/python3.13/zipapp.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/zipfile/__init__.py",
+      "target": "lib/python3.13/zipfile/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/zipfile/__main__.py",
+      "target": "lib/python3.13/zipfile/__main__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/zipfile/_path/__init__.py",
+      "target": "lib/python3.13/zipfile/_path/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/zipfile/_path/glob.py",
+      "target": "lib/python3.13/zipfile/_path/glob.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/zipimport.py",
+      "target": "lib/python3.13/zipimport.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/zoneinfo/__init__.py",
+      "target": "lib/python3.13/zoneinfo/__init__.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/zoneinfo/_common.py",
+      "target": "lib/python3.13/zoneinfo/_common.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/zoneinfo/_tzpath.py",
+      "target": "lib/python3.13/zoneinfo/_tzpath.py",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/python3.13/zoneinfo/_zoneinfo.py",
+      "target": "lib/python3.13/zoneinfo/_zoneinfo.py",
+      "type": "symlink"
+    },
+    {
+      "source": "share/licenses/cpython/LICENSE",
+      "target": "share/licenses/cpython/LICENSE",
+      "type": "symlink"
+    }
+  ],
+  "package": "python",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/python.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "3.13.3_1"
+}

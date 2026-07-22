@@ -1,0 +1,1713 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 15624060,
+    "cache_key_sha": "b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2",
+    "payload_root": "erlang/28.2_1",
+    "sha256": "b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/erlang/blobs/sha256:b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/erlang/28.2_1",
+  "links": [
+    {
+      "source": "bin/erl",
+      "target": "bin/erl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/bin/no_dot_erlang.boot",
+      "target": "lib/erlang/bin/no_dot_erlang.boot",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/bin/start.boot",
+      "target": "lib/erlang/bin/start.boot",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/bin/start.script",
+      "target": "lib/erlang/bin/start.script",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/bin/start_clean.boot",
+      "target": "lib/erlang/bin/start_clean.boot",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/bin/start_clean.script",
+      "target": "lib/erlang/bin/start_clean.script",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/beam.smp",
+      "target": "lib/erlang/erts-16.1.2/bin/beam.smp",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/ct_run",
+      "target": "lib/erlang/erts-16.1.2/bin/ct_run",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/dialyzer",
+      "target": "lib/erlang/erts-16.1.2/bin/dialyzer",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/dyn_erl",
+      "target": "lib/erlang/erts-16.1.2/bin/dyn_erl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/epmd",
+      "target": "lib/erlang/erts-16.1.2/bin/epmd",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/erl_call",
+      "target": "lib/erlang/erts-16.1.2/bin/erl_call",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/erl_child_setup",
+      "target": "lib/erlang/erts-16.1.2/bin/erl_child_setup",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/erlc",
+      "target": "lib/erlang/erts-16.1.2/bin/erlc",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/erlexec",
+      "target": "lib/erlang/erts-16.1.2/bin/erlexec",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/escript",
+      "target": "lib/erlang/erts-16.1.2/bin/escript",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/heart",
+      "target": "lib/erlang/erts-16.1.2/bin/heart",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/inet_gethost",
+      "target": "lib/erlang/erts-16.1.2/bin/inet_gethost",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/run_erl",
+      "target": "lib/erlang/erts-16.1.2/bin/run_erl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/to_erl",
+      "target": "lib/erlang/erts-16.1.2/bin/to_erl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/typer",
+      "target": "lib/erlang/erts-16.1.2/bin/typer",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/erts-16.1.2/bin/yielding_c_fun",
+      "target": "lib/erlang/erts-16.1.2/bin/yielding_c_fun",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_a.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_a.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_asm.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_asm.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_block.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_block.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_bounds.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_bounds.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_call_types.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_call_types.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_clean.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_clean.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_core_to_ssa.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_core_to_ssa.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_dict.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_dict.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_digraph.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_digraph.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_disasm.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_disasm.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_doc.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_doc.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_flatten.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_flatten.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_jump.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_jump.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_listing.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_listing.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_opcodes.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_opcodes.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_alias.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_alias.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_bc_size.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_bc_size.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_bool.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_bool.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_bsm.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_bsm.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_check.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_check.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_codegen.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_codegen.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_dead.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_dead.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_destructive_update.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_destructive_update.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_lint.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_lint.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_opt.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_opt.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_pp.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_pp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_pre_codegen.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_pre_codegen.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_recv.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_recv.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_share.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_share.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_ss.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_ss.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_throw.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_throw.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_type.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_ssa_type.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_trim.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_trim.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_types.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_types.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_utils.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_utils.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_validator.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_validator.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/beam_z.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/beam_z.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/cerl.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/cerl.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/cerl_clauses.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/cerl_clauses.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/cerl_inline.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/cerl_inline.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/cerl_trees.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/cerl_trees.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/compile.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/compile.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/compiler.app",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/compiler.app",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/compiler.appup",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/compiler.appup",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/core_lib.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/core_lib.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/core_lint.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/core_lint.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/core_parse.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/core_parse.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/core_pp.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/core_pp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/core_scan.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/core_scan.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/erl_bifs.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/erl_bifs.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/rec_env.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/rec_env.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_alias.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_alias.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_bsm.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_bsm.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_fold.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_fold.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_fold_lists.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_fold_lists.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_inline.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_inline.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_prepare.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/sys_core_prepare.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/sys_coverage.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/sys_coverage.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/sys_messages.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/sys_messages.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/sys_pre_attributes.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/sys_pre_attributes.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/compiler-9.0.3/ebin/v3_core.beam",
+      "target": "lib/erlang/lib/compiler-9.0.3/ebin/v3_core.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/atomics.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/atomics.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/counters.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/counters.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/erl_init.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/erl_init.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/erl_prim_loader.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/erl_prim_loader.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/erl_tracer.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/erl_tracer.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/erlang.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/erlang.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/erts.app",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/erts.app",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/erts_code_purger.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/erts_code_purger.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/erts_dirty_process_signal_handler.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/erts_dirty_process_signal_handler.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/erts_internal.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/erts_internal.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/erts_literal_area_collector.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/erts_literal_area_collector.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/erts_trace_cleaner.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/erts_trace_cleaner.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/init.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/init.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/persistent_term.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/persistent_term.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/prim_buffer.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/prim_buffer.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/prim_eval.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/prim_eval.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/prim_file.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/prim_file.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/prim_inet.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/prim_inet.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/prim_net.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/prim_net.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/prim_socket.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/prim_socket.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/prim_zip.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/prim_zip.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/socket_registry.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/socket_registry.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/erts-16.1.2/ebin/zlib.beam",
+      "target": "lib/erlang/lib/erts-16.1.2/ebin/zlib.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/application.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/application.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/application_controller.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/application_controller.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/application_master.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/application_master.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/application_starter.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/application_starter.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/auth.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/auth.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/code.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/code.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/code_server.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/code_server.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/disk_log.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/disk_log.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/disk_log_1.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/disk_log_1.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/disk_log_server.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/disk_log_server.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/disk_log_sup.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/disk_log_sup.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/dist_ac.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/dist_ac.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/dist_util.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/dist_util.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erl_boot_server.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erl_boot_server.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erl_compile_server.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erl_compile_server.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erl_ddll.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erl_ddll.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erl_debugger.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erl_debugger.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erl_distribution.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erl_distribution.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erl_epmd.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erl_epmd.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erl_erts_errors.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erl_erts_errors.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erl_kernel_errors.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erl_kernel_errors.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erl_reply.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erl_reply.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erl_signal_handler.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erl_signal_handler.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erpc.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erpc.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/error_handler.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/error_handler.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/error_logger.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/error_logger.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/erts_debug.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/erts_debug.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/file.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/file.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/file_io_server.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/file_io_server.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/file_server.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/file_server.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/gen_sctp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/gen_sctp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/gen_tcp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/gen_tcp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/gen_tcp_socket.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/gen_tcp_socket.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/gen_udp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/gen_udp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/gen_udp_socket.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/gen_udp_socket.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/global.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/global.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/global_group.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/global_group.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/global_search.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/global_search.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/group.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/group.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/group_history.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/group_history.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/heart.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/heart.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet6_sctp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet6_sctp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet6_tcp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet6_tcp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet6_tcp_dist.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet6_tcp_dist.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet6_udp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet6_udp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_config.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_config.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_db.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_db.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_dns.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_dns.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_dns_tsig.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_dns_tsig.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_epmd_dist.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_epmd_dist.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_epmd_socket.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_epmd_socket.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_gethost_native.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_gethost_native.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_hosts.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_hosts.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_parse.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_parse.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_res.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_res.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_sctp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_sctp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_tcp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_tcp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_tcp_dist.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_tcp_dist.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/inet_udp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/inet_udp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/kernel.app",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/kernel.app",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/kernel.appup",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/kernel.appup",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/kernel.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/kernel.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/kernel_config.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/kernel_config.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/kernel_refc.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/kernel_refc.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/local_tcp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/local_tcp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/local_udp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/local_udp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_backend.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_backend.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_config.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_config.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_disk_log_h.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_disk_log_h.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_filters.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_filters.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_formatter.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_formatter.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_h_common.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_h_common.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_handler.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_handler.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_handler_watcher.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_handler_watcher.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_olp.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_olp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_proxy.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_proxy.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_server.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_server.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_simple_h.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_simple_h.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_std_h.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_std_h.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/logger_sup.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/logger_sup.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/net.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/net.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/net_adm.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/net_adm.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/net_kernel.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/net_kernel.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/os.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/os.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/pg.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/pg.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/pg2.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/pg2.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/prim_tty.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/prim_tty.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/prim_tty_sighandler.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/prim_tty_sighandler.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/ram_file.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/ram_file.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io_compressed.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io_compressed.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io_deflate.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io_deflate.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io_delayed.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io_delayed.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io_inflate.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io_inflate.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io_list.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/raw_file_io_list.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/rpc.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/rpc.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/seq_trace.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/seq_trace.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/socket.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/socket.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/standard_error.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/standard_error.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/trace.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/trace.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/user_drv.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/user_drv.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/user_sup.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/user_sup.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/ebin/wrap_log_reader.beam",
+      "target": "lib/erlang/lib/kernel-10.4.2/ebin/wrap_log_reader.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/include/dist.hrl",
+      "target": "lib/erlang/lib/kernel-10.4.2/include/dist.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/include/dist_util.hrl",
+      "target": "lib/erlang/lib/kernel-10.4.2/include/dist_util.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/include/eep48.hrl",
+      "target": "lib/erlang/lib/kernel-10.4.2/include/eep48.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/include/file.hrl",
+      "target": "lib/erlang/lib/kernel-10.4.2/include/file.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/include/inet.hrl",
+      "target": "lib/erlang/lib/kernel-10.4.2/include/inet.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/include/inet_sctp.hrl",
+      "target": "lib/erlang/lib/kernel-10.4.2/include/inet_sctp.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/include/logger.hrl",
+      "target": "lib/erlang/lib/kernel-10.4.2/include/logger.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/kernel-10.4.2/include/net_address.hrl",
+      "target": "lib/erlang/lib/kernel-10.4.2/include/net_address.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/argparse.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/argparse.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/array.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/array.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/base64.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/base64.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/beam_lib.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/beam_lib.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/binary.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/binary.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/c.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/c.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/calendar.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/calendar.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/dets.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/dets.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/dets_server.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/dets_server.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/dets_sup.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/dets_sup.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/dets_utils.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/dets_utils.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/dets_v9.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/dets_v9.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/dict.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/dict.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/digraph.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/digraph.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/digraph_utils.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/digraph_utils.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/edlin.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/edlin.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/edlin_context.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/edlin_context.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/edlin_expand.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/edlin_expand.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/edlin_key.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/edlin_key.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/edlin_type_suggestion.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/edlin_type_suggestion.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/epp.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/epp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_abstract_code.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_abstract_code.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_anno.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_anno.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_bits.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_bits.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_compile.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_compile.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_error.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_error.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_eval.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_eval.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_expand_records.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_expand_records.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_features.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_features.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_internal.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_internal.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_lint.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_lint.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_parse.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_parse.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_posix_msg.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_posix_msg.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_pp.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_pp.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_scan.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_scan.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_stdlib_errors.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_stdlib_errors.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/erl_tar.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/erl_tar.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/error_logger_file_h.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/error_logger_file_h.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/error_logger_tty_h.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/error_logger_tty_h.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/escript.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/escript.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/ets.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/ets.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/eval_bits.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/eval_bits.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/file_sorter.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/file_sorter.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/filelib.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/filelib.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/filename.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/filename.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/gb_sets.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/gb_sets.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/gb_trees.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/gb_trees.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/gen.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/gen.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/gen_event.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/gen_event.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/gen_fsm.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/gen_fsm.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/gen_server.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/gen_server.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/gen_statem.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/gen_statem.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/io.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/io.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/io_lib.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/io_lib.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/io_lib_format.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/io_lib_format.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/io_lib_fread.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/io_lib_fread.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/io_lib_pretty.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/io_lib_pretty.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/json.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/json.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/lists.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/lists.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/log_mf_h.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/log_mf_h.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/maps.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/maps.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/math.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/math.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/ms_transform.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/ms_transform.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/orddict.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/orddict.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/ordsets.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/ordsets.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/otp_internal.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/otp_internal.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/peer.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/peer.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/pool.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/pool.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/proc_lib.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/proc_lib.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/proplists.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/proplists.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/qlc.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/qlc.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/qlc_pt.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/qlc_pt.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/queue.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/queue.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/rand.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/rand.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/random.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/random.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/re.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/re.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/sets.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/sets.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/shell.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/shell.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/shell_default.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/shell_default.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/shell_docs.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/shell_docs.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/shell_docs_markdown.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/shell_docs_markdown.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/shell_docs_test.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/shell_docs_test.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/slave.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/slave.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/sofs.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/sofs.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/stdlib.app",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/stdlib.app",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/stdlib.appup",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/stdlib.appup",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/string.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/string.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/supervisor.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/supervisor.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/supervisor_bridge.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/supervisor_bridge.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/sys.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/sys.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/timer.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/timer.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/unicode.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/unicode.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/unicode_util.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/unicode_util.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/uri_string.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/uri_string.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/win32reg.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/win32reg.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/zip.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/zip.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/ebin/zstd.beam",
+      "target": "lib/erlang/lib/stdlib-7.1/ebin/zstd.beam",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/include/assert.hrl",
+      "target": "lib/erlang/lib/stdlib-7.1/include/assert.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/include/erl_bits.hrl",
+      "target": "lib/erlang/lib/stdlib-7.1/include/erl_bits.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/include/erl_compile.hrl",
+      "target": "lib/erlang/lib/stdlib-7.1/include/erl_compile.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/include/ms_transform.hrl",
+      "target": "lib/erlang/lib/stdlib-7.1/include/ms_transform.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/include/qlc.hrl",
+      "target": "lib/erlang/lib/stdlib-7.1/include/qlc.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/lib/stdlib-7.1/include/zip.hrl",
+      "target": "lib/erlang/lib/stdlib-7.1/include/zip.hrl",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/OTP_VERSION",
+      "target": "lib/erlang/releases/28/OTP_VERSION",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/installed_application_versions",
+      "target": "lib/erlang/releases/28/installed_application_versions",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/no_dot_erlang.boot",
+      "target": "lib/erlang/releases/28/no_dot_erlang.boot",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/no_dot_erlang.rel",
+      "target": "lib/erlang/releases/28/no_dot_erlang.rel",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/no_dot_erlang.script",
+      "target": "lib/erlang/releases/28/no_dot_erlang.script",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/start.boot",
+      "target": "lib/erlang/releases/28/start.boot",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/start.script",
+      "target": "lib/erlang/releases/28/start.script",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/start_all_example.rel",
+      "target": "lib/erlang/releases/28/start_all_example.rel",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/start_clean.boot",
+      "target": "lib/erlang/releases/28/start_clean.boot",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/start_clean.rel",
+      "target": "lib/erlang/releases/28/start_clean.rel",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/start_clean.script",
+      "target": "lib/erlang/releases/28/start_clean.script",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/start_sasl.boot",
+      "target": "lib/erlang/releases/28/start_sasl.boot",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/start_sasl.rel",
+      "target": "lib/erlang/releases/28/start_sasl.rel",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/erlang/releases/28/start_sasl.script",
+      "target": "lib/erlang/releases/28/start_sasl.script",
+      "type": "symlink"
+    }
+  ],
+  "package": "erlang",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/erlang.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "28.2_1"
+}

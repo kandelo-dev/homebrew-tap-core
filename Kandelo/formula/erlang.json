@@ -1,0 +1,44 @@
+{
+  "bottle_rebuild": 0,
+  "bottles": [
+    {
+      "arch": "wasm32",
+      "bottle_tag": "wasm32_kandelo",
+      "browser_compatible": false,
+      "built_at": "2026-07-22T03:20:22Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29886510272",
+      "built_from": {
+        "formula_sha256": "f85b4a1118197f7caf55b91427a6baa950e301991fada499c022e53148d293d3",
+        "kandelo_commit": "466a685d9366d3b712c4fe998307e00157bd5d15",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "cbb439454adf2718b010d0fe2caffe7158340a0e",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "bytes": 15624060,
+      "cache_key_sha": "b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2",
+      "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+      "fork_instrumentation": "required",
+      "kandelo_abi": 41,
+      "link_manifest": "Kandelo/link/erlang-28.2_1-rebuild0-wasm32.json",
+      "prefix": "/home/linuxbrew/.linuxbrew",
+      "runtime_support": [
+        "node"
+      ],
+      "sha256": "b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/erlang/blobs/sha256:b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2"
+    }
+  ],
+  "dependencies": [],
+  "formula_path": "Formula/erlang.rb",
+  "formula_revision": 1,
+  "full_name": "kandelo-dev/tap-core/erlang",
+  "kandelo_abi": 41,
+  "name": "erlang",
+  "schema": 1,
+  "source_metadata": "Kandelo/metadata.json",
+  "tap_commit": "cbb439454adf2718b010d0fe2caffe7158340a0e",
+  "tap_name": "kandelo-dev/tap-core",
+  "tap_repository": "kandelo-dev/homebrew-tap-core",
+  "version": "28.2_1"
+}

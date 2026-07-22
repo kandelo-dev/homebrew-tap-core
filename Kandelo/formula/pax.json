@@ -42,7 +42,7 @@
   "name": "pax",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "6d0691de45a9b9dfab741ac42804d3e2ab58b8bc",
+  "tap_commit": "cbb439454adf2718b010d0fe2caffe7158340a0e",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "20240817"

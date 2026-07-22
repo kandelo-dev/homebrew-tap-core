@@ -105,4 +105,10 @@ class Python < Formula
       timeout_ms:         180_000,
     )
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "4389c20b2d0dcd71d8111f08c5e5d54add1af0ba51e7110549bc24a3cd07bdb2"
+  end
+
 end

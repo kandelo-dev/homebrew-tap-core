@@ -222,4 +222,10 @@ class Erlang < Formula
       timeout_ms:         180_000,
     )
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2"
+  end
+
 end
