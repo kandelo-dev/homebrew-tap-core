@@ -9,7 +9,7 @@ class Bash < Formula
   mirror "https://ftp.gnu.org/gnu/bash/bash-5.2.37.tar.gz"
   sha256 "9599b22ecd1d5787ad7d3b7bf0c59f312b3396d1e281175dd1f8a4014da621ff"
   license "GPL-3.0-or-later"
-  revision 1
+  revision 2
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
@@ -95,7 +95,7 @@ class Bash < Formula
         "--disable-nls",
         "--disable-mem-scramble",
         "--disable-net-redirections",
-        "--disable-progcomp"
+        "--enable-progcomp"
 
       config_h = (buildpath/"config.h").read
       {
@@ -180,6 +180,38 @@ class Bash < Formula
       refute_includes bashbug, path
     end
     assert_empty kandelo_run_wasm(bin/"bash", ["-n", bin/"bashbug"], env: env)
+
+    # Stock Homebrew starts by re-enabling and enumerating Bash builtins so a
+    # caller's exported functions cannot shadow them. Exercise that upstream
+    # contract directly: --disable-progcomp omits compgen and breaks bin/brew
+    # before it can execute even `brew --version`.
+    homebrew_builtin_reset = <<~'BASH'
+      test "$(type -t printf)" = builtin
+      builtin enable -n printf
+      test "$(type -t printf)" != builtin
+      builtin enable printf
+      test "$(type -t printf)" = builtin
+      printf() { echo shadowed; }
+      builtin enable compgen unset
+      saw_compgen= saw_unset=
+      for cmd in $(builtin compgen -A builtin); do
+        case "$cmd" in
+          compgen) saw_compgen=yes ;;
+          unset) saw_unset=yes ;;
+        esac
+        builtin unset -f "$cmd"
+        builtin enable "$cmd"
+      done
+      test "$saw_compgen" = yes
+      test "$saw_unset" = yes
+      test "$(type -t compgen)" = builtin
+      test "$(type -t complete)" = builtin
+      test "$(type -t unset)" = builtin
+      test "$(type -t printf)" = builtin
+      printf 'homebrew-builtins-ready\n'
+    BASH
+    assert_equal "homebrew-builtins-ready\n",
+      kandelo_run_wasm(bin/"bash", ["-c", homebrew_builtin_reset], env: env)
 
     source_fixture = testpath/"source-args.sh"
     source_fixture.write <<~'BASH'
