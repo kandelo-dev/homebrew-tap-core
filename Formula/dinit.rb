@@ -13,9 +13,9 @@ class Dinit < Formula
   sha256 "3c0f624eb958f8e884631be4ef687da1e475ebaa6241e7ee330b864e6cd9e30b"
   license "Apache-2.0"
 
-  depends_on "binaryen" => [:build, :test]
+  depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
   depends_on "m4" => :build
-  depends_on "wabt" => [:build, :test]
+  depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
   depends_on "kandelo-dev/tap-core/libcxx"
 
   skip_clean "sbin/dinit", "sbin/dinitctl", "sbin/dinitcheck"

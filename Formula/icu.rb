@@ -18,9 +18,9 @@ class Icu < Formula
 
   keg_only "its Kandelo target headers and libraries conflict with native ICU"
 
-  depends_on "pkgconf" => [:build, :test]
-  depends_on "binaryen" => :test
-  depends_on "wabt" => :test
+  depends_on KandeloFormulaSupport::PkgconfRequirement => [:build, :test]
+  depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
+  depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
   depends_on "kandelo-dev/tap-core/libcxx"
 
   skip_clean "lib/libicudata.a"

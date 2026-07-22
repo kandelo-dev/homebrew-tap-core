@@ -12,8 +12,8 @@ class Lsof < Formula
   sha256 "07e7a7ebff8003114f6b4bef1ccdc2e9b15ecfbd5e6ccc3bf8563107b8151fde"
   license "GPL-2.0-or-later"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/lsof"
 

@@ -10,8 +10,8 @@ class Getconf < Formula
   sha256 "e1c8be153cc3cfefa1a24bcaf62fe74d4d78eeadba660f320b09931e29d95c65"
   license "BSD-4-Clause"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/getconf"
 

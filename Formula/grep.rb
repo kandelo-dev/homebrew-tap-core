@@ -9,8 +9,8 @@ class Grep < Formula
   sha256 "1db2aedde89d0dea42b16d9528f894c8d15dae4e190b59aecc78f5a951276eab"
   license "GPL-3.0-or-later"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/grep"
 

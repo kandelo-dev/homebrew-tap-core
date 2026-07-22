@@ -10,8 +10,8 @@ class Asa < Formula
   sha256 "7d9722ea86e05e716500f47852f950fd3f5bfd961e38639c54884f56587ca0a0"
   license "BSD-4-Clause"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/asa"
 

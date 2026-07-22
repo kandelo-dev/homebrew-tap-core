@@ -10,8 +10,8 @@ class M4 < Formula
   sha256 "f25c6ab51548a73a75558742fb031e0625d6485fe5f9155949d6486a2408ab66"
   license "GPL-3.0-or-later"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/dash"
 
   skip_clean "bin/m4"

@@ -9,11 +9,11 @@ class Libzip < Formula
   sha256 "82e9f2f2421f9d7c2466bbc3173cd09595a88ea37db0d559a9d0a2dc60dc722e"
   license "BSD-3-Clause"
 
-  depends_on "binaryen" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on "cmake" => [:build, :test]
   depends_on "ninja" => [:build, :test]
-  depends_on "pkgconf" => [:build, :test]
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::PkgconfRequirement => [:build, :test]
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin", "lib/libzip.a"

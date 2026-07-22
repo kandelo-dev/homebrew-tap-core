@@ -10,8 +10,8 @@ class Gencat < Formula
   sha256 "b5e640fea67f8066432ce02e5f13d1a9e3b4763a4c5f8cc5f3cc55baa12fdff4"
   license all_of: ["BSD-2-Clause", "BSD-3-Clause", "ISC"]
 
-  depends_on "binaryen" => [:build, :test]
-  depends_on "wabt" => [:build, :test]
+  depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
+  depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
 
   skip_clean "bin/gencat"
 

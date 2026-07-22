@@ -14,7 +14,7 @@ class Libxml2 < Formula
   revision 2
 
   depends_on "cmake" => [:build, :test]
-  depends_on "pkgconf" => [:build, :test]
+  depends_on KandeloFormulaSupport::PkgconfRequirement => [:build, :test]
   depends_on "kandelo-dev/tap-core/libiconv"
   depends_on "kandelo-dev/tap-core/zlib"
 

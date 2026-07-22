@@ -9,7 +9,7 @@ class Libmagic < Formula
   sha256 "fc97f51029bb0e2c9f4e3bffefdaf678f0e039ee872b9de5c002a6d09c784d82"
   license all_of: ["BSD-2-Clause-Darwin", "BSD-2-Clause", :public_domain]
 
-  depends_on "pkgconf" => :test
+  depends_on KandeloFormulaSupport::PkgconfRequirement => [:build, :test]
   depends_on "kandelo-dev/tap-core/bzip2"
   depends_on "kandelo-dev/tap-core/xz"
   depends_on "kandelo-dev/tap-core/zlib"

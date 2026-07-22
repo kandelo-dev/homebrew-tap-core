@@ -9,8 +9,8 @@ class Pax < Formula
   sha256 "e955d5d3af97aede0a3f463a9a59b83e8d1083aaf142eb6f388c549a7d182e6b"
   license all_of: ["BSD-3-Clause", "MirOS", "ISC", "CC0-1.0"]
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/musl-fts"
 
   skip_clean "bin/pax"

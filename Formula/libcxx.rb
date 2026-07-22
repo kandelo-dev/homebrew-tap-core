@@ -12,7 +12,7 @@ class Libcxx < Formula
   revision 1
 
   depends_on "cmake" => :build
-  depends_on "wabt" => :test
+  depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
 
   skip_clean "lib/libc++.a"
   skip_clean "lib/libc++-pic.a"

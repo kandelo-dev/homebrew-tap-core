@@ -86,9 +86,9 @@ class Git < Formula
   ]
   revision 1
 
-  depends_on "binaryen" => :build
-  depends_on "pkgconf" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::PkgconfRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/coreutils"
   depends_on "kandelo-dev/tap-core/dash"
   depends_on "kandelo-dev/tap-core/diffutils"

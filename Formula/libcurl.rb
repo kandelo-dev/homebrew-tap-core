@@ -18,9 +18,9 @@ class Libcurl < Formula
     sha256 cellar: :any_skip_relocation, wasm64_kandelo: "f780d907648bcbc8d0c9a7deeb465875a26bc4a27bc889050b37cb56a0dc58c8"
   end
 
-  depends_on "pkgconf" => [:build, :test]
-  depends_on "binaryen" => :test
-  depends_on "wabt" => :test
+  depends_on KandeloFormulaSupport::PkgconfRequirement => [:build, :test]
+  depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
+  depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
   depends_on "kandelo-dev/tap-core/openssl"
   depends_on "kandelo-dev/tap-core/zlib"
 

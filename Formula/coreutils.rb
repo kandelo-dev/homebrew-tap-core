@@ -10,8 +10,8 @@ class Coreutils < Formula
   sha256 "7a0124327b398fd9eb1a6abde583389821422c744ffa10734b24f557610d3283"
   license "GPL-3.0-or-later"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/coreutils"
 

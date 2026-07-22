@@ -16,9 +16,9 @@ class MuslFts < Formula
   # Autoconf embeds Homebrew's canonical opt/m4 path. Declare m4 directly so
   # the isolated publisher exposes the reviewed native m4 at that exact path.
   depends_on "m4" => :build
-  depends_on "pkgconf" => :build
-  depends_on "binaryen" => :test
-  depends_on "wabt" => :test
+  depends_on KandeloFormulaSupport::PkgconfRequirement => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
+  depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
 
   skip_clean "lib/libfts.a"
 

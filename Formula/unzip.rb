@@ -10,8 +10,8 @@ class Unzip < Formula
   sha256 "036d96991646d0449ed0aa952e4fbe21b476ce994abc276e49d30e686708bd37"
   license "Info-ZIP"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/unzip", "bin/funzip", "bin/unzipsfx", "bin/zipinfo"
 

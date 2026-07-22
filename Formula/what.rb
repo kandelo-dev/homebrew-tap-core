@@ -10,8 +10,8 @@ class What < Formula
   sha256 "218d0e29d362c49eec614bdbde551ee1ef3e9fa254e28748598a06100bd6bbd7"
   license "BSD-3-Clause"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/what"
 

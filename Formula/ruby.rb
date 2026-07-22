@@ -27,7 +27,7 @@ class Ruby < Formula
   # that native toolchain explicit instead of depending on the publisher PATH.
   depends_on "rust" => :build
   depends_on "unzip" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin"

@@ -17,8 +17,8 @@ class Fbdoom < Formula
   sha256 "77f57cee68fed438dffdba96f6070b8975c16652a63ddf4fb967994e5585a38a"
   license "GPL-2.0-or-later"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/fbdoom"
 

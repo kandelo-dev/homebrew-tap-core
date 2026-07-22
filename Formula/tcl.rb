@@ -15,8 +15,8 @@ class Tcl < Formula
   sha256 "053ce8cdc632a6484f6a1416524fb66b614cd13e77366ad2722bc205d53eff95"
   license "TCL"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin/tclsh9.0"
