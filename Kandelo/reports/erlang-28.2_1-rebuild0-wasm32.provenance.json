@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/erlang.json",
-      "sha256": "a6164a4b03de05a2768f32aa31e2a7569b1086da6de5e4a8898d32d749cc233c"
+      "sha256": "5eacfc150c5c446c476dace55fe6a8472fb1f368cf27ecdc06eace3af5d14185"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/erlang-28.2_1-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "f4114fdb6948fd7fa90a268244ccf85c1c75d7627e8f407af9c563b53d4f5f8d"
+      "sha256": "aa82de77908bd0296627348a0218ea5455999dea01dafa8692d9a1eebf5f0af2"
     },
     "provenance_json": {
       "path": "Kandelo/reports/erlang-28.2_1-rebuild0-wasm32.provenance.json",
-      "sha256": "f1147c73025a865dc1016db4e95abe4ba41906c54448ebca9037a10cc21c7e45"
+      "sha256": "c8da7d621d1f4d867c0d8d2e8b92a1dd723d3e1aa1db50a29e1d7861b86e65c9"
     }
   },
   "repositories": {

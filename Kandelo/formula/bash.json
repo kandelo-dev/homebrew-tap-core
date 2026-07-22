@@ -5,45 +5,46 @@
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-20T11:46:50Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29738426190",
+      "built_at": "2026-07-22T23:02:33Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29963546302",
       "built_from": {
-        "formula_sha256": "0a23c5447e8adcd371745ba6cca026d64ef8884f9bdace220cad040cd6040d15",
-        "kandelo_commit": "90bbf4e3a90a6d72305243ce10b04e26d471c0ac",
+        "formula_sha256": "c7b2baad0d1bc66b30bc7cabbc01b77f47935e4214978a0e1c0a5483ae93e693",
+        "kandelo_commit": "dc5bb1210f1359be17d1d4078a7d56ec14903e4a",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "4293a38082c67a4c73264840363959fadf49cb3a",
+        "tap_commit": "9cb60ec8181afb0c04a14440b5a66b03e81b48e6",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 1763279,
-      "cache_key_sha": "0b6bbfc9b9e4a58b9b2f4218f5a2abc27c4f57d29a68b5e7c7235ff986fe8219",
+      "bytes": 1783637,
+      "cache_key_sha": "bef5fef66621e5692db4268997f7ab5ad30bf6c9f18ea578453843a142c4a87b",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
       "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/bash-5.2.37_1-rebuild3-wasm32.json",
+      "link_manifest": "Kandelo/link/bash-5.2.37_2-rebuild3-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "0b6bbfc9b9e4a58b9b2f4218f5a2abc27c4f57d29a68b5e7c7235ff986fe8219",
+      "sha256": "bef5fef66621e5692db4268997f7ab5ad30bf6c9f18ea578453843a142c4a87b",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/bash/blobs/sha256:0b6bbfc9b9e4a58b9b2f4218f5a2abc27c4f57d29a68b5e7c7235ff986fe8219"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/bash/blobs/sha256:bef5fef66621e5692db4268997f7ab5ad30bf6c9f18ea578453843a142c4a87b"
     }
   ],
   "dependencies": [
     {
+      "full_name": "kandelo-dev/tap-core/ncurses",
       "name": "ncurses",
       "version": "6.5"
     }
   ],
   "formula_path": "Formula/bash.rb",
-  "formula_revision": 1,
+  "formula_revision": 2,
   "full_name": "kandelo-dev/tap-core/bash",
   "kandelo_abi": 41,
   "name": "bash",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "cbb439454adf2718b010d0fe2caffe7158340a0e",
+  "tap_commit": "9cb60ec8181afb0c04a14440b5a66b03e81b48e6",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
-  "version": "5.2.37_1"
+  "version": "5.2.37_2"
 }

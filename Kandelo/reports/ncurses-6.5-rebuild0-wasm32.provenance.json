@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/ncurses.json",
-      "sha256": "1ce1d619c622dd22bc0d847719d68c427845804d11aad2929f0839fbffa48024"
+      "sha256": "97932fc28ab4885d0a7ec9a33cdd4580543a78f88f7426e55e1d885a7bb09af9"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/ncurses-6.5-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "f4114fdb6948fd7fa90a268244ccf85c1c75d7627e8f407af9c563b53d4f5f8d"
+      "sha256": "aa82de77908bd0296627348a0218ea5455999dea01dafa8692d9a1eebf5f0af2"
     },
     "provenance_json": {
       "path": "Kandelo/reports/ncurses-6.5-rebuild0-wasm32.provenance.json",
-      "sha256": "f9aa3be8135670a26140a3767e1ce0fd0654135a605628195d370a6ade59a6d7"
+      "sha256": "915148938c34a4dd46e669e274c13e9516635a99f492c011aa66013ddf676825"
     }
   },
   "repositories": {
