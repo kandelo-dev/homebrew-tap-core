@@ -32,18 +32,27 @@ cross-ABI hashes, or hand-edit a generated block. See the
 [authoritative bottle-repeatability contract](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md#retained-receipt-bottle-repeatability)
 for the exact immutable-input boundary and revision rules.
 
-Registry-bridged build scripts must declare every native tool they execute as a
-direct build dependency. The sealed publisher removes ambient host tools and
-retains only declared native dependency paths. For example, Ruby declares both
-`rust` and `wabt` as build dependencies because its bridge resolves the host
-target with `rustc`, builds `wasm-local-root-spill` with `cargo` and `rustc`
-inside caller-owned scratch space, and inspects the result with `wasm-objdump`.
+Registry-bridged build scripts must declare every native tool they execute.
+Ordinary native Formula dependencies remain direct build dependencies. The
+publisher-only Binaryen, pkgconf, and WABT tools instead use the closed
+`KandeloFormulaSupport::{Binaryen,Pkgconf,Wabt}Requirement` allowlist. A tool
+used only while building uses `:build`; a tool also used by `test do` uses
+`[:build, :test]`. Never use `:test` alone: pinned Homebrew would retain that
+Requirement while pouring a bottle and make the Kandelo guest resolve a host
+tool it cannot run. The trusted publisher statically binds each Requirement to
+one `homebrew/core` Formula and sentinel executable, then exposes only that
+sealed native tool. Adding another Requirement therefore requires a matching
+publisher-contract change; it is not a tap-local escape hatch. For example,
+Ruby declares `rust` as an ordinary build dependency and WABT through the
+allowlisted Requirement because its bridge resolves the host target with
+`rustc`, builds `wasm-local-root-spill` with `cargo` and `rustc` inside
+caller-owned scratch space, and inspects the result with `wasm-objdump`.
 
-Final linked programs must declare WABT and Binaryen as build dependencies and
-call `kandelo_validate_wasm_artifact` after their last optimizer or fork
-instrumentation transform and before installation. WABT reads the export
-surface; Binaryen is the fallback disassembler for opcodes WABT cannot yet
-decode. Use `fork: :required` for programs that must carry the complete
+Final linked programs must declare the WABT and Binaryen Requirements with
+`:build` and call `kandelo_validate_wasm_artifact` after their last optimizer
+or fork instrumentation transform and before installation. WABT reads the
+export surface; Binaryen is the fallback disassembler for opcodes WABT cannot
+yet decode. Use `fork: :required` for programs that must carry the complete
 continuation interface, `fork: :forbidden` for programs that must remain
 fork-free, and the default `:auto` only when the program's imported fork
 surface is authoritative. The validator rejects ABI mismatches, legacy

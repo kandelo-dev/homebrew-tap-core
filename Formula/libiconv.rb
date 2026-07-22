@@ -12,8 +12,8 @@ class Libiconv < Formula
   sha256 "88dd96a8c0464eca144fc791ae60cd31cd8ee78321e67397e25fc095c4a19aa6"
   license all_of: ["GPL-3.0-or-later", "LGPL-2.0-or-later"]
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   on_macos do
     keg_only :provided_by_macos

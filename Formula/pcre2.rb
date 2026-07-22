@@ -10,9 +10,9 @@ class Pcre2 < Formula
   license "BSD-3-Clause"
   revision 1
 
-  depends_on "binaryen" => :build
-  depends_on "pkgconf" => [:build, :test]
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::PkgconfRequirement => [:build, :test]
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin", "lib/libpcre2-8.a", "lib/libpcre2-16.a", "lib/libpcre2-32.a",
              "lib/libpcre2-posix.a"

@@ -20,8 +20,8 @@ class Nethack < Formula
     sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051"
   end
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/ncurses"
 
   skip_clean "bin/nethack"

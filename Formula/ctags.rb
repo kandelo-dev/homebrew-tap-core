@@ -9,10 +9,10 @@ class Ctags < Formula
   sha256 "2c63efe9e0e083dc50e6fdd8c5414781cc8873d8c8940cf553c01870ed962f8c"
   license "GPL-2.0-or-later"
 
-  depends_on "binaryen" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on "docutils" => :build
-  depends_on "pkgconf" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::PkgconfRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/ctags", "bin/optscript", "bin/readtags"
 

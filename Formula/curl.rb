@@ -9,7 +9,7 @@ class Curl < Formula
   sha256 "c7ca7db48b0909743eaef34250da02c19bc61d4f1dcedd6603f109409536ab56"
   license "curl"
 
-  depends_on "pkgconf" => :build
+  depends_on KandeloFormulaSupport::PkgconfRequirement => :build
   depends_on "kandelo-dev/tap-core/libcurl"
   depends_on "kandelo-dev/tap-core/openssl"
   depends_on "kandelo-dev/tap-core/zlib"

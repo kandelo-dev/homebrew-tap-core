@@ -11,8 +11,8 @@ class Bash < Formula
   license "GPL-3.0-or-later"
   revision 2
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/ncurses"
 
   skip_clean "bin/bash"

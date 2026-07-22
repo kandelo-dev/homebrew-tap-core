@@ -11,8 +11,8 @@ class Sqlite < Formula
   license "blessing"
   revision 1
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/sqlite3"
   skip_clean "lib/libsqlite3.a"

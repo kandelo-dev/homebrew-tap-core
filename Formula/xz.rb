@@ -13,9 +13,9 @@ class Xz < Formula
   license all_of: ["GPL-2.0-or-later", "LGPL-2.1-or-later", "0BSD"]
   revision 1
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
-  depends_on "pkgconf" => :test
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
+  depends_on KandeloFormulaSupport::PkgconfRequirement => [:build, :test]
 
   skip_clean "bin", "lib/liblzma.a"
 

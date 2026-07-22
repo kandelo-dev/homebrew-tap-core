@@ -12,8 +12,8 @@ class Tar < Formula
   sha256 "4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16"
   license "GPL-3.0-or-later"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/dash"
   depends_on "kandelo-dev/tap-core/gzip"
 

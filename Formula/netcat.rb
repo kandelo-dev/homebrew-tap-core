@@ -13,9 +13,9 @@ class Netcat < Formula
   license "GPL-2.0-or-later"
 
   depends_on "automake" => :build
-  depends_on "binaryen" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on "gpatch" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/nc"
 

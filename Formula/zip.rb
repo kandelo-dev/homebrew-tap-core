@@ -10,8 +10,8 @@ class Zip < Formula
   sha256 "f0e8bb1f9b7eb0b01285495a2699df3a4b766784c1765a8f1aeedf63c0806369"
   license "Info-ZIP"
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/unzip"
 
   skip_clean "bin/zip", "bin/zipcloak", "bin/zipnote", "bin/zipsplit"

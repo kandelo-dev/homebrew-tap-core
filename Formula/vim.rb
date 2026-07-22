@@ -12,8 +12,8 @@ class Vim < Formula
   sha256 "7d460830e12082b541c34b0b96942ebface1ad9fa0b77245930717c0ccf8b664"
   license "Vim"
 
-  depends_on "binaryen" => [:build, :test]
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/dash" => :test
   depends_on "kandelo-dev/tap-core/ncurses"
 

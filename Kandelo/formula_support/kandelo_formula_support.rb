@@ -56,6 +56,35 @@ module KandeloFormulaSupport
     WASM_POSIX_SYSROOT
   ].freeze
 
+  # These tools exist only in the trusted Linux publisher. Model them as
+  # Homebrew Requirements so a stock Kandelo guest can prune them with the
+  # build graph before it tries to resolve homebrew/core Formula metadata.
+  # The publisher statically validates this exact class shape and restores the
+  # named, sealed host tools to source builds and Formula tests.
+  # Declares the sealed Binaryen optimizer used by artifact validation.
+  class BinaryenRequirement < Requirement
+    KANDELO_NATIVE_FORMULA = "binaryen"
+    KANDELO_NATIVE_SENTINEL = "wasm-opt"
+    fatal true
+    satisfy(build_env: false) { which("wasm-opt") }
+  end
+
+  # Declares the sealed pkgconf executable used by build and test probes.
+  class PkgconfRequirement < Requirement
+    KANDELO_NATIVE_FORMULA = "pkgconf"
+    KANDELO_NATIVE_SENTINEL = "pkg-config"
+    fatal true
+    satisfy(build_env: false) { which("pkg-config") }
+  end
+
+  # Declares the sealed WABT validator used by artifact validation.
+  class WabtRequirement < Requirement
+    KANDELO_NATIVE_FORMULA = "wabt"
+    KANDELO_NATIVE_SENTINEL = "wasm-validate"
+    fatal true
+    satisfy(build_env: false) { which("wasm-validate") }
+  end
+
   # The publisher writes one root-owned, read-only attestation at a fixed path
   # before Homebrew evaluates any Formula. Load it while this support module is
   # required, validate the exact target Formula and support bytes, and freeze
