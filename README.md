@@ -87,7 +87,7 @@ Formula source currently present in this repository includes:
 - `nethack`, the ncurses game binary and its complete immutable data tree;
 - `fbdoom`, the pinned framebuffer Doom engine with its reviewed Kandelo
   input, audio, and save-path adaptations (the shareware IWAD remains an
-  external, integrity-checked demo asset); and
+  external, integrity-checked demo asset);
 - `tcl`, the threaded Tcl 9 interpreter, standard library, extension loader,
   and development files; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
