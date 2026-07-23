@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/bash.json",
-      "sha256": "fb5075ece7a1e76d616810ca3822d1cdb96d58489d1777798783e2e2908a7c66"
+      "sha256": "3718074fe47436f9cebd7b33738a4368f8465808e1d08b2366b771047aaae14c"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/bash-5.2.37_2-rebuild3-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "aa82de77908bd0296627348a0218ea5455999dea01dafa8692d9a1eebf5f0af2"
+      "sha256": "83d72eca4c3bdcacbb0842cd46ddca7f58516fd7c366cc608329e160874a0bf4"
     },
     "provenance_json": {
       "path": "Kandelo/reports/bash-5.2.37_2-rebuild3-wasm32.provenance.json",
-      "sha256": "e109d780ad8319da3ff15226afbee0e4289072c3182ed5243b17447ad2c94684"
+      "sha256": "b6ebdd075ec0f95e8f6cca47fe2c92cca44460ba37f9e78cd8cf41a0303901db"
     }
   },
   "repositories": {

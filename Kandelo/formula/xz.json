@@ -37,7 +37,7 @@
   "name": "xz",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "9cb60ec8181afb0c04a14440b5a66b03e81b48e6",
+  "tap_commit": "97fc956a2d4e311cd9a5d85c8581d8085f47d3c9",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "5.6.2_1"

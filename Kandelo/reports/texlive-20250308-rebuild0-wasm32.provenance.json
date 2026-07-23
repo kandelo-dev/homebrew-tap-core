@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/texlive.json",
-      "sha256": "013ba8d2907dc643dda38aa335c43062341c315cc91837dd2d8413539ab0c98c"
+      "sha256": "40d71d028ab18bc061863e5717139c832f243a780e42bd7b9a4194bbc1a79e5f"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/texlive-20250308-rebuild0-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "aa82de77908bd0296627348a0218ea5455999dea01dafa8692d9a1eebf5f0af2"
+      "sha256": "83d72eca4c3bdcacbb0842cd46ddca7f58516fd7c366cc608329e160874a0bf4"
     },
     "provenance_json": {
       "path": "Kandelo/reports/texlive-20250308-rebuild0-wasm32.provenance.json",
-      "sha256": "8b15aed4feaae330cb9185dba5237d94974b61a0cdf52f4a517368ec6f9fbe88"
+      "sha256": "ebe8bc07e4d3e46e8651926a0dd51cc759557ef746af6d4cc08866c7b2604410"
     }
   },
   "repositories": {

@@ -416,4 +416,10 @@ class Tcl < Formula
     assert_equal "tcl-thread-ok\n",
       kandelo_run_browser_wasm(thread_wasm, [], timeout_ms: 180_000)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "4919c6b52d025a1d73c1a02c14c0dc9ee0b7ce263420b27ec7559d7216d38c41"
+  end
+
 end
