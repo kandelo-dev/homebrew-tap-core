@@ -110,6 +110,7 @@ class Libiconv < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "f97630d988a1c2e5faf2ff0980c3033981f94fc3f1bf4919f4355cdd874ab72d"
   end
 

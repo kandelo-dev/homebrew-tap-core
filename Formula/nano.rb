@@ -79,7 +79,7 @@ class Nano < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 3
+    rebuild 4
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "a436b8a2d03dae2558c78985a90e49ae3343cdf9581d62b3f73c96da5aa22673"
   end
 end

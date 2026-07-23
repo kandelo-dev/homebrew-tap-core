@@ -57,6 +57,7 @@ class Grep < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "329d5c8cb98668b8040e67fcfa5d767eb14b8627c6ee8431ede338e1e12ca540"
   end
 

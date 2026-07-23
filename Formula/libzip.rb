@@ -335,6 +335,7 @@ class Libzip < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "1f2355418103ed61307abc977dd82768414bff331f502dded7fafbe06e7c3d7c"
   end
 

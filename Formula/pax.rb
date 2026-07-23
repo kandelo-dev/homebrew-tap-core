@@ -132,6 +132,7 @@ class Pax < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "4748c44e343ffa4c4f2e70e51c68085d251cb35bc94ff1fd16ffcab5080ea84d"
   end
 

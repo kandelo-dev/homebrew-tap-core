@@ -50,6 +50,7 @@ class Gzip < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "bb77f31106485ba7e67b5532eb38cb31efae65cb215a0ecdf8a99916e452d6fe"
   end
 

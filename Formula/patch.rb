@@ -119,6 +119,7 @@ class Patch < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "c6fc1e3ce0735098a0e0163a08deaf4c9147aed1762b849a8c01cd2ef5d93111"
   end
 

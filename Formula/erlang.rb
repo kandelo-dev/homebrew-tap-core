@@ -225,6 +225,7 @@ class Erlang < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2"
   end
 

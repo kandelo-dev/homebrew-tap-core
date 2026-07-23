@@ -91,6 +91,7 @@ class Dash < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "89ac0416a5e160baae31560ce4dd444379722d832eabac7c4a299cf323886d36"
   end
 
