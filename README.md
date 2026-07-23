@@ -37,6 +37,9 @@ Formula source currently present in this repository includes:
 - `curl`, the matching command-line transfer client linked against the tap library;
 - `ncurses`, the wide-character terminal library and CLI dependency root;
 - `less` and its upstream `more` compatibility mode, terminal pagers linked against the tap's real ncurses termcap interface;
+- `mandoc`, the normal `man`, `apropos`, `whatis`, and `makewhatis` toolset,
+  with roff formatting, section lookup, compressed-page support, and real
+  terminal paging through the tap's `less`;
 - `bash`, the GNU interactive shell with real pipelines, subprocesses, and process substitution;
 - `sed`, the GNU stream-editing CLI used by shell and build workflows;
 - `gzip`, the GNU compression CLI with native gunzip and zcat aliases;

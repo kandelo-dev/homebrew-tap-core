@@ -1,12 +1,14 @@
 require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require "zlib"
 
 class Mandoc < Formula
   include KandeloFormulaSupport
 
-  GUEST_CELLAR = "/home/linuxbrew/.linuxbrew/Cellar".freeze
-  GUEST_MANPATH = "/home/linuxbrew/.linuxbrew/share/man:/usr/share/man".freeze
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/mandoc".freeze
-  GUEST_PAGER = "/home/linuxbrew/.linuxbrew/opt/less/bin/less".freeze
+  GUEST_PREFIX = "/home/linuxbrew/.linuxbrew".freeze
+  GUEST_CELLAR = "#{GUEST_PREFIX}/Cellar".freeze
+  GUEST_MANPATH = "#{GUEST_PREFIX}/share/man:/usr/share/man".freeze
+  GUEST_OPT_PREFIX = "#{GUEST_PREFIX}/opt/mandoc".freeze
+  GUEST_PAGER = "#{GUEST_PREFIX}/opt/less/bin/less".freeze
 
   desc "Manual page formatter and viewer for Kandelo"
   homepage "https://mandoc.bsd.lv/"
@@ -149,6 +151,11 @@ class Mandoc < Formula
     manual_root = "/manual"
     section_one = testpath/"hello.1"
     section_five = testpath/"hello.5"
+    alias_page = testpath/"hello-alias.1"
+    compressed_page = testpath/"compressed.1.gz"
+    mdoc_page = testpath/"kandelo.7"
+    soelim_page = testpath/"soelim-main.roff"
+    soelim_include = testpath/"soelim-include.roff"
     section_one.write <<~ROFF
       .TH HELLO 1 "July 2026" "Kandelo" "General Commands Manual"
       .SH NAME
@@ -163,9 +170,36 @@ class Mandoc < Formula
       .SH DESCRIPTION
       This text came from the section five page.
     ROFF
+    alias_page.write ".so man1/hello.1\n"
+    Zlib::GzipWriter.open(compressed_page) do |gzip|
+      gzip.write <<~ROFF
+        .TH COMPRESSED 1 "July 2026" "Kandelo" "General Commands Manual"
+        .SH NAME
+        compressed \\- exercise a compressed bottle manual
+        .SH DESCRIPTION
+        This text came from the compressed page.
+      ROFF
+    end
+    mdoc_page.write <<~MDOC
+      .Dd July 23, 2026
+      .Dt KANDELO 7
+      .Os Kandelo
+      .Sh NAME
+      .Nm kandelo
+      .Nd run POSIX software in WebAssembly
+      .Sh DESCRIPTION
+      This text came from the mdoc page.
+    MDOC
+    soelim_page.write "before include\n.so soelim-include.roff\nafter include\n"
+    soelim_include.write "included text\n"
     manual_files = {
-      "#{manual_root}/man1/hello.1" => section_one,
-      "#{manual_root}/man5/hello.5" => section_five,
+      "#{manual_root}/man1/compressed.1.gz" => compressed_page,
+      "#{manual_root}/man1/hello-alias.1"   => alias_page,
+      "#{manual_root}/man1/hello.1"         => section_one,
+      "#{manual_root}/man5/hello.5"         => section_five,
+      "#{manual_root}/man7/kandelo.7"       => mdoc_page,
+      "#{manual_root}/soelim-include.roff"  => soelim_include,
+      "#{manual_root}/soelim-main.roff"     => soelim_page,
     }
     env = {
       "HOME"       => "/",
@@ -187,13 +221,92 @@ class Mandoc < Formula
     assert_includes fifth, "This text came from the section five page."
     refute_includes fifth, "This text came from the section one page."
 
-    default_path = kandelo_run_wasm(
-      bin/"man", ["1", "hello"],
-      argv0: "#{GUEST_OPT_PREFIX}/bin/man", env: env, merge_stderr: true,
-      guest_files: { "/home/linuxbrew/.linuxbrew/share/man/man1/hello.1" => section_one }
+    assert_equal "#{manual_root}/man1/hello.1\n", kandelo_run_wasm(
+      bin/"man", ["-M", manual_root, "-w", "1", "hello"],
+      argv0: "#{GUEST_OPT_PREFIX}/bin/man", env: env, guest_files: manual_files
     )
-    assert_includes default_path, "This text came from the section one page."
+
+    alias_output = kandelo_run_wasm(
+      bin/"man", ["-M", manual_root, "hello-alias"],
+      argv0: "#{GUEST_OPT_PREFIX}/bin/man", env: env, guest_files: manual_files
+    )
+    assert_includes alias_output, "This text came from the section one page."
+
+    compressed_output = kandelo_run_wasm(
+      bin/"man", ["-M", manual_root, "compressed"],
+      argv0: "#{GUEST_OPT_PREFIX}/bin/man", env: env, guest_files: manual_files
+    )
+    assert_includes compressed_output, "This text came from the compressed page."
+
+    mdoc_output = kandelo_run_wasm(
+      bin/"man", ["-M", manual_root, "7", "kandelo"],
+      argv0: "#{GUEST_OPT_PREFIX}/bin/man", env: env, guest_files: manual_files
+    )
+    assert_includes mdoc_output, "This text came from the mdoc page."
+
+    demandoc_output = kandelo_run_wasm(bin/"demandoc", [], stdin: section_one.read)
+    assert_includes demandoc_output, "print a greeting"
+    refute_includes demandoc_output, ".TH HELLO"
+
+    soelim_output = kandelo_run_wasm(
+      bin/"soelim", ["soelim-main.roff"],
+      env:         env.merge("KERNEL_CWD" => manual_root),
+      guest_files: manual_files
+    )
+    assert_equal "before include\nincluded text\nafter include\n", soelim_output
+
+    missing_output = kandelo_run_wasm(
+      bin/"man", ["-M", manual_root, "missing"],
+      argv0: "#{GUEST_OPT_PREFIX}/bin/man", env: env, merge_stderr: true,
+      guest_files: manual_files, expected_status: 5
+    )
+    assert_match(/No entry for missing in the manual/, missing_output)
+
+    # Homebrew keeps a package's page in its versioned keg and exposes the
+    # ordinary global MANPATH entry as a relative symlink. This fixture matches
+    # the composed VFS shape: resolving the link is metadata-only, while
+    # opening its Cellar target is what materializes the owning bottle.
+    homebrew_prefix = testpath/"homebrew-prefix"
+    bottled_page = homebrew_prefix/"Cellar/bottled/1.0/share/man/man1/bottled.1"
+    bottled_link = homebrew_prefix/"share/man/man1/bottled.1"
+    bottled_page.dirname.mkpath
+    bottled_link.dirname.mkpath
+    bottled_page.write(
+      section_one.read
+                 .sub("HELLO", "BOTTLED")
+                 .sub("hello \\- print a greeting", "bottled \\- read a linked bottle page")
+                 .sub("section one page", "linked bottle page"),
+    )
+    bottled_link.make_symlink("../../../Cellar/bottled/1.0/share/man/man1/bottled.1")
+    prefix_mount = { GUEST_PREFIX => homebrew_prefix.realpath }
+    default_path = kandelo_run_wasm(
+      bin/"man", ["1", "bottled"],
+      argv0: "#{GUEST_OPT_PREFIX}/bin/man", env: env, merge_stderr: true,
+      writable_host_directories: prefix_mount
+    )
+    assert_includes default_path, "This text came from the linked bottle page."
     refute_includes default_path, "outdated mandoc.db"
+
+    # Database-backed lookup is optional for viewing but remains a supported
+    # user-facing surface for apropos(1), whatis(1), and makewhatis(8).
+    assert_empty kandelo_run_wasm(
+      sbin/"makewhatis", ["#{GUEST_PREFIX}/share/man"],
+      argv0: "#{GUEST_OPT_PREFIX}/sbin/makewhatis", env: env,
+      writable_host_directories: prefix_mount
+    )
+    assert_path_exists homebrew_prefix/"share/man/mandoc.db"
+    whatis_output = kandelo_run_wasm(
+      bin/"whatis", ["-M", "#{GUEST_PREFIX}/share/man", "bottled"],
+      argv0: "#{GUEST_OPT_PREFIX}/bin/whatis", env: env,
+      writable_host_directories: prefix_mount
+    )
+    assert_match(/^bottled\(1\) - read a linked bottle page$/, whatis_output)
+    apropos_output = kandelo_run_wasm(
+      bin/"apropos", ["-M", "#{GUEST_PREFIX}/share/man", "linked bottle"],
+      argv0: "#{GUEST_OPT_PREFIX}/bin/apropos", env: env,
+      writable_host_directories: prefix_mount
+    )
+    assert_match(/^bottled\(1\) - read a linked bottle page$/, apropos_output)
 
     browser = kandelo_run_browser_wasm(
       bin/"man", ["-M", manual_root, "1", "hello"],

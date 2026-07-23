@@ -18,6 +18,7 @@ class PosixUtilsLite < Formula
   version "0.1.0"
   sha256 "07e7a7ebff8003114f6b4bef1ccdc2e9b15ecfbd5e6ccc3bf8563107b8151fde"
   license "GPL-2.0-or-later"
+  revision 1
 
   depends_on "binaryen" => :build
   depends_on "wabt" => :build
@@ -27,7 +28,7 @@ class PosixUtilsLite < Formula
   def install
     kandelo_require_arch!("wasm32")
 
-    # Transitional Tier-2 bridge: keep the current 37-command multicall
+    # Transitional Tier-2 bridge: keep the remaining 36-command multicall
     # recipe intact for the exact-shell proof. Splitting commands into their
     # maintained upstream Formulae remains explicit migration debt.
     out_dir = kandelo_build_package(script_env: {})
