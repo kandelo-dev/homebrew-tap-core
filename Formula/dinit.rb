@@ -132,6 +132,20 @@ class Dinit < Formula
   end
 
   test do
+    assert_supervisor_run = lambda do |output|
+      assert_includes output, "service-helper-ok"
+      assert_includes output, "service-stop-ok"
+      %w[worker list stop boot].each { |service| assert_includes output, service }
+      assert_match(/\[\s*OK\s*\] worker/, output)
+      assert_match(/^\[[\[{][^\n]*\] boot$/, output)
+      refute_includes output, "libc++abi: terminating"
+    end
+    assert_malformed_service = lambda do |output|
+      assert_includes output, "malformed"
+      assert_includes output, "restart must be one of"
+      refute_includes output, "libc++abi: terminating"
+    end
+
     PROGRAMS.each do |program|
       artifact = sbin/program
       assert_path_exists artifact
@@ -238,7 +252,7 @@ class Dinit < Formula
       guest_files:               service_files,
       merge_stderr:              true,
     )
-    assert_supervisor_run(node_output)
+    assert_supervisor_run.call(node_output)
 
     browser_output = kandelo_run_browser_wasm(
       sbin/"dinit",
@@ -251,7 +265,7 @@ class Dinit < Formula
       merge_stderr:       true,
       timeout_ms:         120_000,
     )
-    assert_supervisor_run(browser_output)
+    assert_supervisor_run.call(browser_output)
 
     malformed = testpath/"malformed"
     malformed.write <<~EOS
@@ -274,7 +288,7 @@ class Dinit < Formula
       guest_files:  malformed_files,
       merge_stderr: true,
     )
-    assert_malformed_service(malformed_supervisor_node)
+    assert_malformed_service.call(malformed_supervisor_node)
 
     malformed_supervisor_browser = kandelo_run_browser_wasm(
       sbin/"dinit",
@@ -285,7 +299,7 @@ class Dinit < Formula
       guest_program_path: "/sbin/dinit",
       merge_stderr:       true,
     )
-    assert_malformed_service(malformed_supervisor_browser)
+    assert_malformed_service.call(malformed_supervisor_browser)
 
     malformed_node = kandelo_run_wasm(
       sbin/"dinitcheck",
@@ -295,7 +309,7 @@ class Dinit < Formula
       merge_stderr:    true,
       expected_status: 1,
     )
-    assert_malformed_service(malformed_node)
+    assert_malformed_service.call(malformed_node)
 
     malformed_browser = kandelo_run_browser_wasm(
       sbin/"dinitcheck",
@@ -307,22 +321,7 @@ class Dinit < Formula
       merge_stderr:       true,
       expected_status:    1,
     )
-    assert_malformed_service(malformed_browser)
-  end
-
-  def assert_supervisor_run(output)
-    assert_includes output, "service-helper-ok"
-    assert_includes output, "service-stop-ok"
-    %w[worker list stop boot].each { |service| assert_includes output, service }
-    assert_match(/\[\s*OK\s*\] worker/, output)
-    assert_match(/^\[[\[{][^\n]*\] boot$/, output)
-    refute_includes output, "libc++abi: terminating"
-  end
-
-  def assert_malformed_service(output)
-    assert_includes output, "malformed"
-    assert_includes output, "restart must be one of"
-    refute_includes output, "libc++abi: terminating"
+    assert_malformed_service.call(malformed_browser)
   end
 end
 
