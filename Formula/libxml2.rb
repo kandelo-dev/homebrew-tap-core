@@ -291,6 +291,7 @@ class Libxml2 < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "e461a9eed2839637ad061dd35d1b8569912e57a0daf84918f944f0bef3055595"
   end
 

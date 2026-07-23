@@ -168,6 +168,7 @@ class Sqlite < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "d8a7a49c269a651b66be6a8b2d371f4f0a740e8a5db587f147a7ee437360bf83"
     sha256 cellar: :any_skip_relocation, wasm64_kandelo: "e5b06a7fee3e85b98095ce06144aba3ed5b7cbced77af1420115507d6a878f44"
   end

@@ -326,6 +326,7 @@ class Dinit < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "211e70a89b0a3e61d41767056d5b05e4637416802a7d1c65eaeb164b6c05cfa5"
   end
 

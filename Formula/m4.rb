@@ -61,6 +61,7 @@ class M4 < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "239ed19d15ff5514bb37cc57366e0d25d3b81f7b9b20bdfba17af6f44829c9c6"
   end
 

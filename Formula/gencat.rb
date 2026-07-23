@@ -220,6 +220,7 @@ class Gencat < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "15797b34192270f24156cdb4c8ff354f486c2dda787291390b0f00218b43aee0"
   end
 
