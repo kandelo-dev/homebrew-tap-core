@@ -7,7 +7,7 @@ class PosixUtilsLite < Formula
 
   UTILITIES = %w[
     ar asa cal cflow compress ctags cxref ed ex fuser gencat getconf gettext
-    iconv ipcrm ipcs lex locale logger man more msgfmt ngettext nm patch pax
+    iconv ipcrm ipcs lex locale logger more msgfmt ngettext nm patch pax
     pgrep ps renice strings strip uncompress uudecode uuencode what xgettext
     yacc
   ].freeze
