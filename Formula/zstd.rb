@@ -14,9 +14,9 @@ class Zstd < Formula
     "MIT",
   ]
 
-  depends_on "binaryen" => :build
-  depends_on "wabt" => :build
-  depends_on "pkgconf" => :test
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
+  depends_on KandeloFormulaSupport::PkgconfRequirement => [:build, :test]
 
   skip_clean "bin/zstd", "lib/libzstd.a"
 

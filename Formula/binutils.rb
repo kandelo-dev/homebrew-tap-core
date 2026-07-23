@@ -10,9 +10,9 @@ class Binutils < Formula
   sha256 "e127a709cba24c76de8936cb7083dd768f28cd37eb010492e2f19b71eb1294e4"
   license "GPL-3.0-or-later"
 
-  depends_on "binaryen" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on "texinfo" => :build
-  depends_on "wabt" => [:build, :test]
+  depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
 
   skip_clean "bin/addr2line", "bin/ar", "bin/c++filt", "bin/elfedit",
              "bin/nm", "bin/objcopy", "bin/objdump", "bin/ranlib",

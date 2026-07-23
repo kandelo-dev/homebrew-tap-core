@@ -12,11 +12,11 @@ class Bc < Formula
   sha256 "62adfca89b0a1c0164c2cdca59ca210c1d44c3ffc46daf9931cf4942664cb02a"
   license "GPL-3.0-or-later"
 
-  depends_on "binaryen" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on "bison" => :build
   depends_on "flex" => :build
   depends_on "m4" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/bc"
 

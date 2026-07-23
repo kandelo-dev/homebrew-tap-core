@@ -17,9 +17,9 @@ class Python < Formula
   license "Python-2.0"
   revision 1
 
-  depends_on "binaryen" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on "unzip" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin"

@@ -18,11 +18,11 @@ class Erlang < Formula
   license "Apache-2.0"
   revision 1
 
-  depends_on "binaryen" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on "erlang@28" => :build
   depends_on "gnu-tar" => :build
   depends_on "python@3.13" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "zstd" => :build
   depends_on "kandelo-dev/tap-core/dash" => :test
 

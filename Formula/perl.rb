@@ -12,10 +12,10 @@ class Perl < Formula
   sha256 "4c155b4e6160682b38919b55ac319081b898db11857cf18a7d9ffed2648ccaff"
   license any_of: ["Artistic-1.0-Perl", "GPL-1.0-or-later"]
 
-  depends_on "binaryen" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on "gnu-sed" => :build
   depends_on "gpatch" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/perl"
   skip_clean "lib/perl5"

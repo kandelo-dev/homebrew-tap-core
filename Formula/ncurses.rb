@@ -9,9 +9,9 @@ class Ncurses < Formula
   sha256 "136d91bc269a9a5785e5f9e980bc76ab57428f604ce3e5a5a90cebc767971cc6"
   license "X11"
 
-  depends_on "binaryen" => :build
-  depends_on "pkgconf" => [:build, :test]
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::PkgconfRequirement => [:build, :test]
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/libcxx"
 
   skip_clean "bin"

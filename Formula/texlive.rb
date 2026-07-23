@@ -102,9 +102,9 @@ class Texlive < Formula
   sha256 "fffdb1a3d143c177a4398a2229a40d6a88f18098e5f6dcfd57648c9f2417490f"
   license :cannot_represent
 
-  depends_on "binaryen" => :build
-  depends_on "pkgconf" => :build
-  depends_on "wabt" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::PkgconfRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/libcxx"
   depends_on "kandelo-dev/tap-core/libpng"
   depends_on "kandelo-dev/tap-core/zlib"

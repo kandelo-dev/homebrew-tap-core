@@ -10,7 +10,7 @@ class FileFormula < Formula
   sha256 "fc97f51029bb0e2c9f4e3bffefdaf678f0e039ee872b9de5c002a6d09c784d82"
   license "BSD-2-Clause-Darwin"
 
-  depends_on "pkgconf" => :build
+  depends_on KandeloFormulaSupport::PkgconfRequirement => :build
   depends_on "kandelo-dev/tap-core/bzip2"
   depends_on "kandelo-dev/tap-core/libmagic"
   depends_on "kandelo-dev/tap-core/xz"

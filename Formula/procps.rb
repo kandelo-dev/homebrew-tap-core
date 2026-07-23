@@ -9,9 +9,9 @@ class Procps < Formula
   sha256 "67bea6fbc3a42a535a0230c9e891e5ddfb4d9d39422d46565a2990d1ace15216"
   license "GPL-2.0-or-later"
 
-  depends_on "binaryen" => :build
-  depends_on "pkgconf" => :build
-  depends_on "wabt" => [:build, :test]
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::PkgconfRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
 
   skip_clean "bin/ps"
 

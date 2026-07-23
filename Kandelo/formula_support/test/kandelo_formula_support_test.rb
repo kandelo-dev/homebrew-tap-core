@@ -7,6 +7,17 @@ require "open3"
 require "pathname" # rubocop:disable Lint/RedundantRequireStatement
 require "rbconfig"
 require "tmpdir"
+
+# Standalone Ruby does not preload Homebrew's Requirement DSL. This minimal
+# double exists only when the real Homebrew class is absent; the publisher's
+# pinned-Homebrew lifecycle test exercises the real DSL separately.
+unless defined?(Requirement)
+  requirement_double = Class.new
+  requirement_double.define_singleton_method(:fatal) { |*| nil }
+  requirement_double.define_singleton_method(:satisfy) { |**_options, &_block| nil }
+  Object.const_set(:Requirement, requirement_double)
+end
+
 require_relative "../kandelo_formula_support"
 
 # Regression coverage for Formula runtime execution evidence.
@@ -15,6 +26,70 @@ class KandeloFormulaSupportTest < Minitest::Test
   InstalledFormula = Struct.new(:rack, :pkg_version, keyword_init: true)
   StableSpec = Struct.new(:url, :checksum, keyword_init: true)
   StableChecksum = Struct.new(:hexdigest, keyword_init: true)
+
+  NATIVE_REQUIREMENT_IDENTITIES = {
+    KandeloFormulaSupport::BinaryenRequirement => ["binaryen", "wasm-opt"],
+    KandeloFormulaSupport::PkgconfRequirement  => ["pkgconf", "pkg-config"],
+    KandeloFormulaSupport::WabtRequirement     => ["wabt", "wasm-validate"],
+  }.freeze
+
+  def test_native_requirements_have_the_closed_publisher_identity
+    support = Pathname(__dir__).join("..", "kandelo_formula_support.rb").binread
+    NATIVE_REQUIREMENT_IDENTITIES.each do |requirement, (formula, sentinel)|
+      assert_operator requirement, :<, Requirement
+      assert_equal formula, requirement::KANDELO_NATIVE_FORMULA
+      assert_equal sentinel, requirement::KANDELO_NATIVE_SENTINEL
+      canonical_definition = [
+        "  class #{requirement.name.split("::").last} < Requirement",
+        "    KANDELO_NATIVE_FORMULA = #{formula.inspect}",
+        "    KANDELO_NATIVE_SENTINEL = #{sentinel.inspect}",
+        "    fatal true",
+        "    satisfy(build_env: false) { which(#{sentinel.inspect}) }",
+        "  end",
+        "",
+      ].join("\n")
+      assert_includes support, canonical_definition
+    end
+  end
+
+  def test_formulae_use_requirements_for_every_allowlisted_publisher_tool
+    formula_dir = Pathname(__dir__).join("../../..", "Formula").cleanpath
+    requirement_pattern = Regexp.new(
+      "depends_on KandeloFormulaSupport::([A-Z][A-Za-z0-9]*Requirement) " \
+      "=> (:[a-z]+|\\[(?::[a-z]+)(?:, :[a-z]+)*\\])",
+    )
+    allowed = NATIVE_REQUIREMENT_IDENTITIES.keys.map do |requirement|
+      requirement.name.split("::").last
+    end.sort
+    support_require =
+      %Q(require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s\n)
+    used = []
+
+    formula_dir.glob("*.rb").sort.each do |path|
+      source = path.binread
+      refute_match(
+        /^  depends_on "(?:binaryen|pkgconf|wabt)"(?: => .+)?$/,
+        source,
+        "#{path.basename} exposes a publisher-only tool as a Formula dependency",
+      )
+
+      declarations = source.scan(requirement_pattern)
+      next if declarations.empty?
+
+      assert_includes source, support_require
+      declarations.each do |class_name, tags|
+        assert_includes allowed, class_name, "#{path.basename} uses an unsealed native Requirement"
+        assert_includes(
+          [":build", "[:build, :test]"],
+          tags,
+          "#{path.basename} lets a publisher-only Requirement enter the guest runtime graph",
+        )
+        used << class_name
+      end
+    end
+
+    assert_equal allowed, used.uniq.sort
+  end
 
   # Minimal Formula double for command-construction tests.
   class Harness
@@ -283,6 +358,10 @@ class KandeloFormulaSupportTest < Minitest::Test
       "WASM_POSIX_SYSROOT"              => fixture.fetch(:sysroot).to_s,
     }.merge(environment)
     source = [
+      "class Requirement",
+      "  def self.fatal(*) = nil",
+      "  def self.satisfy(**_options, &_block) = nil",
+      "end",
       *support_paths.map { |path| "require #{path.to_s.inspect}" },
       after_require,
     ].join("\n")
@@ -1518,12 +1597,14 @@ class KandeloFormulaSupportTest < Minitest::Test
 
   def test_ruby_declares_every_registry_script_native_build_dependency
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
-    native_declarations = formula.lines.grep(/^\s*depends_on "(?:rust|unzip|wabt)"/)
+    native_declarations = formula.lines.grep(
+      /^\s*depends_on (?:"(?:rust|unzip)"|KandeloFormulaSupport::WabtRequirement)/,
+    )
 
     assert_equal [
       %Q(  depends_on "rust" => :build\n),
       %Q(  depends_on "unzip" => :build\n),
-      %Q(  depends_on "wabt" => :build\n),
+      "  depends_on KandeloFormulaSupport::WabtRequirement => :build\n",
     ], native_declarations
   end
 
