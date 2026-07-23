@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/nano.json",
-      "sha256": "4e71832f049f4cdba356522198b5ba2e82490e536faf2b2578590c91f99d93c0"
+      "sha256": "a566351dc6a4f16f7bfee9ac6e851bf3cf5e431117d30807b22cfee5d7fffc66"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/nano-8.0-rebuild3-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "83d72eca4c3bdcacbb0842cd46ddca7f58516fd7c366cc608329e160874a0bf4"
+      "sha256": "242533c0c1df86f421763b5468326a91357faba9f714b52b7b1bf87883203e7b"
     },
     "provenance_json": {
       "path": "Kandelo/reports/nano-8.0-rebuild3-wasm32.provenance.json",
-      "sha256": "eb031ab4e5c63a9027bafbedf3c15c9d9b7e09990fe43fbb1de2ac6daa65262b"
+      "sha256": "edd0ee4f73969b20b67fd099a52aba87ae4f503169fee8047576b4df17fe4be9"
     }
   },
   "repositories": {

@@ -1,0 +1,63 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1055018,
+    "cache_key_sha": "211e70a89b0a3e61d41767056d5b05e4637416802a7d1c65eaeb164b6c05cfa5",
+    "payload_root": "dinit/0.19.4",
+    "sha256": "211e70a89b0a3e61d41767056d5b05e4637416802a7d1c65eaeb164b6c05cfa5",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/dinit/blobs/sha256:211e70a89b0a3e61d41767056d5b05e4637416802a7d1c65eaeb164b6c05cfa5"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "sbin"
+    ]
+  },
+  "kandelo_abi": 41,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/dinit/0.19.4",
+  "links": [
+    {
+      "source": "sbin/dinit",
+      "target": "sbin/dinit",
+      "type": "symlink"
+    },
+    {
+      "source": "sbin/dinitcheck",
+      "target": "sbin/dinitcheck",
+      "type": "symlink"
+    },
+    {
+      "source": "sbin/dinitctl",
+      "target": "sbin/dinitctl",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man5/dinit-service.5",
+      "target": "share/man/man5/dinit-service.5",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man8/dinit.8",
+      "target": "share/man/man8/dinit.8",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man8/dinitcheck.8",
+      "target": "share/man/man8/dinitcheck.8",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man8/dinitctl.8",
+      "target": "share/man/man8/dinitctl.8",
+      "type": "symlink"
+    }
+  ],
+  "package": "dinit",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/dinit.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "0.19.4"
+}

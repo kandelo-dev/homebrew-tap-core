@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-23T16:49:26Z",
+  "generated_at": "2026-07-23T17:59:24Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 41,
   "kandelo_commit": "427185cff21ed213de8b8b6573b4f1a3757aa80d",
@@ -452,6 +452,51 @@
       "full_name": "kandelo-dev/tap-core/diffutils",
       "name": "diffutils",
       "version": "3.12"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-23T17:59:24Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30029829582",
+          "built_from": {
+            "formula_sha256": "0712b47358735eb478bf555a2c9b6cc1bd76abe5eea058e110abe996f958c89b",
+            "kandelo_commit": "427185cff21ed213de8b8b6573b4f1a3757aa80d",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "01f9bea83ad53efff2c6fbdc92396d50d1aeabb1",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 1055018,
+          "cache_key_sha": "211e70a89b0a3e61d41767056d5b05e4637416802a7d1c65eaeb164b6c05cfa5",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 41,
+          "link_manifest": "Kandelo/link/dinit-0.19.4-rebuild0-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "211e70a89b0a3e61d41767056d5b05e4637416802a7d1c65eaeb164b6c05cfa5",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/dinit/blobs/sha256:211e70a89b0a3e61d41767056d5b05e4637416802a7d1c65eaeb164b6c05cfa5"
+        }
+      ],
+      "dependencies": [
+        {
+          "full_name": "kandelo-dev/tap-core/libcxx",
+          "name": "libcxx",
+          "version": "21.1.7_1"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/dinit.json",
+      "formula_path": "Formula/dinit.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/dinit",
+      "name": "dinit",
+      "version": "0.19.4"
     },
     {
       "bottle_rebuild": 0,
@@ -2829,7 +2874,7 @@
   ],
   "release_tag": "bottles-abi-v41",
   "schema": 1,
-  "tap_commit": "97fc956a2d4e311cd9a5d85c8581d8085f47d3c9",
+  "tap_commit": "01f9bea83ad53efff2c6fbdc92396d50d1aeabb1",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }
