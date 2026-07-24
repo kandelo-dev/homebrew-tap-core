@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import dataclasses
 import datetime as dt
 import fcntl
@@ -135,6 +136,15 @@ class FormulaStatus:
     arches: tuple[str, ...]
     dependencies: tuple[str, ...]
     detail: str
+
+
+@dataclasses.dataclass(frozen=True)
+class SubmittedDispatch:
+    formula: str
+    arches: tuple[str, ...]
+    tap_sha: str
+    before_run_ids: frozenset[int]
+    submitted_at: str
 
 
 def _run(
@@ -1113,6 +1123,140 @@ def _utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def submitted_dispatch(state: Mapping[str, Any]) -> SubmittedDispatch:
+    value = state.get("unresolved_dispatch")
+    if not isinstance(value, dict):
+        raise RolloutError("rollout state has no unresolved dispatch to recover")
+    expected_keys = {
+        "arches",
+        "before_run_ids",
+        "formula",
+        "recorded_at",
+        "status",
+        "submitted_at",
+        "tap_sha",
+    }
+    if set(value) != expected_keys or value.get("status") != "submitted":
+        raise RolloutError(
+            "unresolved dispatch is not an exact submitted intent; refusing recovery"
+        )
+    formula = value.get("formula")
+    arches = value.get("arches")
+    tap_sha = value.get("tap_sha")
+    before_run_ids = value.get("before_run_ids")
+    if (
+        formula not in FORMULA_ORDER
+        or arches != list(required_arches(formula))
+        or not isinstance(tap_sha, str)
+        or not re.fullmatch(r"[0-9a-f]{40}", tap_sha)
+        or not isinstance(before_run_ids, list)
+        or any(
+            isinstance(run_id, bool) or not isinstance(run_id, int) or run_id <= 0
+            for run_id in before_run_ids
+        )
+        or before_run_ids != sorted(set(before_run_ids))
+        or not isinstance(value.get("recorded_at"), str)
+        or not value["recorded_at"]
+        or not isinstance(value.get("submitted_at"), str)
+        or not value["submitted_at"]
+    ):
+        raise RolloutError("unresolved submitted dispatch is malformed")
+    if any(entry.get("formula") == formula for entry in state["dispatches"]):
+        raise RolloutError(
+            f"unresolved dispatch Formula {formula} is already in the durable ledger"
+        )
+    return SubmittedDispatch(
+        formula=formula,
+        arches=tuple(arches),
+        tap_sha=tap_sha,
+        before_run_ids=frozenset(before_run_ids),
+        submitted_at=value["submitted_at"],
+    )
+
+
+def build_and_test_matrix(
+    jobs: Iterable[Mapping[str, Any]],
+) -> tuple[tuple[str, str], ...]:
+    matrix: list[tuple[str, str]] = []
+    pattern = re.compile(
+        r"(?:^| / )build-and-test "
+        r"\(([a-z0-9][a-z0-9._-]*),\s+(wasm32|wasm64)\)$"
+    )
+    for job in jobs:
+        name = job.get("name")
+        if not isinstance(name, str):
+            continue
+        match = pattern.search(name)
+        if match:
+            matrix.append((match.group(1), match.group(2)))
+    return tuple(sorted(matrix))
+
+
+def workflow_run_page(
+    github: GitHub,
+) -> tuple[int, tuple[Mapping[str, Any], ...]]:
+    response = github.runs(per_page=100)
+    total_count = response.get("total_count")
+    runs = response.get("workflow_runs")
+    if (
+        isinstance(total_count, bool)
+        or not isinstance(total_count, int)
+        or total_count < 0
+        or not isinstance(runs, list)
+        or len(runs) != min(total_count, 100)
+    ):
+        raise RolloutError("GitHub returned an incomplete workflow run page")
+    seen_run_ids: set[int] = set()
+    for run in runs:
+        if (
+            not isinstance(run, dict)
+            or isinstance(run.get("id"), bool)
+            or not isinstance(run.get("id"), int)
+            or run["id"] <= 0
+        ):
+            raise RolloutError("GitHub returned a malformed workflow run")
+        if run["id"] in seen_run_ids:
+            raise RolloutError(f"GitHub returned duplicate workflow run {run['id']}")
+        seen_run_ids.add(run["id"])
+    return total_count, tuple(runs)
+
+
+def matching_dispatch_run_ids(
+    github: GitHub,
+    *,
+    before_ids: frozenset[int],
+    formula: str,
+    arches: Sequence[str],
+    tap_sha: str,
+) -> tuple[int, ...]:
+    total_count, runs = workflow_run_page(github)
+    returned_run_ids = frozenset(run["id"] for run in runs)
+    # WHY: before_run_ids is the durable correlation boundary. If no recorded
+    # run remains in the newest page, an older duplicate may be hidden beyond
+    # that page; accepting one visible candidate could adopt the wrong request.
+    if before_ids:
+        if returned_run_ids.isdisjoint(before_ids):
+            raise RolloutError(
+                "dispatch correlation window exceeded the newest 100 workflow runs"
+            )
+    elif total_count != len(runs):
+        raise RolloutError(
+            "dispatch correlation window exceeded the complete workflow history"
+        )
+
+    expected_matrix = tuple(sorted((formula, arch) for arch in arches))
+    candidates: list[int] = []
+    for run in runs:
+        run_id = run["id"]
+        if run_id in before_ids:
+            continue
+        if run.get("event") != "repository_dispatch" or run.get("head_sha") != tap_sha:
+            continue
+        if build_and_test_matrix(github.jobs(run_id)) == expected_matrix:
+            candidates.append(run_id)
+    return tuple(candidates)
+
+
 def acknowledge_dispatch(
     github: GitHub,
     *,
@@ -1124,32 +1268,14 @@ def acknowledge_dispatch(
     poll_seconds: float,
 ) -> int:
     deadline = time.monotonic() + timeout_seconds
-    expected_arches = set(arches)
     while time.monotonic() < deadline:
-        response = github.runs(per_page=100)
-        candidates: list[int] = []
-        for run in response["workflow_runs"]:
-            if not isinstance(run, dict) or not isinstance(run.get("id"), int):
-                continue
-            if run["id"] in before_ids:
-                continue
-            if run.get("event") != "repository_dispatch" or run.get("head_sha") != tap_sha:
-                continue
-            jobs = github.jobs(run["id"])
-            found_formulae = run_formulae(jobs)
-            found_arches = {
-                arch
-                for job in jobs
-                for arch in re.findall(
-                    rf"\({re.escape(formula)},\s+(wasm32|wasm64)\)",
-                    str(job.get("name", "")),
-                )
-            }
-            if (
-                found_formulae == frozenset((formula,))
-                and expected_arches == found_arches
-            ):
-                candidates.append(run["id"])
+        candidates = matching_dispatch_run_ids(
+            github,
+            before_ids=before_ids,
+            formula=formula,
+            arches=arches,
+            tap_sha=tap_sha,
+        )
         if len(candidates) == 1:
             return candidates[0]
         if len(candidates) > 1:
@@ -1161,6 +1287,60 @@ def acknowledge_dispatch(
         f"no unambiguous run ID appeared for {formula} within {timeout_seconds}s; "
         "the unresolved state marker was retained"
     )
+
+
+def recover_submitted_dispatch(
+    *,
+    tap: GitTap,
+    github: GitHub,
+    expected_kandelo_sha: str,
+    state_path: pathlib.Path,
+    no_fetch: bool,
+) -> tuple[str, int]:
+    state = read_state(state_path)
+    if state is None:
+        raise RolloutError(f"rollout state {state_path} does not exist")
+    sha = tap.main_without_fetch() if no_fetch else tap.fetch_main()
+    snapshot = load_snapshot(tap, sha)
+    validate_workflow(github, snapshot, expected_kandelo_sha)
+    validate_state(state, snapshot, expected_kandelo_sha)
+    intent = submitted_dispatch(state)
+    if not tap.is_ancestor(intent.tap_sha, snapshot.sha):
+        raise RolloutError(
+            "unresolved dispatch tap SHA is not an ancestor of current tap main"
+        )
+
+    candidates = matching_dispatch_run_ids(
+        github,
+        before_ids=intent.before_run_ids,
+        formula=intent.formula,
+        arches=intent.arches,
+        tap_sha=intent.tap_sha,
+    )
+    if len(candidates) != 1:
+        raise RolloutError(
+            f"recovery found {len(candidates)} exact new runs for "
+            f"{intent.formula}; the unresolved marker was retained"
+        )
+    run_id = candidates[0]
+
+    # WHY: The dispatch request may have succeeded before acknowledgement
+    # timed out. Record the correlated run and clear the marker in one file
+    # replacement; recovery never sends another repository_dispatch.
+    recovered_state = copy.deepcopy(state)
+    recovered_state["dispatches"].append(
+        {
+            "formula": intent.formula,
+            "arches": list(intent.arches),
+            "tap_sha": intent.tap_sha,
+            "run_id": run_id,
+            "submitted_at": intent.submitted_at,
+        }
+    )
+    recovered_state["unresolved_dispatch"] = None
+    validate_state(recovered_state, snapshot, expected_kandelo_sha)
+    write_state(state_path, recovered_state)
+    return intent.formula, run_id
 
 
 def dispatch_ready(
@@ -1241,11 +1421,10 @@ def dispatch_ready(
             for formula in values
         }:
             continue
-        recent = github.runs(per_page=100)
+        _recent_total, recent_runs = workflow_run_page(github)
         before_ids = frozenset(
             run["id"]
-            for run in recent["workflow_runs"]
-            if isinstance(run, dict) and isinstance(run.get("id"), int)
+            for run in recent_runs
         )
         intent = {
             "formula": selected.name,
@@ -1363,12 +1542,21 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--state-file",
         type=pathlib.Path,
-        help="durable local dispatch ledger (required with --dispatch)",
+        help=(
+            "durable local dispatch ledger "
+            "(required with --dispatch or --recover-dispatch)"
+        ),
     )
-    parser.add_argument(
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument(
         "--dispatch",
         action="store_true",
         help="explicitly create fresh production repository_dispatch events",
+    )
+    action.add_argument(
+        "--recover-dispatch",
+        action="store_true",
+        help="record one exact late run for the submitted unresolved intent; never dispatch",
     )
     parser.add_argument(
         "--max-dispatches",
@@ -1379,8 +1567,8 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--ack-timeout",
         type=int,
-        default=120,
-        help="seconds to wait for each unambiguous new run ID",
+        default=600,
+        help="seconds to wait for each unambiguous new run ID (default: 600)",
     )
     parser.add_argument(
         "--poll-seconds",
@@ -1397,8 +1585,8 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[0-9a-f]{40}", args.expected_kandelo_sha):
         parser.error("--expected-kandelo-sha must be exactly 40 lowercase hex characters")
-    if args.dispatch and args.state_file is None:
-        parser.error("--state-file is required with --dispatch")
+    if (args.dispatch or args.recover_dispatch) and args.state_file is None:
+        parser.error("--state-file is required with --dispatch or --recover-dispatch")
     if args.max_dispatches < 1 or args.max_dispatches > MAX_ACTIVE_RUNS:
         parser.error(f"--max-dispatches must be between 1 and {MAX_ACTIVE_RUNS}")
     if args.ack_timeout < 1 or args.poll_seconds <= 0:
@@ -1411,6 +1599,21 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
     try:
         tap = GitTap(args.tap_root)
         github = GitHub()
+        if args.recover_dispatch:
+            state_path = args.state_file.resolve()
+            with state_lock(state_path):
+                formula, run_id = recover_submitted_dispatch(
+                    tap=tap,
+                    github=github,
+                    expected_kandelo_sha=args.expected_kandelo_sha,
+                    state_path=state_path,
+                    no_fetch=args.no_fetch,
+                )
+            print(
+                f"recovered submitted {formula} dispatch as run {run_id}; "
+                "no repository_dispatch was sent"
+            )
+            return 0
         if args.dispatch:
             state_path = args.state_file.resolve()
             with state_lock(state_path):

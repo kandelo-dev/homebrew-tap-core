@@ -10,6 +10,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import re
 import sys
 import tempfile
 import unittest
@@ -44,6 +45,11 @@ class FakeGitHub:
     def run(self, run_id):
         return self.runs_by_id[run_id]
 
+    def dispatch(self, formula, arches):
+        raise AssertionError(
+            f"recovery must never dispatch {formula} for {tuple(arches)}"
+        )
+
     def workflow(self):
         return {
             "id": rollout.WORKFLOW_ID,
@@ -59,6 +65,120 @@ class RolloutControllerTests(unittest.TestCase):
         cls.tap = rollout.GitTap(cls.root)
         cls.head = cls.tap.git("rev-parse", "HEAD").stdout.strip()
         cls.snapshot = rollout.load_snapshot(cls.tap, cls.head)
+        match = re.search(
+            r"reusable-homebrew-bottle-publish\.yml@([0-9a-f]{40})",
+            cls.snapshot.workflow_source,
+        )
+        assert match is not None
+        cls.publisher_sha = match.group(1)
+
+    def _submitted_state(
+        self,
+        *,
+        formula: str = "asa",
+        arches: tuple[str, ...] = ("wasm32",),
+        before_run_ids: tuple[int, ...] = (),
+    ) -> dict:
+        state = rollout.initial_state(self.snapshot, self.publisher_sha)
+        state["unresolved_dispatch"] = {
+            "formula": formula,
+            "arches": list(arches),
+            "tap_sha": self.head,
+            "recorded_at": "2026-07-24T06:46:34Z",
+            "before_run_ids": list(before_run_ids),
+            "status": "submitted",
+            "submitted_at": "2026-07-24T06:46:35Z",
+        }
+        return state
+
+    @staticmethod
+    def _candidate_github(
+        *runs: dict,
+        jobs_by_run: dict[int, tuple[dict, ...]] | None = None,
+        total_count: int | None = None,
+    ) -> FakeGitHub:
+        github = FakeGitHub()
+        github.by_status[None] = {
+            "total_count": len(runs) if total_count is None else total_count,
+            "workflow_runs": list(runs),
+        }
+        github.jobs_by_run = jobs_by_run or {}
+        return github
+
+    def _recover(
+        self,
+        github: FakeGitHub,
+        state: dict,
+    ) -> tuple[tuple[str, int], dict]:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "rollout.json"
+            rollout.write_state(state_path, state)
+            with mock.patch.object(
+                self.tap, "main_without_fetch", return_value=self.head
+            ):
+                result = rollout.recover_submitted_dispatch(
+                    tap=self.tap,
+                    github=github,
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                )
+            recovered = rollout.read_state(state_path)
+            assert recovered is not None
+            self.assertEqual(0o600, state_path.stat().st_mode & 0o777)
+            return result, recovered
+
+    def _assert_recovery_fails_unchanged(
+        self,
+        pattern: str,
+        github: FakeGitHub,
+        state: dict,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "rollout.json"
+            rollout.write_state(state_path, state)
+            original = state_path.read_bytes()
+            with (
+                mock.patch.object(
+                    self.tap, "main_without_fetch", return_value=self.head
+                ),
+                self.assertRaisesRegex(rollout.RolloutError, pattern),
+            ):
+                rollout.recover_submitted_dispatch(
+                    tap=self.tap,
+                    github=github,
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                )
+            self.assertEqual(original, state_path.read_bytes())
+
+    @staticmethod
+    def _run(
+        run_id: int,
+        head_sha: str,
+        *,
+        status: str = "in_progress",
+        conclusion=None,
+        event: str = "repository_dispatch",
+    ) -> dict:
+        return {
+            "id": run_id,
+            "event": event,
+            "head_sha": head_sha,
+            "status": status,
+            "conclusion": conclusion,
+        }
+
+    @staticmethod
+    def _matrix_jobs(
+        formula: str,
+        *arches: str,
+    ) -> tuple[dict, ...]:
+        return tuple(
+            {"name": f"publish / build-and-test ({formula}, {arch})"}
+            for arch in arches
+        )
 
     @staticmethod
     def _identity_source(
@@ -732,6 +852,191 @@ jobs:
                 poll_seconds=0.001,
             )
 
+    def test_recovery_atomically_records_one_late_exact_match(self):
+        state = self._submitted_state(before_run_ids=(100,))
+        github = self._candidate_github(
+            self._run(100, self.head),
+            self._run(123, self.head),
+            jobs_by_run={
+                123: (
+                    {"name": "publish / plan"},
+                    *self._matrix_jobs("asa", "wasm32"),
+                    {"name": "publish / upload-bottle (asa, wasm32)"},
+                ),
+            },
+        )
+
+        result, recovered = self._recover(github, state)
+
+        self.assertEqual(("asa", 123), result)
+        self.assertIsNone(recovered["unresolved_dispatch"])
+        self.assertEqual(
+            {
+                "formula": "asa",
+                "arches": ["wasm32"],
+                "tap_sha": self.head,
+                "run_id": 123,
+                "submitted_at": "2026-07-24T06:46:35Z",
+            },
+            recovered["dispatches"][-1],
+        )
+
+    def test_recovery_accepts_an_exact_run_that_already_completed(self):
+        state = self._submitted_state()
+        github = self._candidate_github(
+            self._run(
+                123,
+                self.head,
+                status="completed",
+                conclusion="failure",
+            ),
+            jobs_by_run={123: self._matrix_jobs("asa", "wasm32")},
+        )
+
+        result, recovered = self._recover(github, state)
+
+        self.assertEqual(("asa", 123), result)
+        self.assertEqual(123, recovered["dispatches"][-1]["run_id"])
+
+    def test_recovery_with_no_new_run_fails_without_rewriting_state(self):
+        state = self._submitted_state(before_run_ids=(100,))
+        github = self._candidate_github(
+            self._run(100, self.head),
+            jobs_by_run={100: self._matrix_jobs("asa", "wasm32")},
+        )
+        self._assert_recovery_fails_unchanged(
+            "recovery found 0 exact new runs",
+            github,
+            state,
+        )
+
+    def test_recovery_with_multiple_exact_runs_fails_without_rewriting_state(self):
+        state = self._submitted_state()
+        github = self._candidate_github(
+            self._run(123, self.head),
+            self._run(124, self.head),
+            jobs_by_run={
+                123: self._matrix_jobs("asa", "wasm32"),
+                124: self._matrix_jobs("asa", "wasm32"),
+            },
+        )
+        self._assert_recovery_fails_unchanged(
+            "recovery found 2 exact new runs",
+            github,
+            state,
+        )
+
+    def test_recovery_rejects_a_run_from_the_wrong_tap_head(self):
+        state = self._submitted_state()
+        github = self._candidate_github(
+            self._run(123, "f" * 40),
+            jobs_by_run={123: self._matrix_jobs("asa", "wasm32")},
+        )
+        self._assert_recovery_fails_unchanged(
+            "recovery found 0 exact new runs",
+            github,
+            state,
+        )
+
+    def test_recovery_rejects_the_wrong_formula_matrix(self):
+        state = self._submitted_state()
+        github = self._candidate_github(
+            self._run(123, self.head),
+            jobs_by_run={123: self._matrix_jobs("bc", "wasm32")},
+        )
+        self._assert_recovery_fails_unchanged(
+            "recovery found 0 exact new runs",
+            github,
+            state,
+        )
+
+    def test_recovery_rejects_the_wrong_architecture_matrix(self):
+        state = self._submitted_state()
+        github = self._candidate_github(
+            self._run(123, self.head),
+            jobs_by_run={123: self._matrix_jobs("asa", "wasm64")},
+        )
+        self._assert_recovery_fails_unchanged(
+            "recovery found 0 exact new runs",
+            github,
+            state,
+        )
+
+    def test_recovery_fails_closed_when_the_job_page_is_incomplete(self):
+        state = self._submitted_state()
+        github = self._candidate_github(self._run(123, self.head))
+        github.jobs = mock.Mock(
+            side_effect=rollout.RolloutError(
+                "GitHub returned an incomplete job matrix for run 123"
+            )
+        )
+        self._assert_recovery_fails_unchanged(
+            "incomplete job matrix",
+            github,
+            state,
+        )
+
+    def test_recovery_rejects_a_truncated_workflow_run_page(self):
+        state = self._submitted_state(before_run_ids=(100,))
+        github = self._candidate_github(
+            self._run(123, self.head),
+            jobs_by_run={123: self._matrix_jobs("asa", "wasm32")},
+            total_count=2,
+        )
+        self._assert_recovery_fails_unchanged(
+            "incomplete workflow run page",
+            github,
+            state,
+        )
+
+    def test_recovery_rejects_one_visible_match_after_boundary_loss(self):
+        state = self._submitted_state(before_run_ids=(100,))
+        runs = tuple(
+            self._run(run_id, self.head)
+            for run_id in range(200, 300)
+        )
+        github = self._candidate_github(
+            *runs,
+            jobs_by_run={299: self._matrix_jobs("asa", "wasm32")},
+            total_count=200,
+        )
+        self._assert_recovery_fails_unchanged(
+            "correlation window exceeded the newest 100",
+            github,
+            state,
+        )
+
+    def test_recovery_requires_complete_history_for_an_empty_boundary(self):
+        state = self._submitted_state(before_run_ids=())
+        runs = tuple(
+            self._run(run_id, self.head)
+            for run_id in range(200, 300)
+        )
+        github = self._candidate_github(
+            *runs,
+            jobs_by_run={299: self._matrix_jobs("asa", "wasm32")},
+            total_count=101,
+        )
+        self._assert_recovery_fails_unchanged(
+            "correlation window exceeded the complete workflow history",
+            github,
+            state,
+        )
+
+    def test_recovery_rejects_an_intent_not_known_to_be_submitted(self):
+        state = self._submitted_state()
+        state["unresolved_dispatch"]["status"] = "intent-recorded"
+        state["unresolved_dispatch"].pop("submitted_at")
+        github = self._candidate_github(
+            self._run(123, self.head),
+            jobs_by_run={123: self._matrix_jobs("asa", "wasm32")},
+        )
+        self._assert_recovery_fails_unchanged(
+            "not an exact submitted intent",
+            github,
+            state,
+        )
+
     def test_state_write_is_private_and_preserves_unresolved_marker(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "rollout.json"
@@ -766,6 +1071,23 @@ jobs:
                 )
             )
         self.assertIn("--state-file is required with --dispatch", stderr.getvalue())
+
+    def test_cli_requires_state_for_recovery_and_preserves_timeout_override(self):
+        base = (
+            "--tap-root",
+            str(self.root),
+            "--expected-kandelo-sha",
+            "a" * 40,
+        )
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit):
+            rollout.parse_args((*base, "--recover-dispatch"))
+        self.assertIn("--recover-dispatch", stderr.getvalue())
+
+        defaults = rollout.parse_args(base)
+        override = rollout.parse_args((*base, "--ack-timeout", "17"))
+        self.assertEqual(600, defaults.ack_timeout)
+        self.assertEqual(17, override.ack_timeout)
 
 
 if __name__ == "__main__":

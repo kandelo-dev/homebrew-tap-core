@@ -252,6 +252,28 @@ repository-rooted bottle namespace. A failed Formula blocks its downstream
 dependents, but it does not block unrelated ready Formulae from filling an
 available slot.
 
+The rollout controller records a durable intent before sending
+`repository_dispatch`, then waits for GitHub to expose the run's generated job
+matrix. If that acknowledgement times out, do not dispatch the Formula again:
+the request may already have succeeded. Wait until the run shows the exact
+Formula and architecture matrix, then recover it against the same ledger:
+
+```bash
+: "${KANDELO_ROLLOUT_STATE:?set this to the existing ABI 42 rollout ledger}"
+python3 scripts/abi42-rollout.py \
+  --tap-root "$PWD" \
+  --expected-kandelo-sha dc8f83027961d8e83ba1df1aad828bc603c71f52 \
+  --state-file "$KANDELO_ROLLOUT_STATE" \
+  --recover-dispatch
+```
+
+Recovery sends no event. It uses the intent's recorded pre-dispatch run IDs,
+Formula, architectures, and tap commit, and accepts exactly one later
+`repository_dispatch` run with that exact generated matrix. No match, multiple
+matches, a partial job page, or any identity mismatch leaves the unresolved
+marker unchanged. Resume normal controller dispatching only after recovery
+reports the correlated run ID.
+
 After a failed publication or a publisher-pin change, submit a fresh
 `repository_dispatch`; do not select **Re-run jobs** on the old run. A rerun
 retains the original caller workflow and its pinned reusable-workflow revision,
