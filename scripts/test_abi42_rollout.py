@@ -1061,10 +1061,10 @@ jobs:
         inventory = rollout.reconcile_recorded_activity(
             github,
             rollout.RunInventory(
-                count=7,
-                runs=(),
-                formulae={},
-                unknown_run_ids=(),
+                count=8,
+                runs=({"id": 123, "status": "in_progress"},),
+                formulae={123: frozenset()},
+                unknown_run_ids=(123,),
             ),
             {
                 "dispatches": [
@@ -1074,6 +1074,7 @@ jobs:
         )
         self.assertEqual(8, inventory.count)
         self.assertEqual(frozenset(("asa",)), inventory.formulae[123])
+        self.assertEqual((), inventory.unknown_run_ids)
 
     def test_successful_recorded_run_waits_for_finalizer_visibility(self):
         github = FakeGitHub()
@@ -1376,6 +1377,103 @@ jobs:
             ["bc", "binutils", "bzip2"],
             [entry["formula"] for entry in state["dispatches"]],
         )
+
+    def test_uncertain_http_request_blocks_retry_but_preserves_later_plans(self):
+        first_token = "abi42-" + "d" * 32
+        second_token = "abi42-" + "e" * 32
+        state = self._token_state(
+            ("bc", first_token, "planned"),
+            ("binutils", second_token, "planned"),
+        )
+
+        class FailingGitHub(FakeGitHub):
+            def __init__(self) -> None:
+                super().__init__()
+                self.calls: list[tuple[str, str]] = []
+
+            def dispatch(self, formula, arches, dispatch_token):
+                del arches
+                self.calls.append((formula, dispatch_token))
+                raise rollout.RolloutError("ambiguous HTTP transport failure")
+
+        github = FailingGitHub()
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "rollout.json"
+            rollout.write_state(state_path, state)
+            with (
+                mock.patch.object(
+                    self.tap, "main_without_fetch", return_value=self.head
+                ),
+                self.assertRaisesRegex(
+                    rollout.RolloutError, "ambiguous HTTP transport failure"
+                ),
+            ):
+                rollout.dispatch_ready(
+                    tap=self.tap,
+                    github=github,
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=2,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                )
+            retained = rollout.read_state(state_path)
+            assert retained is not None
+            self.assertEqual(
+                ["request-started", "planned"],
+                [
+                    entry["status"]
+                    for entry in retained["pending_dispatches"]
+                ],
+            )
+            with (
+                mock.patch.object(
+                    self.tap, "main_without_fetch", return_value=self.head
+                ),
+                self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    "recover them before continuing",
+                ),
+            ):
+                rollout.dispatch_ready(
+                    tap=self.tap,
+                    github=github,
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=2,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                )
+        self.assertEqual([("bc", first_token)], github.calls)
+
+    def test_shared_ack_timeout_retains_every_submitted_token(self):
+        first_token = "abi42-" + "a" * 32
+        second_token = "abi42-" + "b" * 32
+        state = self._token_state(
+            ("bc", first_token, "submitted"),
+            ("binutils", second_token, "submitted"),
+        )
+        github = self._candidate_github()
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "rollout.json"
+            rollout.write_state(state_path, state)
+            original = state_path.read_bytes()
+            with self.assertRaisesRegex(
+                rollout.RolloutError,
+                "bc, binutils",
+            ):
+                rollout.acknowledge_pending_dispatches(
+                    github=github,
+                    state=state,
+                    state_path=state_path,
+                    snapshot=self.snapshot,
+                    expected_kandelo_sha=self.publisher_sha,
+                    timeout_seconds=0,
+                    poll_seconds=0.001,
+                )
+            self.assertEqual(original, state_path.read_bytes())
 
     def test_recovery_atomically_records_one_late_exact_match(self):
         state = self._submitted_state(before_run_ids=(100,))
