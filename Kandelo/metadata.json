@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T15:04:13Z",
+  "generated_at": "2026-07-24T15:05:58Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -616,6 +616,45 @@
       "full_name": "kandelo-dev/tap-core/libcxx",
       "name": "libcxx",
       "version": "21.1.7_1"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T15:05:58Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30101970187",
+          "built_from": {
+            "formula_sha256": "bd20976b9442076d733f8d051416db05f29fccf227224baa07c150dfeeaec11a",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "4d2c719b567ca66b7e5db0724e3d2c87aa9c3a1f",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 1668988,
+          "cache_key_sha": "d9ce9c3641115bd99a419a0baec1e8df218bf15096036d081705440d79cba769",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/libiconv-1.19-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "d9ce9c3641115bd99a419a0baec1e8df218bf15096036d081705440d79cba769",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libiconv/blobs/sha256:d9ce9c3641115bd99a419a0baec1e8df218bf15096036d081705440d79cba769"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/libiconv.json",
+      "formula_path": "Formula/libiconv.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/libiconv",
+      "name": "libiconv",
+      "version": "1.19"
     }
   ],
   "release_tag": "bottles-abi-v42",

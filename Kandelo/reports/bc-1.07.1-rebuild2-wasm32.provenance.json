@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "9b245ad592583967cc98ad654820d6a4de36f1ce0d817336857559ae66d82b24"
+      "sha256": "e206af9423d7102c997013df65c3ad24f61406a68b6fe98fbd0f4ed978065b13"
     },
     "provenance_json": {
       "path": "Kandelo/reports/bc-1.07.1-rebuild2-wasm32.provenance.json",
-      "sha256": "7f273e9507fcc7e54d938d995d9a1953dfc9af622873a21b1fcb408663fcf3e3"
+      "sha256": "b600a8a62230654b379ecad01fd8e24a1f8f281b368c377a0ea6c6c54fcb2e86"
     }
   },
   "repositories": {

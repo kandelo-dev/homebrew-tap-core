@@ -1,43 +1,43 @@
 {
-  "bottle_rebuild": 0,
+  "bottle_rebuild": 1,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-19T22:43:13Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29706054942",
+      "built_at": "2026-07-24T15:05:58Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30101970187",
       "built_from": {
-        "formula_sha256": "002f86f05c6d29c40ffce7849c04b65701c2a5ba45cd7335698715e50497ec5d",
-        "kandelo_commit": "c69d3d2baae22efabdc8d570b158396953bd8429",
+        "formula_sha256": "bd20976b9442076d733f8d051416db05f29fccf227224baa07c150dfeeaec11a",
+        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "bbb69174da9ab1d008c4bcc6073496acf2a84c16",
+        "tap_commit": "4d2c719b567ca66b7e5db0724e3d2c87aa9c3a1f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
       "bytes": 1668988,
-      "cache_key_sha": "f97630d988a1c2e5faf2ff0980c3033981f94fc3f1bf4919f4355cdd874ab72d",
+      "cache_key_sha": "d9ce9c3641115bd99a419a0baec1e8df218bf15096036d081705440d79cba769",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/libiconv-1.19-rebuild0-wasm32.json",
+      "kandelo_abi": 42,
+      "link_manifest": "Kandelo/link/libiconv-1.19-rebuild1-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "f97630d988a1c2e5faf2ff0980c3033981f94fc3f1bf4919f4355cdd874ab72d",
+      "sha256": "d9ce9c3641115bd99a419a0baec1e8df218bf15096036d081705440d79cba769",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libiconv/blobs/sha256:f97630d988a1c2e5faf2ff0980c3033981f94fc3f1bf4919f4355cdd874ab72d"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libiconv/blobs/sha256:d9ce9c3641115bd99a419a0baec1e8df218bf15096036d081705440d79cba769"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/libiconv.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/libiconv",
-  "kandelo_abi": 41,
+  "kandelo_abi": 42,
   "name": "libiconv",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "01f9bea83ad53efff2c6fbdc92396d50d1aeabb1",
+  "tap_commit": "4d2c719b567ca66b7e5db0724e3d2c87aa9c3a1f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.19"

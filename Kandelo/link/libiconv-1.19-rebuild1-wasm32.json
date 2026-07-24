@@ -1,0 +1,118 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1668988,
+    "cache_key_sha": "d9ce9c3641115bd99a419a0baec1e8df218bf15096036d081705440d79cba769",
+    "payload_root": "libiconv/1.19",
+    "sha256": "d9ce9c3641115bd99a419a0baec1e8df218bf15096036d081705440d79cba769",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libiconv/blobs/sha256:d9ce9c3641115bd99a419a0baec1e8df218bf15096036d081705440d79cba769"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/libiconv/1.19",
+  "links": [
+    {
+      "source": "bin/iconv",
+      "target": "bin/iconv",
+      "type": "symlink"
+    },
+    {
+      "source": "include/iconv.h",
+      "target": "include/iconv.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/libcharset.h",
+      "target": "include/libcharset.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/localcharset.h",
+      "target": "include/localcharset.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libcharset.a",
+      "target": "lib/libcharset.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libiconv.a",
+      "target": "lib/libiconv.a",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/iconv.1.html",
+      "target": "share/doc/iconv.1.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/iconv.3.html",
+      "target": "share/doc/iconv.3.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/iconv_close.3.html",
+      "target": "share/doc/iconv_close.3.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/iconv_open.3.html",
+      "target": "share/doc/iconv_open.3.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/iconv_open_into.3.html",
+      "target": "share/doc/iconv_open_into.3.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/iconvctl.3.html",
+      "target": "share/doc/iconvctl.3.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/iconv.1",
+      "target": "share/man/man1/iconv.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man3/iconv.3",
+      "target": "share/man/man3/iconv.3",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man3/iconv_close.3",
+      "target": "share/man/man3/iconv_close.3",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man3/iconv_open.3",
+      "target": "share/man/man3/iconv_open.3",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man3/iconv_open_into.3",
+      "target": "share/man/man3/iconv_open_into.3",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man3/iconvctl.3",
+      "target": "share/man/man3/iconvctl.3",
+      "type": "symlink"
+    }
+  ],
+  "package": "libiconv",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/libiconv.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.19"
+}
