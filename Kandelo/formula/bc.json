@@ -37,7 +37,7 @@
   "name": "bc",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "385efd6ba9b7dd0a579af89cd2d69c6c4da1a65b",
+  "tap_commit": "8e505681de5ef8eba75dc1f723111cdac858fba6",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.07.1"
