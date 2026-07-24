@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T15:46:41Z",
+  "generated_at": "2026-07-24T15:48:17Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -1060,11 +1060,50 @@
       "full_name": "kandelo-dev/tap-core/posix-utils-lite",
       "name": "posix-utils-lite",
       "version": "0.1.0"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T15:48:17Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30105138400",
+          "built_from": {
+            "formula_sha256": "66f78c1fcbb1ebb9f6fda0be366c47f227a0c4250b70060bb38c113fdf858367",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "cc66d66d873dc655f892d0e1b14a6eec460c3cf2",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 145180,
+          "cache_key_sha": "dfec34eb67958aecb4194b2dd74964a33a5d1793d61902f95bd3c04858750208",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/procps-4.0.6-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "dfec34eb67958aecb4194b2dd74964a33a5d1793d61902f95bd3c04858750208",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/procps/blobs/sha256:dfec34eb67958aecb4194b2dd74964a33a5d1793d61902f95bd3c04858750208"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/procps.json",
+      "formula_path": "Formula/procps.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/procps",
+      "name": "procps",
+      "version": "4.0.6"
     }
   ],
   "release_tag": "bottles-abi-v42",
   "schema": 1,
-  "tap_commit": "eb78ddfa62254c0a98859d4fa1cb48bed87fcfe1",
+  "tap_commit": "cc66d66d873dc655f892d0e1b14a6eec460c3cf2",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }

@@ -37,7 +37,7 @@
   "name": "perl",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "eb78ddfa62254c0a98859d4fa1cb48bed87fcfe1",
+  "tap_commit": "cc66d66d873dc655f892d0e1b14a6eec460c3cf2",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "5.40.3"
