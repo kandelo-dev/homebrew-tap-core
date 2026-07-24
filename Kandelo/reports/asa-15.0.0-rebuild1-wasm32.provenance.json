@@ -1,0 +1,115 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 23977,
+    "cache_key_sha": "3ae1cc89f0e93a9ab7c23c1c4480849b28e39b58d68630426adc1a3180793d0c",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "3ae1cc89f0e93a9ab7c23c1c4480849b28e39b58d68630426adc1a3180793d0c",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/asa/blobs/sha256:3ae1cc89f0e93a9ab7c23c1c4480849b28e39b58d68630426adc1a3180793d0c"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30094542074",
+    "job": "verify-bottle",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "909ba2b77222de5bef3b06bc0c42595c0f0aa1446150fbf988a3f7cb3d649565"
+  },
+  "formula": {
+    "path": "Formula/asa.rb",
+    "sha256": "44a51270db954dc77c63d411705a0128d978c9c96f02f0cebb0535eeb0f2d51c"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/asa.json",
+      "sha256": "f452113881eb06dc1aeeb916d3ca8a2fdc4fbda63c0457595077e6f09f9ac8e4"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/asa-15.0.0-rebuild1-wasm32.json",
+      "sha256": "9f28da6ea3581fe889a55e7cc6885fb5a55ffb3eea4d2c8c8a87ccdc4ee44f83"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "2f0d2f33de6e4ba2363b224c16872df50eb79cf9bd89c2cbff283b5e6de8996d"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/asa-15.0.0-rebuild1-wasm32.provenance.json",
+      "sha256": "4a94ee895d84a65a0f81a593985ccfd172e0d216fe991142dd1691844648d431"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "edeebd60813fd8aceded35b93e4c36c211232b18",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 1,
+    "kandelo_abi": 42,
+    "package": "asa",
+    "version": "15.0.0"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/asa.json",
+          "Kandelo/link/asa-15.0.0-rebuild1-wasm32.json",
+          "Kandelo/reports/asa-15.0.0-rebuild1-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured asa from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: 3ae1cc89f0e93a9ab7c23c1c4480849b28e39b58d68630426adc1a3180793d0c"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [],
+        "skip_reason": "No successful browser VFS smoke was recorded for this bottle.",
+        "skipped": [
+          "browser_compatible is false for this bottle"
+        ],
+        "status": "skipped"
+      }
+    ]
+  }
+}

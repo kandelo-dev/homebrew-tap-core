@@ -1,0 +1,38 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 23977,
+    "cache_key_sha": "3ae1cc89f0e93a9ab7c23c1c4480849b28e39b58d68630426adc1a3180793d0c",
+    "payload_root": "asa/15.0.0",
+    "sha256": "3ae1cc89f0e93a9ab7c23c1c4480849b28e39b58d68630426adc1a3180793d0c",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/asa/blobs/sha256:3ae1cc89f0e93a9ab7c23c1c4480849b28e39b58d68630426adc1a3180793d0c"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/asa/15.0.0",
+  "links": [
+    {
+      "source": "bin/asa",
+      "target": "bin/asa",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/asa.1",
+      "target": "share/man/man1/asa.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "asa",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/asa.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "15.0.0"
+}
