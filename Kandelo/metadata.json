@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T14:20:55Z",
+  "generated_at": "2026-07-24T14:21:41Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -199,6 +199,45 @@
       "full_name": "kandelo-dev/tap-core/coreutils",
       "name": "coreutils",
       "version": "9.6"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T14:21:41Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30098987254",
+          "built_from": {
+            "formula_sha256": "2ea8efce384dbc00a95573cf1ac0d78964fe1816182841466694f918345e5db4",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 165887,
+          "cache_key_sha": "93ae2b1153a5f7073eb7d2ca4a86feca138e6e5130f2a7b5e15d7bb2b35c92b8",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/dash-0.5.12-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "93ae2b1153a5f7073eb7d2ca4a86feca138e6e5130f2a7b5e15d7bb2b35c92b8",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/dash/blobs/sha256:93ae2b1153a5f7073eb7d2ca4a86feca138e6e5130f2a7b5e15d7bb2b35c92b8"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/dash.json",
+      "formula_path": "Formula/dash.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/dash",
+      "name": "dash",
+      "version": "0.5.12"
     }
   ],
   "release_tag": "bottles-abi-v42",
