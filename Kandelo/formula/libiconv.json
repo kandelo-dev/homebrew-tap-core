@@ -37,7 +37,7 @@
   "name": "libiconv",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "21467f00ef458dc29268b1beb48e6923b80a1dad",
+  "tap_commit": "1d823d89e11b71b536b53d172eb40f0e75ca3baa",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.19"

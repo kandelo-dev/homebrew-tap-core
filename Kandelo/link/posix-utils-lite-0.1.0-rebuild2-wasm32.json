@@ -1,0 +1,213 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 60408,
+    "cache_key_sha": "dc2dc2e5a8fe268cf71ada257cc09ae77496c46c5d23af70921f878fb3e2d555",
+    "payload_root": "posix-utils-lite/0.1.0",
+    "sha256": "dc2dc2e5a8fe268cf71ada257cc09ae77496c46c5d23af70921f878fb3e2d555",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/posix-utils-lite/blobs/sha256:dc2dc2e5a8fe268cf71ada257cc09ae77496c46c5d23af70921f878fb3e2d555"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/posix-utils-lite/0.1.0",
+  "links": [
+    {
+      "source": "bin/ar",
+      "target": "bin/ar",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/asa",
+      "target": "bin/asa",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/cal",
+      "target": "bin/cal",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/cflow",
+      "target": "bin/cflow",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/compress",
+      "target": "bin/compress",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ctags",
+      "target": "bin/ctags",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/cxref",
+      "target": "bin/cxref",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ed",
+      "target": "bin/ed",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ex",
+      "target": "bin/ex",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/fuser",
+      "target": "bin/fuser",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/gencat",
+      "target": "bin/gencat",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/getconf",
+      "target": "bin/getconf",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/gettext",
+      "target": "bin/gettext",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/iconv",
+      "target": "bin/iconv",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ipcrm",
+      "target": "bin/ipcrm",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ipcs",
+      "target": "bin/ipcs",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/lex",
+      "target": "bin/lex",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/locale",
+      "target": "bin/locale",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/logger",
+      "target": "bin/logger",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/man",
+      "target": "bin/man",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/more",
+      "target": "bin/more",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/msgfmt",
+      "target": "bin/msgfmt",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ngettext",
+      "target": "bin/ngettext",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/nm",
+      "target": "bin/nm",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/patch",
+      "target": "bin/patch",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/pax",
+      "target": "bin/pax",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/pgrep",
+      "target": "bin/pgrep",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ps",
+      "target": "bin/ps",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/renice",
+      "target": "bin/renice",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/strings",
+      "target": "bin/strings",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/strip",
+      "target": "bin/strip",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/uncompress",
+      "target": "bin/uncompress",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/uudecode",
+      "target": "bin/uudecode",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/uuencode",
+      "target": "bin/uuencode",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/what",
+      "target": "bin/what",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/xgettext",
+      "target": "bin/xgettext",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/yacc",
+      "target": "bin/yacc",
+      "type": "symlink"
+    }
+  ],
+  "package": "posix-utils-lite",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/posix-utils-lite.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "0.1.0"
+}

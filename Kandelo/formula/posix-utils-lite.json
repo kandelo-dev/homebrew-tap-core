@@ -1,43 +1,43 @@
 {
-  "bottle_rebuild": 1,
+  "bottle_rebuild": 2,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-21T09:23:35Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29816775761",
+      "built_at": "2026-07-24T15:46:08Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30104848840",
       "built_from": {
-        "formula_sha256": "531ca82103864ec3ed92ca21509bbbcaf0723c3e3ccd275b9f84877aee0de5ed",
-        "kandelo_commit": "ac1c16ee3e5b3a248f5ab7e55db8172060c1b0d6",
+        "formula_sha256": "787635f6f4f8a26037a64896e872b7f41e5ff8a03d40443d165abc7006a33d8e",
+        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
+        "tap_commit": "1d823d89e11b71b536b53d172eb40f0e75ca3baa",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 60387,
-      "cache_key_sha": "00f5d975d41a5af97c7534b46f08c40bfc296c45a385156a36b4bace4a01c345",
+      "bytes": 60408,
+      "cache_key_sha": "dc2dc2e5a8fe268cf71ada257cc09ae77496c46c5d23af70921f878fb3e2d555",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/posix-utils-lite-0.1.0-rebuild1-wasm32.json",
+      "kandelo_abi": 42,
+      "link_manifest": "Kandelo/link/posix-utils-lite-0.1.0-rebuild2-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "00f5d975d41a5af97c7534b46f08c40bfc296c45a385156a36b4bace4a01c345",
+      "sha256": "dc2dc2e5a8fe268cf71ada257cc09ae77496c46c5d23af70921f878fb3e2d555",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/posix-utils-lite/blobs/sha256:00f5d975d41a5af97c7534b46f08c40bfc296c45a385156a36b4bace4a01c345"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/posix-utils-lite/blobs/sha256:dc2dc2e5a8fe268cf71ada257cc09ae77496c46c5d23af70921f878fb3e2d555"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/posix-utils-lite.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/posix-utils-lite",
-  "kandelo_abi": 41,
+  "kandelo_abi": 42,
   "name": "posix-utils-lite",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "01f9bea83ad53efff2c6fbdc92396d50d1aeabb1",
+  "tap_commit": "1d823d89e11b71b536b53d172eb40f0e75ca3baa",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "0.1.0"
