@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "formula": "libpng",
+  "arch": "wasm32",
+  "release_tag": "bottles-abi-v42",
+  "status": "failed",
+  "attempted_at": "2026-07-24T21:21:16Z",
+  "attempted_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30126208303",
+  "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+  "tap_commit": "71b3004a43be103b315d8d298a89799c3895e98a",
+  "error": "publish-handoff=success; validate-payload=failure; publish=skipped",
+  "error_detail": "homebrew-publish-handoff-paths.sh: artifact root is not a regular directory\n"
+}
