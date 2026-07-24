@@ -26,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 from typing import Any, Iterable, Mapping, Sequence
 
 
@@ -38,10 +39,14 @@ EXPECTED_ABI = 42
 EXPECTED_RELEASE_TAG = "bottles-abi-v42"
 PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
 PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
+PUBLISHER_SHA = "df608a26e751f624c0b70b74f29d62c7c61ac9ad"
 MAX_ACTIVE_RUNS = 8
 ACTIVE_STATUSES = ("queued", "in_progress", "waiting", "pending", "requested")
-ACTIVE_INVENTORY_ATTEMPTS = 3
-ACTIVE_INVENTORY_BACKOFF_SECONDS = 1.0
+WORKFLOW_RUN_SNAPSHOT_ATTEMPTS = 3
+WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS = 1.0
+WORKFLOW_RUN_PAGE_SIZE = 100
+MAX_WORKFLOW_RUN_PAGES = 100
+DISPATCH_RUN_CLOCK_SKEW = dt.timedelta(minutes=5)
 BOTTLE_ROOT = "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
 LEGACY_SINGLE_INTENT_WORKFLOW_SHA256 = (
     "3207ecd35a5cca77fc5bb0e26bee8ab9d354efcb7fef2c1d7aa8b65a8b2bade3"
@@ -97,8 +102,8 @@ class RolloutError(RuntimeError):
     """A condition that makes continuing the rollout unsafe."""
 
 
-class ActiveInventorySnapshotError(RolloutError):
-    """GitHub returned a temporarily inconsistent active-run count and page."""
+class WorkflowRunSnapshotError(RolloutError):
+    """GitHub changed a workflow-run listing while it was being paginated."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -173,6 +178,12 @@ class PendingDispatch:
     recorded_at: str
     request_started_at: str | None
     submitted_at: str | None
+
+
+@dataclasses.dataclass(frozen=True)
+class CorrelatedRun:
+    run_id: int
+    source_tap_sha: str
 
 
 def _run(
@@ -264,6 +275,46 @@ class GitTap:
             )
         return result.returncode == 0
 
+    def ensure_commit(self, revision: str) -> None:
+        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+            raise RolloutError(f"tap commit is not an exact SHA: {revision!r}")
+        present = self.git("cat-file", "-e", f"{revision}^{{commit}}", check=False)
+        if present.returncode == 0:
+            return
+        # A repository_dispatch run can expose a new protected-main commit
+        # before this controller's remote-tracking ref is refreshed. Fetch only
+        # that immutable run source so validation never substitutes newer main.
+        self.git("fetch", "--quiet", "--no-tags", "origin", revision)
+        resolved = self.git("rev-parse", f"{revision}^{{commit}}").stdout.strip()
+        if resolved != revision:
+            raise RolloutError(f"GitHub run source {revision} was not fetched exactly")
+
+    def changed_entries(
+        self, ancestor: str, descendant: str
+    ) -> tuple[tuple[str, str], ...]:
+        output = self.git(
+            "diff",
+            "--name-status",
+            "--no-renames",
+            "-z",
+            ancestor,
+            descendant,
+        ).stdout
+        fields = output.split("\0")
+        if fields[-1:] == [""]:
+            fields.pop()
+        if len(fields) % 2:
+            raise RolloutError("tap source comparison returned malformed entries")
+        entries = tuple(zip(fields[0::2], fields[1::2], strict=True))
+        if any(
+            not re.fullmatch(r"[ACDMTUXB]", status) or not path
+            for status, path in entries
+        ):
+            raise RolloutError("tap source comparison returned an unsafe change")
+        if len(entries) != len({path for _status, path in entries}):
+            raise RolloutError("tap source comparison returned duplicate paths")
+        return entries
+
     def tree_oid(self, revision: str, path: str) -> str:
         result = self.git("rev-parse", f"{revision}:{path}", check=False)
         oid = result.stdout.strip()
@@ -288,10 +339,20 @@ class GitHub:
             f"repos/{self.repository}/actions/workflows/{WORKFLOW_ID}"
         )
 
-    def runs(self, status: str | None = None, per_page: int = 100) -> Mapping[str, Any]:
-        query = f"?per_page={per_page}"
-        if status is not None:
-            query += f"&status={status}"
+    def runs(
+        self,
+        *,
+        per_page: int = WORKFLOW_RUN_PAGE_SIZE,
+        page: int = 1,
+        created: str | None = None,
+    ) -> Mapping[str, Any]:
+        query_values: dict[str, str | int] = {
+            "per_page": per_page,
+            "page": page,
+        }
+        if created is not None:
+            query_values["created"] = created
+        query = "?" + urllib.parse.urlencode(query_values)
         result = self.api_json(
             f"repos/{self.repository}/actions/workflows/{WORKFLOW_ID}/runs{query}"
         )
@@ -629,10 +690,10 @@ def validate_workflow(
         snapshot.workflow_source,
         flags=re.MULTILINE,
     )
-    if uses != [expected_kandelo_sha] or refs != [expected_kandelo_sha]:
+    if uses != [PUBLISHER_SHA] or refs != [expected_kandelo_sha]:
         raise RolloutError(
             "production workflow is not frozen to the requested ABI 42 Kandelo SHA "
-            f"(uses={uses}, kandelo-ref={refs})"
+            f"(publisher={uses}, kandelo-ref={refs})"
         )
 
     run_names = re.findall(
@@ -653,7 +714,7 @@ def validate_workflow(
         "kandelo-repository": KANDELO_REPOSITORY,
         "tap-repository": REPOSITORY.lower(),
         "tap-name": TAP_NAME,
-        "tap-ref": "main",
+        "tap-ref": "${{ github.sha }}",
         "formulae": "${{ github.event.client_payload.formulae }}",
         "arches": "${{ github.event.client_payload.arches || 'wasm32' }}",
         "force": "${{ github.event.client_payload.force || false }}",
@@ -694,6 +755,112 @@ def publication_workflow_contract(source: str) -> str:
         # workflow compatibility rule.
         return source
     return "".join(line for line in lines if line not in run_name_lines)
+
+
+def finalizer_owned_path(path: str) -> bool:
+    if path == "Kandelo/metadata.json":
+        return True
+    if re.fullmatch(
+        r"Formula/(" + "|".join(map(re.escape, FORMULA_ORDER)) + r")\.rb",
+        path,
+    ):
+        return True
+    if re.fullmatch(
+        r"Kandelo/formula/("
+        + "|".join(map(re.escape, FORMULA_ORDER))
+        + r")\.json",
+        path,
+    ):
+        return True
+    generated_name = r"[A-Za-z0-9][A-Za-z0-9._+-]*"
+    return bool(
+        re.fullmatch(rf"Kandelo/link/{generated_name}\.json", path)
+        or re.fullmatch(
+            rf"Kandelo/reports/(?:{generated_name}/)*{generated_name}\.json",
+            path,
+        )
+    )
+
+
+def finalizer_owned_change(status: str, path: str) -> bool:
+    # Finalization composes files and replaces earlier generated summaries. It
+    # never deletes or renames tracked state; treating D/R as ordinary output
+    # could hide removal of provenance during a parallel source advance.
+    return status in ("A", "M") and finalizer_owned_path(path)
+
+
+def validate_correlated_source(
+    tap: GitTap,
+    state: Mapping[str, Any],
+    intent: PendingDispatch,
+    source_tap_sha: str,
+    *,
+    snapshots: dict[str, TapSnapshot] | None = None,
+    validated_pairs: set[tuple[str, str]] | None = None,
+) -> None:
+    if not re.fullmatch(r"[0-9a-f]{40}", source_tap_sha):
+        raise RolloutError(
+            f"token-correlated run for {intent.formula} has an invalid source SHA"
+        )
+    tap.ensure_commit(source_tap_sha)
+    if not tap.is_ancestor(intent.tap_sha, source_tap_sha):
+        raise RolloutError(
+            f"token-correlated source for {intent.formula} is not a descendant "
+            "of its reserved tap commit"
+        )
+
+    pair = (intent.tap_sha, source_tap_sha)
+    if validated_pairs is not None and pair in validated_pairs:
+        return
+    snapshot_cache = snapshots if snapshots is not None else {}
+    if intent.tap_sha not in snapshot_cache:
+        snapshot_cache[intent.tap_sha] = load_snapshot(tap, intent.tap_sha)
+    if source_tap_sha not in snapshot_cache:
+        snapshot_cache[source_tap_sha] = load_snapshot(tap, source_tap_sha)
+    reserved = snapshot_cache[intent.tap_sha]
+    source = snapshot_cache[source_tap_sha]
+    frozen_catalog = state.get("catalog")
+    if catalog_state(reserved) != frozen_catalog:
+        raise RolloutError(
+            f"reserved source catalog for {intent.formula} differs from the ledger"
+        )
+    if catalog_state(source) != frozen_catalog:
+        raise RolloutError(
+            f"token-correlated source for {intent.formula} changes a Formula "
+            "recipe, identity, or dependency"
+        )
+    frozen_support = state.get("formula_support_tree")
+    if (
+        reserved.formula_support_tree != frozen_support
+        or source.formula_support_tree != frozen_support
+    ):
+        raise RolloutError(
+            f"token-correlated source for {intent.formula} changes Formula support"
+        )
+    if publication_workflow_contract(
+        source.workflow_source
+    ) != publication_workflow_contract(reserved.workflow_source):
+        raise RolloutError(
+            f"token-correlated source for {intent.formula} changes the normalized "
+            "publication workflow"
+        )
+
+    changes = tap.changed_entries(intent.tap_sha, source_tap_sha)
+    unsafe = [
+        f"{status} {path}"
+        for status, path in changes
+        if not finalizer_owned_change(status, path)
+    ]
+    if unsafe:
+        # WHY: equivalent recipes and workflow bytes are necessary but do not
+        # make an unrelated README, controller, or policy edit part of a bottle
+        # build. Only generated finalizer outputs may advance the event source.
+        raise RolloutError(
+            f"token-correlated source for {intent.formula} is not a "
+            f"finalizer-only descendant: {', '.join(unsafe)}"
+        )
+    if validated_pairs is not None:
+        validated_pairs.add(pair)
 
 
 def _packages_by_name(metadata: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
@@ -852,9 +1019,19 @@ def finalization_reasons(
             ):
                 reasons.append(f"{arch} source Formula support differs")
             source_workflow = tap.show(source_sha, WORKFLOW_PATH)
-            if publication_workflow_contract(
-                source_workflow
-            ) != publication_workflow_contract(snapshot.workflow_source):
+            source_workflow_sha256 = hashlib.sha256(
+                publication_workflow_contract(source_workflow).encode()
+            ).hexdigest()
+            current_workflow_sha256 = hashlib.sha256(
+                publication_workflow_contract(snapshot.workflow_source).encode()
+            ).hexdigest()
+            if source_workflow_sha256 not in (
+                current_workflow_sha256,
+                LEGACY_SINGLE_INTENT_WORKFLOW_SHA256,
+            ):
+                # Existing ABI 42 bottles were finalized by the one exact
+                # reviewed predecessor workflow. Do not invalidate those
+                # immutable artifacts when the caller-SHA trust upgrade lands.
                 reasons.append(f"{arch} source publication workflow differs")
         except RolloutError as error:
             reasons.append(f"{arch} source provenance cannot be read: {error}")
@@ -878,27 +1055,130 @@ def run_formulae(jobs: Iterable[Mapping[str, Any]]) -> frozenset[str]:
     return frozenset(formulae)
 
 
-def _active_inventory_once(github: GitHub) -> RunInventory:
-    runs_by_id: dict[int, Mapping[str, Any]] = {}
-    total = 0
-    for status in ACTIVE_STATUSES:
-        response = github.runs(status)
-        count = response.get("total_count")
-        if not isinstance(count, int) or count < 0:
-            raise RolloutError(f"GitHub {status} run count is invalid")
-        listed = response["workflow_runs"]
-        if count <= 100 and len(listed) != count:
-            raise ActiveInventorySnapshotError(
-                f"GitHub {status} reported {count} active runs but returned "
-                f"{len(listed)}"
+def _workflow_run_page(
+    github: GitHub,
+    *,
+    page: int,
+    created: str | None,
+) -> tuple[int, tuple[Mapping[str, Any], ...]]:
+    response = github.runs(
+        per_page=WORKFLOW_RUN_PAGE_SIZE,
+        page=page,
+        created=created,
+    )
+    total_count = response.get("total_count")
+    runs = response.get("workflow_runs")
+    expected_count = (
+        max(
+            0,
+            min(
+                WORKFLOW_RUN_PAGE_SIZE,
+                total_count - ((page - 1) * WORKFLOW_RUN_PAGE_SIZE),
+            ),
+        )
+        if isinstance(total_count, int) and not isinstance(total_count, bool)
+        else -1
+    )
+    if (
+        isinstance(total_count, bool)
+        or not isinstance(total_count, int)
+        or total_count < 0
+        or not isinstance(runs, list)
+        or len(runs) != expected_count
+    ):
+        raise WorkflowRunSnapshotError(
+            f"GitHub returned an incomplete workflow run page {page}"
+        )
+    for run in runs:
+        if (
+            not isinstance(run, dict)
+            or isinstance(run.get("id"), bool)
+            or not isinstance(run.get("id"), int)
+            or run["id"] <= 0
+        ):
+            raise RolloutError("GitHub returned a malformed workflow run")
+    return total_count, tuple(runs)
+
+
+def _collect_workflow_run_snapshot(
+    github: GitHub,
+    *,
+    created: str | None,
+) -> tuple[Mapping[str, Any], ...]:
+    total_count, first_page = _workflow_run_page(
+        github,
+        page=1,
+        created=created,
+    )
+    page_count = max(
+        1,
+        (total_count + WORKFLOW_RUN_PAGE_SIZE - 1) // WORKFLOW_RUN_PAGE_SIZE,
+    )
+    if page_count > MAX_WORKFLOW_RUN_PAGES:
+        raise RolloutError(
+            f"workflow run snapshot requires {page_count} pages; "
+            f"the safety limit is {MAX_WORKFLOW_RUN_PAGES}"
+        )
+    runs = list(first_page)
+    for page in range(2, page_count + 1):
+        page_total, page_runs = _workflow_run_page(
+            github,
+            page=page,
+            created=created,
+        )
+        if page_total != total_count:
+            raise WorkflowRunSnapshotError(
+                "GitHub changed workflow run total_count during pagination"
             )
-        total += count
-        for run in listed:
-            if not isinstance(run, dict) or not isinstance(run.get("id"), int):
-                raise RolloutError(f"GitHub {status} returned a malformed active run")
+        runs.extend(page_runs)
+    if len(runs) != total_count:
+        raise WorkflowRunSnapshotError(
+            f"GitHub returned {len(runs)} of {total_count} workflow runs"
+        )
+    run_ids = [run["id"] for run in runs]
+    if len(run_ids) != len(set(run_ids)):
+        raise WorkflowRunSnapshotError(
+            "GitHub returned duplicate workflow runs across pages"
+        )
+    return tuple(runs)
+
+
+def workflow_run_snapshot(
+    github: GitHub,
+    *,
+    created: str | None = None,
+) -> tuple[Mapping[str, Any], ...]:
+    for attempt in range(WORKFLOW_RUN_SNAPSHOT_ATTEMPTS):
+        try:
+            first = _collect_workflow_run_snapshot(github, created=created)
+            second = _collect_workflow_run_snapshot(github, created=created)
+            # WHY: page insertion can preserve total_count while shifting an
+            # item across the pagination boundary. Two identical complete
+            # listings prove the controller did not correlate against a torn
+            # view, and duplicate IDs are rejected in each collection.
+            if first != second:
+                raise WorkflowRunSnapshotError(
+                    "GitHub changed the workflow run snapshot during collection"
+                )
+            return second
+        except WorkflowRunSnapshotError:
+            if attempt + 1 == WORKFLOW_RUN_SNAPSHOT_ATTEMPTS:
+                raise
+            time.sleep(WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS * (2**attempt))
+    raise AssertionError("workflow run snapshot retry loop did not return or raise")
+
+
+def active_inventory(github: GitHub) -> RunInventory:
+    # One unfiltered, stable listing avoids losing a run while GitHub moves it
+    # between requested, queued, waiting, pending, and in-progress states.
+    all_runs = workflow_run_snapshot(github)
+    runs_by_id: dict[int, Mapping[str, Any]] = {}
+    for run in all_runs:
+        status = run.get("status")
+        if not isinstance(status, str):
+            raise RolloutError("GitHub returned a workflow run without a status")
+        if status in ACTIVE_STATUSES:
             runs_by_id[run["id"]] = run
-    # Status filters are disjoint. Deduplicating details protects reporting,
-    # while the exact total_count sum is the authoritative capacity count.
     formulae: dict[int, frozenset[str]] = {}
     unknown: list[int] = []
     for run_id in sorted(runs_by_id):
@@ -907,27 +1187,11 @@ def _active_inventory_once(github: GitHub) -> RunInventory:
         if not found:
             unknown.append(run_id)
     return RunInventory(
-        count=total,
+        count=len(runs_by_id),
         runs=tuple(runs_by_id.values()),
         formulae=formulae,
         unknown_run_ids=tuple(unknown),
     )
-
-
-def active_inventory(github: GitHub) -> RunInventory:
-    for attempt in range(ACTIVE_INVENTORY_ATTEMPTS):
-        try:
-            return _active_inventory_once(github)
-        except ActiveInventorySnapshotError:
-            if attempt + 1 == ACTIVE_INVENTORY_ATTEMPTS:
-                raise
-            # WHY: GitHub can briefly publish a new total_count before the run
-            # appears in the accompanying page. Retry the entire multi-status
-            # snapshot so we never combine stale and fresh fragments. Only this
-            # known eventual-consistency shape is retried; malformed identities
-            # and incomplete job matrices continue to fail immediately.
-            time.sleep(ACTIVE_INVENTORY_BACKOFF_SECONDS * (2**attempt))
-    raise AssertionError("active inventory retry loop did not return or raise")
 
 
 def reconcile_recorded_activity(
@@ -962,9 +1226,9 @@ def reconcile_recorded_activity(
             formulae[run_id] = frozenset((formula,))
             continue
         run = github.run(run_id)
-        # Sequential status-filter queries can miss a run while GitHub moves it
-        # between requested/queued/waiting/in-progress. The durable ledger
-        # closes that race for every run this sole dispatcher creates.
+        # A run can complete or change status immediately after the stable
+        # listing. The durable ledger remains authoritative for every run this
+        # sole dispatcher created until its direct status says completed.
         if run.get("status") != "completed":
             runs_by_id[run_id] = run
             formulae[run_id] = frozenset((formula,))
@@ -1032,6 +1296,16 @@ def write_state(path: pathlib.Path, state: Mapping[str, Any]) -> None:
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary, path)
+        # WHY: fsyncing the file before rename preserves its bytes, but not the
+        # directory entry that makes the replacement discoverable after a host
+        # crash. Persist the parent after os.replace so a durable request marker
+        # cannot silently roll back and authorize a duplicate publication.
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        directory_descriptor = os.open(path.parent, directory_flags)
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
@@ -1138,10 +1412,21 @@ def validate_state(
         formula = entry.get("formula")
         run_id = entry.get("run_id")
         tap_sha = entry.get("tap_sha")
+        source_tap_sha = entry.get("source_tap_sha")
         submitted_at = entry.get("submitted_at")
         dispatch_token = entry.get("dispatch_token")
+        expected_entry_keys = {
+            "formula",
+            "arches",
+            "tap_sha",
+            "run_id",
+            "submitted_at",
+        }
+        if dispatch_token is not None:
+            expected_entry_keys.update(("dispatch_token", "source_tap_sha"))
         if (
-            formula not in FORMULA_ORDER
+            set(entry) != expected_entry_keys
+            or formula not in FORMULA_ORDER
             or entry.get("arches") != list(required_arches(formula))
             or isinstance(run_id, bool)
             or not isinstance(run_id, int)
@@ -1155,6 +1440,13 @@ def validate_state(
                 and (
                     not isinstance(dispatch_token, str)
                     or not DISPATCH_TOKEN_RE.fullmatch(dispatch_token)
+                )
+            )
+            or (
+                dispatch_token is not None
+                and (
+                    not isinstance(source_tap_sha, str)
+                    or not re.fullmatch(r"[0-9a-f]{40}", source_tap_sha)
                 )
             )
         ):
@@ -1443,7 +1735,7 @@ def build_and_test_matrix(
 def workflow_run_page(
     github: GitHub,
 ) -> tuple[int, tuple[Mapping[str, Any], ...]]:
-    response = github.runs(per_page=100)
+    response = github.runs(per_page=100, page=1, created=None)
     total_count = response.get("total_count")
     runs = response.get("workflow_runs")
     if (
@@ -1537,29 +1829,107 @@ def acknowledge_dispatch(
     )
 
 
-def matching_token_run_ids(
-    github: GitHub,
-    intent: PendingDispatch,
-) -> tuple[int, ...]:
-    _total_count, runs = workflow_run_page(github)
-    return matching_token_run_ids_in_runs(runs, intent)
+def _parse_utc_timestamp(value: str, label: str) -> dt.datetime:
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise RolloutError(f"{label} is not an ISO-8601 timestamp") from error
+    if parsed.tzinfo is None or parsed.utcoffset() != dt.timedelta(0):
+        raise RolloutError(f"{label} is not a UTC timestamp")
+    return parsed
 
 
-def matching_token_run_ids_in_runs(
-    runs: Iterable[Mapping[str, Any]],
-    intent: PendingDispatch,
-) -> tuple[int, ...]:
-    expected_title = workflow_run_title(intent.formula, intent.dispatch_token)
-    return tuple(
-        run["id"]
-        for run in runs
-        if run.get("event") == "repository_dispatch"
-        and run.get("head_sha") == intent.tap_sha
-        and run.get("display_title") == expected_title
+def _format_utc_timestamp(value: dt.datetime) -> str:
+    return (
+        value.astimezone(dt.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
     )
 
 
+def dispatch_run_created_range(
+    intents: Sequence[PendingDispatch],
+    *,
+    now: dt.datetime | None = None,
+) -> str:
+    if not intents:
+        raise RolloutError("dispatch run range requires at least one intent")
+    current = now or dt.datetime.now(dt.timezone.utc)
+    starts: list[dt.datetime] = []
+    ends: list[dt.datetime] = []
+    for intent in intents:
+        if intent.request_started_at is None:
+            raise RolloutError(
+                f"dispatch intent for {intent.formula} has no request start"
+            )
+        started = _parse_utc_timestamp(
+            intent.request_started_at,
+            f"{intent.formula} request_started_at",
+        )
+        ended = (
+            _parse_utc_timestamp(
+                intent.submitted_at,
+                f"{intent.formula} submitted_at",
+            )
+            if intent.submitted_at is not None
+            else current
+        )
+        if ended < started:
+            raise RolloutError(
+                f"{intent.formula} submitted_at precedes request_started_at"
+            )
+        starts.append(started)
+        ends.append(ended)
+    lower = min(starts) - DISPATCH_RUN_CLOCK_SKEW
+    upper = max(ends)
+    if any(intent.submitted_at is None for intent in intents):
+        upper = max(upper, current)
+    upper += DISPATCH_RUN_CLOCK_SKEW
+    return f"{_format_utc_timestamp(lower)}..{_format_utc_timestamp(upper)}"
+
+
+def matching_token_runs_in_runs(
+    tap: GitTap,
+    state: Mapping[str, Any],
+    runs: Iterable[Mapping[str, Any]],
+    intent: PendingDispatch,
+    *,
+    snapshots: dict[str, TapSnapshot],
+    validated_pairs: set[tuple[str, str]],
+) -> tuple[CorrelatedRun, ...]:
+    expected_title = workflow_run_title(intent.formula, intent.dispatch_token)
+    matches: list[CorrelatedRun] = []
+    for run in runs:
+        if (
+            run.get("event") != "repository_dispatch"
+            or run.get("display_title") != expected_title
+        ):
+            continue
+        source_tap_sha = run.get("head_sha")
+        if not isinstance(source_tap_sha, str):
+            raise RolloutError(
+                f"token-correlated run {run['id']} has no source tap SHA"
+            )
+        validate_correlated_source(
+            tap,
+            state,
+            intent,
+            source_tap_sha,
+            snapshots=snapshots,
+            validated_pairs=validated_pairs,
+        )
+        matches.append(
+            CorrelatedRun(
+                run_id=run["id"],
+                source_tap_sha=source_tap_sha,
+            )
+        )
+    return tuple(matches)
+
+
 def correlate_pending_dispatches(
+    tap: GitTap,
     github: GitHub,
     state: Mapping[str, Any],
 ) -> tuple[dict[str, Any], tuple[tuple[str, int], ...]]:
@@ -1567,14 +1937,24 @@ def correlate_pending_dispatches(
     uncertain = tuple(intent for intent in intents if intent.status != "planned")
     if not uncertain:
         return copy.deepcopy(state), ()
-    _total_count, runs = workflow_run_page(github)
-    matches: dict[str, int] = {}
+    created = dispatch_run_created_range(uncertain)
+    runs = workflow_run_snapshot(github, created=created)
+    snapshots: dict[str, TapSnapshot] = {}
+    validated_pairs: set[tuple[str, str]] = set()
+    matches: dict[str, CorrelatedRun] = {}
     for intent in uncertain:
-        candidates = matching_token_run_ids_in_runs(runs, intent)
+        candidates = matching_token_runs_in_runs(
+            tap,
+            state,
+            runs,
+            intent,
+            snapshots=snapshots,
+            validated_pairs=validated_pairs,
+        )
         if len(candidates) > 1:
             raise RolloutError(
                 f"dispatch token for {intent.formula} matched multiple runs: "
-                f"{sorted(candidates)}"
+                f"{sorted(candidate.run_id for candidate in candidates)}"
             )
         if candidates:
             matches[intent.dispatch_token] = candidates[0]
@@ -1585,8 +1965,8 @@ def correlate_pending_dispatches(
     retained: list[Mapping[str, Any]] = []
     recovered: list[tuple[str, int]] = []
     for value, intent in zip(updated["pending_dispatches"], intents, strict=True):
-        run_id = matches.get(intent.dispatch_token)
-        if run_id is None:
+        match = matches.get(intent.dispatch_token)
+        if match is None:
             retained.append(value)
             continue
         # WHY: request-started is written before the HTTP request. A crash can
@@ -1600,18 +1980,20 @@ def correlate_pending_dispatches(
                 "formula": intent.formula,
                 "arches": list(intent.arches),
                 "tap_sha": intent.tap_sha,
-                "run_id": run_id,
+                "source_tap_sha": match.source_tap_sha,
+                "run_id": match.run_id,
                 "dispatch_token": intent.dispatch_token,
                 "submitted_at": submitted_at,
             }
         )
-        recovered.append((intent.formula, run_id))
+        recovered.append((intent.formula, match.run_id))
     updated["pending_dispatches"] = retained
     return updated, tuple(recovered)
 
 
 def acknowledge_pending_dispatches(
     *,
+    tap: GitTap,
     github: GitHub,
     state: Mapping[str, Any],
     state_path: pathlib.Path,
@@ -1624,7 +2006,7 @@ def acknowledge_pending_dispatches(
     acknowledged: list[tuple[str, int]] = []
     deadline = time.monotonic() + timeout_seconds
     while True:
-        updated, recovered = correlate_pending_dispatches(github, current)
+        updated, recovered = correlate_pending_dispatches(tap, github, current)
         if recovered:
             validate_state(updated, snapshot, expected_kandelo_sha)
             write_state(state_path, updated)
@@ -1696,7 +2078,7 @@ def recover_submitted_dispatch(
         recovered.append((intent.formula, run_id))
 
     token_state, token_recovered = correlate_pending_dispatches(
-        github, recovered_state
+        tap, github, recovered_state
     )
     recovered.extend(token_recovered)
     if not recovered:
@@ -1912,6 +2294,7 @@ def dispatch_ready(
             submitted += 1
 
         state, acknowledged = acknowledge_pending_dispatches(
+            tap=tap,
             github=github,
             state=state,
             state_path=state_path,

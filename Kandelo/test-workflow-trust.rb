@@ -30,10 +30,11 @@ REPOSITORY_CANARY_PERMISSIONS = {
 }.freeze
 CHECKOUT_ACTION = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
 RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
-# Production executes and builds from this reviewed publisher descendant.
-# ABI 42's sealed package inputs remain bound separately to the exact generation
-# that produced them, so neither side of the bootstrap cycle can move.
+# Dry-run and maintenance remain on this reviewed Kandelo generation. Production
+# build provenance also stays on it while the caller uses the separate exact
+# trust-only publisher below.
 CURRENT_KANDELO_WORKFLOW_SHA = "d3805721b887a19382ef1c96b576fc27badc0951"
+CURRENT_PUBLISHER_SHA = "df608a26e751f624c0b70b74f29d62c7c61ac9ad"
 PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
 
@@ -107,7 +108,7 @@ PUBLISH_INPUTS = {
   "kandelo-ref" => CURRENT_KANDELO_WORKFLOW_SHA,
   "tap-repository" => "kandelo-dev/homebrew-tap-core",
   "tap-name" => "kandelo-dev/tap-core",
-  "tap-ref" => "main",
+  "tap-ref" => expression("github.sha"),
   "formulae" => expression("github.event.client_payload.formulae"),
   "arches" => expression("github.event.client_payload.arches || 'wasm32'"),
   "release-tag" => expression("github.event.client_payload.release_tag || ''"),
@@ -149,7 +150,7 @@ CALLER_SPECS = {
     run_name: PUBLISH_RUN_NAME,
     event: "publish-kandelo-bottles",
     job: "publish",
-    reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@#{CURRENT_KANDELO_WORKFLOW_SHA}",
+    reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@#{CURRENT_PUBLISHER_SHA}",
     inputs: VFS_PUBLISH_INPUTS,
   },
   "dry-run" => {
@@ -665,6 +666,11 @@ def self_test(callers, contract, base_contract)
       expression("github.event.client_payload.tap_ref")
     check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
   end
+  expect_rejection("a mutable write publication tap ref") do
+    mutated = deep_copy(current_callers.fetch("publish"))
+    mutated.dig("jobs", "publish", "with")["tap-ref"] = "main"
+    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
+  end
   expect_rejection("dry-run publication") do
     mutated = deep_copy(current_callers.fetch("dry-run"))
     mutated.dig("jobs", "dry-run", "with")["dry-run"] = false
@@ -731,6 +737,8 @@ begin
   check_workflow_file_set
   check(CURRENT_KANDELO_WORKFLOW_SHA.match?(/\A[0-9a-f]{40}\z/),
         "current Kandelo workflow pin is not an exact SHA")
+  check(CURRENT_PUBLISHER_SHA.match?(/\A[0-9a-f]{40}\z/),
+        "current Kandelo publisher pin is not an exact SHA")
   check(PREPUBLICATION_GENERATION_SHA.match?(/\A[0-9a-f]{40}\z/),
         "prepublication package-generation pin is not an exact SHA")
   check(PREPUBLICATION_STAGING_TAG.match?(/\Apr-[1-9][0-9]*-staging\z/),
@@ -747,6 +755,7 @@ begin
   end
   workflow_shas = [
     CURRENT_KANDELO_WORKFLOW_SHA,
+    CURRENT_PUBLISHER_SHA,
     PREPUBLICATION_GENERATION_SHA,
     REPOSITORY_CANARY_KANDELO_SHA,
     RETIRED_PAT_KANDELO_WORKFLOW_SHA,
