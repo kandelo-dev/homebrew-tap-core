@@ -37,7 +37,7 @@
   "name": "pcre2",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "c0e32f29237361c3364e222df796da580fa04197",
+  "tap_commit": "28ffdfa6261c82acb77cab8b1608267f9ba884c6",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "10.44_1"
