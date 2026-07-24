@@ -60,6 +60,28 @@ class RolloutControllerTests(unittest.TestCase):
         cls.head = cls.tap.git("rev-parse", "HEAD").stdout.strip()
         cls.snapshot = rollout.load_snapshot(cls.tap, cls.head)
 
+    @staticmethod
+    def _identity_source(
+        *,
+        version: str | None,
+        revision: int,
+        rebuild: int = 1,
+    ) -> str:
+        version_line = f'  version "{version}"\n' if version is not None else ""
+        revision_line = f"  revision {revision}\n" if revision else ""
+        return (
+            "class Asa < Formula\n"
+            f"{version_line}"
+            f"{revision_line}"
+            "  bottle do\n"
+            f'    root_url "{rollout.BOTTLE_ROOT}"\n'
+            f"    rebuild {rebuild}\n"
+            '    sha256 cellar: :any_skip_relocation, '
+            f'wasm32_kandelo: "{"0" * 64}"\n'
+            "  end\n"
+            "end\n"
+        )
+
     def test_exact_plan_has_63_formulae_and_70_architecture_identities(self):
         self.assertEqual(63, len(rollout.FORMULA_ORDER))
         self.assertEqual(63, len(set(rollout.FORMULA_ORDER)))
@@ -80,6 +102,67 @@ class RolloutControllerTests(unittest.TestCase):
         )
         self.assertEqual(frozenset(("libcurl",)), rollout.DUAL_ARCH_SECOND)
         self.assertEqual(frozenset(("curl",)), rollout.DUAL_ARCH_THIRD)
+        self.assertEqual(
+            "3.13.3_1-1",
+            self.snapshot.identities["python"].top_reference,
+        )
+        self.assertEqual(
+            "1.3.1_4-2",
+            self.snapshot.identities["zlib"].top_reference,
+        )
+
+    def test_explicit_base_version_becomes_canonical_homebrew_pkg_version(self):
+        unrevisioned = rollout.parse_formula_identity(
+            "asa",
+            self._identity_source(version="1.2.3", revision=0),
+            None,
+        )
+        revised = rollout.parse_formula_identity(
+            "asa",
+            self._identity_source(version="1.2.3", revision=2),
+            None,
+        )
+
+        self.assertEqual("1.2.3", unrevisioned.pkg_version)
+        self.assertEqual("1.2.3-1", unrevisioned.top_reference)
+        self.assertEqual("1.2.3_2", revised.pkg_version)
+        self.assertEqual("1.2.3_2-1", revised.top_reference)
+
+    def test_inferred_base_version_tracks_formula_revision_changes(self):
+        unchanged = rollout.parse_formula_identity(
+            "asa",
+            self._identity_source(version=None, revision=2),
+            {
+                "version": "1.2.3_2",
+                "formula_revision": 2,
+            },
+        )
+        advanced = rollout.parse_formula_identity(
+            "asa",
+            self._identity_source(version=None, revision=3),
+            {
+                "version": "1.2.3_2",
+                "formula_revision": 2,
+            },
+        )
+
+        self.assertEqual("1.2.3_2", unchanged.pkg_version)
+        self.assertEqual("1.2.3_3", advanced.pkg_version)
+        self.assertEqual("1.2.3_3-1", advanced.top_reference)
+
+    def test_inferred_base_version_rejects_noncanonical_previous_pkg_version(self):
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "does not match its Formula revision",
+        ):
+            rollout.parse_formula_identity(
+                "asa",
+                self._identity_source(version=None, revision=2),
+                {
+                    "version": "1.2.3",
+                    "formula_revision": 2,
+                },
+            )
 
     def test_source_scan_captures_runtime_build_and_test_edges(self):
         dependencies = self.snapshot.dependencies
@@ -195,7 +278,7 @@ jobs:
             )
         package = {
             "name": formula,
-            "version": identity.version,
+            "version": identity.pkg_version,
             "formula_revision": identity.formula_revision,
             "bottle_rebuild": identity.bottle_rebuild,
             "bottles": copy.deepcopy(bottles),
@@ -236,6 +319,39 @@ jobs:
             "a" * 40,
         )
         self.assertTrue(any("bottle_rebuild" in reason for reason in reasons))
+
+    def test_explicit_revision_finalizes_and_unblocks_dependents(self):
+        python = self._finalized_snapshot("python")
+        self.assertEqual("3.13.3_1", python.identities["python"].pkg_version)
+        self.assertEqual(
+            (),
+            rollout.finalization_reasons(
+                self.tap, python, "python", ("wasm32",), "a" * 40
+            ),
+        )
+
+        libcxx = self._finalized_snapshot("libcxx")
+        statuses = {
+            status.name: status
+            for status in rollout.calculate_statuses(
+                self.tap,
+                libcxx,
+                "a" * 40,
+                rollout.RunInventory(
+                    count=0,
+                    runs=(),
+                    formulae={},
+                    unknown_run_ids=(),
+                ),
+                {},
+            )
+        }
+        self.assertEqual("finalized", statuses["libcxx"].state)
+        self.assertEqual(
+            "ready",
+            statuses["dinit"].state,
+            "a finalized revised dependency must not stall the next wave",
+        )
 
     def test_finalization_rejects_wrong_kandelo_sha_and_missing_arch(self):
         snapshot = self._finalized_snapshot("zlib")
