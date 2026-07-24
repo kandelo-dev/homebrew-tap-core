@@ -37,7 +37,7 @@
   "name": "binutils",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "4d2c719b567ca66b7e5db0724e3d2c87aa9c3a1f",
+  "tap_commit": "89aef97b76cb281424d039512388d138425f29d9",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "2.46.1"

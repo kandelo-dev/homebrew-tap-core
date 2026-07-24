@@ -1,0 +1,33 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 20531,
+    "cache_key_sha": "f08d6195469a2c34fa59dfcf452235d3e2c6aad508f8906189b6e65ae93b9857",
+    "payload_root": "lsof/0.1.0",
+    "sha256": "f08d6195469a2c34fa59dfcf452235d3e2c6aad508f8906189b6e65ae93b9857",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/lsof/blobs/sha256:f08d6195469a2c34fa59dfcf452235d3e2c6aad508f8906189b6e65ae93b9857"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/lsof/0.1.0",
+  "links": [
+    {
+      "source": "bin/lsof",
+      "target": "bin/lsof",
+      "type": "symlink"
+    }
+  ],
+  "package": "lsof",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/lsof.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "0.1.0"
+}
