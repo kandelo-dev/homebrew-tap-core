@@ -10,10 +10,12 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@c16a48c693c8a6dea4ca14e7886b735bf685d51d
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@437fde2524ea6ad9c44933f8abbf995a46841009
     with:
       kandelo-repository: Automattic/kandelo
-      kandelo-ref: main
+      # WHY: Build from the same reviewed Kandelo generation that defines this
+      # reusable workflow, so ABI 42 publication cannot mix source generations.
+      kandelo-ref: 437fde2524ea6ad9c44933f8abbf995a46841009
       tap-repository: kandelo-dev/homebrew-tap-core
       tap-name: kandelo-dev/tap-core
       tap-ref: main

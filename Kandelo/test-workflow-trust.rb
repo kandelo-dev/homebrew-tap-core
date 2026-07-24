@@ -30,6 +30,9 @@ REPOSITORY_CANARY_PERMISSIONS = {
 }.freeze
 CHECKOUT_ACTION = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
 RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
+# Production pins both executable workflow code and the Kandelo source checkout
+# here so a publication window cannot combine two independently moving revisions.
+CURRENT_KANDELO_WORKFLOW_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 
 def check(condition, message)
   raise message unless condition
@@ -91,7 +94,7 @@ end
 
 PUBLISH_INPUTS = {
   "kandelo-repository" => "Automattic/kandelo",
-  "kandelo-ref" => "main",
+  "kandelo-ref" => CURRENT_KANDELO_WORKFLOW_SHA,
   "tap-repository" => "kandelo-dev/homebrew-tap-core",
   "tap-name" => "kandelo-dev/tap-core",
   "tap-ref" => "main",
@@ -118,7 +121,6 @@ PAT_PUBLISH_SECRETS = {
     expression("secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN"),
 }.freeze
 
-CURRENT_KANDELO_WORKFLOW_SHA = "c16a48c693c8a6dea4ca14e7886b735bf685d51d"
 REPOSITORY_CANARY_KANDELO_SHA = "7d9854e4a6be178e2431816cd21b8a19a1ff6d67"
 RETIRED_PAT_KANDELO_WORKFLOW_SHA = "acc54b0d0fb5ffc1e742d437081a58bfd163e785"
 PREVIOUS_KANDELO_WORKFLOW_SHA = "a71ab7a03cef9cb456e24c7b5f46bbc42122d9c4"
