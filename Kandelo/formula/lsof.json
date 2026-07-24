@@ -37,7 +37,7 @@
   "name": "lsof",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "1d823d89e11b71b536b53d172eb40f0e75ca3baa",
+  "tap_commit": "eb78ddfa62254c0a98859d4fa1cb48bed87fcfe1",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "0.1.0"
