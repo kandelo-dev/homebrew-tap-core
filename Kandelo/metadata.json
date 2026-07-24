@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T17:16:56Z",
+  "generated_at": "2026-07-24T17:21:38Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -785,6 +785,51 @@
       "version": "0.1.0"
     },
     {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T17:21:38Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30111122068",
+          "built_from": {
+            "formula_sha256": "e50bf2be21d2ced96da729716538f96331cc7cb03343d51e179935ce3b46a88d",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "0798e44cfa2fe21db31ead10a4708b8a7d824790",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 467539,
+          "cache_key_sha": "26d0358b99a8fac315257bf054718dbf5902322433a65440ae0ac0f287f56a84",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/m4-1.4.21-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "26d0358b99a8fac315257bf054718dbf5902322433a65440ae0ac0f287f56a84",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/m4/blobs/sha256:26d0358b99a8fac315257bf054718dbf5902322433a65440ae0ac0f287f56a84"
+        }
+      ],
+      "dependencies": [
+        {
+          "full_name": "kandelo-dev/tap-core/dash",
+          "name": "dash",
+          "version": "0.5.12"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/m4.json",
+      "formula_path": "Formula/m4.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/m4",
+      "name": "m4",
+      "version": "1.4.21"
+    },
+    {
       "bottle_rebuild": 2,
       "bottles": [
         {
@@ -1375,7 +1420,7 @@
   ],
   "release_tag": "bottles-abi-v42",
   "schema": 1,
-  "tap_commit": "5ac7e5e46be95fb78f9107d7e6bbf562cd027ec8",
+  "tap_commit": "0798e44cfa2fe21db31ead10a4708b8a7d824790",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }

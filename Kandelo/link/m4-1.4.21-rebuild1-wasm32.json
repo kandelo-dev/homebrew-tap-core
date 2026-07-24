@@ -1,0 +1,53 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 467539,
+    "cache_key_sha": "26d0358b99a8fac315257bf054718dbf5902322433a65440ae0ac0f287f56a84",
+    "payload_root": "m4/1.4.21",
+    "sha256": "26d0358b99a8fac315257bf054718dbf5902322433a65440ae0ac0f287f56a84",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/m4/blobs/sha256:26d0358b99a8fac315257bf054718dbf5902322433a65440ae0ac0f287f56a84"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/m4/1.4.21",
+  "links": [
+    {
+      "source": "bin/m4",
+      "target": "bin/m4",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/m4.info",
+      "target": "share/info/m4.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/m4.info-1",
+      "target": "share/info/m4.info-1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/m4.info-2",
+      "target": "share/info/m4.info-2",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/m4.1",
+      "target": "share/man/man1/m4.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "m4",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/m4.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.4.21"
+}

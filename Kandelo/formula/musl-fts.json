@@ -64,7 +64,7 @@
   "name": "musl-fts",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "5ac7e5e46be95fb78f9107d7e6bbf562cd027ec8",
+  "tap_commit": "0798e44cfa2fe21db31ead10a4708b8a7d824790",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.2.7"
