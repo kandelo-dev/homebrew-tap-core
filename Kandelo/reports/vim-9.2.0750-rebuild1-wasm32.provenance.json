@@ -1,57 +1,57 @@
 {
   "bottle": {
     "bottle_tag": "wasm32_kandelo",
-    "bytes": 322776,
-    "cache_key_sha": "287816b46a24222478b8fd4bb20f5aff5559d215ce85e28e80a55c3704feb017",
+    "bytes": 11347096,
+    "cache_key_sha": "491e88d76446ffeb66be85e8afb5315666b1abdbf579d914b7ae9310d69e2ad0",
     "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
     "prefix": "/home/linuxbrew/.linuxbrew",
-    "sha256": "287816b46a24222478b8fd4bb20f5aff5559d215ce85e28e80a55c3704feb017",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/less/blobs/sha256:287816b46a24222478b8fd4bb20f5aff5559d215ce85e28e80a55c3704feb017"
+    "sha256": "491e88d76446ffeb66be85e8afb5315666b1abdbf579d914b7ae9310d69e2ad0",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/vim/blobs/sha256:491e88d76446ffeb66be85e8afb5315666b1abdbf579d914b7ae9310d69e2ad0"
   },
   "build": {
     "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
     "dev_shell": "scripts/dev-shell.sh",
-    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30132254293",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30132438635",
     "job": "verify-bottle",
     "runner_os": "Linux",
     "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
     "sysroot_fingerprint": "909ba2b77222de5bef3b06bc0c42595c0f0aa1446150fbf988a3f7cb3d649565"
   },
   "formula": {
-    "path": "Formula/less.rb",
-    "sha256": "4a540befbca239eb958218fd88d74b33c417bebce3cbbed8bf6ba432c401f8ef"
+    "path": "Formula/vim.rb",
+    "sha256": "31ba86e73964075018dffdaef77529469095799d45039940c2689a58b64d711e"
   },
   "metadata": {
     "formula_json": {
-      "path": "Kandelo/formula/less.json",
-      "sha256": "313ed74d09ddc5c336f0da37667a75187bf44af11eab7d15d5fb334b2e5bfd00"
+      "path": "Kandelo/formula/vim.json",
+      "sha256": "d1a1227702ba0d2e6c7e797bc3615957838ad89e77593726d38f2a9acf4bee9f"
     },
     "link_manifest_json": {
-      "path": "Kandelo/link/less-668_1-rebuild4-wasm32.json",
-      "sha256": "115d1d534e86caf5e11bf485e3f635d13e550bc5d3ce03f5b75ff93adc940cb0"
+      "path": "Kandelo/link/vim-9.2.0750-rebuild1-wasm32.json",
+      "sha256": "b01af0204228107e24a1e0753601f5d0e0a2cace5b08d4bc0842c8b7896812cc"
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
       "sha256": "591b7934b9194b4caeb5305754c60a5493bd48fcd3e8feb82b1f3bef1c84d7f6"
     },
     "provenance_json": {
-      "path": "Kandelo/reports/less-668_1-rebuild4-wasm32.provenance.json",
-      "sha256": "d302649ade76d83611ffafe2b51c93ef2e6e783424af52e13bcbbe34ce375bb2"
+      "path": "Kandelo/reports/vim-9.2.0750-rebuild1-wasm32.provenance.json",
+      "sha256": "760d3455377ef7d15b6f0c88364ddcae708d5fecf615b2f47a0a49eb3dd813f8"
     }
   },
   "repositories": {
     "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
     "kandelo_repository": "Automattic/kandelo",
-    "tap_commit": "0ffb3c9f2059bcedf2f404f3a39e822ec90a894a",
+    "tap_commit": "8c6e13c6f7f5d689121587c41811a9f061afc92a",
     "tap_repository": "kandelo-dev/homebrew-tap-core"
   },
   "schema": 1,
   "subject": {
     "arch": "wasm32",
-    "bottle_rebuild": 4,
+    "bottle_rebuild": 1,
     "kandelo_abi": 42,
-    "package": "less",
-    "version": "668_1"
+    "package": "vim",
+    "version": "9.2.0750"
   },
   "validation": {
     "outcome_lists": [
@@ -60,9 +60,9 @@
         "name": "schema",
         "passed": [
           "Kandelo/metadata.json",
-          "Kandelo/formula/less.json",
-          "Kandelo/link/less-668_1-rebuild4-wasm32.json",
-          "Kandelo/reports/less-668_1-rebuild4-wasm32.provenance.json"
+          "Kandelo/formula/vim.json",
+          "Kandelo/link/vim-9.2.0750-rebuild1-wasm32.json",
+          "Kandelo/reports/vim-9.2.0750-rebuild1-wasm32.provenance.json"
         ],
         "skipped": [],
         "status": "success"
@@ -93,9 +93,9 @@
         "failed": [],
         "name": "node_smoke",
         "passed": [
-          "Homebrew force-poured less from anonymous-public-readback",
+          "Homebrew force-poured vim from anonymous-public-readback",
           "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
-          "exact bottle sha256: 287816b46a24222478b8fd4bb20f5aff5559d215ce85e28e80a55c3704feb017"
+          "exact bottle sha256: 491e88d76446ffeb66be85e8afb5315666b1abdbf579d914b7ae9310d69e2ad0"
         ],
         "skipped": [],
         "status": "success"

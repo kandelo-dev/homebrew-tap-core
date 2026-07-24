@@ -37,7 +37,7 @@
   "name": "fbdoom",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "0ffb3c9f2059bcedf2f404f3a39e822ec90a894a",
+  "tap_commit": "8c6e13c6f7f5d689121587c41811a9f061afc92a",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "0.1.0"

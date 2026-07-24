@@ -297,7 +297,7 @@ class Vim < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "ff498fc9596b823a5c135ec1eae6f1c65e2b47a34e87b1a6680cf397c174e57c"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "491e88d76446ffeb66be85e8afb5315666b1abdbf579d914b7ae9310d69e2ad0"
   end
 
 end
