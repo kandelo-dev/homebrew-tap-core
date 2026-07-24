@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/lsof.json",
-      "sha256": "99d41ac6cfac748e3ef1024637e0dc306b64923da100c9debc8e854fe9f7b5e5"
+      "sha256": "6d07a1c4719661e11912c8f125216dccf1ce116a76a141c97853cbec2add4363"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/lsof-0.1.0-rebuild2-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "3ad72a12365ca679c377c60d8e82c2c23c01672192aa06949968ce5b7b149d6f"
+      "sha256": "3d45b3b8681f5dcec901d98d45764f6bbbb098b2412aa3d14ae546fc14c91b4c"
     },
     "provenance_json": {
       "path": "Kandelo/reports/lsof-0.1.0-rebuild2-wasm32.provenance.json",
-      "sha256": "835b11f02985a4b27a3917f229e69548f03a5b8cb05f1b1744cbb3f658c9fa1d"
+      "sha256": "2c6120fc0401cb855cf48cd32df675b7390ef5c6f968942e1e210e7a794dd260"
     }
   },
   "repositories": {

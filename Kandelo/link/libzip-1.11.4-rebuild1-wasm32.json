@@ -1,0 +1,108 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 306264,
+    "cache_key_sha": "5f7deb2c960da48f40a375e3954f3ef73d48f04bc3e554b5df13fb9d9e11af5e",
+    "payload_root": "libzip/1.11.4",
+    "sha256": "5f7deb2c960da48f40a375e3954f3ef73d48f04bc3e554b5df13fb9d9e11af5e",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libzip/blobs/sha256:5f7deb2c960da48f40a375e3954f3ef73d48f04bc3e554b5df13fb9d9e11af5e"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/libzip/1.11.4",
+  "links": [
+    {
+      "source": "bin/zipcmp",
+      "target": "bin/zipcmp",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/zipmerge",
+      "target": "bin/zipmerge",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ziptool",
+      "target": "bin/ziptool",
+      "type": "symlink"
+    },
+    {
+      "source": "include/zip.h",
+      "target": "include/zip.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/zipconf.h",
+      "target": "include/zipconf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libzip/libzip-bin-targets-release.cmake",
+      "target": "lib/cmake/libzip/libzip-bin-targets-release.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libzip/libzip-bin-targets.cmake",
+      "target": "lib/cmake/libzip/libzip-bin-targets.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libzip/libzip-config-version.cmake",
+      "target": "lib/cmake/libzip/libzip-config-version.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libzip/libzip-config.cmake",
+      "target": "lib/cmake/libzip/libzip-config.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libzip/libzip-targets-release.cmake",
+      "target": "lib/cmake/libzip/libzip-targets-release.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libzip/libzip-targets.cmake",
+      "target": "lib/cmake/libzip/libzip-targets.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libzip/modules/FindMbedTLS.cmake",
+      "target": "lib/cmake/libzip/modules/FindMbedTLS.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libzip/modules/FindNettle.cmake",
+      "target": "lib/cmake/libzip/modules/FindNettle.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/cmake/libzip/modules/Findzstd.cmake",
+      "target": "lib/cmake/libzip/modules/Findzstd.cmake",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libzip.a",
+      "target": "lib/libzip.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/libzip.pc",
+      "target": "lib/pkgconfig/libzip.pc",
+      "type": "symlink"
+    }
+  ],
+  "package": "libzip",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/libzip.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.11.4"
+}
