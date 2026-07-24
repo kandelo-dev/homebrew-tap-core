@@ -33,7 +33,7 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # Production executes and builds from this reviewed publisher descendant.
 # ABI 42's sealed package inputs remain bound separately to the exact generation
 # that produced them, so neither side of the bootstrap cycle can move.
-CURRENT_KANDELO_WORKFLOW_SHA = "d3805721b887a19382ef1c96b576fc27badc0951"
+CURRENT_KANDELO_WORKFLOW_SHA = "3545bfd34509a52b68a4620c92e4aae24c60adb0"
 PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
 
@@ -100,7 +100,7 @@ PUBLISH_INPUTS = {
   "kandelo-ref" => CURRENT_KANDELO_WORKFLOW_SHA,
   "tap-repository" => "kandelo-dev/homebrew-tap-core",
   "tap-name" => "kandelo-dev/tap-core",
-  "tap-ref" => "main",
+  "tap-ref" => expression("github.event.client_payload.tap_sha"),
   "formulae" => expression("github.event.client_payload.formulae"),
   "arches" => expression("github.event.client_payload.arches || 'wasm32'"),
   "release-tag" => expression("github.event.client_payload.release_tag || ''"),
@@ -173,6 +173,7 @@ CALLER_SPECS = {
     reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@#{CURRENT_KANDELO_WORKFLOW_SHA}",
     inputs: {
       "mode" => expression("github.event.client_payload.mode || 'rebuild'"),
+      "tap-ref" => expression("github.event.client_payload.tap_sha"),
       "formulae" => expression("github.event.client_payload.formulae"),
       "arches" => expression("github.event.client_payload.arches || 'wasm32'"),
       "release-tag" => expression("github.event.client_payload.release_tag || ''"),

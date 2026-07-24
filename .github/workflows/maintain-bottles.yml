@@ -10,9 +10,12 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@d3805721b887a19382ef1c96b576fc27badc0951
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@3545bfd34509a52b68a4620c92e4aae24c60adb0
     with:
       mode: ${{ github.event.client_payload.mode || 'rebuild' }}
+      # WHY: maintenance must rebuild or roll back the exact reviewed Formula
+      # source, even though repository_dispatch loads this caller from main.
+      tap-ref: ${{ github.event.client_payload.tap_sha }}
       formulae: ${{ github.event.client_payload.formulae }}
       arches: ${{ github.event.client_payload.arches || 'wasm32' }}
       release-tag: ${{ github.event.client_payload.release_tag || '' }}

@@ -303,12 +303,22 @@ class GitHub:
             raise RolloutError(f"GitHub returned a malformed job for run {run_id}")
         return tuple(result["jobs"])
 
-    def dispatch(self, formula: str, arches: Sequence[str]) -> None:
+    def dispatch(
+        self, formula: str, arches: Sequence[str], tap_sha: str
+    ) -> None:
+        if not re.fullmatch(r"[0-9a-f]{40}", tap_sha):
+            raise RolloutError(
+                f"dispatch requires an exact lowercase tap commit SHA, got {tap_sha!r}"
+            )
         payload: dict[str, Any] = {
             "event_type": "publish-kandelo-bottles",
             "client_payload": {
                 "formulae": formula,
                 "arches": ",".join(arches),
+                # WHY: repository_dispatch loads the caller from the default
+                # branch, but bottle source must stay bound to the exact tap
+                # snapshot that the controller validated and recorded.
+                "tap_sha": tap_sha,
             },
         }
         if formula == "python":
@@ -614,7 +624,7 @@ def validate_workflow(
         "kandelo-repository": KANDELO_REPOSITORY,
         "tap-repository": REPOSITORY.lower(),
         "tap-name": TAP_NAME,
-        "tap-ref": "main",
+        "tap-ref": "${{ github.event.client_payload.tap_sha }}",
         "formulae": "${{ github.event.client_payload.formulae }}",
         "arches": "${{ github.event.client_payload.arches || 'wasm32' }}",
         "force": "${{ github.event.client_payload.force || false }}",
@@ -1636,7 +1646,7 @@ def dispatch_ready(
         state["unresolved_dispatch"] = intent
         write_state(state_path, state)
         try:
-            github.dispatch(selected.name, selected.arches)
+            github.dispatch(selected.name, selected.arches, snapshot.sha)
             intent["status"] = "submitted"
             intent["submitted_at"] = _utc_now()
             write_state(state_path, state)
