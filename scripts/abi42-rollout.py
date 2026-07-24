@@ -28,6 +28,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 REPOSITORY = "Kandelo-dev/homebrew-tap-core"
 TAP_NAME = "kandelo-dev/tap-core"
+KANDELO_REPOSITORY = "Automattic/kandelo"
 WORKFLOW_ID = 315_324_894
 WORKFLOW_PATH = ".github/workflows/publish-bottles.yml"
 EXPECTED_ABI = 42
@@ -110,6 +111,7 @@ class TapSnapshot:
     identities: Mapping[str, FormulaIdentity]
     dependencies: Mapping[str, frozenset[str]]
     workflow_source: str
+    formula_support_tree: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -218,6 +220,13 @@ class GitTap:
             )
         return result.returncode == 0
 
+    def tree_oid(self, revision: str, path: str) -> str:
+        result = self.git("rev-parse", f"{revision}:{path}", check=False)
+        oid = result.stdout.strip()
+        if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", oid):
+            raise RolloutError(f"{path} is not a Git tree at tap commit {revision}")
+        return oid
+
 
 class GitHub:
     def __init__(self, repository: str = REPOSITORY) -> None:
@@ -260,6 +269,13 @@ class GitHub:
         )
         if not isinstance(result, dict) or not isinstance(result.get("jobs"), list):
             raise RolloutError(f"GitHub jobs for run {run_id} have an unexpected shape")
+        count = result.get("total_count")
+        if not isinstance(count, int) or count != len(result["jobs"]):
+            raise RolloutError(
+                f"GitHub returned an incomplete job matrix for run {run_id}"
+            )
+        if any(not isinstance(job, dict) for job in result["jobs"]):
+            raise RolloutError(f"GitHub returned a malformed job for run {run_id}")
         return tuple(result["jobs"])
 
     def dispatch(self, formula: str, arches: Sequence[str]) -> None:
@@ -383,6 +399,24 @@ def parse_formula_identity(
     )
 
 
+def formula_contract_sha256(formula: str, source: str) -> str:
+    """Hash every Formula byte except finalizer-owned bottle checksums."""
+    block = bottle_block(source, formula)
+    normalized, substitutions = re.subn(
+        r'^(\s+sha256\s+cellar:\s+[^,]+,\s+'
+        r'(?:wasm32|wasm64)_kandelo:\s+)"[0-9a-f]{64}"\s*$',
+        r'\1"<finalized-sha256>"',
+        block,
+        flags=re.MULTILINE,
+    )
+    if substitutions != len(required_arches(formula)):
+        raise RolloutError(
+            f"Formula/{formula}.rb did not expose every finalizer-owned checksum"
+        )
+    frozen_source = source.replace(block, normalized, 1)
+    return hashlib.sha256(frozen_source.encode()).hexdigest()
+
+
 def same_tap_dependencies(formula: str, source: str) -> frozenset[str]:
     found = set(
         re.findall(
@@ -448,6 +482,7 @@ def load_snapshot(tap: GitTap, sha: str) -> TapSnapshot:
         identities=identities,
         dependencies=dependencies,
         workflow_source=tap.show(sha, WORKFLOW_PATH),
+        formula_support_tree=tap.tree_oid(sha, "Kandelo/formula_support"),
     )
 
 
@@ -481,12 +516,42 @@ def validate_workflow(
             f"(uses={uses}, kandelo-ref={refs})"
         )
 
+    # The controller owns only formula/architecture payloads. Freeze the
+    # surrounding caller wiring so a tap-side workflow edit cannot redirect or
+    # force a publication while retaining the reviewed Kandelo SHA.
+    expected_scalars = {
+        "kandelo-repository": KANDELO_REPOSITORY,
+        "tap-repository": REPOSITORY.lower(),
+        "tap-name": TAP_NAME,
+        "tap-ref": "main",
+        "formulae": "${{ github.event.client_payload.formulae }}",
+        "arches": "${{ github.event.client_payload.arches || 'wasm32' }}",
+        "force": "${{ github.event.client_payload.force || false }}",
+        "dry-run": "false",
+        "require-vfs-acceptance": (
+            "${{ github.event.client_payload.require_vfs_acceptance || false }}"
+        ),
+    }
+    for key, expected in expected_scalars.items():
+        values = re.findall(
+            rf"^\s+{re.escape(key)}:\s*(.+?)\s*$",
+            snapshot.workflow_source,
+            flags=re.MULTILINE,
+        )
+        if values != [expected]:
+            raise RolloutError(
+                f"production workflow {key} differs from {expected!r}: {values}"
+            )
+
 
 def _packages_by_name(metadata: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     packages: dict[str, Mapping[str, Any]] = {}
-    for value in metadata.get("packages", ()):
+    values = metadata.get("packages")
+    if not isinstance(values, list):
+        raise RolloutError("Kandelo/metadata.json packages is not an array")
+    for value in values:
         if not isinstance(value, dict) or not isinstance(value.get("name"), str):
-            continue
+            raise RolloutError("Kandelo/metadata.json contains a malformed package")
         name = value["name"]
         if name in packages:
             raise RolloutError(f"Kandelo/metadata.json duplicates package {name}")
@@ -498,9 +563,12 @@ def _bottles_by_arch(
     value: Mapping[str, Any], label: str
 ) -> dict[str, Mapping[str, Any]]:
     result: dict[str, Mapping[str, Any]] = {}
-    for bottle in value.get("bottles", ()):
+    bottles = value.get("bottles")
+    if not isinstance(bottles, list):
+        raise RolloutError(f"{label} bottles is not an array")
+    for bottle in bottles:
         if not isinstance(bottle, dict) or not isinstance(bottle.get("arch"), str):
-            continue
+            raise RolloutError(f"{label} contains a malformed bottle")
         arch = bottle["arch"]
         if arch in result:
             raise RolloutError(f"{label} duplicates architecture {arch}")
@@ -546,12 +614,24 @@ def finalization_reasons(
 
     aggregate_bottles = _bottles_by_arch(package, f"aggregate {formula}")
     sidecar_bottles = _bottles_by_arch(sidecar, f"sidecar {formula}")
+    expected_arches = set(identity.arches)
+    for label, bottles in (
+        ("aggregate", aggregate_bottles),
+        ("sidecar", sidecar_bottles),
+    ):
+        unexpected = sorted(set(bottles) - expected_arches)
+        if unexpected:
+            reasons.append(f"{label} has unexpected architectures: {unexpected}")
+    if package.get("dependencies") != sidecar.get("dependencies"):
+        reasons.append("aggregate and sidecar dependencies differ")
     for arch in arches:
         aggregate = aggregate_bottles.get(arch)
         formula_bottle = sidecar_bottles.get(arch)
         if aggregate is None or formula_bottle is None:
             reasons.append(f"{arch} is missing from aggregate or sidecar")
             continue
+        if aggregate != formula_bottle:
+            reasons.append(f"aggregate and sidecar {arch} bottle records differ")
         sha = aggregate.get("sha256")
         expected_url = f"{BOTTLE_ROOT}/{formula}/blobs/sha256:{sha}"
         for label, bottle in (("aggregate", aggregate), ("sidecar", formula_bottle)):
@@ -573,6 +653,13 @@ def finalization_reasons(
                 continue
             if built_from.get("kandelo_commit") != expected_kandelo_sha:
                 reasons.append(f"{label} {arch} was built from another Kandelo SHA")
+            if (
+                built_from.get("kandelo_repository", "").lower()
+                != KANDELO_REPOSITORY.lower()
+            ):
+                reasons.append(
+                    f"{label} {arch} was built from another Kandelo repository"
+                )
             if built_from.get("tap_repository", "").lower() != REPOSITORY.lower():
                 reasons.append(f"{label} {arch} was built from another tap")
 
@@ -595,6 +682,20 @@ def finalization_reasons(
             source_identity = parse_formula_identity(formula, source_formula, package)
             if source_identity.state_value() != identity.state_value():
                 reasons.append(f"{arch} source Formula identity differs")
+            if formula_contract_sha256(
+                formula, source_formula
+            ) != formula_contract_sha256(
+                formula, snapshot.formula_sources[formula]
+            ):
+                reasons.append(f"{arch} source Formula recipe differs")
+            if (
+                tap.tree_oid(source_sha, "Kandelo/formula_support")
+                != snapshot.formula_support_tree
+            ):
+                reasons.append(f"{arch} source Formula support differs")
+            source_workflow = tap.show(source_sha, WORKFLOW_PATH)
+            if source_workflow != snapshot.workflow_source:
+                reasons.append(f"{arch} source publication workflow differs")
         except RolloutError as error:
             reasons.append(f"{arch} source provenance cannot be read: {error}")
         if identity.bottle_sha256.get(arch) != sha:
@@ -625,10 +726,17 @@ def active_inventory(github: GitHub) -> RunInventory:
         count = response.get("total_count")
         if not isinstance(count, int) or count < 0:
             raise RolloutError(f"GitHub {status} run count is invalid")
+        listed = response["workflow_runs"]
+        if count <= 100 and len(listed) != count:
+            raise RolloutError(
+                f"GitHub {status} reported {count} active runs but returned "
+                f"{len(listed)}"
+            )
         total += count
-        for run in response["workflow_runs"]:
-            if isinstance(run, dict) and isinstance(run.get("id"), int):
-                runs_by_id[run["id"]] = run
+        for run in listed:
+            if not isinstance(run, dict) or not isinstance(run.get("id"), int):
+                raise RolloutError(f"GitHub {status} returned a malformed active run")
+            runs_by_id[run["id"]] = run
     # Status filters are disjoint. Deduplicating details protects reporting,
     # while the exact total_count sum is the authoritative capacity count.
     formulae: dict[int, frozenset[str]] = {}
@@ -646,6 +754,46 @@ def active_inventory(github: GitHub) -> RunInventory:
     )
 
 
+def reconcile_recorded_activity(
+    github: GitHub,
+    inventory: RunInventory,
+    state: Mapping[str, Any],
+) -> RunInventory:
+    """Keep controller-owned runs counted across status-filter transitions."""
+    runs_by_id = {
+        run["id"]: run
+        for run in inventory.runs
+        if isinstance(run, dict) and isinstance(run.get("id"), int)
+    }
+    formulae = dict(inventory.formulae)
+    count = inventory.count
+    for entry in state.get("dispatches", ()):
+        if not isinstance(entry, dict):
+            continue
+        run_id = entry.get("run_id")
+        formula = entry.get("formula")
+        if (
+            not isinstance(run_id, int)
+            or formula not in FORMULA_ORDER
+            or run_id in runs_by_id
+        ):
+            continue
+        run = github.run(run_id)
+        # Sequential status-filter queries can miss a run while GitHub moves it
+        # between requested/queued/waiting/in-progress. The durable ledger
+        # closes that race for every run this sole dispatcher creates.
+        if run.get("status") != "completed":
+            runs_by_id[run_id] = run
+            formulae[run_id] = frozenset((formula,))
+            count += 1
+    return RunInventory(
+        count=count,
+        runs=tuple(runs_by_id.values()),
+        formulae=formulae,
+        unknown_run_ids=inventory.unknown_run_ids,
+    )
+
+
 def required_arches(formula: str) -> tuple[str, ...]:
     return ("wasm32", "wasm64") if formula in DUAL_ARCH_FORMULAE else ("wasm32",)
 
@@ -658,7 +806,16 @@ def dependency_arch(dependency: str, target_arch: str) -> str:
 
 def catalog_state(snapshot: TapSnapshot) -> dict[str, Any]:
     return {
-        name: snapshot.identities[name].state_value()
+        name: {
+            **snapshot.identities[name].state_value(),
+            # Bottle finalization may replace only the checksum literals.
+            # Freezing the rest prevents recipe or dependency edits from
+            # silently reusing the rollout's already-reserved identity.
+            "formula_contract_sha256": formula_contract_sha256(
+                name, snapshot.formula_sources[name]
+            ),
+            "dependencies": sorted(snapshot.dependencies[name]),
+        }
         for name in FORMULA_ORDER
     }
 
@@ -722,6 +879,9 @@ def initial_state(
         "expected_kandelo_sha": expected_kandelo_sha,
         "cutover_tap_sha": snapshot.sha,
         "catalog": catalog_state(snapshot),
+        "formula_support_tree": snapshot.formula_support_tree,
+        "workflow_sha256": hashlib.sha256(snapshot.workflow_source.encode()).hexdigest(),
+        "waves": [list(wave) for wave in WAVES],
         "unresolved_dispatch": None,
         "dispatches": [],
     }
@@ -738,12 +898,39 @@ def validate_state(
         "abi": EXPECTED_ABI,
         "expected_kandelo_sha": expected_kandelo_sha,
         "catalog": catalog_state(snapshot),
+        "formula_support_tree": snapshot.formula_support_tree,
+        "workflow_sha256": hashlib.sha256(snapshot.workflow_source.encode()).hexdigest(),
+        "waves": [list(wave) for wave in WAVES],
     }
     for field, expected in fixed.items():
         if state.get(field) != expected:
             raise RolloutError(
                 f"rollout state {field} differs from current reviewed cutover"
             )
+    dispatches = state.get("dispatches")
+    if not isinstance(dispatches, list):
+        raise RolloutError("rollout state dispatches is not an array")
+    seen_formulae: set[str] = set()
+    seen_run_ids: set[int] = set()
+    for entry in dispatches:
+        if not isinstance(entry, dict):
+            raise RolloutError("rollout state contains a malformed dispatch")
+        formula = entry.get("formula")
+        run_id = entry.get("run_id")
+        tap_sha = entry.get("tap_sha")
+        if (
+            formula not in FORMULA_ORDER
+            or entry.get("arches") != list(required_arches(formula))
+            or not isinstance(run_id, int)
+            or run_id <= 0
+            or not isinstance(tap_sha, str)
+            or not re.fullmatch(r"[0-9a-f]{40}", tap_sha)
+        ):
+            raise RolloutError("rollout state contains a malformed dispatch")
+        if formula in seen_formulae or run_id in seen_run_ids:
+            raise RolloutError("rollout state contains a duplicate dispatch")
+        seen_formulae.add(formula)
+        seen_run_ids.add(run_id)
 
 
 def history_blocks_from_state(
@@ -886,7 +1073,10 @@ def acknowledge_dispatch(
                     str(job.get("name", "")),
                 )
             }
-            if found_formulae == frozenset((formula,)) and expected_arches <= found_arches:
+            if (
+                found_formulae == frozenset((formula,))
+                and expected_arches == found_arches
+            ):
                 candidates.append(run["id"])
         if len(candidates) == 1:
             return candidates[0]
@@ -927,7 +1117,9 @@ def dispatch_ready(
                 f"{state_path} contains an unresolved dispatch; inspect it before continuing"
             )
 
-        inventory = active_inventory(github)
+        inventory = reconcile_recorded_activity(
+            github, active_inventory(github), state
+        )
         if inventory.count >= MAX_ACTIVE_RUNS:
             return dispatched
         if inventory.unknown_run_ids:
@@ -961,7 +1153,9 @@ def dispatch_ready(
         latest_sha = tap.main_without_fetch() if no_fetch else tap.fetch_main()
         if latest_sha != snapshot.sha:
             continue
-        latest_inventory = active_inventory(github)
+        latest_inventory = reconcile_recorded_activity(
+            github, active_inventory(github), state
+        )
         if latest_inventory.count >= MAX_ACTIVE_RUNS:
             return dispatched
         if latest_inventory.unknown_run_ids:
@@ -1172,6 +1366,8 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
                     f"{args.state_file} contains an unresolved dispatch"
                 )
         inventory = active_inventory(github)
+        if state is not None:
+            inventory = reconcile_recorded_activity(github, inventory, state)
         finalized = {
             formula: not finalization_reasons(
                 tap,

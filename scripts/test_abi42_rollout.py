@@ -116,12 +116,27 @@ class RolloutControllerTests(unittest.TestCase):
 
     def test_workflow_must_pin_both_call_and_source_to_frozen_sha(self):
         expected = "a" * 40
+        vfs_expression = (
+            "${{ github.event.client_payload.require_vfs_acceptance || false }}"
+        )
         source = f"""\
+on:
+  repository_dispatch:
+    types: [publish-kandelo-bottles]
 jobs:
   publish:
     uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@{expected}
     with:
+      kandelo-repository: Automattic/kandelo
       kandelo-ref: {expected}
+      tap-repository: kandelo-dev/homebrew-tap-core
+      tap-name: kandelo-dev/tap-core
+      tap-ref: main
+      formulae: ${{{{ github.event.client_payload.formulae }}}}
+      arches: ${{{{ github.event.client_payload.arches || 'wasm32' }}}}
+      force: ${{{{ github.event.client_payload.force || false }}}}
+      dry-run: false
+      require-vfs-acceptance: {vfs_expression}
 """
         snapshot = dataclasses.replace(self.snapshot, workflow_source=source)
         rollout.validate_workflow(FakeGitHub(), snapshot, expected)
@@ -134,6 +149,19 @@ jobs:
                     snapshot,
                     workflow_source=source.replace(
                         f"kandelo-ref: {expected}", "kandelo-ref: main"
+                    ),
+                ),
+                expected,
+            )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "workflow force differs"
+        ):
+            rollout.validate_workflow(
+                FakeGitHub(),
+                dataclasses.replace(
+                    snapshot,
+                    workflow_source=source.replace(
+                        "github.event.client_payload.force || false", "true"
                     ),
                 ),
                 expected,
@@ -153,6 +181,7 @@ jobs:
                     "built_from": {
                         "formula_sha256": formula_sha,
                         "kandelo_commit": "a" * 40,
+                        "kandelo_repository": rollout.KANDELO_REPOSITORY,
                         "tap_commit": self.head,
                         "tap_repository": rollout.REPOSITORY,
                     },
@@ -233,6 +262,132 @@ jobs:
             reasons,
         )
 
+    def test_finalization_rejects_sidecar_provenance_different_from_aggregate(self):
+        snapshot = self._finalized_snapshot("zlib")
+        sidecars = copy.deepcopy(snapshot.formula_sidecars)
+        sidecars["zlib"]["bottles"][0]["built_from"]["formula_sha256"] = "f" * 64
+        reasons = rollout.finalization_reasons(
+            self.tap,
+            dataclasses.replace(snapshot, formula_sidecars=sidecars),
+            "zlib",
+            ("wasm32", "wasm64"),
+            "a" * 40,
+        )
+        self.assertIn(
+            "aggregate and sidecar wasm32 bottle records differ",
+            reasons,
+        )
+
+    def test_finalization_rejects_a_different_source_recipe_with_same_identity(self):
+        snapshot = self._finalized_snapshot("zlib")
+        source = snapshot.formula_sources["zlib"].replace(
+            "class Zlib < Formula",
+            "class Zlib < Formula\n  # Semantically different build input.",
+            1,
+        )
+        source_digest = hashlib.sha256(source.encode()).hexdigest()
+        metadata = copy.deepcopy(snapshot.metadata)
+        sidecars = copy.deepcopy(snapshot.formula_sidecars)
+        for bottle in metadata["packages"][0]["bottles"]:
+            bottle["built_from"]["formula_sha256"] = source_digest
+        for bottle in sidecars["zlib"]["bottles"]:
+            bottle["built_from"]["formula_sha256"] = source_digest
+
+        class SourceTap:
+            def is_ancestor(self, ancestor, descendant):
+                return ancestor == self_head and descendant == self_head
+
+            def show(self, revision, path):
+                self.assert_revision(revision)
+                if path == "Formula/zlib.rb":
+                    return source
+                if path == rollout.WORKFLOW_PATH:
+                    return snapshot.workflow_source
+                raise AssertionError(path)
+
+            def tree_oid(self, revision, path):
+                self.assert_revision(revision)
+                self.assert_path(path)
+                return snapshot.formula_support_tree
+
+            @staticmethod
+            def assert_revision(revision):
+                if revision != self_head:
+                    raise AssertionError(revision)
+
+            @staticmethod
+            def assert_path(path):
+                if path != "Kandelo/formula_support":
+                    raise AssertionError(path)
+
+        self_head = self.head
+        reasons = rollout.finalization_reasons(
+            SourceTap(),
+            dataclasses.replace(
+                snapshot,
+                metadata=metadata,
+                formula_sidecars=sidecars,
+            ),
+            "zlib",
+            ("wasm32", "wasm64"),
+            "a" * 40,
+        )
+        self.assertIn("wasm32 source Formula recipe differs", reasons)
+        self.assertIn("wasm64 source Formula recipe differs", reasons)
+
+    def test_rollout_state_freezes_recipe_support_and_wave_contracts(self):
+        state = rollout.initial_state(self.snapshot, "a" * 40)
+        rollout.validate_state(state, self.snapshot, "a" * 40)
+
+        sources = dict(self.snapshot.formula_sources)
+        sources["asa"] = sources["asa"].replace(
+            'desc "', 'desc "changed ', 1
+        )
+        with self.assertRaisesRegex(rollout.RolloutError, "catalog differs"):
+            rollout.validate_state(
+                state,
+                dataclasses.replace(self.snapshot, formula_sources=sources),
+                "a" * 40,
+            )
+
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "formula_support_tree differs"
+        ):
+            rollout.validate_state(
+                state,
+                dataclasses.replace(self.snapshot, formula_support_tree="f" * 40),
+                "a" * 40,
+            )
+
+        changed_waves = copy.deepcopy(state)
+        changed_waves["waves"][0].reverse()
+        with self.assertRaisesRegex(rollout.RolloutError, "waves differs"):
+            rollout.validate_state(changed_waves, self.snapshot, "a" * 40)
+
+    def test_rollout_state_allows_only_finalizer_checksum_formula_edits(self):
+        state = rollout.initial_state(self.snapshot, "a" * 40)
+        sources = dict(self.snapshot.formula_sources)
+        old_digest = self.snapshot.identities["asa"].bottle_sha256["wasm32"]
+        sources["asa"] = sources["asa"].replace(old_digest, "f" * 64, 1)
+        rollout.validate_state(
+            state,
+            dataclasses.replace(self.snapshot, formula_sources=sources),
+            "a" * 40,
+        )
+
+    def test_rollout_state_rejects_a_malformed_dispatch_ledger(self):
+        state = rollout.initial_state(self.snapshot, "a" * 40)
+        state["dispatches"].append(
+            {
+                "formula": "asa",
+                "run_id": 123,
+            }
+        )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "malformed dispatch"
+        ):
+            rollout.validate_state(state, self.snapshot, "a" * 40)
+
     def test_active_inventory_counts_every_production_wait_state(self):
         github = FakeGitHub()
         for index, status in enumerate(rollout.ACTIVE_STATUSES, start=1):
@@ -248,6 +403,15 @@ jobs:
         self.assertEqual(len(rollout.ACTIVE_STATUSES), inventory.count)
         self.assertEqual((), inventory.unknown_run_ids)
 
+    def test_dual_arch_dependencies_follow_the_consumer_architecture(self):
+        self.assertEqual("wasm32", rollout.dependency_arch("zlib", "wasm32"))
+        self.assertEqual("wasm64", rollout.dependency_arch("zlib", "wasm64"))
+        self.assertEqual(
+            "wasm32",
+            rollout.dependency_arch("dash", "wasm64"),
+            "single-architecture dependencies cannot be requested as wasm64",
+        )
+
     def test_unknown_active_formula_is_reported_conservatively(self):
         github = FakeGitHub()
         github.by_status["queued"] = {
@@ -257,6 +421,57 @@ jobs:
         github.jobs_by_run[123] = ({"name": "publish / plan"},)
         inventory = rollout.active_inventory(github)
         self.assertEqual((123,), inventory.unknown_run_ids)
+
+    def test_active_inventory_rejects_count_without_complete_run_details(self):
+        github = FakeGitHub()
+        github.by_status["queued"] = {
+            "total_count": 1,
+            "workflow_runs": [],
+        }
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "reported 1 active runs but returned 0"
+        ):
+            rollout.active_inventory(github)
+
+    def test_run_correlation_rejects_an_incomplete_job_page(self):
+        github = rollout.GitHub()
+        with (
+            mock.patch.object(
+                github,
+                "api_json",
+                return_value={
+                    "total_count": 2,
+                    "jobs": [{"name": "publish / plan"}],
+                },
+            ),
+            self.assertRaisesRegex(
+                rollout.RolloutError, "incomplete job matrix"
+            ),
+        ):
+            github.jobs(123)
+
+    def test_recorded_active_run_cannot_disappear_during_status_transitions(self):
+        github = FakeGitHub()
+        github.runs_by_id[123] = {
+            "id": 123,
+            "status": "in_progress",
+        }
+        inventory = rollout.reconcile_recorded_activity(
+            github,
+            rollout.RunInventory(
+                count=7,
+                runs=(),
+                formulae={},
+                unknown_run_ids=(),
+            ),
+            {
+                "dispatches": [
+                    {"formula": "asa", "run_id": 123},
+                ]
+            },
+        )
+        self.assertEqual(8, inventory.count)
+        self.assertEqual(frozenset(("asa",)), inventory.formulae[123])
 
     def test_successful_recorded_run_waits_for_finalizer_visibility(self):
         github = FakeGitHub()
@@ -310,6 +525,39 @@ jobs:
                 arches=("wasm32",),
                 tap_sha=self.head,
                 timeout_seconds=0,
+                poll_seconds=0.001,
+            )
+
+    def test_dispatch_acknowledgement_requires_the_exact_arch_matrix(self):
+        github = FakeGitHub()
+        github.by_status[None] = {
+            "total_count": 1,
+            "workflow_runs": [
+                {
+                    "id": 124,
+                    "event": "repository_dispatch",
+                    "head_sha": self.head,
+                }
+            ],
+        }
+        github.jobs_by_run[124] = (
+            {"name": "publish / build-and-test (asa, wasm32)"},
+            {"name": "publish / build-and-test (asa, wasm64)"},
+        )
+        with (
+            mock.patch.object(rollout.time, "monotonic", side_effect=(0, 0, 2)),
+            mock.patch.object(rollout.time, "sleep"),
+            self.assertRaisesRegex(
+                rollout.RolloutError, "no unambiguous run ID appeared"
+            ),
+        ):
+            rollout.acknowledge_dispatch(
+                github,
+                before_ids=frozenset(),
+                formula="asa",
+                arches=("wasm32",),
+                tap_sha=self.head,
+                timeout_seconds=1,
                 poll_seconds=0.001,
             )
 
