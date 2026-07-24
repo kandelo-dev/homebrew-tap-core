@@ -37,7 +37,7 @@
   "name": "gawk",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "f5b159cd25b0b6c9c65b4261206229ab544d82f8",
+  "tap_commit": "6cf861153dbdf5a6f57276f959a597fc30cd6bed",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "5.3.0"

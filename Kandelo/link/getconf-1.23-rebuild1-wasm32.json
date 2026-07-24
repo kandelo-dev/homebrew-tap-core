@@ -1,0 +1,38 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 26666,
+    "cache_key_sha": "e7a9684780e8a7dd12efa7344be40fc541caffc0986065622bfdb498daa05902",
+    "payload_root": "getconf/1.23",
+    "sha256": "e7a9684780e8a7dd12efa7344be40fc541caffc0986065622bfdb498daa05902",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/getconf/blobs/sha256:e7a9684780e8a7dd12efa7344be40fc541caffc0986065622bfdb498daa05902"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/getconf/1.23",
+  "links": [
+    {
+      "source": "bin/getconf",
+      "target": "bin/getconf",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/getconf.1",
+      "target": "share/man/man1/getconf.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "getconf",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/getconf.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.23"
+}

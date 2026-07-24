@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T14:43:49Z",
+  "generated_at": "2026-07-24T14:51:44Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -433,11 +433,50 @@
       "full_name": "kandelo-dev/tap-core/gencat",
       "name": "gencat",
       "version": "1.37"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T14:51:44Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30100888238",
+          "built_from": {
+            "formula_sha256": "fd99f91d7eb76d2ebbeab63afb9d35fd6bbd1f3488680736a9c1bd243865b504",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "6cf861153dbdf5a6f57276f959a597fc30cd6bed",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 26666,
+          "cache_key_sha": "e7a9684780e8a7dd12efa7344be40fc541caffc0986065622bfdb498daa05902",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/getconf-1.23-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "e7a9684780e8a7dd12efa7344be40fc541caffc0986065622bfdb498daa05902",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/getconf/blobs/sha256:e7a9684780e8a7dd12efa7344be40fc541caffc0986065622bfdb498daa05902"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/getconf.json",
+      "formula_path": "Formula/getconf.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/getconf",
+      "name": "getconf",
+      "version": "1.23"
     }
   ],
   "release_tag": "bottles-abi-v42",
   "schema": 1,
-  "tap_commit": "f5b159cd25b0b6c9c65b4261206229ab544d82f8",
+  "tap_commit": "6cf861153dbdf5a6f57276f959a597fc30cd6bed",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }
