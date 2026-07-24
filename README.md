@@ -207,7 +207,7 @@ upload or tap-finalization jobs.
 
 Write publication accepts formulae, arches, and an optional release tag. During
 the ABI 42 bootstrap, the caller executes and builds from reviewed publisher
-descendant `5669c1d9481a97f2a9074657d319677a1357506c`. Its package inputs are
+descendant `01129b4ab626b16e61e5f208fd1486d3f4f2beba`. Its package inputs are
 separately fixed to generation
 `437fde2524ea6ad9c44933f8abbf995a46841009` on `pr-1079-staging`; the tap source
 remains fixed to reviewed `main`. The publisher proves that the package
@@ -262,7 +262,7 @@ Formula and architecture matrix, then recover it against the same ledger:
 : "${KANDELO_ROLLOUT_STATE:?set this to the existing ABI 42 rollout ledger}"
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
-  --expected-kandelo-sha 5669c1d9481a97f2a9074657d319677a1357506c \
+  --expected-kandelo-sha 01129b4ab626b16e61e5f208fd1486d3f4f2beba \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --recover-dispatch
 ```
