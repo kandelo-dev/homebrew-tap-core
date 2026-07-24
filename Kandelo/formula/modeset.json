@@ -37,7 +37,7 @@
   "name": "modeset",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "cc66d66d873dc655f892d0e1b14a6eec460c3cf2",
+  "tap_commit": "aecde46f2d627d2867d2c0ffd0f6ebed123f11ed",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "0.1.0"

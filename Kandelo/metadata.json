@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T15:48:17Z",
+  "generated_at": "2026-07-24T15:55:54Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -1099,11 +1099,50 @@
       "full_name": "kandelo-dev/tap-core/procps",
       "name": "procps",
       "version": "4.0.6"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T15:55:54Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30105411969",
+          "built_from": {
+            "formula_sha256": "e578404405dc97371903fe83c3373f745bef9a376d98814b3e432f72449de942",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "aecde46f2d627d2867d2c0ffd0f6ebed123f11ed",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 189318,
+          "cache_key_sha": "49217f1c99b44bb6ec11e0ca5416a1b6330106bfbdde32df40ee8bd2f61db41e",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/sed-4.9-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "49217f1c99b44bb6ec11e0ca5416a1b6330106bfbdde32df40ee8bd2f61db41e",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/sed/blobs/sha256:49217f1c99b44bb6ec11e0ca5416a1b6330106bfbdde32df40ee8bd2f61db41e"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/sed.json",
+      "formula_path": "Formula/sed.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/sed",
+      "name": "sed",
+      "version": "4.9"
     }
   ],
   "release_tag": "bottles-abi-v42",
   "schema": 1,
-  "tap_commit": "cc66d66d873dc655f892d0e1b14a6eec460c3cf2",
+  "tap_commit": "aecde46f2d627d2867d2c0ffd0f6ebed123f11ed",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }
