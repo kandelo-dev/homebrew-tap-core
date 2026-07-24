@@ -98,7 +98,7 @@ class Findutils < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "66381cfaedc0dd81edb9739e9d2eb0895fce9bcab7336b23c4a60298fa96ccb5"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "6b35b405280a50d10ac1f9dce5583aa4eda34c1b07e531f8174bc52b29085c44"
   end
 
 end

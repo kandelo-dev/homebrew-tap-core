@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "defb625835e83146e2c65131db13b11f44917814636a6f2021227ff96b5ad310"
+      "sha256": "41865d11f13e5b129e25d8f906efb48baf7afcb441a17ef91d52a845ec106d5f"
     },
     "provenance_json": {
       "path": "Kandelo/reports/modeset-0.1.0-rebuild2-wasm32.provenance.json",
-      "sha256": "8400be9382e45b713208c678051486edb8154f2b13fec63d66eaba5a3e4c3ede"
+      "sha256": "a393cfbe4d9d82448480ff17d0f322cf0a0c322bd322eb683a9176ea13da7321"
     }
   },
   "repositories": {
