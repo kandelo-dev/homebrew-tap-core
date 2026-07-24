@@ -85,17 +85,21 @@ class RolloutError(RuntimeError):
 @dataclasses.dataclass(frozen=True)
 class FormulaIdentity:
     name: str
-    version: str
+    pkg_version: str
     formula_revision: int
     bottle_rebuild: int
     arches: tuple[str, ...]
     bottle_sha256: Mapping[str, str]
 
+    @property
+    def top_reference(self) -> str:
+        return homebrew_top_reference(self.pkg_version, self.bottle_rebuild)
+
     def state_value(self) -> dict[str, Any]:
         # Generated bottle hashes change when the finalizer commits. The
         # version/revision/rebuild/arch tuple is the immutable reserved identity.
         return {
-            "version": self.version,
+            "version": self.pkg_version,
             "formula_revision": self.formula_revision,
             "bottle_rebuild": self.bottle_rebuild,
             "arches": list(self.arches),
@@ -337,6 +341,65 @@ def bottle_block(source: str, formula: str) -> str:
     raise RolloutError(f"Formula/{formula}.rb has an unterminated bottle block")
 
 
+def homebrew_pkg_version(base_version: str, formula_revision: int) -> str:
+    if not base_version or "\n" in base_version or "\r" in base_version:
+        raise RolloutError("Homebrew base version is invalid")
+    if (
+        isinstance(formula_revision, bool)
+        or not isinstance(formula_revision, int)
+        or formula_revision < 0
+    ):
+        raise RolloutError("Homebrew Formula revision is invalid")
+    # WHY: Homebrew sidecars and OCI references use PkgVersion, which appends
+    # Formula revision to the upstream/base version; using the base alone makes
+    # a successful revised Formula look permanently unfinalized.
+    return (
+        f"{base_version}_{formula_revision}"
+        if formula_revision > 0
+        else base_version
+    )
+
+
+def previous_formula_base_version(previous_package: Mapping[str, Any]) -> str:
+    previous_version = previous_package.get("version")
+    previous_revision = previous_package.get("formula_revision")
+    if (
+        not isinstance(previous_version, str)
+        or not previous_version
+        or isinstance(previous_revision, bool)
+        or not isinstance(previous_revision, int)
+        or previous_revision < 0
+    ):
+        raise RolloutError(
+            "previous package cannot provide an inferred Homebrew base version"
+        )
+    if previous_revision == 0:
+        return previous_version
+    suffix = f"_{previous_revision}"
+    if not previous_version.endswith(suffix) or len(previous_version) == len(suffix):
+        raise RolloutError(
+            "previous package version does not match its Formula revision"
+        )
+    return previous_version[: -len(suffix)]
+
+
+def homebrew_top_reference(pkg_version: str, bottle_rebuild: int) -> str:
+    if (
+        isinstance(bottle_rebuild, bool)
+        or not isinstance(bottle_rebuild, int)
+        or bottle_rebuild < 0
+    ):
+        raise RolloutError("Homebrew bottle rebuild is invalid")
+    reference = (
+        f"{pkg_version}-{bottle_rebuild}"
+        if bottle_rebuild > 0
+        else pkg_version
+    )
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9._-]{0,127}", reference):
+        raise RolloutError(f"Homebrew top reference is invalid: {reference!r}")
+    return reference
+
+
 def parse_formula_identity(
     formula: str,
     source: str,
@@ -362,41 +425,40 @@ def parse_formula_identity(
             f"Formula/{formula}.rb bottle arches differ from {expected_arches}"
         )
 
+    formula_revision = _single_int(
+        source, r"^\s{2}revision\s+([0-9]+)\s*$", 0, f"{formula} revision"
+    )
     source_versions = re.findall(
         r'^\s{2}version\s+"([^"]+)"\s*$', source, flags=re.MULTILINE
-    )
-    previous_version = (
-        previous_package.get("version")
-        if isinstance(previous_package, dict)
-        and isinstance(previous_package.get("version"), str)
-        else None
     )
     if source_versions:
         if len(set(source_versions)) != 1:
             raise RolloutError(f"Formula/{formula}.rb has ambiguous versions")
-        version = source_versions[0]
-    elif previous_version:
-        version = previous_version
+        base_version = source_versions[0]
+    elif isinstance(previous_package, dict):
+        base_version = previous_formula_base_version(previous_package)
     else:
         raise RolloutError(
             f"Formula/{formula}.rb needs an explicit version for rollout identity"
         )
+    pkg_version = homebrew_pkg_version(base_version, formula_revision)
 
-    formula_revision = _single_int(
-        source, r"^\s{2}revision\s+([0-9]+)\s*$", 0, f"{formula} revision"
-    )
     if rebuild < 1:
         raise RolloutError(
             f"Formula/{formula}.rb has not reserved a positive ABI 42 rebuild"
         )
-    return FormulaIdentity(
+    identity = FormulaIdentity(
         name=formula,
-        version=version,
+        pkg_version=pkg_version,
         formula_revision=formula_revision,
         bottle_rebuild=rebuild,
         arches=expected_arches,
         bottle_sha256=hashes,
     )
+    # WHY: Validate the derived OCI name before this identity can be frozen
+    # into rollout state or selected for a production dispatch.
+    _ = identity.top_reference
+    return identity
 
 
 def formula_contract_sha256(formula: str, source: str) -> str:
@@ -600,7 +662,7 @@ def finalization_reasons(
 
     expected_fields = {
         "name": formula,
-        "version": identity.version,
+        "version": identity.pkg_version,
         "formula_revision": identity.formula_revision,
         "bottle_rebuild": identity.bottle_rebuild,
     }
