@@ -10,12 +10,10 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@437fde2524ea6ad9c44933f8abbf995a46841009
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@dc8f83027961d8e83ba1df1aad828bc603c71f52
     with:
       kandelo-repository: Automattic/kandelo
-      # WHY: Build from the same reviewed Kandelo generation that defines this
-      # reusable workflow, so ABI 42 publication cannot mix source generations.
-      kandelo-ref: 437fde2524ea6ad9c44933f8abbf995a46841009
+      kandelo-ref: dc8f83027961d8e83ba1df1aad828bc603c71f52
       tap-repository: kandelo-dev/homebrew-tap-core
       tap-name: kandelo-dev/tap-core
       tap-ref: main
@@ -26,3 +24,10 @@ jobs:
       force: ${{ github.event.client_payload.force || false }}
       dry-run: false
       require-vfs-acceptance: ${{ github.event.client_payload.require_vfs_acceptance || false }}
+      # WHY: ABI 42's package archives were produced immediately before the
+      # publisher bridge. The bridge proves this sealed generation is an exact
+      # ancestor with the same rootfs closure instead of rebuilding from a
+      # mutable release index. Only Python defers its bottle-dependent VFS proof.
+      prepublication-staging-tag: pr-1079-staging
+      prepublication-staging-kandelo-sha: 437fde2524ea6ad9c44933f8abbf995a46841009
+      defer-vfs-acceptance-until-postpublication: ${{ github.event.client_payload.require_vfs_acceptance || false }}

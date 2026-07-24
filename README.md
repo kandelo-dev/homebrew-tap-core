@@ -206,15 +206,29 @@ workflow narrows each scheduled job, and a dry run never schedules its bottle
 upload or tap-finalization jobs.
 
 Write publication accepts formulae, arches, and an optional release tag. During
-the ABI 42 publication window, the caller pins both its reusable publisher and
-the Kandelo source checkout to the same reviewed commit,
-`437fde2524ea6ad9c44933f8abbf995a46841009`; the tap source remains fixed to
-reviewed `main`. Keeping the two Kandelo references identical prevents a bottle
-from being built by one publisher generation against another generation's
-source. After that exact Kandelo commit is merged, the workflow pin moves to
-the immutable merge commit and the source ref returns to reviewed `main` in
-one follow-up change. Set `KANDELO_FORMULA` to the exact short name of one
-dependency-ready Formula, then submit the dispatch:
+the ABI 42 bootstrap, the caller executes and builds from reviewed publisher
+descendant `dc8f83027961d8e83ba1df1aad828bc603c71f52`. Its package inputs are
+separately fixed to generation
+`437fde2524ea6ad9c44933f8abbf995a46841009` on `pr-1079-staging`; the tap source
+remains fixed to reviewed `main`. The publisher proves that the package
+generation is an ancestor of the publisher descendant, that both commits
+declare the same exact `rootfs` closure, and that every selected staging
+archive matches that sealed closure before a bottle build may use it. This
+explicit two-commit bridge breaks the package-before-bottle cycle without
+making either input mutable.
+
+Only the controller's Python dispatch requests VFS acceptance. The protected
+caller maps that one bit to both required acceptance and the temporary
+postpublication deferral; the controller leaves that bit false for the other
+62 Formulae. Python still completes its ordinary build, public upload,
+anonymous verification, index publication, and tap finalization; only its
+proof that depends on the newly published bottle waits for the
+postpublication shell stage. After the canonical ABI 42 tap and that shell
+proof are green, rotate the caller back to the landed Kandelo revision and
+remove these staging inputs in one reviewed change.
+
+Set `KANDELO_FORMULA` to the exact short name of one dependency-ready Formula,
+then submit the dispatch:
 
 ```bash
 : "${KANDELO_FORMULA:?set KANDELO_FORMULA to one dependency-ready Formula name}"

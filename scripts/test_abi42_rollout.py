@@ -110,6 +110,11 @@ class RolloutControllerTests(unittest.TestCase):
             "1.3.1_4-2",
             self.snapshot.identities["zlib"].top_reference,
         )
+        self.assertEqual("pr-1079-staging", rollout.PREPUBLICATION_STAGING_TAG)
+        self.assertEqual(
+            "437fde2524ea6ad9c44933f8abbf995a46841009",
+            rollout.PREPUBLICATION_GENERATION_SHA,
+        )
 
     def test_explicit_base_version_becomes_canonical_homebrew_pkg_version(self):
         unrevisioned = rollout.parse_formula_identity(
@@ -220,6 +225,9 @@ jobs:
       force: ${{{{ github.event.client_payload.force || false }}}}
       dry-run: false
       require-vfs-acceptance: {vfs_expression}
+      prepublication-staging-tag: {rollout.PREPUBLICATION_STAGING_TAG}
+      prepublication-staging-kandelo-sha: {rollout.PREPUBLICATION_GENERATION_SHA}
+      defer-vfs-acceptance-until-postpublication: {vfs_expression}
 """
         snapshot = dataclasses.replace(self.snapshot, workflow_source=source)
         rollout.validate_workflow(FakeGitHub(), snapshot, expected)
@@ -245,6 +253,36 @@ jobs:
                     snapshot,
                     workflow_source=source.replace(
                         "github.event.client_payload.force || false", "true"
+                    ),
+                ),
+                expected,
+            )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "prepublication-staging-kandelo-sha differs"
+        ):
+            rollout.validate_workflow(
+                FakeGitHub(),
+                dataclasses.replace(
+                    snapshot,
+                    workflow_source=source.replace(
+                        rollout.PREPUBLICATION_GENERATION_SHA,
+                        "b" * 40,
+                    ),
+                ),
+                expected,
+            )
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "defer-vfs-acceptance-until-postpublication differs",
+        ):
+            rollout.validate_workflow(
+                FakeGitHub(),
+                dataclasses.replace(
+                    snapshot,
+                    workflow_source=source.replace(
+                        "defer-vfs-acceptance-until-postpublication: "
+                        f"{vfs_expression}",
+                        "defer-vfs-acceptance-until-postpublication: true",
                     ),
                 ),
                 expected,
@@ -607,7 +645,7 @@ jobs:
         )
         self.assertEqual("waiting-finalization", blocks["asa"][0])
 
-    def test_python_dispatch_is_single_formula_and_requires_vfs_acceptance(self):
+    def test_only_python_dispatch_requests_the_deferred_vfs_acceptance(self):
         calls = []
 
         def capture(argv, **kwargs):
@@ -615,10 +653,27 @@ jobs:
             return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
         with mock.patch.object(rollout, "_run", side_effect=capture):
-            rollout.GitHub().dispatch("python", ("wasm32",))
-            rollout.GitHub().dispatch("zlib", ("wasm32", "wasm64"))
-        python_payload = json.loads(calls[0][1]["input_text"])
-        zlib_payload = json.loads(calls[1][1]["input_text"])
+            for formula in rollout.FORMULA_ORDER:
+                rollout.GitHub().dispatch(
+                    formula,
+                    rollout.required_arches(formula),
+                )
+        payloads = {
+            payload["client_payload"]["formulae"]: payload
+            for _, kwargs in calls
+            for payload in (json.loads(kwargs["input_text"]),)
+        }
+        self.assertEqual(set(rollout.FORMULA_ORDER), set(payloads))
+        self.assertEqual(
+            ["python"],
+            sorted(
+                formula
+                for formula, payload in payloads.items()
+                if "require_vfs_acceptance" in payload["client_payload"]
+            ),
+        )
+        python_payload = payloads["python"]
+        zlib_payload = payloads["zlib"]
         self.assertEqual("python", python_payload["client_payload"]["formulae"])
         self.assertIs(True, python_payload["client_payload"]["require_vfs_acceptance"])
         self.assertEqual(
@@ -627,7 +682,7 @@ jobs:
         self.assertNotIn(
             "require_vfs_acceptance", zlib_payload["client_payload"]
         )
-        self.assertNotIn("rerun", json.dumps((calls[0][0], calls[1][0])).lower())
+        self.assertNotIn("rerun", json.dumps(calls).lower())
 
     def test_absent_dispatch_run_id_fails_closed(self):
         github = FakeGitHub()
