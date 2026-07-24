@@ -125,7 +125,13 @@ source-build support. The publisher exposes its sealed, root-owned checker at
 `target/<host>/release/xtask` through a Homebrew-prefixed bridge because
 Homebrew removes ordinary environment variables before Formula tests. The
 support module validates that exact layout and freezes the path before Formula
-code runs, then restores it only for Kandelo's Node and browser test runners.
+code runs. A sealed publisher also carries the resolver's content-addressed
+program generations in the fixed `.ci-test-binary-cache/programs` child of the
+same authoritative checkout. The support module requires that exact real
+directory at load time and restores its frozen cache root, repository root, and
+checker only for Kandelo's Tier-2 build and Node/browser test processes. This
+keeps the relative `binaries/` mirrors attached to their complete package
+generation instead of flattening them into mutable source-checkout files.
 
 During a source build, the shared Formula support removes Homebrew's global
 `bin`/`sbin` directories and Kandelo runtime dependency executable directories
