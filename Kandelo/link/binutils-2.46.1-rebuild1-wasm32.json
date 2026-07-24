@@ -1,0 +1,153 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 2725010,
+    "cache_key_sha": "950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a",
+    "payload_root": "binutils/2.46.1",
+    "sha256": "950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/binutils/blobs/sha256:950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/binutils/2.46.1",
+  "links": [
+    {
+      "source": "bin/addr2line",
+      "target": "bin/addr2line",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ar",
+      "target": "bin/ar",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/c++filt",
+      "target": "bin/c++filt",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/elfedit",
+      "target": "bin/elfedit",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/nm",
+      "target": "bin/nm",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/objcopy",
+      "target": "bin/objcopy",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/objdump",
+      "target": "bin/objdump",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/ranlib",
+      "target": "bin/ranlib",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/readelf",
+      "target": "bin/readelf",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/size",
+      "target": "bin/size",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/strings",
+      "target": "bin/strings",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/strip",
+      "target": "bin/strip",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/binutils.info",
+      "target": "share/info/binutils.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/addr2line.1",
+      "target": "share/man/man1/addr2line.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/ar.1",
+      "target": "share/man/man1/ar.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/c++filt.1",
+      "target": "share/man/man1/c++filt.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/elfedit.1",
+      "target": "share/man/man1/elfedit.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/nm.1",
+      "target": "share/man/man1/nm.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/objcopy.1",
+      "target": "share/man/man1/objcopy.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/objdump.1",
+      "target": "share/man/man1/objdump.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/ranlib.1",
+      "target": "share/man/man1/ranlib.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/readelf.1",
+      "target": "share/man/man1/readelf.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/size.1",
+      "target": "share/man/man1/size.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/strings.1",
+      "target": "share/man/man1/strings.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/strip.1",
+      "target": "share/man/man1/strip.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "binutils",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/binutils.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "2.46.1"
+}

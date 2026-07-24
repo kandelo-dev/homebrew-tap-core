@@ -436,7 +436,7 @@ class Binutils < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "2604854305b794d476c1fc7f1ad8964e74ce2e4ee08cbcd443253baebeb0fc16"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a"
   end
 
 end

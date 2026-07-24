@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T14:10:06Z",
+  "generated_at": "2026-07-24T14:17:27Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -82,6 +82,45 @@
       "full_name": "kandelo-dev/tap-core/bc",
       "name": "bc",
       "version": "1.07.1"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T14:17:27Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30097974849",
+          "built_from": {
+            "formula_sha256": "c8ca0d57d802aac555eb03673c907333463208c49f2d5e5466b715d85322d7a0",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 2725010,
+          "cache_key_sha": "950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/binutils-2.46.1-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/binutils/blobs/sha256:950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/binutils.json",
+      "formula_path": "Formula/binutils.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/binutils",
+      "name": "binutils",
+      "version": "2.46.1"
     },
     {
       "bottle_rebuild": 1,
