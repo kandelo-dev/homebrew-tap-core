@@ -1220,6 +1220,36 @@ class RolloutControllerTests(unittest.TestCase):
                 expected,
             )
 
+    def test_run_name_is_the_only_non_bottle_affecting_workflow_difference(self):
+        current = self.snapshot.workflow_source
+        legacy = current.replace(
+            f"run-name: {rollout.WORKFLOW_RUN_NAME_SOURCE}\n",
+            "",
+            1,
+        )
+        self.assertEqual(
+            rollout.publication_workflow_contract(legacy),
+            rollout.publication_workflow_contract(current),
+        )
+        changed_payload = current.replace(
+            "github.event.client_payload.formulae",
+            "github.event.client_payload.other_formulae",
+            1,
+        )
+        self.assertNotEqual(
+            rollout.publication_workflow_contract(changed_payload),
+            rollout.publication_workflow_contract(current),
+        )
+        changed_run_name = current.replace(
+            rollout.WORKFLOW_RUN_NAME_SOURCE,
+            "Publish Kandelo bottles",
+            1,
+        )
+        self.assertNotEqual(
+            rollout.publication_workflow_contract(changed_run_name),
+            rollout.publication_workflow_contract(current),
+        )
+
     def _finalized_snapshot(self, formula: str):
         identity = self.snapshot.identities[formula]
         source = self.snapshot.formula_sources[formula]
