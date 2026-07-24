@@ -202,6 +202,38 @@ class RolloutControllerTests(unittest.TestCase):
             "end\n"
         )
 
+    def _load_snapshot_view(
+        self,
+        *,
+        metadata: dict | None = None,
+        formula_sources: dict[str, str] | None = None,
+        formula_sidecars: dict[str, dict | None] | None = None,
+    ):
+        source_overrides = formula_sources or {}
+        sidecar_overrides = formula_sidecars or {}
+        tap = mock.Mock(wraps=self.tap)
+
+        def show(revision, path):
+            if path == "Kandelo/metadata.json" and metadata is not None:
+                return json.dumps(metadata)
+            if path.startswith("Formula/"):
+                formula = pathlib.PurePosixPath(path).stem
+                if formula in source_overrides:
+                    return source_overrides[formula]
+            return self.tap.show(revision, path)
+
+        def show_optional(revision, path):
+            if path.startswith("Kandelo/formula/"):
+                formula = pathlib.PurePosixPath(path).stem
+                if formula in sidecar_overrides:
+                    sidecar = sidecar_overrides[formula]
+                    return None if sidecar is None else json.dumps(sidecar)
+            return self.tap.show_optional(revision, path)
+
+        tap.show.side_effect = show
+        tap.show_optional.side_effect = show_optional
+        return rollout.load_snapshot(tap, self.head)
+
     def test_exact_plan_has_63_formulae_and_70_architecture_identities(self):
         self.assertEqual(63, len(rollout.FORMULA_ORDER))
         self.assertEqual(63, len(set(rollout.FORMULA_ORDER)))
@@ -288,6 +320,140 @@ class RolloutControllerTests(unittest.TestCase):
                     "formula_revision": 2,
                 },
             )
+
+    def test_first_abi42_finalization_keeps_continuation_versions_in_sidecars(self):
+        asa_package = copy.deepcopy(self.snapshot.formula_sidecars["asa"])
+        self.assertIsNotNone(asa_package)
+        collapsed_metadata = copy.deepcopy(self.snapshot.metadata)
+        collapsed_metadata["kandelo_abi"] = rollout.EXPECTED_ABI
+        collapsed_metadata["release_tag"] = rollout.EXPECTED_RELEASE_TAG
+        collapsed_metadata["packages"] = [asa_package]
+
+        previous_binutils = copy.deepcopy(
+            self.snapshot.formula_sidecars["binutils"]
+        )
+        self.assertIsNotNone(previous_binutils)
+        previous_binutils["kandelo_abi"] = rollout.EXPECTED_ABI - 1
+        current = self._load_snapshot_view(
+            metadata=collapsed_metadata,
+            formula_sidecars={"binutils": previous_binutils},
+        )
+
+        # Model the ledger frozen before the aggregate metadata rolled over.
+        cutover_metadata = copy.deepcopy(collapsed_metadata)
+        cutover_metadata["kandelo_abi"] = rollout.EXPECTED_ABI - 1
+        cutover_metadata["packages"] = [
+            copy.deepcopy(sidecar)
+            for sidecar in self.snapshot.formula_sidecars.values()
+            if sidecar is not None
+        ]
+        cutover = dataclasses.replace(self.snapshot, metadata=cutover_metadata)
+        state = rollout.initial_state(cutover, self.publisher_sha)
+
+        self.assertEqual(["asa"], [
+            package["name"] for package in current.metadata["packages"]
+        ])
+        self.assertEqual(
+            previous_binutils["version"],
+            current.identities["binutils"].pkg_version,
+        )
+        rollout.validate_state(state, current, self.publisher_sha)
+
+        statuses = {
+            status.name: status
+            for status in rollout.calculate_statuses(
+                self.tap,
+                current,
+                self.publisher_sha,
+                rollout.RunInventory(
+                    count=0,
+                    runs=(),
+                    formulae={},
+                    unknown_run_ids=(),
+                ),
+                {},
+            )
+        }
+        self.assertEqual("finalized", statuses["asa"].state)
+        self.assertEqual("ready", statuses["binutils"].state)
+
+    def test_implicit_version_fails_closed_without_its_formula_sidecar(self):
+        self.assertNotRegex(
+            self.snapshot.formula_sources["binutils"],
+            r"(?m)^\s{2}version\s+",
+        )
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "Formula/binutils.rb needs an explicit version",
+        ):
+            self._load_snapshot_view(formula_sidecars={"binutils": None})
+
+    def test_formula_sidecar_cannot_supply_another_packages_version(self):
+        sidecar = copy.deepcopy(self.snapshot.formula_sidecars["binutils"])
+        self.assertIsNotNone(sidecar)
+        sidecar["name"] = "bc"
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "Kandelo/formula/binutils.json belongs to another Formula",
+        ):
+            self._load_snapshot_view(formula_sidecars={"binutils": sidecar})
+
+    def test_frozen_catalog_rejects_current_sidecar_version_tampering(self):
+        state = rollout.initial_state(self.snapshot, self.publisher_sha)
+        sidecar = copy.deepcopy(self.snapshot.formula_sidecars["binutils"])
+        self.assertIsNotNone(sidecar)
+        sidecar["version"] = "999.0"
+        current = self._load_snapshot_view(
+            formula_sidecars={"binutils": sidecar}
+        )
+
+        with self.assertRaisesRegex(rollout.RolloutError, "catalog differs"):
+            rollout.validate_state(state, current, self.publisher_sha)
+
+    def test_frozen_catalog_rejects_ledger_or_current_source_tampering(self):
+        state = rollout.initial_state(self.snapshot, self.publisher_sha)
+        tampered_state = copy.deepcopy(state)
+        tampered_state["catalog"]["binutils"]["version"] = "999.0"
+        with self.assertRaisesRegex(rollout.RolloutError, "catalog differs"):
+            rollout.validate_state(
+                tampered_state,
+                self.snapshot,
+                self.publisher_sha,
+            )
+
+        source = self.snapshot.formula_sources["binutils"].replace(
+            "class Binutils < Formula",
+            "class Binutils < Formula\n  # Unreviewed recipe change.",
+            1,
+        )
+        current = self._load_snapshot_view(
+            formula_sources={"binutils": source}
+        )
+        with self.assertRaisesRegex(rollout.RolloutError, "catalog differs"):
+            rollout.validate_state(state, current, self.publisher_sha)
+
+    def test_dispatch_cannot_recreate_a_missing_ledger_after_cutover(self):
+        self.assertEqual(
+            rollout.EXPECTED_ABI,
+            self.snapshot.metadata["kandelo_abi"],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "missing-rollout.json"
+            with self.assertRaisesRegex(
+                rollout.RolloutError,
+                "cannot initialize a replacement rollout state after the ABI 42 cutover",
+            ):
+                rollout.dispatch_ready(
+                    tap=self.tap,
+                    github=FakeGitHub(),
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=1,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                )
+            self.assertFalse(state_path.exists())
 
     def test_source_scan_captures_runtime_build_and_test_edges(self):
         dependencies = self.snapshot.dependencies
@@ -551,6 +717,31 @@ jobs:
             "aggregate and sidecar wasm32 bottle records differ",
             reasons,
         )
+
+    def test_finalization_validates_archived_formula_digest_as_a_receipt(self):
+        snapshot = self._finalized_snapshot("zlib")
+        metadata = copy.deepcopy(snapshot.metadata)
+        sidecars = copy.deepcopy(snapshot.formula_sidecars)
+        metadata["packages"][0]["bottles"][0]["built_from"][
+            "formula_sha256"
+        ] = "not-a-sha"
+        sidecars["zlib"]["bottles"][0]["built_from"][
+            "formula_sha256"
+        ] = "not-a-sha"
+
+        reasons = rollout.finalization_reasons(
+            self.tap,
+            dataclasses.replace(
+                snapshot,
+                metadata=metadata,
+                formula_sidecars=sidecars,
+            ),
+            "zlib",
+            ("wasm32",),
+            "a" * 40,
+        )
+
+        self.assertIn("wasm32 archived Formula digest is invalid", reasons)
 
     def test_finalization_rejects_a_different_source_recipe_with_same_identity(self):
         snapshot = self._finalized_snapshot("zlib")
