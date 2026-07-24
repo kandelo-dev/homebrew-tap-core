@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T14:30:37Z",
+  "generated_at": "2026-07-24T14:36:03Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -355,11 +355,50 @@
       "full_name": "kandelo-dev/tap-core/fbdoom",
       "name": "fbdoom",
       "version": "0.1.0"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T14:36:03Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30099900629",
+          "built_from": {
+            "formula_sha256": "55967cb2c37b65ebc4b8d2ede2126cde59895f4df8cbce3eaec914017df1a12d",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "1c87074a9444919517b7c7b1b0f52e003069540b",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 650444,
+          "cache_key_sha": "d79b3af6327266ddb6521dfbcc6413b8ec3f041176f7db917606adab381e8b63",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/gawk-5.3.0-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "d79b3af6327266ddb6521dfbcc6413b8ec3f041176f7db917606adab381e8b63",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/gawk/blobs/sha256:d79b3af6327266ddb6521dfbcc6413b8ec3f041176f7db917606adab381e8b63"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/gawk.json",
+      "formula_path": "Formula/gawk.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/gawk",
+      "name": "gawk",
+      "version": "5.3.0"
     }
   ],
   "release_tag": "bottles-abi-v42",
   "schema": 1,
-  "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
+  "tap_commit": "1c87074a9444919517b7c7b1b0f52e003069540b",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }

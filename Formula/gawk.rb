@@ -86,7 +86,7 @@ class Gawk < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "8ff1da0358df5a0f2f7441699187c80c252f11139a7a055c7fec233778211e26"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "d79b3af6327266ddb6521dfbcc6413b8ec3f041176f7db917606adab381e8b63"
   end
 
 end
