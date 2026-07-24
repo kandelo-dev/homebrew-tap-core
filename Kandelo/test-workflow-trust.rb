@@ -30,10 +30,11 @@ REPOSITORY_CANARY_PERMISSIONS = {
 }.freeze
 CHECKOUT_ACTION = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
 RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
-# Production executes and builds from this reviewed publisher descendant.
-# ABI 42's sealed package inputs remain bound separately to the exact generation
-# that produced them, so neither side of the bootstrap cycle can move.
+# Production executes the publisher implementation from this reviewed
+# descendant. The package consumer stays separate because publisher-only or
+# later packaging edits may legitimately change package cache identities.
 CURRENT_KANDELO_WORKFLOW_SHA = "3545bfd34509a52b68a4620c92e4aae24c60adb0"
+CURRENT_KANDELO_CONSUMER_SHA = "d3805721b887a19382ef1c96b576fc27badc0951"
 PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
 
@@ -97,7 +98,7 @@ end
 
 PUBLISH_INPUTS = {
   "kandelo-repository" => "Automattic/kandelo",
-  "kandelo-ref" => CURRENT_KANDELO_WORKFLOW_SHA,
+  "kandelo-ref" => CURRENT_KANDELO_CONSUMER_SHA,
   "tap-repository" => "kandelo-dev/homebrew-tap-core",
   "tap-name" => "kandelo-dev/tap-core",
   "tap-ref" => expression("github.event.client_payload.tap_sha"),
