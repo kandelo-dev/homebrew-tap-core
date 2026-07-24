@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T14:36:03Z",
+  "generated_at": "2026-07-24T14:43:49Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -394,11 +394,50 @@
       "full_name": "kandelo-dev/tap-core/gawk",
       "name": "gawk",
       "version": "5.3.0"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T14:43:49Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30100285693",
+          "built_from": {
+            "formula_sha256": "4441562332b8d60611b96b1f81b39722ba32e226594cd8effeb52d662b8d9f22",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "f5b159cd25b0b6c9c65b4261206229ab544d82f8",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 29701,
+          "cache_key_sha": "11cc87afdb11486886578760c3d1276c9e62bc6c319c8ec57d850a80a7208130",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/gencat-1.37-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "11cc87afdb11486886578760c3d1276c9e62bc6c319c8ec57d850a80a7208130",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/gencat/blobs/sha256:11cc87afdb11486886578760c3d1276c9e62bc6c319c8ec57d850a80a7208130"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/gencat.json",
+      "formula_path": "Formula/gencat.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/gencat",
+      "name": "gencat",
+      "version": "1.37"
     }
   ],
   "release_tag": "bottles-abi-v42",
   "schema": 1,
-  "tap_commit": "1c87074a9444919517b7c7b1b0f52e003069540b",
+  "tap_commit": "f5b159cd25b0b6c9c65b4261206229ab544d82f8",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }
