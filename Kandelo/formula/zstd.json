@@ -1,43 +1,43 @@
 {
-  "bottle_rebuild": 0,
+  "bottle_rebuild": 1,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-19T23:55:50Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29708191507",
+      "built_at": "2026-07-24T16:56:59Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30109477122",
       "built_from": {
-        "formula_sha256": "75e15d83d5d739b81d547edbe21253339a73f092023012a84b452c64257d3faf",
-        "kandelo_commit": "f739ed70cc622cdbc7b49cf25e6d734784d7bf26",
+        "formula_sha256": "8f8916664129843db9d8d351a92150967946ca047bbd6917c3db0bdeef64d548",
+        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "12ce3cdff72b89d9bdde1d58aee430199f4bc1b2",
+        "tap_commit": "5ac7e5e46be95fb78f9107d7e6bbf562cd027ec8",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 1087314,
-      "cache_key_sha": "db3d6e0d92799b39afce67376f773f26338395ef2fd992ba2f49431252863063",
+      "bytes": 1087339,
+      "cache_key_sha": "a7364e9a2c7a11d95f8718d52a158394b01f8339728d0fbba9fe9decd774d77e",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/zstd-1.5.7-rebuild0-wasm32.json",
+      "kandelo_abi": 42,
+      "link_manifest": "Kandelo/link/zstd-1.5.7-rebuild1-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "db3d6e0d92799b39afce67376f773f26338395ef2fd992ba2f49431252863063",
+      "sha256": "a7364e9a2c7a11d95f8718d52a158394b01f8339728d0fbba9fe9decd774d77e",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/zstd/blobs/sha256:db3d6e0d92799b39afce67376f773f26338395ef2fd992ba2f49431252863063"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/zstd/blobs/sha256:a7364e9a2c7a11d95f8718d52a158394b01f8339728d0fbba9fe9decd774d77e"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/zstd.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/zstd",
-  "kandelo_abi": 41,
+  "kandelo_abi": 42,
   "name": "zstd",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "01f9bea83ad53efff2c6fbdc92396d50d1aeabb1",
+  "tap_commit": "5ac7e5e46be95fb78f9107d7e6bbf562cd027ec8",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.5.7"
