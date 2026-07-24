@@ -85,6 +85,13 @@ def deep_copy(value)
   Marshal.load(Marshal.dump(value))
 end
 
+PUBLISH_RUN_NAME = [
+  "Publish Kandelo bottles /",
+  expression("github.event.client_payload.formulae"),
+  "/",
+  expression("github.event.client_payload.dispatch_token || 'untracked'"),
+].join(" ").freeze
+
 def expect_rejection(label)
   rejected = false
   begin
@@ -139,6 +146,7 @@ CALLER_SPECS = {
   "publish" => {
     path: File.join(WORKFLOW_ROOT, "publish-bottles.yml"),
     name: "Publish Kandelo bottles",
+    run_name: PUBLISH_RUN_NAME,
     event: "publish-kandelo-bottles",
     job: "publish",
     reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@#{CURRENT_KANDELO_WORKFLOW_SHA}",
@@ -303,9 +311,15 @@ def check_workflow_file_set
 end
 
 def check_caller(workflow, spec, label)
-  check(normalized_keys(workflow, label).sort == %w[jobs name on],
+  expected_top_level_keys = %w[jobs name on]
+  expected_top_level_keys << "run-name" if spec.key?(:run_name)
+  check(normalized_keys(workflow, label).sort == expected_top_level_keys.sort,
         "#{label} has unexpected top-level configuration")
   check(workflow["name"] == spec.fetch(:name), "#{label} name changed")
+  if spec.key?(:run_name)
+    check(workflow["run-name"] == spec.fetch(:run_name),
+          "#{label} run identity changed")
+  end
   check(workflow_events(workflow) == {
     "repository_dispatch" => { "types" => [spec.fetch(:event)] },
   }, "#{label} must expose only its reviewed repository_dispatch event")
@@ -496,6 +510,19 @@ def self_test(callers, contract, base_contract)
   end
   expect_rejection("an arbitrary immutable Kandelo workflow pin") do
     check_caller_profile(arbitrary_callers, test_profiles)
+  end
+  expect_rejection("the publisher without its dispatch run identity") do
+    mutated = deep_copy(current_callers.fetch("publish"))
+    mutated.delete("run-name")
+    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
+  end
+  expect_rejection("a changed dispatch run identity") do
+    mutated = deep_copy(current_callers.fetch("publish"))
+    mutated["run-name"] = [
+      "Publish Kandelo bottles /",
+      expression("github.event.client_payload.formulae"),
+    ].join(" ")
+    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
   end
   expect_rejection("the current publisher without VFS acceptance mapping") do
     mutated = deep_copy(current_callers)
