@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T13:13:25Z",
+  "generated_at": "2026-07-24T14:03:30Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -43,11 +43,50 @@
       "full_name": "kandelo-dev/tap-core/asa",
       "name": "asa",
       "version": "15.0.0"
+    },
+    {
+      "bottle_rebuild": 2,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T14:03:30Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30097678311",
+          "built_from": {
+            "formula_sha256": "fda2657752d0caf8ee56dc96886a3135f08e6968e6b33e197e418c3ea164cefa",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 60608,
+          "cache_key_sha": "b2657996570d89554214182ba1c78c23fb1129a939839fc5481b4e33b8d3f968",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/bc-1.07.1-rebuild2-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "b2657996570d89554214182ba1c78c23fb1129a939839fc5481b4e33b8d3f968",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/bc/blobs/sha256:b2657996570d89554214182ba1c78c23fb1129a939839fc5481b4e33b8d3f968"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/bc.json",
+      "formula_path": "Formula/bc.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/bc",
+      "name": "bc",
+      "version": "1.07.1"
     }
   ],
   "release_tag": "bottles-abi-v42",
   "schema": 1,
-  "tap_commit": "edeebd60813fd8aceded35b93e4c36c211232b18",
+  "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }

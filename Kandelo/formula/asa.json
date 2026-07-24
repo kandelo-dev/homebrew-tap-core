@@ -37,7 +37,7 @@
   "name": "asa",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "edeebd60813fd8aceded35b93e4c36c211232b18",
+  "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "15.0.0"
