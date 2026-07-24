@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/bzip2.json",
-      "sha256": "0d4460763c6d71f4998890059b11410f9c59311b7bef65bf9812b0e75fbe1d9b"
+      "sha256": "b18fdbcdc604c962516f99b958dab26cab5ce54e0b283cb92c5fc465db142564"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/bzip2-1.0.8_2-rebuild1-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "34f3e63db2ecbaadcc303e987a662b4cb5bfaf1458a39fc37d716ea8ac0cefe3"
+      "sha256": "9b245ad592583967cc98ad654820d6a4de36f1ce0d817336857559ae66d82b24"
     },
     "provenance_json": {
       "path": "Kandelo/reports/bzip2-1.0.8_2-rebuild1-wasm32.provenance.json",
-      "sha256": "f1b42ec22d4e1ae2118dd0c5c8e94a5d2a3f763001a5c8194ae6d15577dc133a"
+      "sha256": "90578f0fd73e3ceda79f43171df9178f42c4dafb728061f29d29890a8ea35e2b"
     }
   },
   "repositories": {

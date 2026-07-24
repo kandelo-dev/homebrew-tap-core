@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/fbdoom.json",
-      "sha256": "81a8def3e164e4d315eed19a836571e229f4a4f07f45e90b62b990a4945a41aa"
+      "sha256": "8c3b22ee9b91bff6e02467536e596be9d6b0d98729752abd60baada72b6f0707"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/fbdoom-0.1.0-rebuild2-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "34f3e63db2ecbaadcc303e987a662b4cb5bfaf1458a39fc37d716ea8ac0cefe3"
+      "sha256": "9b245ad592583967cc98ad654820d6a4de36f1ce0d817336857559ae66d82b24"
     },
     "provenance_json": {
       "path": "Kandelo/reports/fbdoom-0.1.0-rebuild2-wasm32.provenance.json",
-      "sha256": "db1fd5318ecfed86f4c3bd045e91a02060f7b5e37e4720eafd44d5513aeb7efc"
+      "sha256": "4e0dfee11679338de2c252d1b80a6286e9e45cb1cd3068672e5fcfb5d708f4d7"
     }
   },
   "repositories": {

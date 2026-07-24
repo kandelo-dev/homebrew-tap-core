@@ -356,8 +356,8 @@ class Libcxx < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "6535e2bdfe6829b31661c0cb41b6bbc75d9abf9e4ce4aea48ad98b8444b8025f"
-    sha256 cellar: :any_skip_relocation, wasm64_kandelo: "57992ef202791d64763875310d2704151525d7190aa4db2404fa96837b13fdd3"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "387896ea098b312942a3694ffdf1b2351da234cfc4fde58b451f32abc0feb119"
+    sha256 cellar: :any_skip_relocation, wasm64_kandelo: "3958681ac2a3a261ec47c8a06e25626c5bfad68ac27e017a42469d210c81e36d"
   end
 
 end
