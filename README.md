@@ -205,10 +205,16 @@ ceiling because a called workflow cannot elevate caller authority. The reusable
 workflow narrows each scheduled job, and a dry run never schedules its bottle
 upload or tap-finalization jobs.
 
-Write publication accepts formulae, arches, and an optional release tag, but
-hardcodes both executable repositories to reviewed `main`. Set
-`KANDELO_FORMULA` to the exact short name of one dependency-ready Formula, then
-submit the dispatch:
+Write publication accepts formulae, arches, and an optional release tag. During
+the ABI 42 publication window, the caller pins both its reusable publisher and
+the Kandelo source checkout to the same reviewed commit,
+`437fde2524ea6ad9c44933f8abbf995a46841009`; the tap source remains fixed to
+reviewed `main`. Keeping the two Kandelo references identical prevents a bottle
+from being built by one publisher generation against another generation's
+source. After that exact Kandelo commit is merged, the workflow pin moves to
+the immutable merge commit and the source ref returns to reviewed `main` in
+one follow-up change. Set `KANDELO_FORMULA` to the exact short name of one
+dependency-ready Formula, then submit the dispatch:
 
 ```bash
 : "${KANDELO_FORMULA:?set KANDELO_FORMULA to one dependency-ready Formula name}"
