@@ -119,7 +119,7 @@ class Tar < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "18a020ab36b0354d2fda2bded59d5c25d1d83efd228ac9965668382a0ce979af"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "057a97a7c9eccaa898ddb1f9abefd73767b893d458487b1424880b1c610f8548"
   end
 
 end

@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "3ea29bc724f848340eada760098102d20e4066b03788c2e086a4dbafbb143ec8"
+      "sha256": "422d55e7b592a3223d92d2aab7e625812ad68058a440b268b3d14fc7cbde9a78"
     },
     "provenance_json": {
       "path": "Kandelo/reports/lsof-0.1.0-rebuild2-wasm32.provenance.json",
-      "sha256": "b56aa14622dc41e079ed83b1fcc5247227f3fcb03ffe0fb2e70f12e3446650a1"
+      "sha256": "aa652bd0fe88cfbd375ccf1e0967ccab590ecf621452fc91b72cbb2daf183a30"
     }
   },
   "repositories": {

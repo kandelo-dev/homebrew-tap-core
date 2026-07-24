@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T22:43:16Z",
+  "generated_at": "2026-07-24T22:49:31Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -1484,6 +1484,56 @@
       "full_name": "kandelo-dev/tap-core/sed",
       "name": "sed",
       "version": "4.9"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T22:49:31Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30130934306",
+          "built_from": {
+            "formula_sha256": "f5939ff8c4bbdd900f619bad62a5198cf277c7e1567f1a49950b340d9d307777",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "72ed849f8ea47eb26f355e8cb209e6c7b6c89f44",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 1089706,
+          "cache_key_sha": "057a97a7c9eccaa898ddb1f9abefd73767b893d458487b1424880b1c610f8548",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/tar-1.35-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "057a97a7c9eccaa898ddb1f9abefd73767b893d458487b1424880b1c610f8548",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/tar/blobs/sha256:057a97a7c9eccaa898ddb1f9abefd73767b893d458487b1424880b1c610f8548"
+        }
+      ],
+      "dependencies": [
+        {
+          "full_name": "kandelo-dev/tap-core/dash",
+          "name": "dash",
+          "version": "0.5.12"
+        },
+        {
+          "full_name": "kandelo-dev/tap-core/gzip",
+          "name": "gzip",
+          "version": "1.14"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/tar.json",
+      "formula_path": "Formula/tar.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/tar",
+      "name": "tar",
+      "version": "1.35"
     },
     {
       "bottle_rebuild": 1,
