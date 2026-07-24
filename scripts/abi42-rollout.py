@@ -3,8 +3,9 @@
 
 The default command is read-only with respect to GitHub. It fetches tap `main`,
 checks finalized sidecars and production runs, and prints what is ready. The
-only write path is the explicit `--dispatch` flag, which always creates a fresh
-`repository_dispatch`; this program has no workflow-rerun operation.
+only write path is the explicit `--dispatch` flag, which reserves a
+capacity-bounded batch and creates one fresh `repository_dispatch` per Formula;
+this program has no workflow-rerun operation.
 """
 
 from __future__ import annotations
@@ -39,6 +40,8 @@ PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
 PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 MAX_ACTIVE_RUNS = 8
 ACTIVE_STATUSES = ("queued", "in_progress", "waiting", "pending", "requested")
+ACTIVE_INVENTORY_ATTEMPTS = 3
+ACTIVE_INVENTORY_BACKOFF_SECONDS = 1.0
 BOTTLE_ROOT = "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
 LEGACY_SINGLE_INTENT_WORKFLOW_SHA256 = (
     "3207ecd35a5cca77fc5bb0e26bee8ab9d354efcb7fef2c1d7aa8b65a8b2bade3"
@@ -92,6 +95,10 @@ if sum(2 if name in DUAL_ARCH_FORMULAE else 1 for name in FORMULA_ORDER) != 70:
 
 class RolloutError(RuntimeError):
     """A condition that makes continuing the rollout unsafe."""
+
+
+class ActiveInventorySnapshotError(RolloutError):
+    """GitHub returned a temporarily inconsistent active-run count and page."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -871,7 +878,7 @@ def run_formulae(jobs: Iterable[Mapping[str, Any]]) -> frozenset[str]:
     return frozenset(formulae)
 
 
-def active_inventory(github: GitHub) -> RunInventory:
+def _active_inventory_once(github: GitHub) -> RunInventory:
     runs_by_id: dict[int, Mapping[str, Any]] = {}
     total = 0
     for status in ACTIVE_STATUSES:
@@ -881,7 +888,7 @@ def active_inventory(github: GitHub) -> RunInventory:
             raise RolloutError(f"GitHub {status} run count is invalid")
         listed = response["workflow_runs"]
         if count <= 100 and len(listed) != count:
-            raise RolloutError(
+            raise ActiveInventorySnapshotError(
                 f"GitHub {status} reported {count} active runs but returned "
                 f"{len(listed)}"
             )
@@ -905,6 +912,22 @@ def active_inventory(github: GitHub) -> RunInventory:
         formulae=formulae,
         unknown_run_ids=tuple(unknown),
     )
+
+
+def active_inventory(github: GitHub) -> RunInventory:
+    for attempt in range(ACTIVE_INVENTORY_ATTEMPTS):
+        try:
+            return _active_inventory_once(github)
+        except ActiveInventorySnapshotError:
+            if attempt + 1 == ACTIVE_INVENTORY_ATTEMPTS:
+                raise
+            # WHY: GitHub can briefly publish a new total_count before the run
+            # appears in the accompanying page. Retry the entire multi-status
+            # snapshot so we never combine stale and fresh fragments. Only this
+            # known eventual-consistency shape is retried; malformed identities
+            # and incomplete job matrices continue to fail immediately.
+            time.sleep(ACTIVE_INVENTORY_BACKOFF_SECONDS * (2**attempt))
+    raise AssertionError("active inventory retry loop did not return or raise")
 
 
 def reconcile_recorded_activity(
@@ -1753,6 +1776,32 @@ def dispatch_ready(
                 "active production runs have not exposed their Formula matrix yet: "
                 + ", ".join(map(str, inventory.unknown_run_ids))
             )
+        active_formulae = {
+            formula
+            for values in inventory.formulae.values()
+            for formula in values
+        }
+        if pending:
+            superseded_tokens = {
+                intent.dispatch_token
+                for intent in pending
+                if intent.formula in active_formulae
+            }
+            if superseded_tokens:
+                # WHY: a planned marker proves no HTTP request was attempted.
+                # If another actor started that Formula while this controller
+                # was down, dropping only the colliding plans avoids a duplicate
+                # publication while preserving unrelated reserved work.
+                state["pending_dispatches"] = [
+                    entry
+                    for entry in state["pending_dispatches"]
+                    if entry.get("dispatch_token") not in superseded_tokens
+                ]
+                validate_state(state, snapshot, expected_kandelo_sha)
+                write_state(state_path, state)
+                pending = pending_dispatches(state)
+                if not pending:
+                    continue
         available = min(maximum, MAX_ACTIVE_RUNS - inventory.count)
 
         if not pending:
@@ -1957,7 +2006,10 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     action.add_argument(
         "--recover-dispatch",
         action="store_true",
-        help="record one exact late run for the submitted unresolved intent; never dispatch",
+        help=(
+            "record exact late runs for submitted unresolved intents; "
+            "never dispatch"
+        ),
     )
     parser.add_argument(
         "--max-dispatches",
@@ -1969,7 +2021,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         "--ack-timeout",
         type=int,
         default=600,
-        help="seconds to wait for each unambiguous new run ID (default: 600)",
+        help="seconds to wait for the batch's unambiguous run IDs (default: 600)",
     )
     parser.add_argument(
         "--poll-seconds",

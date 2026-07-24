@@ -262,11 +262,21 @@ repository-rooted bottle namespace. A failed Formula blocks its downstream
 dependents, but it does not block unrelated ready Formulae from filling an
 available slot.
 
-The rollout controller records a durable intent before sending
-`repository_dispatch`, then waits for GitHub to expose the run's generated job
-matrix. If that acknowledgement times out, do not dispatch the Formula again:
-the request may already have succeeded. Wait until the run shows the exact
-Formula and architecture matrix, then recover it against the same ledger:
+The rollout controller first reserves every Formula in the available
+capacity-bounded batch in its private ledger. Before each HTTP request it
+records a random `abi42-…` dispatch token and a `request-started` marker, then
+submits the independent requests back-to-back. The caller exposes the Formula
+and token in the workflow run name, so one workflow-run query can acknowledge
+the whole batch as soon as GitHub creates the outer runs; the controller does
+not wait several minutes for each reusable workflow's generated job matrix.
+GitHub can briefly return an active-run count before the matching run page
+catches up; the controller retries that exact inconsistency with bounded
+backoff, then still fails closed if GitHub does not converge before it reserves
+or sends any new work.
+
+If acknowledgement times out, do not dispatch any pending Formula again: a
+request may already have succeeded. Recover every currently visible exact token
+match against the same ledger:
 
 ```bash
 : "${KANDELO_ROLLOUT_STATE:?set this to the existing ABI 42 rollout ledger}"
@@ -277,21 +287,27 @@ python3 scripts/abi42-rollout.py \
   --recover-dispatch
 ```
 
-Recovery sends no event. It uses the intent's recorded pre-dispatch run IDs,
-Formula, architectures, and tap commit, and accepts exactly one later
-`repository_dispatch` run with that exact generated matrix. No match, multiple
-matches, a partial job page, or any identity mismatch leaves the unresolved
-marker unchanged. Resume normal controller dispatching only after recovery
-reports the correlated run ID.
+Recovery sends no event. A legacy single-intent marker still uses its recorded
+pre-dispatch run boundary and exact generated matrix. New markers use their
+unguessable token, Formula, and tap commit, accepting exactly one matching
+`repository_dispatch` run name without depending on job creation. One recovery
+pass atomically records every visible independent match and retains later ones.
+No matches, duplicate token runs, a partial run page, or any identity mismatch
+leaves the affected pending markers unchanged. Resume normal dispatching only
+after every request-started or submitted marker is correlated; never retry an
+ambiguous token.
 
 The rollout ledger is part of the write-safety boundary. Preserve the original
 private ledger after the first ABI 42 Formula is finalized: it freezes the
-reviewed catalog and retains successful, failed, and unresolved dispatch
-history. Read-only status may derive an implicit Formula version from that
-Formula's package-owned sidecar, but a write-capable controller cross-checks
-the result against the frozen ledger. Once aggregate metadata has rolled over
-to ABI 42, the controller refuses to create a replacement ledger; restore the
-original file instead of reconstructing one from current tap state.
+reviewed catalog and retains successful, failed, planned, request-started, and
+submitted dispatch history. The controller migrates the earlier single-intent
+shape only when its workflow digest is the exact reviewed predecessor; it does
+not reinterpret an arbitrary old ledger. Read-only status may derive an implicit
+Formula version from that Formula's package-owned sidecar, but a write-capable
+controller cross-checks the result against the frozen ledger. Once aggregate
+metadata has rolled over to ABI 42, the controller refuses to create a
+replacement ledger; restore the original file instead of reconstructing one
+from current tap state.
 
 After a failed publication or a publisher-pin change, submit a fresh
 `repository_dispatch`; do not select **Re-run jobs** on the old run. A rerun

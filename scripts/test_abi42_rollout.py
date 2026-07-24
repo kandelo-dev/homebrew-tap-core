@@ -1030,10 +1030,65 @@ jobs:
             "total_count": 1,
             "workflow_runs": [],
         }
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "reported 1 active runs but returned 0"
+        with (
+            mock.patch.object(rollout.time, "sleep") as sleep,
+            self.assertRaisesRegex(
+                rollout.RolloutError, "reported 1 active runs but returned 0"
+            ),
         ):
             rollout.active_inventory(github)
+        self.assertEqual(
+            [
+                mock.call(rollout.ACTIVE_INVENTORY_BACKOFF_SECONDS),
+                mock.call(rollout.ACTIVE_INVENTORY_BACKOFF_SECONDS * 2),
+            ],
+            sleep.call_args_list,
+        )
+
+    def test_active_inventory_retries_a_transient_count_page_mismatch(self):
+        class EventuallyConsistentGitHub(FakeGitHub):
+            def __init__(self) -> None:
+                super().__init__()
+                self.queued_calls = 0
+
+            def runs(self, status=None, per_page=100):
+                del per_page
+                if status != "queued":
+                    return {"total_count": 0, "workflow_runs": []}
+                self.queued_calls += 1
+                return {
+                    "total_count": 1,
+                    "workflow_runs": (
+                        []
+                        if self.queued_calls == 1
+                        else [{"id": 123, "status": "queued"}]
+                    ),
+                }
+
+        github = EventuallyConsistentGitHub()
+        github.jobs_by_run[123] = self._matrix_jobs("asa", "wasm32")
+        with mock.patch.object(rollout.time, "sleep") as sleep:
+            inventory = rollout.active_inventory(github)
+
+        self.assertEqual(1, inventory.count)
+        self.assertEqual(frozenset(("asa",)), inventory.formulae[123])
+        self.assertEqual(2, github.queued_calls)
+        sleep.assert_called_once_with(rollout.ACTIVE_INVENTORY_BACKOFF_SECONDS)
+
+    def test_active_inventory_does_not_retry_malformed_run_identity(self):
+        github = FakeGitHub()
+        github.by_status["queued"] = {
+            "total_count": 1,
+            "workflow_runs": [{"id": "123", "status": "queued"}],
+        }
+        with (
+            mock.patch.object(rollout.time, "sleep") as sleep,
+            self.assertRaisesRegex(
+                rollout.RolloutError, "malformed active run"
+            ),
+        ):
+            rollout.active_inventory(github)
+        sleep.assert_not_called()
 
     def test_run_correlation_rejects_an_incomplete_job_page(self):
         github = rollout.GitHub()
@@ -1376,6 +1431,80 @@ jobs:
         self.assertEqual(
             ["bc", "binutils", "bzip2"],
             [entry["formula"] for entry in state["dispatches"]],
+        )
+
+    def test_resumed_batch_drops_only_plans_superseded_by_an_active_run(self):
+        bc_token = "abi42-" + "c" * 32
+        binutils_token = "abi42-" + "d" * 32
+        state = self._token_state(
+            ("bc", bc_token, "planned"),
+            ("binutils", binutils_token, "planned"),
+        )
+
+        class CollisionGitHub(FakeGitHub):
+            def __init__(self, head: str) -> None:
+                super().__init__()
+                self.head = head
+                self.dispatched: list[str] = []
+                self.created_runs: list[dict] = []
+
+            def runs(self, status=None, per_page=100):
+                del per_page
+                active = {
+                    "id": 150,
+                    "event": "repository_dispatch",
+                    "head_sha": self.head,
+                    "status": "queued",
+                }
+                if status == "queued":
+                    return {"total_count": 1, "workflow_runs": [active]}
+                if status is not None:
+                    return {"total_count": 0, "workflow_runs": []}
+                runs = [active, *self.created_runs]
+                return {"total_count": len(runs), "workflow_runs": runs}
+
+            def dispatch(self, formula, arches, dispatch_token):
+                del arches
+                self.dispatched.append(formula)
+                self.created_runs.append(
+                    {
+                        "id": 200,
+                        "event": "repository_dispatch",
+                        "head_sha": self.head,
+                        "status": "queued",
+                        "display_title": rollout.workflow_run_title(
+                            formula, dispatch_token
+                        ),
+                    }
+                )
+
+        github = CollisionGitHub(self.head)
+        github.jobs_by_run[150] = self._matrix_jobs("bc", "wasm32")
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "rollout.json"
+            rollout.write_state(state_path, state)
+            with mock.patch.object(
+                self.tap, "main_without_fetch", return_value=self.head
+            ):
+                count = rollout.dispatch_ready(
+                    tap=self.tap,
+                    github=github,
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=2,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                )
+            recovered = rollout.read_state(state_path)
+            assert recovered is not None
+
+        self.assertEqual(1, count)
+        self.assertEqual(["binutils"], github.dispatched)
+        self.assertEqual([], recovered["pending_dispatches"])
+        self.assertEqual(
+            ["binutils"],
+            [entry["formula"] for entry in recovered["dispatches"]],
         )
 
     def test_uncertain_http_request_blocks_retry_but_preserves_later_plans(self):
