@@ -230,6 +230,11 @@ the package consumer, that both commits declare the same exact `rootfs`
 closure, and that every selected staging archive matches that sealed closure
 before a bottle build may use it. This explicit bridge breaks the
 package-before-bottle cycle without making any build input mutable.
+The protected caller itself may load from a later finalizer-only `main` commit
+than the reserved Formula source. The controller records that actual
+`repository_dispatch` source separately and accepts it only when the Formula
+catalog, support tree, and normalized caller contract remain frozen and every
+intervening path is generated finalizer output.
 
 Only the controller's Python dispatch requests VFS acceptance. The protected
 caller maps that one bit to both required acceptance and the temporary
@@ -290,13 +295,13 @@ The rollout controller first reserves every Formula in the available
 capacity-bounded batch in its private ledger. Before each HTTP request it
 records a random `abi42-…` dispatch token and a `request-started` marker, then
 submits the independent requests back-to-back. The caller exposes the Formula
-and token in the workflow run name, so one workflow-run query can acknowledge
-the whole batch as soon as GitHub creates the outer runs; the controller does
-not wait several minutes for each reusable workflow's generated job matrix.
-GitHub can briefly return an active-run count before the matching run page
-catches up; the controller retries that exact inconsistency with bounded
-backoff, then still fails closed if GitHub does not converge before it reserves
-or sends any new work.
+and token in the workflow run name, so one workflow-run snapshot can
+acknowledge the whole batch as soon as GitHub creates the outer runs; the
+controller does not wait several minutes for each reusable workflow's
+generated job matrix. Active capacity comes from one unfiltered, paginated
+snapshot filtered locally, avoiding gaps while GitHub moves a run between
+statuses. Every snapshot is collected twice and must have the same total,
+pages, and unique run IDs before the controller acts.
 
 If acknowledgement times out, do not dispatch any pending Formula again: a
 request may already have succeeded. Recover every currently visible exact token
@@ -312,14 +317,21 @@ python3 scripts/abi42-rollout.py \
 ```
 
 Recovery sends no event. A legacy single-intent marker still uses its recorded
-pre-dispatch run boundary and exact generated matrix. New markers use their
-unguessable token, Formula, and tap commit, accepting exactly one matching
-`repository_dispatch` run name without depending on job creation. One recovery
-pass atomically records every visible independent match and retains later ones.
-No matches, duplicate token runs, a partial run page, or any identity mismatch
-leaves the affected pending markers unchanged. Resume normal dispatching only
-after every request-started or submitted marker is correlated; never retry an
-ambiguous token.
+pre-dispatch run boundary and exact generated matrix. New markers query only
+the bounded creation-time range around their durable HTTP requests and paginate
+the whole result. They use their unguessable token and Formula to select exactly
+one `repository_dispatch` run without depending on job creation. The ledger
+keeps both the reserved tap commit and the run's actual source commit. The
+latter may be a finalizer-only descendant after an earlier parallel run advances
+`main`, but only when the frozen Formula catalog, Formula support tree, and
+normalized publication workflow remain equivalent. Recipe, support, workflow,
+controller, or unrelated path drift fails closed.
+
+One recovery pass atomically records every visible independent match and
+retains later ones. No matches, duplicate token runs, a partial or changing
+snapshot, or any identity mismatch leaves the affected pending markers
+unchanged. Resume normal dispatching only after every request-started or
+submitted marker is correlated; never retry an ambiguous token.
 
 If an operator deliberately cancels the sole correlated run before any
 external-write job starts, preserve that fact and release the intent with the
@@ -343,8 +355,10 @@ the marker unchanged. The controller records the cancelled run and both tap
 commits in `abandoned_dispatches` before clearing the unresolved marker; it
 sends no event.
 
-The rollout ledger is part of the write-safety boundary. Preserve the original
-private ledger after the first ABI 42 Formula is finalized: it freezes the
+The rollout ledger is part of the write-safety boundary. Each replacement
+fsyncs both the file and its parent directory so a host crash cannot erase a
+durable request marker while leaving its GitHub dispatch alive. Preserve the
+original private ledger after the first ABI 42 Formula is finalized: it freezes the
 reviewed catalog and retains successful, failed, planned, request-started, and
 submitted, unresolved, and safely abandoned dispatch history. The controller
 migrates the earlier single-intent shape only through its explicitly reviewed
