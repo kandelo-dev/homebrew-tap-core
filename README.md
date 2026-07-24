@@ -284,6 +284,15 @@ matches, a partial job page, or any identity mismatch leaves the unresolved
 marker unchanged. Resume normal controller dispatching only after recovery
 reports the correlated run ID.
 
+The rollout ledger is part of the write-safety boundary. Preserve the original
+private ledger after the first ABI 42 Formula is finalized: it freezes the
+reviewed catalog and retains successful, failed, and unresolved dispatch
+history. Read-only status may derive an implicit Formula version from that
+Formula's package-owned sidecar, but a write-capable controller cross-checks
+the result against the frozen ledger. Once aggregate metadata has rolled over
+to ABI 42, the controller refuses to create a replacement ledger; restore the
+original file instead of reconstructing one from current tap state.
+
 After a failed publication or a publisher-pin change, submit a fresh
 `repository_dispatch`; do not select **Re-run jobs** on the old run. A rerun
 retains the original caller workflow and its pinned reusable-workflow revision,

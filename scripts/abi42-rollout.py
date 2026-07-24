@@ -509,11 +509,6 @@ def load_snapshot(tap: GitTap, sha: str) -> TapSnapshot:
     metadata = _json_object(
         tap.show(sha, "Kandelo/metadata.json"), "Kandelo/metadata.json"
     )
-    previous_packages = {
-        package.get("name"): package
-        for package in metadata.get("packages", ())
-        if isinstance(package, dict) and isinstance(package.get("name"), str)
-    }
     actual_formulae = tap.formula_names(sha)
     expected_formulae = frozenset(FORMULA_ORDER)
     if actual_formulae != expected_formulae:
@@ -536,8 +531,18 @@ def load_snapshot(tap: GitTap, sha: str) -> TapSnapshot:
             if sidecar_text is not None
             else None
         )
+        if sidecars[formula] is not None and sidecars[formula].get("name") != formula:
+            raise RolloutError(
+                f"Kandelo/formula/{formula}.json belongs to another Formula"
+            )
+        # WHY: aggregate metadata intentionally contains only packages finalized
+        # for the current ABI and therefore shrinks at the first ABI rollover.
+        # Each package-owned sidecar remains its last finalized identity, so it
+        # is the stable version fallback until this Formula is finalized again.
+        # Write-capable continuation still cross-checks this derived identity
+        # against the frozen state catalog and cannot recreate state post-cutover.
         identities[formula] = parse_formula_identity(
-            formula, source, previous_packages.get(formula)
+            formula, source, sidecars[formula]
         )
         dependencies[formula] = same_tap_dependencies(formula, source)
 
@@ -749,18 +754,24 @@ def finalization_reasons(
         if not isinstance(built_from, dict):
             continue
         source_sha = built_from.get("tap_commit")
-        source_formula_sha = built_from.get("formula_sha256")
+        archived_formula_sha = built_from.get("formula_sha256")
         if not isinstance(source_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", source_sha):
             reasons.append(f"{arch} source tap SHA is invalid")
             continue
+        # WHY: Homebrew records the digest of `.brew/<formula>.rb` in the
+        # bottle, and that receipt canonically omits the source bottle block.
+        # Source integrity is checked independently below against the frozen
+        # Formula contract; treating this receipt digest as the tap file digest
+        # makes every valid finalized bottle appear stale.
+        if not isinstance(archived_formula_sha, str) or not re.fullmatch(
+            r"[0-9a-f]{64}", archived_formula_sha
+        ):
+            reasons.append(f"{arch} archived Formula digest is invalid")
         try:
             if not tap.is_ancestor(source_sha, snapshot.sha):
                 reasons.append(f"{arch} source tap SHA is not on current main")
                 continue
             source_formula = tap.show(source_sha, f"Formula/{formula}.rb")
-            actual_formula_sha = hashlib.sha256(source_formula.encode()).hexdigest()
-            if source_formula_sha != actual_formula_sha:
-                reasons.append(f"{arch} source Formula digest is wrong")
             source_identity = parse_formula_identity(formula, source_formula, package)
             if source_identity.state_value() != identity.state_value():
                 reasons.append(f"{arch} source Formula identity differs")
@@ -1361,6 +1372,20 @@ def dispatch_ready(
         snapshot = load_snapshot(tap, sha)
         validate_workflow(github, snapshot, expected_kandelo_sha)
         if state is None:
+            aggregate_abi = snapshot.metadata.get("kandelo_abi")
+            # WHY: after the first ABI 42 finalization, the original ledger is
+            # the only durable record of prior dispatches and failed partials.
+            # Sidecars are sufficient for read-only inspection, but must never
+            # be used to reconstruct and resume a write-capable rollout.
+            if (
+                isinstance(aggregate_abi, bool)
+                or not isinstance(aggregate_abi, int)
+                or aggregate_abi >= EXPECTED_ABI
+            ):
+                raise RolloutError(
+                    "cannot initialize a replacement rollout state after the "
+                    f"ABI {EXPECTED_ABI} cutover; restore the original ledger"
+                )
             state = initial_state(snapshot, expected_kandelo_sha)
             write_state(state_path, state)
         validate_state(state, snapshot, expected_kandelo_sha)
