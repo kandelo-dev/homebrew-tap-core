@@ -1,32 +1,32 @@
 {
-  "bottle_rebuild": 0,
+  "bottle_rebuild": 1,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-21T22:07:20Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29869815378",
+      "built_at": "2026-07-24T23:11:44Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30130742343",
       "built_from": {
-        "formula_sha256": "3409d27874870b68acf19b7ef3aac710947121371133f6e1bf98899294d4312e",
-        "kandelo_commit": "4a521b458f0e7cf08f02a6f62a27743569b9926b",
+        "formula_sha256": "0dada72bca6ab864f03920129319883e506469863a68097f27b659efae1c1a52",
+        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "6d0691de45a9b9dfab741ac42804d3e2ab58b8bc",
+        "tap_commit": "72ed849f8ea47eb26f355e8cb209e6c7b6c89f44",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 6899071,
-      "cache_key_sha": "11fce9a36f1bacdd6c2d48392cb7d72e87baa04640716f83a72963980f4b6019",
+      "bytes": 7263556,
+      "cache_key_sha": "bd3129e6d39b077e104b98a99d6539939ee38f353b83612fc0aef0581a41f3db",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/ruby-4.0.5_1-rebuild0-wasm32.json",
+      "kandelo_abi": 42,
+      "link_manifest": "Kandelo/link/ruby-4.0.5_1-rebuild1-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "11fce9a36f1bacdd6c2d48392cb7d72e87baa04640716f83a72963980f4b6019",
+      "sha256": "bd3129e6d39b077e104b98a99d6539939ee38f353b83612fc0aef0581a41f3db",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ruby/blobs/sha256:11fce9a36f1bacdd6c2d48392cb7d72e87baa04640716f83a72963980f4b6019"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ruby/blobs/sha256:bd3129e6d39b077e104b98a99d6539939ee38f353b83612fc0aef0581a41f3db"
     }
   ],
   "dependencies": [
@@ -39,11 +39,11 @@
   "formula_path": "Formula/ruby.rb",
   "formula_revision": 1,
   "full_name": "kandelo-dev/tap-core/ruby",
-  "kandelo_abi": 41,
+  "kandelo_abi": 42,
   "name": "ruby",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "01f9bea83ad53efff2c6fbdc92396d50d1aeabb1",
+  "tap_commit": "72ed849f8ea47eb26f355e8cb209e6c7b6c89f44",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "4.0.5_1"

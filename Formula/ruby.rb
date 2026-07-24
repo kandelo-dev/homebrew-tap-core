@@ -159,7 +159,7 @@ class Ruby < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "11fce9a36f1bacdd6c2d48392cb7d72e87baa04640716f83a72963980f4b6019"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "bd3129e6d39b077e104b98a99d6539939ee38f353b83612fc0aef0581a41f3db"
   end
 
 end
