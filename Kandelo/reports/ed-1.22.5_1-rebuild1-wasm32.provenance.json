@@ -1,42 +1,42 @@
 {
   "bottle": {
     "bottle_tag": "wasm32_kandelo",
-    "bytes": 2725010,
-    "cache_key_sha": "950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a",
+    "bytes": 104388,
+    "cache_key_sha": "3a7d19c8b266e35d67caf4e61946d4f3f042de72ffd5aa8cef70f824b7e11a73",
     "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
     "prefix": "/home/linuxbrew/.linuxbrew",
-    "sha256": "950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/binutils/blobs/sha256:950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a"
+    "sha256": "3a7d19c8b266e35d67caf4e61946d4f3f042de72ffd5aa8cef70f824b7e11a73",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ed/blobs/sha256:3a7d19c8b266e35d67caf4e61946d4f3f042de72ffd5aa8cef70f824b7e11a73"
   },
   "build": {
     "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
     "dev_shell": "scripts/dev-shell.sh",
-    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30097974849",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30099282621",
     "job": "verify-bottle",
     "runner_os": "Linux",
     "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
     "sysroot_fingerprint": "909ba2b77222de5bef3b06bc0c42595c0f0aa1446150fbf988a3f7cb3d649565"
   },
   "formula": {
-    "path": "Formula/binutils.rb",
-    "sha256": "c8ca0d57d802aac555eb03673c907333463208c49f2d5e5466b715d85322d7a0"
+    "path": "Formula/ed.rb",
+    "sha256": "e0ed36a157b6267813280cb198a33e99b87ec133b3cab930d9ad233e00a11001"
   },
   "metadata": {
     "formula_json": {
-      "path": "Kandelo/formula/binutils.json",
-      "sha256": "9bd45a437d4c68934d06345762b7f8247b7653459b431b8ab16a99f5f4efb062"
+      "path": "Kandelo/formula/ed.json",
+      "sha256": "54adc438c52b7eb6a784244aa226e46634ad5962247d94038376f27320f396c0"
     },
     "link_manifest_json": {
-      "path": "Kandelo/link/binutils-2.46.1-rebuild1-wasm32.json",
-      "sha256": "46f3621cc72ccaaa185b3e344eae404dcbc92d87c0b20eea086c894192d06b7e"
+      "path": "Kandelo/link/ed-1.22.5_1-rebuild1-wasm32.json",
+      "sha256": "e7d90c5f7b8d0aa46f7ca6a73bb18f99b0d71cefb555ee6607098e4d33482a42"
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
       "sha256": "03548ecc4edcb13278ae76e6b231e0b1e25a0063d9f11a13f615287bf15c9251"
     },
     "provenance_json": {
-      "path": "Kandelo/reports/binutils-2.46.1-rebuild1-wasm32.provenance.json",
-      "sha256": "13f6dd8d5b4cedf7f4fff42523b623de1a75947e827366cc239570b0acf5eccb"
+      "path": "Kandelo/reports/ed-1.22.5_1-rebuild1-wasm32.provenance.json",
+      "sha256": "ffcebf14b3f73a47c72b4feb48ae6e2aaab7c48292b44f243b697ffc13d932d2"
     }
   },
   "repositories": {
@@ -50,8 +50,8 @@
     "arch": "wasm32",
     "bottle_rebuild": 1,
     "kandelo_abi": 42,
-    "package": "binutils",
-    "version": "2.46.1"
+    "package": "ed",
+    "version": "1.22.5_1"
   },
   "validation": {
     "outcome_lists": [
@@ -60,9 +60,9 @@
         "name": "schema",
         "passed": [
           "Kandelo/metadata.json",
-          "Kandelo/formula/binutils.json",
-          "Kandelo/link/binutils-2.46.1-rebuild1-wasm32.json",
-          "Kandelo/reports/binutils-2.46.1-rebuild1-wasm32.provenance.json"
+          "Kandelo/formula/ed.json",
+          "Kandelo/link/ed-1.22.5_1-rebuild1-wasm32.json",
+          "Kandelo/reports/ed-1.22.5_1-rebuild1-wasm32.provenance.json"
         ],
         "skipped": [],
         "status": "success"
@@ -93,9 +93,9 @@
         "failed": [],
         "name": "node_smoke",
         "passed": [
-          "Homebrew force-poured binutils from anonymous-public-readback",
+          "Homebrew force-poured ed from anonymous-public-readback",
           "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
-          "exact bottle sha256: 950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a"
+          "exact bottle sha256: 3a7d19c8b266e35d67caf4e61946d4f3f042de72ffd5aa8cef70f824b7e11a73"
         ],
         "skipped": [],
         "status": "success"
