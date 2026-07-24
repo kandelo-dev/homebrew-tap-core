@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T15:16:08Z",
+  "generated_at": "2026-07-24T15:23:11Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -799,11 +799,50 @@
       "full_name": "kandelo-dev/tap-core/musl-fts",
       "name": "musl-fts",
       "version": "1.2.7"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T15:23:11Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30103276775",
+          "built_from": {
+            "formula_sha256": "e896969df6ef4761935e2878edb38251e1e204a451aeec31f27f161a9f76d209",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "385efd6ba9b7dd0a579af89cd2d69c6c4da1a65b",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 35009,
+          "cache_key_sha": "14a2431f669b102d09ea9597dd75b299fe440a7c018b98498f33c09b6765dcf2",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/ncompress-5.0_1-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "14a2431f669b102d09ea9597dd75b299fe440a7c018b98498f33c09b6765dcf2",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ncompress/blobs/sha256:14a2431f669b102d09ea9597dd75b299fe440a7c018b98498f33c09b6765dcf2"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/ncompress.json",
+      "formula_path": "Formula/ncompress.rb",
+      "formula_revision": 1,
+      "full_name": "kandelo-dev/tap-core/ncompress",
+      "name": "ncompress",
+      "version": "5.0_1"
     }
   ],
   "release_tag": "bottles-abi-v42",
   "schema": 1,
-  "tap_commit": "dc8e6abd380f80143ba39d86e935813519fbd67b",
+  "tap_commit": "385efd6ba9b7dd0a579af89cd2d69c6c4da1a65b",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }

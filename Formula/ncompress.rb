@@ -82,7 +82,7 @@ class Ncompress < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "14a2431f669b102d09ea9597dd75b299fe440a7c018b98498f33c09b6765dcf2"
   end
 
 end

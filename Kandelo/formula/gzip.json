@@ -37,7 +37,7 @@
   "name": "gzip",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "dc8e6abd380f80143ba39d86e935813519fbd67b",
+  "tap_commit": "385efd6ba9b7dd0a579af89cd2d69c6c4da1a65b",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.14"
