@@ -676,17 +676,17 @@ class KandeloFormulaSupportTest < Minitest::Test
   def test_support_load_rejects_unsealed_or_unbound_formula_checkers
     mutations = {
       "missing checker" => lambda do |fixture|
-        fixture.fetch(:root)/"target/release/missing-xtask"
+        fixture.fetch(:root)/"target/x86_64-unknown-linux-gnu/release/xtask"
       end,
       "writable checker" => lambda do |fixture|
-        checker = fixture.fetch(:root)/"target/release/writable-xtask"
+        checker = fixture.fetch(:root)/"target/x86_64-unknown-linux-gnu/release/xtask"
         checker.dirname.mkpath
         checker.binwrite("writable\n")
         checker.chmod(0755)
         checker
       end,
       "empty checker" => lambda do |fixture|
-        checker = fixture.fetch(:root)/"target/release/empty-xtask"
+        checker = fixture.fetch(:root)/"target/x86_64-unknown-linux-gnu/release/xtask"
         checker.dirname.mkpath
         checker.binwrite("")
         checker.chmod(0555)
@@ -698,9 +698,23 @@ class KandeloFormulaSupportTest < Minitest::Test
         checker.chmod(0555)
         checker
       end,
+      "misplaced root-owned checker" => lambda do |fixture|
+        checker = fixture.fetch(:root)/"bin/xtask"
+        checker.dirname.mkpath
+        checker.binwrite("misplaced\n")
+        checker.chmod(0555)
+        checker
+      end,
+      "invalid checker host component" => lambda do |fixture|
+        checker = fixture.fetch(:root)/"target/x86_64 unknown/release/xtask"
+        checker.dirname.mkpath
+        checker.binwrite("invalid host\n")
+        checker.chmod(0555)
+        checker
+      end,
       "symlinked checker" => lambda do |fixture|
-        target = fixture.fetch(:root)/"target/release/real-xtask"
-        checker = fixture.fetch(:root)/"target/release/symlink-xtask"
+        target = fixture.fetch(:root)/"target/x86_64-unknown-linux-gnu/release/real-xtask"
+        checker = fixture.fetch(:root)/"target/x86_64-unknown-linux-gnu/release/xtask"
         target.dirname.mkpath
         target.binwrite("real\n")
         target.chmod(0555)
@@ -708,8 +722,8 @@ class KandeloFormulaSupportTest < Minitest::Test
         checker
       end,
       "multiply linked checker" => lambda do |fixture|
-        target = fixture.fetch(:root)/"target/release/real-xtask"
-        checker = fixture.fetch(:root)/"target/release/linked-xtask"
+        target = fixture.fetch(:root)/"target/x86_64-unknown-linux-gnu/release/real-xtask"
+        checker = fixture.fetch(:root)/"target/x86_64-unknown-linux-gnu/release/xtask"
         target.dirname.mkpath
         target.binwrite("linked\n")
         target.chmod(0555)
@@ -735,6 +749,8 @@ class KandeloFormulaSupportTest < Minitest::Test
           "checker is unavailable"
         when "checker outside root", "symlinked checker"
           "checker must be inside the authoritative Kandelo root"
+        when "misplaced root-owned checker", "invalid checker host component"
+          "checker must be at target/<host>/release/xtask"
         else
           "nonempty, root-owned, mode-0555 regular file with one link"
         end
@@ -746,7 +762,7 @@ class KandeloFormulaSupportTest < Minitest::Test
 
   def test_support_load_rejects_a_checker_not_owned_by_root
     with_tier2_loader_fixture do |fixture|
-      checker = fixture.fetch(:root)/"target/release/xtask"
+      checker = fixture.fetch(:root)/"target/x86_64-unknown-linux-gnu/release/xtask"
       checker.dirname.mkpath
       checker.binwrite("unprivileged\n")
       checker.chmod(0555)

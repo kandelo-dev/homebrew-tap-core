@@ -121,11 +121,11 @@ support module, package metadata, build script, source identity, architecture,
 and permitted script environment. It is absent from ordinary consumer
 installs, so those installs cannot use the bridge and require a published
 Kandelo bottle. This is an intentional fail-closed boundary, not general
-source-build support. The publisher exposes its sealed, root-owned checker
-through a Homebrew-prefixed bridge because Homebrew removes ordinary environment
-variables before Formula tests. The support module validates and freezes that
-path before Formula code runs, then restores it only for Kandelo's Node and
-browser test runners.
+source-build support. The publisher exposes its sealed, root-owned checker at
+`target/<host>/release/xtask` through a Homebrew-prefixed bridge because
+Homebrew removes ordinary environment variables before Formula tests. The
+support module validates that exact layout and freezes the path before Formula
+code runs, then restores it only for Kandelo's Node and browser test runners.
 
 During a source build, the shared Formula support removes Homebrew's global
 `bin`/`sbin` directories and Kandelo runtime dependency executable directories

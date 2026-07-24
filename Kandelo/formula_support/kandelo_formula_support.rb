@@ -254,6 +254,18 @@ module KandeloFormulaSupport
              relative_checker.each_filename.none? { |part| part == ".." }
         raise "Kandelo Formula checker must be inside the authoritative Kandelo root: #{checker}"
       end
+      # Match the publisher's one sealed alias location exactly. Merely being a
+      # protected file below the checkout is not enough: unrelated root-owned
+      # tooling there must never become Formula runner authority.
+      checker_parts = relative_checker.each_filename.to_a
+      unless checker_parts.length == 4 &&
+             checker_parts[0] == "target" &&
+             checker_parts[1].match?(/\A[A-Za-z0-9_.+\-]+\z/) &&
+             checker_parts[2] == "release" &&
+             checker_parts[3] == "xtask"
+        raise "Kandelo Formula checker must be at target/<host>/release/xtask " \
+              "inside the authoritative Kandelo root: #{checker}"
+      end
       unless before.file? && !before.symlink? && before.size.positive? && before.nlink == 1 &&
              before.uid.zero? && (before.mode & 07777) == 0555
         raise "Kandelo Formula checker must be a nonempty, root-owned, mode-0555 " \
