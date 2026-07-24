@@ -10,10 +10,10 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@2a8b317c94b5e1ab7042d40bcac7c7563b57420b
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@4274178aeefeb2135f8d0bc7d06d0beb0dbc54b0
     with:
       kandelo-repository: Automattic/kandelo
-      kandelo-ref: 2a8b317c94b5e1ab7042d40bcac7c7563b57420b
+      kandelo-ref: 4274178aeefeb2135f8d0bc7d06d0beb0dbc54b0
       tap-repository: kandelo-dev/homebrew-tap-core
       tap-name: kandelo-dev/tap-core
       tap-ref: main
