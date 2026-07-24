@@ -45,9 +45,10 @@ class FakeGitHub:
     def run(self, run_id):
         return self.runs_by_id[run_id]
 
-    def dispatch(self, formula, arches):
+    def dispatch(self, formula, arches, tap_sha):
         raise AssertionError(
-            f"recovery must never dispatch {formula} for {tuple(arches)}"
+            "recovery must never dispatch "
+            f"{formula} for {tuple(arches)} from {tap_sha}"
         )
 
     def workflow(self):
@@ -404,8 +405,19 @@ class RolloutControllerTests(unittest.TestCase):
             metadata=collapsed_metadata,
             formula_sidecars={"binutils": previous_binutils},
         )
+        asa_bottles = asa_package["bottles"]
+        historical_built_from = asa_bottles[0]["built_from"]
+        historical_publisher_sha = historical_built_from["kandelo_commit"]
+        current = dataclasses.replace(
+            current,
+            workflow_source=self.tap.show(
+                historical_built_from["tap_commit"], rollout.WORKFLOW_PATH
+            ),
+        )
 
         # Model the ledger frozen before the aggregate metadata rolled over.
+        # WHY: rotating the protected caller after the rollout does not rewrite
+        # the provenance of bottles already finalized by the earlier producer.
         cutover_metadata = copy.deepcopy(collapsed_metadata)
         cutover_metadata["kandelo_abi"] = rollout.EXPECTED_ABI - 1
         cutover_metadata["packages"] = [
@@ -413,8 +425,12 @@ class RolloutControllerTests(unittest.TestCase):
             for sidecar in self.snapshot.formula_sidecars.values()
             if sidecar is not None
         ]
-        cutover = dataclasses.replace(self.snapshot, metadata=cutover_metadata)
-        state = rollout.initial_state(cutover, self.publisher_sha)
+        cutover = dataclasses.replace(
+            self.snapshot,
+            metadata=cutover_metadata,
+            workflow_source=current.workflow_source,
+        )
+        state = rollout.initial_state(cutover, historical_publisher_sha)
 
         self.assertEqual(["asa"], [
             package["name"] for package in current.metadata["packages"]
@@ -423,14 +439,14 @@ class RolloutControllerTests(unittest.TestCase):
             previous_binutils["version"],
             current.identities["binutils"].pkg_version,
         )
-        rollout.validate_state(state, current, self.publisher_sha)
+        rollout.validate_state(state, current, historical_publisher_sha)
 
         statuses = {
             status.name: status
             for status in rollout.calculate_statuses(
                 self.tap,
                 current,
-                self.publisher_sha,
+                historical_publisher_sha,
                 rollout.RunInventory(
                     count=0,
                     runs=(),
@@ -505,9 +521,14 @@ class RolloutControllerTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             state_path = pathlib.Path(directory) / "missing-rollout.json"
-            with self.assertRaisesRegex(
-                rollout.RolloutError,
-                "cannot initialize a replacement rollout state after the ABI 42 cutover",
+            with (
+                mock.patch.object(
+                    self.tap, "main_without_fetch", return_value=self.head
+                ),
+                self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    "cannot initialize a replacement rollout state after the ABI 42 cutover",
+                ),
             ):
                 rollout.dispatch_ready(
                     tap=self.tap,
@@ -571,7 +592,7 @@ jobs:
       kandelo-ref: {expected}
       tap-repository: kandelo-dev/homebrew-tap-core
       tap-name: kandelo-dev/tap-core
-      tap-ref: main
+      tap-ref: ${{{{ github.event.client_payload.tap_sha }}}}
       formulae: ${{{{ github.event.client_payload.formulae }}}}
       arches: ${{{{ github.event.client_payload.arches || 'wasm32' }}}}
       force: ${{{{ github.event.client_payload.force || false }}}}
@@ -1034,6 +1055,7 @@ jobs:
                 rollout.GitHub().dispatch(
                     formula,
                     rollout.required_arches(formula),
+                    self.head,
                 )
         payloads = {
             payload["client_payload"]["formulae"]: payload
@@ -1054,12 +1076,25 @@ jobs:
         self.assertEqual("python", python_payload["client_payload"]["formulae"])
         self.assertIs(True, python_payload["client_payload"]["require_vfs_acceptance"])
         self.assertEqual(
+            {self.head},
+            {
+                payload["client_payload"]["tap_sha"]
+                for payload in payloads.values()
+            },
+        )
+        self.assertEqual(
             "wasm32,wasm64", zlib_payload["client_payload"]["arches"]
         )
         self.assertNotIn(
             "require_vfs_acceptance", zlib_payload["client_payload"]
         )
         self.assertNotIn("rerun", json.dumps(calls).lower())
+
+    def test_dispatch_rejects_a_mutable_or_malformed_tap_ref(self):
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "exact lowercase tap commit SHA"
+        ):
+            rollout.GitHub().dispatch("zlib", ("wasm32",), "main")
 
     def test_absent_dispatch_run_id_fails_closed(self):
         github = FakeGitHub()

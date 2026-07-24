@@ -193,7 +193,9 @@ caller workflow from tap `main`. These tap workflows contain no shell steps or
 other executable logic. They pass request data to the reviewed reusable
 publisher and maintenance workflows in `Automattic/kandelo`, which validate the
 request and own the build, credential isolation, artifact verification, and tap
-finalization logic.
+finalization logic. Write operations also pass the exact 40-character tap
+commit that contains the reviewed Formula source. The workflow definition
+comes from protected `main`, while the build input is immutable.
 
 A dry run may select unmerged Formula or Kandelo code through event payload
 repositories and refs:
@@ -219,13 +221,13 @@ Write publication accepts formulae, arches, and an optional release tag. During
 the ABI 42 bootstrap, the caller executes and builds from reviewed publisher
 descendant `d3805721b887a19382ef1c96b576fc27badc0951`. Its package inputs are
 separately fixed to generation
-`437fde2524ea6ad9c44933f8abbf995a46841009` on `pr-1079-staging`; the tap source
-remains fixed to reviewed `main`. The publisher proves that the package
-generation is an ancestor of the publisher descendant, that both commits
-declare the same exact `rootfs` closure, and that every selected staging
-archive matches that sealed closure before a bottle build may use it. This
-explicit two-commit bridge breaks the package-before-bottle cycle without
-making either input mutable.
+`437fde2524ea6ad9c44933f8abbf995a46841009` on `pr-1079-staging`; the controller
+fixes the tap source to the exact reviewed commit that it validated and
+recorded. The publisher proves that the package generation is an ancestor of
+the publisher descendant, that both commits declare the same exact `rootfs`
+closure, and that every selected staging archive matches that sealed closure
+before a bottle build may use it. This explicit bridge breaks the
+package-before-bottle cycle without making any build input mutable.
 
 Only the controller's Python dispatch requests VFS acceptance. The protected
 caller maps that one bit to both required acceptance and the temporary
@@ -242,10 +244,12 @@ then submit the dispatch:
 
 ```bash
 : "${KANDELO_FORMULA:?set KANDELO_FORMULA to one dependency-ready Formula name}"
+: "${KANDELO_TAP_SHA:?set KANDELO_TAP_SHA to the exact reviewed tap commit}"
 gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
   -f event_type=publish-kandelo-bottles \
   -f "client_payload[formulae]=${KANDELO_FORMULA}" \
-  -f 'client_payload[arches]=wasm32'
+  -f 'client_payload[arches]=wasm32' \
+  -f "client_payload[tap_sha]=${KANDELO_TAP_SHA}"
 ```
 
 The first-party catalog rollout uses one Formula per write dispatch, even
@@ -368,11 +372,13 @@ record the reason; deleting a package additionally requires its URL and an
 operational reason.
 
 ```bash
+: "${KANDELO_TAP_SHA:?set KANDELO_TAP_SHA to the exact reviewed tap commit}"
 gh api --method POST repos/kandelo-dev/homebrew-tap-core/dispatches \
   -f event_type=maintain-kandelo-bottles \
   -f 'client_payload[mode]=rebuild' \
   -f 'client_payload[formulae]=bzip2,xz' \
-  -f 'client_payload[arches]=wasm32'
+  -f 'client_payload[arches]=wasm32' \
+  -f "client_payload[tap_sha]=${KANDELO_TAP_SHA}"
 ```
 
 Formula Ruby and Homebrew bottle metadata remain authoritative for Homebrew.

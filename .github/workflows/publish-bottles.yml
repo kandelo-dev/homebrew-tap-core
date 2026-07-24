@@ -10,13 +10,15 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@d3805721b887a19382ef1c96b576fc27badc0951
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@3545bfd34509a52b68a4620c92e4aae24c60adb0
     with:
       kandelo-repository: Automattic/kandelo
-      kandelo-ref: d3805721b887a19382ef1c96b576fc27badc0951
+      kandelo-ref: 3545bfd34509a52b68a4620c92e4aae24c60adb0
       tap-repository: kandelo-dev/homebrew-tap-core
       tap-name: kandelo-dev/tap-core
-      tap-ref: main
+      # WHY: repository_dispatch loads this caller from main, but Formula
+      # source must remain the exact reviewed snapshot the controller approved.
+      tap-ref: ${{ github.event.client_payload.tap_sha }}
       formulae: ${{ github.event.client_payload.formulae }}
       arches: ${{ github.event.client_payload.arches || 'wasm32' }}
       release-tag: ${{ github.event.client_payload.release_tag || '' }}
