@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/modeset.json",
-      "sha256": "f32c9e69eb7fb9efdccb5277d41fe7a936e6fe4599954af88f756092a5af7753"
+      "sha256": "6f7808f27dfbd947d5521d4dfeb7014e7bde67a8094b8701a5dc6f9177887a04"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/modeset-0.1.0-rebuild2-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "33b6f2ca97ddd5e079e50226410dbbdca9558c592014bbcde6e696b0b6f41280"
+      "sha256": "3013d4c448a54cd48b91c23f6e0a6ae0709f1fbd22a214c6e14c21570c1a7e37"
     },
     "provenance_json": {
       "path": "Kandelo/reports/modeset-0.1.0-rebuild2-wasm32.provenance.json",
-      "sha256": "38f58038daa0c34ea45fd81093f067ddc84dcc1e6cd84bfcff7b7c5f3d00f3de"
+      "sha256": "d52e5a8ff609a8aef432be485c94393512e4d695a2c778b5a13ff4ed8bfce0c6"
     }
   },
   "repositories": {

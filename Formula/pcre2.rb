@@ -220,7 +220,7 @@ class Pcre2 < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "ed4db7b6a3ab57b837e545d910deeb841f908333b20f49cdafe30430cc9651de"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "db5bff1fca4e75ab3917121350b79849de398d8f79384c3745f27aa318a6469e"
   end
 
 end

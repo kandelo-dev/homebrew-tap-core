@@ -37,7 +37,7 @@
   "name": "netcat",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "8e505681de5ef8eba75dc1f723111cdac858fba6",
+  "tap_commit": "eb78ddfa62254c0a98859d4fa1cb48bed87fcfe1",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "0.7.1"

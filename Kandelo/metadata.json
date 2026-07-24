@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T15:29:30Z",
+  "generated_at": "2026-07-24T15:40:05Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -877,11 +877,50 @@
       "full_name": "kandelo-dev/tap-core/netcat",
       "name": "netcat",
       "version": "0.7.1"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T15:40:05Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30104294173",
+          "built_from": {
+            "formula_sha256": "639324e69487f38df6e68da620716e0b01d4a6dcd53e34e07b93ec6a00c1c01e",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "eb78ddfa62254c0a98859d4fa1cb48bed87fcfe1",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 1884423,
+          "cache_key_sha": "db5bff1fca4e75ab3917121350b79849de398d8f79384c3745f27aa318a6469e",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/pcre2-10.44_1-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "db5bff1fca4e75ab3917121350b79849de398d8f79384c3745f27aa318a6469e",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/pcre2/blobs/sha256:db5bff1fca4e75ab3917121350b79849de398d8f79384c3745f27aa318a6469e"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/pcre2.json",
+      "formula_path": "Formula/pcre2.rb",
+      "formula_revision": 1,
+      "full_name": "kandelo-dev/tap-core/pcre2",
+      "name": "pcre2",
+      "version": "10.44_1"
     }
   ],
   "release_tag": "bottles-abi-v42",
   "schema": 1,
-  "tap_commit": "8e505681de5ef8eba75dc1f723111cdac858fba6",
+  "tap_commit": "eb78ddfa62254c0a98859d4fa1cb48bed87fcfe1",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }
