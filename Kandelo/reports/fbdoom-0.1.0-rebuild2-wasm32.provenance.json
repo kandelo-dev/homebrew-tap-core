@@ -1,42 +1,42 @@
 {
   "bottle": {
     "bottle_tag": "wasm32_kandelo",
-    "bytes": 60608,
-    "cache_key_sha": "b2657996570d89554214182ba1c78c23fb1129a939839fc5481b4e33b8d3f968",
+    "bytes": 186887,
+    "cache_key_sha": "acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba",
     "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
     "prefix": "/home/linuxbrew/.linuxbrew",
-    "sha256": "b2657996570d89554214182ba1c78c23fb1129a939839fc5481b4e33b8d3f968",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/bc/blobs/sha256:b2657996570d89554214182ba1c78c23fb1129a939839fc5481b4e33b8d3f968"
+    "sha256": "acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/fbdoom/blobs/sha256:acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba"
   },
   "build": {
     "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
     "dev_shell": "scripts/dev-shell.sh",
-    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30097678311",
+    "github_run": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30099553154",
     "job": "verify-bottle",
     "runner_os": "Linux",
     "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
     "sysroot_fingerprint": "909ba2b77222de5bef3b06bc0c42595c0f0aa1446150fbf988a3f7cb3d649565"
   },
   "formula": {
-    "path": "Formula/bc.rb",
-    "sha256": "fda2657752d0caf8ee56dc96886a3135f08e6968e6b33e197e418c3ea164cefa"
+    "path": "Formula/fbdoom.rb",
+    "sha256": "bb0af3c903d71230a119acf6cc27f29db931d53e4e58cc3841ca69f2b86aabb7"
   },
   "metadata": {
     "formula_json": {
-      "path": "Kandelo/formula/bc.json",
-      "sha256": "28edb487e186ee804dd166e107aa02f726de36add91f5d339c2d6d96a8a33ecf"
+      "path": "Kandelo/formula/fbdoom.json",
+      "sha256": "6dfac009c9ddad4891798f4e25cd2df0f8ae1f98f646c05f495aaa1170d50b7f"
     },
     "link_manifest_json": {
-      "path": "Kandelo/link/bc-1.07.1-rebuild2-wasm32.json",
-      "sha256": "e94159e226cce88df3095c33a0415640d29079b94c149e88f9c3e08d1e3d9b0c"
+      "path": "Kandelo/link/fbdoom-0.1.0-rebuild2-wasm32.json",
+      "sha256": "0d554d36553680f0caede66f266ff1e8d6b53f875abf1c2862982aa10862d2fc"
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
       "sha256": "4ea415e291cec6f54b45a2613f878b18bda3b393c6f0a7dab0fd438bbd677187"
     },
     "provenance_json": {
-      "path": "Kandelo/reports/bc-1.07.1-rebuild2-wasm32.provenance.json",
-      "sha256": "83762f6bc2aa099c8e2002ad6c5846401f6e0de91cd1c461d14d89a4e4cb7413"
+      "path": "Kandelo/reports/fbdoom-0.1.0-rebuild2-wasm32.provenance.json",
+      "sha256": "f404754fd783d53c40cf2c89ed88d7ddac57c9626e4fa1a4d2e3902f6562d835"
     }
   },
   "repositories": {
@@ -50,8 +50,8 @@
     "arch": "wasm32",
     "bottle_rebuild": 2,
     "kandelo_abi": 42,
-    "package": "bc",
-    "version": "1.07.1"
+    "package": "fbdoom",
+    "version": "0.1.0"
   },
   "validation": {
     "outcome_lists": [
@@ -60,9 +60,9 @@
         "name": "schema",
         "passed": [
           "Kandelo/metadata.json",
-          "Kandelo/formula/bc.json",
-          "Kandelo/link/bc-1.07.1-rebuild2-wasm32.json",
-          "Kandelo/reports/bc-1.07.1-rebuild2-wasm32.provenance.json"
+          "Kandelo/formula/fbdoom.json",
+          "Kandelo/link/fbdoom-0.1.0-rebuild2-wasm32.json",
+          "Kandelo/reports/fbdoom-0.1.0-rebuild2-wasm32.provenance.json"
         ],
         "skipped": [],
         "status": "success"
@@ -93,9 +93,9 @@
         "failed": [],
         "name": "node_smoke",
         "passed": [
-          "Homebrew force-poured bc from anonymous-public-readback",
-          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
-          "exact bottle sha256: b2657996570d89554214182ba1c78c23fb1129a939839fc5481b4e33b8d3f968"
+          "Homebrew force-poured fbdoom from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_pty_wasm",
+          "exact bottle sha256: acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba"
         ],
         "skipped": [],
         "status": "success"

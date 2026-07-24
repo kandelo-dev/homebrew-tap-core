@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T14:24:40Z",
+  "generated_at": "2026-07-24T14:30:37Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -316,6 +316,45 @@
       "full_name": "kandelo-dev/tap-core/ed",
       "name": "ed",
       "version": "1.22.5_1"
+    },
+    {
+      "bottle_rebuild": 2,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T14:30:37Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30099553154",
+          "built_from": {
+            "formula_sha256": "bb0af3c903d71230a119acf6cc27f29db931d53e4e58cc3841ca69f2b86aabb7",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 186887,
+          "cache_key_sha": "acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/fbdoom-0.1.0-rebuild2-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/fbdoom/blobs/sha256:acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/fbdoom.json",
+      "formula_path": "Formula/fbdoom.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/fbdoom",
+      "name": "fbdoom",
+      "version": "0.1.0"
     }
   ],
   "release_tag": "bottles-abi-v42",
