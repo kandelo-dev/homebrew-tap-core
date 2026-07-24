@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T15:55:54Z",
+  "generated_at": "2026-07-24T16:46:19Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -1138,11 +1138,50 @@
       "full_name": "kandelo-dev/tap-core/sed",
       "name": "sed",
       "version": "4.9"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T16:46:19Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30108715435",
+          "built_from": {
+            "formula_sha256": "98562be7786589a1d34ba20bb5849ba54510093c153e057770fd07850b44e8be",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "5ac7e5e46be95fb78f9107d7e6bbf562cd027ec8",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 632700,
+          "cache_key_sha": "3cf43262295b6ee72fc3d3787dc9022b4232d3fdd92fc2433c96889fe1f0fea2",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/xz-5.6.2_1-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "3cf43262295b6ee72fc3d3787dc9022b4232d3fdd92fc2433c96889fe1f0fea2",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/xz/blobs/sha256:3cf43262295b6ee72fc3d3787dc9022b4232d3fdd92fc2433c96889fe1f0fea2"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/xz.json",
+      "formula_path": "Formula/xz.rb",
+      "formula_revision": 1,
+      "full_name": "kandelo-dev/tap-core/xz",
+      "name": "xz",
+      "version": "5.6.2_1"
     }
   ],
   "release_tag": "bottles-abi-v42",
   "schema": 1,
-  "tap_commit": "aecde46f2d627d2867d2c0ffd0f6ebed123f11ed",
+  "tap_commit": "5ac7e5e46be95fb78f9107d7e6bbf562cd027ec8",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }
