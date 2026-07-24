@@ -3,8 +3,9 @@
 
 The default command is read-only with respect to GitHub. It fetches tap `main`,
 checks finalized sidecars and production runs, and prints what is ready. The
-only write path is the explicit `--dispatch` flag, which always creates a fresh
-`repository_dispatch`; this program has no workflow-rerun operation.
+only write path is the explicit `--dispatch` flag, which reserves a
+capacity-bounded batch and creates one fresh `repository_dispatch` per Formula;
+this program has no workflow-rerun operation.
 """
 
 from __future__ import annotations
@@ -20,10 +21,12 @@ import json
 import os
 import pathlib
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 from typing import Any, Iterable, Mapping, Sequence
 
 
@@ -36,9 +39,23 @@ EXPECTED_ABI = 42
 EXPECTED_RELEASE_TAG = "bottles-abi-v42"
 PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
 PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
+PUBLISHER_SHA = "df608a26e751f624c0b70b74f29d62c7c61ac9ad"
 MAX_ACTIVE_RUNS = 8
 ACTIVE_STATUSES = ("queued", "in_progress", "waiting", "pending", "requested")
+WORKFLOW_RUN_SNAPSHOT_ATTEMPTS = 3
+WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS = 1.0
+WORKFLOW_RUN_PAGE_SIZE = 100
+MAX_WORKFLOW_RUN_PAGES = 100
+DISPATCH_RUN_CLOCK_SKEW = dt.timedelta(minutes=5)
 BOTTLE_ROOT = "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+LEGACY_SINGLE_INTENT_WORKFLOW_SHA256 = (
+    "3207ecd35a5cca77fc5bb0e26bee8ab9d354efcb7fef2c1d7aa8b65a8b2bade3"
+)
+DISPATCH_TOKEN_RE = re.compile(r"abi42-[0-9a-f]{32}")
+WORKFLOW_RUN_NAME_SOURCE = (
+    "Publish Kandelo bottles / ${{ github.event.client_payload.formulae }} / "
+    "${{ github.event.client_payload.dispatch_token || 'untracked' }}"
+)
 
 WAVES: tuple[tuple[str, ...], ...] = (
     (
@@ -83,6 +100,10 @@ if sum(2 if name in DUAL_ARCH_FORMULAE else 1 for name in FORMULA_ORDER) != 70:
 
 class RolloutError(RuntimeError):
     """A condition that makes continuing the rollout unsafe."""
+
+
+class WorkflowRunSnapshotError(RolloutError):
+    """GitHub changed a workflow-run listing while it was being paginated."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -145,6 +166,24 @@ class SubmittedDispatch:
     tap_sha: str
     before_run_ids: frozenset[int]
     submitted_at: str
+
+
+@dataclasses.dataclass(frozen=True)
+class PendingDispatch:
+    formula: str
+    arches: tuple[str, ...]
+    tap_sha: str
+    dispatch_token: str
+    status: str
+    recorded_at: str
+    request_started_at: str | None
+    submitted_at: str | None
+
+
+@dataclasses.dataclass(frozen=True)
+class CorrelatedRun:
+    run_id: int
+    source_tap_sha: str
 
 
 def _run(
@@ -236,6 +275,46 @@ class GitTap:
             )
         return result.returncode == 0
 
+    def ensure_commit(self, revision: str) -> None:
+        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+            raise RolloutError(f"tap commit is not an exact SHA: {revision!r}")
+        present = self.git("cat-file", "-e", f"{revision}^{{commit}}", check=False)
+        if present.returncode == 0:
+            return
+        # A repository_dispatch run can expose a new protected-main commit
+        # before this controller's remote-tracking ref is refreshed. Fetch only
+        # that immutable run source so validation never substitutes newer main.
+        self.git("fetch", "--quiet", "--no-tags", "origin", revision)
+        resolved = self.git("rev-parse", f"{revision}^{{commit}}").stdout.strip()
+        if resolved != revision:
+            raise RolloutError(f"GitHub run source {revision} was not fetched exactly")
+
+    def changed_entries(
+        self, ancestor: str, descendant: str
+    ) -> tuple[tuple[str, str], ...]:
+        output = self.git(
+            "diff",
+            "--name-status",
+            "--no-renames",
+            "-z",
+            ancestor,
+            descendant,
+        ).stdout
+        fields = output.split("\0")
+        if fields[-1:] == [""]:
+            fields.pop()
+        if len(fields) % 2:
+            raise RolloutError("tap source comparison returned malformed entries")
+        entries = tuple(zip(fields[0::2], fields[1::2], strict=True))
+        if any(
+            not re.fullmatch(r"[ACDMTUXB]", status) or not path
+            for status, path in entries
+        ):
+            raise RolloutError("tap source comparison returned an unsafe change")
+        if len(entries) != len({path for _status, path in entries}):
+            raise RolloutError("tap source comparison returned duplicate paths")
+        return entries
+
     def tree_oid(self, revision: str, path: str) -> str:
         result = self.git("rev-parse", f"{revision}:{path}", check=False)
         oid = result.stdout.strip()
@@ -260,10 +339,20 @@ class GitHub:
             f"repos/{self.repository}/actions/workflows/{WORKFLOW_ID}"
         )
 
-    def runs(self, status: str | None = None, per_page: int = 100) -> Mapping[str, Any]:
-        query = f"?per_page={per_page}"
-        if status is not None:
-            query += f"&status={status}"
+    def runs(
+        self,
+        *,
+        per_page: int = WORKFLOW_RUN_PAGE_SIZE,
+        page: int = 1,
+        created: str | None = None,
+    ) -> Mapping[str, Any]:
+        query_values: dict[str, str | int] = {
+            "per_page": per_page,
+            "page": page,
+        }
+        if created is not None:
+            query_values["created"] = created
+        query = "?" + urllib.parse.urlencode(query_values)
         result = self.api_json(
             f"repos/{self.repository}/actions/workflows/{WORKFLOW_ID}/runs{query}"
         )
@@ -294,12 +383,20 @@ class GitHub:
             raise RolloutError(f"GitHub returned a malformed job for run {run_id}")
         return tuple(result["jobs"])
 
-    def dispatch(self, formula: str, arches: Sequence[str]) -> None:
+    def dispatch(
+        self,
+        formula: str,
+        arches: Sequence[str],
+        dispatch_token: str,
+    ) -> None:
+        if not DISPATCH_TOKEN_RE.fullmatch(dispatch_token):
+            raise RolloutError("repository dispatch token is malformed")
         payload: dict[str, Any] = {
             "event_type": "publish-kandelo-bottles",
             "client_payload": {
                 "formulae": formula,
                 "arches": ",".join(arches),
+                "dispatch_token": dispatch_token,
             },
         }
         if formula == "python":
@@ -308,8 +405,9 @@ class GitHub:
             # No other Formula can independently request either exception.
             payload["client_payload"]["require_vfs_acceptance"] = True
         # repository_dispatch intentionally returns 204 with no run ID. The
-        # caller must retain its unresolved marker until acknowledge_dispatch()
-        # correlates the new production run.
+        # token is recorded durably before this request and becomes part of the
+        # outer workflow run name, so several requests can be submitted before
+        # their runs appear without confusing one request for another.
         _run(
             (
                 "gh",
@@ -592,10 +690,21 @@ def validate_workflow(
         snapshot.workflow_source,
         flags=re.MULTILINE,
     )
-    if uses != [expected_kandelo_sha] or refs != [expected_kandelo_sha]:
+    if uses != [PUBLISHER_SHA] or refs != [expected_kandelo_sha]:
         raise RolloutError(
             "production workflow is not frozen to the requested ABI 42 Kandelo SHA "
-            f"(uses={uses}, kandelo-ref={refs})"
+            f"(publisher={uses}, kandelo-ref={refs})"
+        )
+
+    run_names = re.findall(
+        r"^run-name:\s*(.+?)\s*$",
+        snapshot.workflow_source,
+        flags=re.MULTILINE,
+    )
+    if run_names != [WORKFLOW_RUN_NAME_SOURCE]:
+        raise RolloutError(
+            "production workflow run-name does not expose the exact Formula "
+            f"and dispatch-token identity: {run_names}"
         )
 
     # The controller owns only formula/architecture payloads. Freeze the
@@ -605,7 +714,7 @@ def validate_workflow(
         "kandelo-repository": KANDELO_REPOSITORY,
         "tap-repository": REPOSITORY.lower(),
         "tap-name": TAP_NAME,
-        "tap-ref": "main",
+        "tap-ref": "${{ github.sha }}",
         "formulae": "${{ github.event.client_payload.formulae }}",
         "arches": "${{ github.event.client_payload.arches || 'wasm32' }}",
         "force": "${{ github.event.client_payload.force || false }}",
@@ -629,6 +738,129 @@ def validate_workflow(
             raise RolloutError(
                 f"production workflow {key} differs from {expected!r}: {values}"
             )
+
+
+def publication_workflow_contract(source: str) -> str:
+    """Return bottle-affecting workflow bytes, excluding exact run identity."""
+    lines = source.splitlines(keepends=True)
+    run_name_lines = [
+        line
+        for line in lines
+        if re.match(r"^run-name:", line)
+    ]
+    expected = f"run-name: {WORKFLOW_RUN_NAME_SOURCE}\n"
+    if run_name_lines not in ([], [expected]):
+        # Do not normalize an unknown run-name shape. It remains a provenance
+        # mismatch instead of turning this display-only exception into a broad
+        # workflow compatibility rule.
+        return source
+    return "".join(line for line in lines if line not in run_name_lines)
+
+
+def finalizer_owned_path(path: str) -> bool:
+    if path == "Kandelo/metadata.json":
+        return True
+    if re.fullmatch(
+        r"Formula/(" + "|".join(map(re.escape, FORMULA_ORDER)) + r")\.rb",
+        path,
+    ):
+        return True
+    if re.fullmatch(
+        r"Kandelo/formula/("
+        + "|".join(map(re.escape, FORMULA_ORDER))
+        + r")\.json",
+        path,
+    ):
+        return True
+    generated_name = r"[A-Za-z0-9][A-Za-z0-9._+-]*"
+    return bool(
+        re.fullmatch(rf"Kandelo/link/{generated_name}\.json", path)
+        or re.fullmatch(
+            rf"Kandelo/reports/(?:{generated_name}/)*{generated_name}\.json",
+            path,
+        )
+    )
+
+
+def finalizer_owned_change(status: str, path: str) -> bool:
+    # Finalization composes files and replaces earlier generated summaries. It
+    # never deletes or renames tracked state; treating D/R as ordinary output
+    # could hide removal of provenance during a parallel source advance.
+    return status in ("A", "M") and finalizer_owned_path(path)
+
+
+def validate_correlated_source(
+    tap: GitTap,
+    state: Mapping[str, Any],
+    intent: PendingDispatch,
+    source_tap_sha: str,
+    *,
+    snapshots: dict[str, TapSnapshot] | None = None,
+    validated_pairs: set[tuple[str, str]] | None = None,
+) -> None:
+    if not re.fullmatch(r"[0-9a-f]{40}", source_tap_sha):
+        raise RolloutError(
+            f"token-correlated run for {intent.formula} has an invalid source SHA"
+        )
+    tap.ensure_commit(source_tap_sha)
+    if not tap.is_ancestor(intent.tap_sha, source_tap_sha):
+        raise RolloutError(
+            f"token-correlated source for {intent.formula} is not a descendant "
+            "of its reserved tap commit"
+        )
+
+    pair = (intent.tap_sha, source_tap_sha)
+    if validated_pairs is not None and pair in validated_pairs:
+        return
+    snapshot_cache = snapshots if snapshots is not None else {}
+    if intent.tap_sha not in snapshot_cache:
+        snapshot_cache[intent.tap_sha] = load_snapshot(tap, intent.tap_sha)
+    if source_tap_sha not in snapshot_cache:
+        snapshot_cache[source_tap_sha] = load_snapshot(tap, source_tap_sha)
+    reserved = snapshot_cache[intent.tap_sha]
+    source = snapshot_cache[source_tap_sha]
+    frozen_catalog = state.get("catalog")
+    if catalog_state(reserved) != frozen_catalog:
+        raise RolloutError(
+            f"reserved source catalog for {intent.formula} differs from the ledger"
+        )
+    if catalog_state(source) != frozen_catalog:
+        raise RolloutError(
+            f"token-correlated source for {intent.formula} changes a Formula "
+            "recipe, identity, or dependency"
+        )
+    frozen_support = state.get("formula_support_tree")
+    if (
+        reserved.formula_support_tree != frozen_support
+        or source.formula_support_tree != frozen_support
+    ):
+        raise RolloutError(
+            f"token-correlated source for {intent.formula} changes Formula support"
+        )
+    if publication_workflow_contract(
+        source.workflow_source
+    ) != publication_workflow_contract(reserved.workflow_source):
+        raise RolloutError(
+            f"token-correlated source for {intent.formula} changes the normalized "
+            "publication workflow"
+        )
+
+    changes = tap.changed_entries(intent.tap_sha, source_tap_sha)
+    unsafe = [
+        f"{status} {path}"
+        for status, path in changes
+        if not finalizer_owned_change(status, path)
+    ]
+    if unsafe:
+        # WHY: equivalent recipes and workflow bytes are necessary but do not
+        # make an unrelated README, controller, or policy edit part of a bottle
+        # build. Only generated finalizer outputs may advance the event source.
+        raise RolloutError(
+            f"token-correlated source for {intent.formula} is not a "
+            f"finalizer-only descendant: {', '.join(unsafe)}"
+        )
+    if validated_pairs is not None:
+        validated_pairs.add(pair)
 
 
 def _packages_by_name(metadata: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
@@ -787,7 +1019,19 @@ def finalization_reasons(
             ):
                 reasons.append(f"{arch} source Formula support differs")
             source_workflow = tap.show(source_sha, WORKFLOW_PATH)
-            if source_workflow != snapshot.workflow_source:
+            source_workflow_sha256 = hashlib.sha256(
+                publication_workflow_contract(source_workflow).encode()
+            ).hexdigest()
+            current_workflow_sha256 = hashlib.sha256(
+                publication_workflow_contract(snapshot.workflow_source).encode()
+            ).hexdigest()
+            if source_workflow_sha256 not in (
+                current_workflow_sha256,
+                LEGACY_SINGLE_INTENT_WORKFLOW_SHA256,
+            ):
+                # Existing ABI 42 bottles were finalized by the one exact
+                # reviewed predecessor workflow. Do not invalidate those
+                # immutable artifacts when the caller-SHA trust upgrade lands.
                 reasons.append(f"{arch} source publication workflow differs")
         except RolloutError as error:
             reasons.append(f"{arch} source provenance cannot be read: {error}")
@@ -811,27 +1055,130 @@ def run_formulae(jobs: Iterable[Mapping[str, Any]]) -> frozenset[str]:
     return frozenset(formulae)
 
 
-def active_inventory(github: GitHub) -> RunInventory:
-    runs_by_id: dict[int, Mapping[str, Any]] = {}
-    total = 0
-    for status in ACTIVE_STATUSES:
-        response = github.runs(status)
-        count = response.get("total_count")
-        if not isinstance(count, int) or count < 0:
-            raise RolloutError(f"GitHub {status} run count is invalid")
-        listed = response["workflow_runs"]
-        if count <= 100 and len(listed) != count:
-            raise RolloutError(
-                f"GitHub {status} reported {count} active runs but returned "
-                f"{len(listed)}"
+def _workflow_run_page(
+    github: GitHub,
+    *,
+    page: int,
+    created: str | None,
+) -> tuple[int, tuple[Mapping[str, Any], ...]]:
+    response = github.runs(
+        per_page=WORKFLOW_RUN_PAGE_SIZE,
+        page=page,
+        created=created,
+    )
+    total_count = response.get("total_count")
+    runs = response.get("workflow_runs")
+    expected_count = (
+        max(
+            0,
+            min(
+                WORKFLOW_RUN_PAGE_SIZE,
+                total_count - ((page - 1) * WORKFLOW_RUN_PAGE_SIZE),
+            ),
+        )
+        if isinstance(total_count, int) and not isinstance(total_count, bool)
+        else -1
+    )
+    if (
+        isinstance(total_count, bool)
+        or not isinstance(total_count, int)
+        or total_count < 0
+        or not isinstance(runs, list)
+        or len(runs) != expected_count
+    ):
+        raise WorkflowRunSnapshotError(
+            f"GitHub returned an incomplete workflow run page {page}"
+        )
+    for run in runs:
+        if (
+            not isinstance(run, dict)
+            or isinstance(run.get("id"), bool)
+            or not isinstance(run.get("id"), int)
+            or run["id"] <= 0
+        ):
+            raise RolloutError("GitHub returned a malformed workflow run")
+    return total_count, tuple(runs)
+
+
+def _collect_workflow_run_snapshot(
+    github: GitHub,
+    *,
+    created: str | None,
+) -> tuple[Mapping[str, Any], ...]:
+    total_count, first_page = _workflow_run_page(
+        github,
+        page=1,
+        created=created,
+    )
+    page_count = max(
+        1,
+        (total_count + WORKFLOW_RUN_PAGE_SIZE - 1) // WORKFLOW_RUN_PAGE_SIZE,
+    )
+    if page_count > MAX_WORKFLOW_RUN_PAGES:
+        raise RolloutError(
+            f"workflow run snapshot requires {page_count} pages; "
+            f"the safety limit is {MAX_WORKFLOW_RUN_PAGES}"
+        )
+    runs = list(first_page)
+    for page in range(2, page_count + 1):
+        page_total, page_runs = _workflow_run_page(
+            github,
+            page=page,
+            created=created,
+        )
+        if page_total != total_count:
+            raise WorkflowRunSnapshotError(
+                "GitHub changed workflow run total_count during pagination"
             )
-        total += count
-        for run in listed:
-            if not isinstance(run, dict) or not isinstance(run.get("id"), int):
-                raise RolloutError(f"GitHub {status} returned a malformed active run")
+        runs.extend(page_runs)
+    if len(runs) != total_count:
+        raise WorkflowRunSnapshotError(
+            f"GitHub returned {len(runs)} of {total_count} workflow runs"
+        )
+    run_ids = [run["id"] for run in runs]
+    if len(run_ids) != len(set(run_ids)):
+        raise WorkflowRunSnapshotError(
+            "GitHub returned duplicate workflow runs across pages"
+        )
+    return tuple(runs)
+
+
+def workflow_run_snapshot(
+    github: GitHub,
+    *,
+    created: str | None = None,
+) -> tuple[Mapping[str, Any], ...]:
+    for attempt in range(WORKFLOW_RUN_SNAPSHOT_ATTEMPTS):
+        try:
+            first = _collect_workflow_run_snapshot(github, created=created)
+            second = _collect_workflow_run_snapshot(github, created=created)
+            # WHY: page insertion can preserve total_count while shifting an
+            # item across the pagination boundary. Two identical complete
+            # listings prove the controller did not correlate against a torn
+            # view, and duplicate IDs are rejected in each collection.
+            if first != second:
+                raise WorkflowRunSnapshotError(
+                    "GitHub changed the workflow run snapshot during collection"
+                )
+            return second
+        except WorkflowRunSnapshotError:
+            if attempt + 1 == WORKFLOW_RUN_SNAPSHOT_ATTEMPTS:
+                raise
+            time.sleep(WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS * (2**attempt))
+    raise AssertionError("workflow run snapshot retry loop did not return or raise")
+
+
+def active_inventory(github: GitHub) -> RunInventory:
+    # One unfiltered, stable listing avoids losing a run while GitHub moves it
+    # between requested, queued, waiting, pending, and in-progress states.
+    all_runs = workflow_run_snapshot(github)
+    runs_by_id: dict[int, Mapping[str, Any]] = {}
+    for run in all_runs:
+        status = run.get("status")
+        if not isinstance(status, str):
+            raise RolloutError("GitHub returned a workflow run without a status")
+        if status in ACTIVE_STATUSES:
             runs_by_id[run["id"]] = run
-    # Status filters are disjoint. Deduplicating details protects reporting,
-    # while the exact total_count sum is the authoritative capacity count.
     formulae: dict[int, frozenset[str]] = {}
     unknown: list[int] = []
     for run_id in sorted(runs_by_id):
@@ -840,7 +1187,7 @@ def active_inventory(github: GitHub) -> RunInventory:
         if not found:
             unknown.append(run_id)
     return RunInventory(
-        count=total,
+        count=len(runs_by_id),
         runs=tuple(runs_by_id.values()),
         formulae=formulae,
         unknown_run_ids=tuple(unknown),
@@ -860,6 +1207,7 @@ def reconcile_recorded_activity(
     }
     formulae = dict(inventory.formulae)
     count = inventory.count
+    recorded_run_ids: set[int] = set()
     for entry in state.get("dispatches", ()):
         if not isinstance(entry, dict):
             continue
@@ -868,13 +1216,19 @@ def reconcile_recorded_activity(
         if (
             not isinstance(run_id, int)
             or formula not in FORMULA_ORDER
-            or run_id in runs_by_id
         ):
             continue
+        recorded_run_ids.add(run_id)
+        if run_id in runs_by_id:
+            # The run name token is visible before the reusable workflow emits
+            # its matrix jobs. The ledger already binds this exact run ID to its
+            # Formula, so treating it as unknown would serialize the next pass.
+            formulae[run_id] = frozenset((formula,))
+            continue
         run = github.run(run_id)
-        # Sequential status-filter queries can miss a run while GitHub moves it
-        # between requested/queued/waiting/in-progress. The durable ledger
-        # closes that race for every run this sole dispatcher creates.
+        # A run can complete or change status immediately after the stable
+        # listing. The durable ledger remains authoritative for every run this
+        # sole dispatcher created until its direct status says completed.
         if run.get("status") != "completed":
             runs_by_id[run_id] = run
             formulae[run_id] = frozenset((formula,))
@@ -883,7 +1237,11 @@ def reconcile_recorded_activity(
         count=count,
         runs=tuple(runs_by_id.values()),
         formulae=formulae,
-        unknown_run_ids=inventory.unknown_run_ids,
+        unknown_run_ids=tuple(
+            run_id
+            for run_id in inventory.unknown_run_ids
+            if run_id not in recorded_run_ids
+        ),
     )
 
 
@@ -938,6 +1296,16 @@ def write_state(path: pathlib.Path, state: Mapping[str, Any]) -> None:
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary, path)
+        # WHY: fsyncing the file before rename preserves its bytes, but not the
+        # directory entry that makes the replacement discoverable after a host
+        # crash. Persist the parent after os.replace so a durable request marker
+        # cannot silently roll back and authorize a duplicate publication.
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        directory_descriptor = os.open(path.parent, directory_flags)
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
@@ -976,8 +1344,40 @@ def initial_state(
         "workflow_sha256": hashlib.sha256(snapshot.workflow_source.encode()).hexdigest(),
         "waves": [list(wave) for wave in WAVES],
         "unresolved_dispatch": None,
+        "pending_dispatches": [],
         "dispatches": [],
     }
+
+
+def upgrade_state(
+    state: Mapping[str, Any],
+    snapshot: TapSnapshot,
+    expected_kandelo_sha: str,
+) -> dict[str, Any]:
+    """Upgrade the single-intent ledger without weakening its frozen inputs."""
+    upgraded = copy.deepcopy(state)
+    if "pending_dispatches" not in upgraded:
+        upgraded["pending_dispatches"] = []
+    current_workflow_sha256 = hashlib.sha256(
+        snapshot.workflow_source.encode()
+    ).hexdigest()
+    recorded_workflow_sha256 = upgraded.get("workflow_sha256")
+    if recorded_workflow_sha256 != current_workflow_sha256:
+        # WHY: the active ABI 42 ledger predates token-correlated run names. Its
+        # exact reviewed workflow digest is the only permitted transition; an
+        # arbitrary old digest must not gain write authority merely because the
+        # new workflow still points at the same reusable publisher.
+        if (
+            recorded_workflow_sha256 != LEGACY_SINGLE_INTENT_WORKFLOW_SHA256
+            or state.get("pending_dispatches") not in (None, [])
+        ):
+            raise RolloutError(
+                "rollout state workflow_sha256 differs from the reviewed "
+                "single-intent or token-correlated workflow"
+            )
+        upgraded["workflow_sha256"] = current_workflow_sha256
+    validate_state(upgraded, snapshot, expected_kandelo_sha)
+    return upgraded
 
 
 def validate_state(
@@ -1005,25 +1405,74 @@ def validate_state(
         raise RolloutError("rollout state dispatches is not an array")
     seen_formulae: set[str] = set()
     seen_run_ids: set[int] = set()
+    seen_tokens: set[str] = set()
     for entry in dispatches:
         if not isinstance(entry, dict):
             raise RolloutError("rollout state contains a malformed dispatch")
         formula = entry.get("formula")
         run_id = entry.get("run_id")
         tap_sha = entry.get("tap_sha")
+        source_tap_sha = entry.get("source_tap_sha")
+        submitted_at = entry.get("submitted_at")
+        dispatch_token = entry.get("dispatch_token")
+        expected_entry_keys = {
+            "formula",
+            "arches",
+            "tap_sha",
+            "run_id",
+            "submitted_at",
+        }
+        if dispatch_token is not None:
+            expected_entry_keys.update(("dispatch_token", "source_tap_sha"))
         if (
-            formula not in FORMULA_ORDER
+            set(entry) != expected_entry_keys
+            or formula not in FORMULA_ORDER
             or entry.get("arches") != list(required_arches(formula))
+            or isinstance(run_id, bool)
             or not isinstance(run_id, int)
             or run_id <= 0
             or not isinstance(tap_sha, str)
             or not re.fullmatch(r"[0-9a-f]{40}", tap_sha)
+            or not isinstance(submitted_at, str)
+            or not submitted_at
+            or (
+                dispatch_token is not None
+                and (
+                    not isinstance(dispatch_token, str)
+                    or not DISPATCH_TOKEN_RE.fullmatch(dispatch_token)
+                )
+            )
+            or (
+                dispatch_token is not None
+                and (
+                    not isinstance(source_tap_sha, str)
+                    or not re.fullmatch(r"[0-9a-f]{40}", source_tap_sha)
+                )
+            )
         ):
             raise RolloutError("rollout state contains a malformed dispatch")
         if formula in seen_formulae or run_id in seen_run_ids:
             raise RolloutError("rollout state contains a duplicate dispatch")
+        if dispatch_token is not None and dispatch_token in seen_tokens:
+            raise RolloutError("rollout state contains a duplicate dispatch token")
         seen_formulae.add(formula)
         seen_run_ids.add(run_id)
+        if dispatch_token is not None:
+            seen_tokens.add(dispatch_token)
+
+    pending = pending_dispatches(state)
+    for intent in pending:
+        if intent.formula in seen_formulae:
+            raise RolloutError("rollout state contains a duplicate dispatch Formula")
+        if intent.dispatch_token in seen_tokens:
+            raise RolloutError("rollout state contains a duplicate dispatch token")
+        seen_formulae.add(intent.formula)
+        seen_tokens.add(intent.dispatch_token)
+
+    if state.get("unresolved_dispatch") is not None:
+        legacy = submitted_dispatch(state)
+        if legacy.formula in seen_formulae:
+            raise RolloutError("rollout state contains a duplicate dispatch Formula")
 
 
 def history_blocks_from_state(
@@ -1134,6 +1583,86 @@ def _utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def workflow_run_title(formula: str, dispatch_token: str) -> str:
+    if formula not in FORMULA_ORDER or not DISPATCH_TOKEN_RE.fullmatch(dispatch_token):
+        raise RolloutError("workflow run identity is malformed")
+    return f"Publish Kandelo bottles / {formula} / {dispatch_token}"
+
+
+def new_dispatch_token(used_tokens: set[str]) -> str:
+    while True:
+        token = f"abi42-{secrets.token_hex(16)}"
+        if token not in used_tokens:
+            return token
+
+
+def pending_dispatches(state: Mapping[str, Any]) -> tuple[PendingDispatch, ...]:
+    values = state.get("pending_dispatches")
+    if not isinstance(values, list):
+        raise RolloutError("rollout state pending_dispatches is not an array")
+    parsed: list[PendingDispatch] = []
+    for value in values:
+        if not isinstance(value, dict):
+            raise RolloutError("rollout state contains a malformed pending dispatch")
+        formula = value.get("formula")
+        arches = value.get("arches")
+        tap_sha = value.get("tap_sha")
+        token = value.get("dispatch_token")
+        status = value.get("status")
+        recorded_at = value.get("recorded_at")
+        request_started_at = value.get("request_started_at")
+        submitted_at = value.get("submitted_at")
+        expected_keys = {
+            "formula",
+            "arches",
+            "tap_sha",
+            "dispatch_token",
+            "recorded_at",
+            "status",
+        }
+        if status in ("request-started", "submitted"):
+            expected_keys.add("request_started_at")
+        if status == "submitted":
+            expected_keys.add("submitted_at")
+        if (
+            set(value) != expected_keys
+            or formula not in FORMULA_ORDER
+            or arches != list(required_arches(formula))
+            or not isinstance(tap_sha, str)
+            or not re.fullmatch(r"[0-9a-f]{40}", tap_sha)
+            or not isinstance(token, str)
+            or not DISPATCH_TOKEN_RE.fullmatch(token)
+            or status not in ("planned", "request-started", "submitted")
+            or not isinstance(recorded_at, str)
+            or not recorded_at
+            or (
+                status in ("request-started", "submitted")
+                and (
+                    not isinstance(request_started_at, str)
+                    or not request_started_at
+                )
+            )
+            or (
+                status == "submitted"
+                and (not isinstance(submitted_at, str) or not submitted_at)
+            )
+        ):
+            raise RolloutError("rollout state contains a malformed pending dispatch")
+        parsed.append(
+            PendingDispatch(
+                formula=formula,
+                arches=tuple(arches),
+                tap_sha=tap_sha,
+                dispatch_token=token,
+                status=status,
+                recorded_at=recorded_at,
+                request_started_at=request_started_at,
+                submitted_at=submitted_at,
+            )
+        )
+    return tuple(parsed)
+
+
 def submitted_dispatch(state: Mapping[str, Any]) -> SubmittedDispatch:
     value = state.get("unresolved_dispatch")
     if not isinstance(value, dict):
@@ -1206,7 +1735,7 @@ def build_and_test_matrix(
 def workflow_run_page(
     github: GitHub,
 ) -> tuple[int, tuple[Mapping[str, Any], ...]]:
-    response = github.runs(per_page=100)
+    response = github.runs(per_page=100, page=1, created=None)
     total_count = response.get("total_count")
     runs = response.get("workflow_runs")
     if (
@@ -1300,6 +1829,205 @@ def acknowledge_dispatch(
     )
 
 
+def _parse_utc_timestamp(value: str, label: str) -> dt.datetime:
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise RolloutError(f"{label} is not an ISO-8601 timestamp") from error
+    if parsed.tzinfo is None or parsed.utcoffset() != dt.timedelta(0):
+        raise RolloutError(f"{label} is not a UTC timestamp")
+    return parsed
+
+
+def _format_utc_timestamp(value: dt.datetime) -> str:
+    return (
+        value.astimezone(dt.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def dispatch_run_created_range(
+    intents: Sequence[PendingDispatch],
+    *,
+    now: dt.datetime | None = None,
+) -> str:
+    if not intents:
+        raise RolloutError("dispatch run range requires at least one intent")
+    current = now or dt.datetime.now(dt.timezone.utc)
+    starts: list[dt.datetime] = []
+    ends: list[dt.datetime] = []
+    for intent in intents:
+        if intent.request_started_at is None:
+            raise RolloutError(
+                f"dispatch intent for {intent.formula} has no request start"
+            )
+        started = _parse_utc_timestamp(
+            intent.request_started_at,
+            f"{intent.formula} request_started_at",
+        )
+        ended = (
+            _parse_utc_timestamp(
+                intent.submitted_at,
+                f"{intent.formula} submitted_at",
+            )
+            if intent.submitted_at is not None
+            else current
+        )
+        if ended < started:
+            raise RolloutError(
+                f"{intent.formula} submitted_at precedes request_started_at"
+            )
+        starts.append(started)
+        ends.append(ended)
+    lower = min(starts) - DISPATCH_RUN_CLOCK_SKEW
+    upper = max(ends)
+    if any(intent.submitted_at is None for intent in intents):
+        upper = max(upper, current)
+    upper += DISPATCH_RUN_CLOCK_SKEW
+    return f"{_format_utc_timestamp(lower)}..{_format_utc_timestamp(upper)}"
+
+
+def matching_token_runs_in_runs(
+    tap: GitTap,
+    state: Mapping[str, Any],
+    runs: Iterable[Mapping[str, Any]],
+    intent: PendingDispatch,
+    *,
+    snapshots: dict[str, TapSnapshot],
+    validated_pairs: set[tuple[str, str]],
+) -> tuple[CorrelatedRun, ...]:
+    expected_title = workflow_run_title(intent.formula, intent.dispatch_token)
+    matches: list[CorrelatedRun] = []
+    for run in runs:
+        if (
+            run.get("event") != "repository_dispatch"
+            or run.get("display_title") != expected_title
+        ):
+            continue
+        source_tap_sha = run.get("head_sha")
+        if not isinstance(source_tap_sha, str):
+            raise RolloutError(
+                f"token-correlated run {run['id']} has no source tap SHA"
+            )
+        validate_correlated_source(
+            tap,
+            state,
+            intent,
+            source_tap_sha,
+            snapshots=snapshots,
+            validated_pairs=validated_pairs,
+        )
+        matches.append(
+            CorrelatedRun(
+                run_id=run["id"],
+                source_tap_sha=source_tap_sha,
+            )
+        )
+    return tuple(matches)
+
+
+def correlate_pending_dispatches(
+    tap: GitTap,
+    github: GitHub,
+    state: Mapping[str, Any],
+) -> tuple[dict[str, Any], tuple[tuple[str, int], ...]]:
+    intents = pending_dispatches(state)
+    uncertain = tuple(intent for intent in intents if intent.status != "planned")
+    if not uncertain:
+        return copy.deepcopy(state), ()
+    created = dispatch_run_created_range(uncertain)
+    runs = workflow_run_snapshot(github, created=created)
+    snapshots: dict[str, TapSnapshot] = {}
+    validated_pairs: set[tuple[str, str]] = set()
+    matches: dict[str, CorrelatedRun] = {}
+    for intent in uncertain:
+        candidates = matching_token_runs_in_runs(
+            tap,
+            state,
+            runs,
+            intent,
+            snapshots=snapshots,
+            validated_pairs=validated_pairs,
+        )
+        if len(candidates) > 1:
+            raise RolloutError(
+                f"dispatch token for {intent.formula} matched multiple runs: "
+                f"{sorted(candidate.run_id for candidate in candidates)}"
+            )
+        if candidates:
+            matches[intent.dispatch_token] = candidates[0]
+    if not matches:
+        return copy.deepcopy(state), ()
+
+    updated = copy.deepcopy(state)
+    retained: list[Mapping[str, Any]] = []
+    recovered: list[tuple[str, int]] = []
+    for value, intent in zip(updated["pending_dispatches"], intents, strict=True):
+        match = matches.get(intent.dispatch_token)
+        if match is None:
+            retained.append(value)
+            continue
+        # WHY: request-started is written before the HTTP request. A crash can
+        # therefore hide the later submitted timestamp even when GitHub accepted
+        # the request. The unique run-name token is the authority in that case;
+        # request_started_at remains the earliest durable submission boundary.
+        submitted_at = intent.submitted_at or intent.request_started_at
+        assert submitted_at is not None
+        updated["dispatches"].append(
+            {
+                "formula": intent.formula,
+                "arches": list(intent.arches),
+                "tap_sha": intent.tap_sha,
+                "source_tap_sha": match.source_tap_sha,
+                "run_id": match.run_id,
+                "dispatch_token": intent.dispatch_token,
+                "submitted_at": submitted_at,
+            }
+        )
+        recovered.append((intent.formula, match.run_id))
+    updated["pending_dispatches"] = retained
+    return updated, tuple(recovered)
+
+
+def acknowledge_pending_dispatches(
+    *,
+    tap: GitTap,
+    github: GitHub,
+    state: Mapping[str, Any],
+    state_path: pathlib.Path,
+    snapshot: TapSnapshot,
+    expected_kandelo_sha: str,
+    timeout_seconds: int,
+    poll_seconds: float,
+) -> tuple[dict[str, Any], tuple[tuple[str, int], ...]]:
+    current = copy.deepcopy(state)
+    acknowledged: list[tuple[str, int]] = []
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        updated, recovered = correlate_pending_dispatches(tap, github, current)
+        if recovered:
+            validate_state(updated, snapshot, expected_kandelo_sha)
+            write_state(state_path, updated)
+            current = updated
+            acknowledged.extend(recovered)
+        uncertain = tuple(
+            intent
+            for intent in pending_dispatches(current)
+            if intent.status != "planned"
+        )
+        if not uncertain:
+            return current, tuple(acknowledged)
+        if time.monotonic() >= deadline:
+            names = ", ".join(intent.formula for intent in uncertain)
+            raise RolloutError(
+                "no token-correlated run ID appeared within "
+                f"{timeout_seconds}s for: {names}; pending markers were retained"
+            )
+        time.sleep(poll_seconds)
+
+
 def recover_submitted_dispatch(
     *,
     tap: GitTap,
@@ -1307,51 +2035,64 @@ def recover_submitted_dispatch(
     expected_kandelo_sha: str,
     state_path: pathlib.Path,
     no_fetch: bool,
-) -> tuple[str, int]:
+) -> tuple[tuple[str, int], ...]:
     state = read_state(state_path)
     if state is None:
         raise RolloutError(f"rollout state {state_path} does not exist")
     sha = tap.main_without_fetch() if no_fetch else tap.fetch_main()
     snapshot = load_snapshot(tap, sha)
     validate_workflow(github, snapshot, expected_kandelo_sha)
-    validate_state(state, snapshot, expected_kandelo_sha)
-    intent = submitted_dispatch(state)
-    if not tap.is_ancestor(intent.tap_sha, snapshot.sha):
+    upgraded = upgrade_state(state, snapshot, expected_kandelo_sha)
+    recovered_state = copy.deepcopy(upgraded)
+    recovered: list[tuple[str, int]] = []
+
+    if recovered_state.get("unresolved_dispatch") is not None:
+        intent = submitted_dispatch(recovered_state)
+        if not tap.is_ancestor(intent.tap_sha, snapshot.sha):
+            raise RolloutError(
+                "unresolved dispatch tap SHA is not an ancestor of current tap main"
+            )
+        candidates = matching_dispatch_run_ids(
+            github,
+            before_ids=intent.before_run_ids,
+            formula=intent.formula,
+            arches=intent.arches,
+            tap_sha=intent.tap_sha,
+        )
+        if len(candidates) != 1:
+            raise RolloutError(
+                f"recovery found {len(candidates)} exact new runs for "
+                f"{intent.formula}; the unresolved marker was retained"
+            )
+        run_id = candidates[0]
+        recovered_state["dispatches"].append(
+            {
+                "formula": intent.formula,
+                "arches": list(intent.arches),
+                "tap_sha": intent.tap_sha,
+                "run_id": run_id,
+                "submitted_at": intent.submitted_at,
+            }
+        )
+        recovered_state["unresolved_dispatch"] = None
+        recovered.append((intent.formula, run_id))
+
+    token_state, token_recovered = correlate_pending_dispatches(
+        tap, github, recovered_state
+    )
+    recovered.extend(token_recovered)
+    if not recovered:
         raise RolloutError(
-            "unresolved dispatch tap SHA is not an ancestor of current tap main"
+            "recovery found no exact token-correlated runs; pending markers "
+            "were retained"
         )
 
-    candidates = matching_dispatch_run_ids(
-        github,
-        before_ids=intent.before_run_ids,
-        formula=intent.formula,
-        arches=intent.arches,
-        tap_sha=intent.tap_sha,
-    )
-    if len(candidates) != 1:
-        raise RolloutError(
-            f"recovery found {len(candidates)} exact new runs for "
-            f"{intent.formula}; the unresolved marker was retained"
-        )
-    run_id = candidates[0]
-
-    # WHY: The dispatch request may have succeeded before acknowledgement
-    # timed out. Record the correlated run and clear the marker in one file
-    # replacement; recovery never sends another repository_dispatch.
-    recovered_state = copy.deepcopy(state)
-    recovered_state["dispatches"].append(
-        {
-            "formula": intent.formula,
-            "arches": list(intent.arches),
-            "tap_sha": intent.tap_sha,
-            "run_id": run_id,
-            "submitted_at": intent.submitted_at,
-        }
-    )
-    recovered_state["unresolved_dispatch"] = None
-    validate_state(recovered_state, snapshot, expected_kandelo_sha)
-    write_state(state_path, recovered_state)
-    return intent.formula, run_id
+    # WHY: every recovered token was durable before its HTTP request. Move all
+    # currently visible exact matches to the completed ledger in one replacement
+    # while retaining every still-ambiguous intent; recovery never dispatches.
+    validate_state(token_state, snapshot, expected_kandelo_sha)
+    write_state(state_path, token_state)
+    return tuple(recovered)
 
 
 def dispatch_ready(
@@ -1366,8 +2107,7 @@ def dispatch_ready(
     poll_seconds: float,
 ) -> int:
     state = read_state(state_path)
-    dispatched = 0
-    while dispatched < maximum:
+    while True:
         sha = tap.main_without_fetch() if no_fetch else tap.fetch_main()
         snapshot = load_snapshot(tap, sha)
         validate_workflow(github, snapshot, expected_kandelo_sha)
@@ -1388,116 +2128,184 @@ def dispatch_ready(
                 )
             state = initial_state(snapshot, expected_kandelo_sha)
             write_state(state_path, state)
-        validate_state(state, snapshot, expected_kandelo_sha)
+        state = upgrade_state(state, snapshot, expected_kandelo_sha)
         if state.get("unresolved_dispatch") is not None:
             raise RolloutError(
                 f"{state_path} contains an unresolved dispatch; inspect it before continuing"
             )
+        pending = pending_dispatches(state)
+        uncertain = tuple(intent for intent in pending if intent.status != "planned")
+        if uncertain:
+            raise RolloutError(
+                f"{state_path} contains submitted token-correlated dispatches; "
+                "recover them before continuing"
+            )
+        if pending and any(intent.tap_sha != snapshot.sha for intent in pending):
+            # WHY: planned means no HTTP request was attempted, so these entries
+            # can be discarded safely when main moves. Once request-started is
+            # durable, this path is forbidden and recovery owns the decision.
+            state["pending_dispatches"] = []
+            write_state(state_path, state)
+            continue
 
         inventory = reconcile_recorded_activity(
             github, active_inventory(github), state
         )
         if inventory.count >= MAX_ACTIVE_RUNS:
-            return dispatched
+            return 0
         if inventory.unknown_run_ids:
             raise RolloutError(
                 "active production runs have not exposed their Formula matrix yet: "
                 + ", ".join(map(str, inventory.unknown_run_ids))
             )
-
-        finalized = {
-            formula: not finalization_reasons(
-                tap,
-                snapshot,
-                formula,
-                required_arches(formula),
-                expected_kandelo_sha,
-            )
-            for formula in FORMULA_ORDER
-        }
-        history_blocks = history_blocks_from_state(github, state, finalized)
-        statuses = calculate_statuses(
-            tap, snapshot, expected_kandelo_sha, inventory, history_blocks
-        )
-        ready = [status for status in statuses if status.state == "ready"]
-        if not ready:
-            return dispatched
-
-        selected = ready[0]
-        # Refresh both main and the active-run count immediately before the
-        # write. A moving tap or newly queued run invalidates the plan instead
-        # of consuming an unchecked ninth slot.
-        latest_sha = tap.main_without_fetch() if no_fetch else tap.fetch_main()
-        if latest_sha != snapshot.sha:
-            continue
-        latest_inventory = reconcile_recorded_activity(
-            github, active_inventory(github), state
-        )
-        if latest_inventory.count >= MAX_ACTIVE_RUNS:
-            return dispatched
-        if latest_inventory.unknown_run_ids:
-            raise RolloutError(
-                "active production runs have not exposed their Formula matrix yet: "
-                + ", ".join(map(str, latest_inventory.unknown_run_ids))
-            )
-        if selected.name in {
+        active_formulae = {
             formula
-            for values in latest_inventory.formulae.values()
+            for values in inventory.formulae.values()
             for formula in values
-        }:
-            continue
-        _recent_total, recent_runs = workflow_run_page(github)
-        before_ids = frozenset(
-            run["id"]
-            for run in recent_runs
-        )
-        intent = {
-            "formula": selected.name,
-            "arches": list(selected.arches),
-            "tap_sha": snapshot.sha,
-            "recorded_at": _utc_now(),
-            "before_run_ids": sorted(before_ids),
-            "status": "intent-recorded",
         }
-        state["unresolved_dispatch"] = intent
-        write_state(state_path, state)
-        try:
-            github.dispatch(selected.name, selected.arches)
-            intent["status"] = "submitted"
-            intent["submitted_at"] = _utc_now()
-            write_state(state_path, state)
-            run_id = acknowledge_dispatch(
-                github,
-                before_ids=before_ids,
-                formula=selected.name,
-                arches=selected.arches,
-                tap_sha=snapshot.sha,
-                timeout_seconds=timeout_seconds,
-                poll_seconds=poll_seconds,
-            )
-        except BaseException:
-            # A failed HTTP response or interrupted process can still follow an
-            # accepted GitHub request. Retaining the marker prevents a blind
-            # duplicate publication on the next invocation.
-            write_state(state_path, state)
-            raise
-        state["dispatches"].append(
-            {
-                "formula": selected.name,
-                "arches": list(selected.arches),
-                "tap_sha": snapshot.sha,
-                "run_id": run_id,
-                "submitted_at": intent["submitted_at"],
+        if pending:
+            superseded_tokens = {
+                intent.dispatch_token
+                for intent in pending
+                if intent.formula in active_formulae
             }
+            if superseded_tokens:
+                # WHY: a planned marker proves no HTTP request was attempted.
+                # If another actor started that Formula while this controller
+                # was down, dropping only the colliding plans avoids a duplicate
+                # publication while preserving unrelated reserved work.
+                state["pending_dispatches"] = [
+                    entry
+                    for entry in state["pending_dispatches"]
+                    if entry.get("dispatch_token") not in superseded_tokens
+                ]
+                validate_state(state, snapshot, expected_kandelo_sha)
+                write_state(state_path, state)
+                pending = pending_dispatches(state)
+                if not pending:
+                    continue
+        available = min(maximum, MAX_ACTIVE_RUNS - inventory.count)
+
+        if not pending:
+            finalized = {
+                formula: not finalization_reasons(
+                    tap,
+                    snapshot,
+                    formula,
+                    required_arches(formula),
+                    expected_kandelo_sha,
+                )
+                for formula in FORMULA_ORDER
+            }
+            history_blocks = history_blocks_from_state(github, state, finalized)
+            statuses = calculate_statuses(
+                tap, snapshot, expected_kandelo_sha, inventory, history_blocks
+            )
+            ready = [status for status in statuses if status.state == "ready"]
+            if not ready:
+                return 0
+
+            # Refresh both main and capacity once immediately before reserving
+            # the whole batch. Every intent is then durable before any request,
+            # so the reserved count—not slow run discovery—protects the limit.
+            latest_sha = tap.main_without_fetch() if no_fetch else tap.fetch_main()
+            if latest_sha != snapshot.sha:
+                continue
+            latest_inventory = reconcile_recorded_activity(
+                github, active_inventory(github), state
+            )
+            if latest_inventory.unknown_run_ids:
+                raise RolloutError(
+                    "active production runs have not exposed their Formula matrix yet: "
+                    + ", ".join(map(str, latest_inventory.unknown_run_ids))
+                )
+            available = min(maximum, MAX_ACTIVE_RUNS - latest_inventory.count)
+            if available <= 0:
+                return 0
+            active_formulae = {
+                formula
+                for values in latest_inventory.formulae.values()
+                for formula in values
+            }
+            selected = [
+                status for status in ready if status.name not in active_formulae
+            ][:available]
+            if not selected:
+                return 0
+            used_tokens = {
+                entry["dispatch_token"]
+                for entry in state["dispatches"]
+                if isinstance(entry, dict)
+                and isinstance(entry.get("dispatch_token"), str)
+            }
+            recorded_at = _utc_now()
+            for status in selected:
+                token = new_dispatch_token(used_tokens)
+                used_tokens.add(token)
+                state["pending_dispatches"].append(
+                    {
+                        "formula": status.name,
+                        "arches": list(status.arches),
+                        "tap_sha": snapshot.sha,
+                        "dispatch_token": token,
+                        "recorded_at": recorded_at,
+                        "status": "planned",
+                    }
+                )
+            validate_state(state, snapshot, expected_kandelo_sha)
+            write_state(state_path, state)
+            pending = pending_dispatches(state)
+
+        planned = [intent for intent in pending if intent.status == "planned"][:available]
+        if not planned:
+            return 0
+        submitted = 0
+        for intent in planned:
+            value = next(
+                entry
+                for entry in state["pending_dispatches"]
+                if entry.get("dispatch_token") == intent.dispatch_token
+            )
+            value["status"] = "request-started"
+            value["request_started_at"] = _utc_now()
+            validate_state(state, snapshot, expected_kandelo_sha)
+            write_state(state_path, state)
+            try:
+                github.dispatch(
+                    intent.formula,
+                    intent.arches,
+                    intent.dispatch_token,
+                )
+            except BaseException:
+                # An HTTP error can still follow an accepted request. The token
+                # and request-started marker make later recovery unambiguous;
+                # this controller never retries the same Formula blindly.
+                write_state(state_path, state)
+                raise
+            value["status"] = "submitted"
+            value["submitted_at"] = _utc_now()
+            validate_state(state, snapshot, expected_kandelo_sha)
+            write_state(state_path, state)
+            print(
+                f"submitted {intent.formula} ({','.join(intent.arches)}) "
+                f"with token {intent.dispatch_token}",
+                flush=True,
+            )
+            submitted += 1
+
+        state, acknowledged = acknowledge_pending_dispatches(
+            tap=tap,
+            github=github,
+            state=state,
+            state_path=state_path,
+            snapshot=snapshot,
+            expected_kandelo_sha=expected_kandelo_sha,
+            timeout_seconds=timeout_seconds,
+            poll_seconds=poll_seconds,
         )
-        state["unresolved_dispatch"] = None
-        write_state(state_path, state)
-        print(
-            f"dispatched {selected.name} ({','.join(selected.arches)}) as run {run_id}",
-            flush=True,
-        )
-        dispatched += 1
-    return dispatched
+        for formula, run_id in acknowledged:
+            print(f"acknowledged {formula} as run {run_id}", flush=True)
+        return submitted
 
 
 def render_status(
@@ -1581,7 +2389,10 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     action.add_argument(
         "--recover-dispatch",
         action="store_true",
-        help="record one exact late run for the submitted unresolved intent; never dispatch",
+        help=(
+            "record exact late runs for submitted unresolved intents; "
+            "never dispatch"
+        ),
     )
     parser.add_argument(
         "--max-dispatches",
@@ -1593,7 +2404,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         "--ack-timeout",
         type=int,
         default=600,
-        help="seconds to wait for each unambiguous new run ID (default: 600)",
+        help="seconds to wait for the batch's unambiguous run IDs (default: 600)",
     )
     parser.add_argument(
         "--poll-seconds",
@@ -1627,17 +2438,17 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
         if args.recover_dispatch:
             state_path = args.state_file.resolve()
             with state_lock(state_path):
-                formula, run_id = recover_submitted_dispatch(
+                recovered = recover_submitted_dispatch(
                     tap=tap,
                     github=github,
                     expected_kandelo_sha=args.expected_kandelo_sha,
                     state_path=state_path,
                     no_fetch=args.no_fetch,
                 )
-            print(
-                f"recovered submitted {formula} dispatch as run {run_id}; "
-                "no repository_dispatch was sent"
+            details = ", ".join(
+                f"{formula} as run {run_id}" for formula, run_id in recovered
             )
+            print(f"recovered submitted {details}; no repository_dispatch was sent")
             return 0
         if args.dispatch:
             state_path = args.state_file.resolve()
@@ -1660,10 +2471,13 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
         validate_workflow(github, snapshot, args.expected_kandelo_sha)
         state = read_state(args.state_file.resolve()) if args.state_file else None
         if state is not None:
-            validate_state(state, snapshot, args.expected_kandelo_sha)
-            if state.get("unresolved_dispatch") is not None:
+            state = upgrade_state(state, snapshot, args.expected_kandelo_sha)
+            if (
+                state.get("unresolved_dispatch") is not None
+                or state.get("pending_dispatches")
+            ):
                 raise RolloutError(
-                    f"{args.state_file} contains an unresolved dispatch"
+                    f"{args.state_file} contains unresolved dispatch intents"
                 )
         inventory = active_inventory(github)
         if state is not None:

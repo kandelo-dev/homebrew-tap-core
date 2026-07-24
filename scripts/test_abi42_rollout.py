@@ -11,10 +11,11 @@ import io
 import json
 import pathlib
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import contextmanager, redirect_stderr
 from unittest import mock
 
 
@@ -28,16 +29,33 @@ SPEC.loader.exec_module(rollout)
 
 class FakeGitHub:
     def __init__(self) -> None:
-        self.by_status: dict[str, dict] = {}
+        self.by_status: dict[str | None, dict] = {}
         self.jobs_by_run: dict[int, tuple[dict, ...]] = {}
         self.runs_by_id: dict[int, dict] = {}
+        self.run_queries: list[dict[str, object]] = []
 
-    def runs(self, status=None, per_page=100):
-        del per_page
-        return self.by_status.get(
-            status,
-            {"total_count": 0, "workflow_runs": []},
+    def runs(self, *, per_page=100, page=1, created=None):
+        self.run_queries.append(
+            {"per_page": per_page, "page": page, "created": created}
         )
+        if None in self.by_status:
+            response = self.by_status[None]
+        else:
+            listed: list[dict] = []
+            total_count = 0
+            for response in self.by_status.values():
+                total_count += response["total_count"]
+                listed.extend(response["workflow_runs"])
+            response = {
+                "total_count": total_count,
+                "workflow_runs": listed,
+            }
+        start = (page - 1) * per_page
+        end = start + per_page
+        return {
+            "total_count": response["total_count"],
+            "workflow_runs": response["workflow_runs"][start:end],
+        }
 
     def jobs(self, run_id):
         return self.jobs_by_run.get(run_id, ())
@@ -45,9 +63,10 @@ class FakeGitHub:
     def run(self, run_id):
         return self.runs_by_id[run_id]
 
-    def dispatch(self, formula, arches):
+    def dispatch(self, formula, arches, dispatch_token):
         raise AssertionError(
-            f"recovery must never dispatch {formula} for {tuple(arches)}"
+            "recovery must never dispatch "
+            f"{formula} for {tuple(arches)} with {dispatch_token}"
         )
 
     def workflow(self):
@@ -65,12 +84,20 @@ class RolloutControllerTests(unittest.TestCase):
         cls.tap = rollout.GitTap(cls.root)
         cls.head = cls.tap.git("rev-parse", "HEAD").stdout.strip()
         cls.snapshot = rollout.load_snapshot(cls.tap, cls.head)
-        match = re.search(
+        publisher_match = re.search(
             r"reusable-homebrew-bottle-publish\.yml@([0-9a-f]{40})",
             cls.snapshot.workflow_source,
         )
-        assert match is not None
-        cls.publisher_sha = match.group(1)
+        source_match = re.search(
+            r"^\s+kandelo-ref:\s+([0-9a-f]{40})\s*$",
+            cls.snapshot.workflow_source,
+            flags=re.MULTILINE,
+        )
+        assert publisher_match is not None and source_match is not None
+        assert publisher_match.group(1) == rollout.PUBLISHER_SHA
+        # Retain the established fixture name: this is the Kandelo commit
+        # recorded in bottle provenance, not the reusable publisher commit.
+        cls.publisher_sha = source_match.group(1)
 
     def _submitted_state(
         self,
@@ -91,6 +118,27 @@ class RolloutControllerTests(unittest.TestCase):
         }
         return state
 
+    def _token_state(
+        self,
+        *intents: tuple[str, str, str],
+    ) -> dict:
+        state = rollout.initial_state(self.snapshot, self.publisher_sha)
+        for formula, token, status in intents:
+            value = {
+                "formula": formula,
+                "arches": list(rollout.required_arches(formula)),
+                "tap_sha": self.head,
+                "dispatch_token": token,
+                "recorded_at": "2026-07-24T07:00:00Z",
+                "status": status,
+            }
+            if status in ("request-started", "submitted"):
+                value["request_started_at"] = "2026-07-24T07:00:01Z"
+            if status == "submitted":
+                value["submitted_at"] = "2026-07-24T07:00:02Z"
+            state["pending_dispatches"].append(value)
+        return state
+
     @staticmethod
     def _candidate_github(
         *runs: dict,
@@ -109,7 +157,7 @@ class RolloutControllerTests(unittest.TestCase):
         self,
         github: FakeGitHub,
         state: dict,
-    ) -> tuple[tuple[str, int], dict]:
+    ) -> tuple[tuple[tuple[str, int], ...], dict]:
         with tempfile.TemporaryDirectory() as directory:
             state_path = pathlib.Path(directory) / "rollout.json"
             rollout.write_state(state_path, state)
@@ -161,14 +209,18 @@ class RolloutControllerTests(unittest.TestCase):
         status: str = "in_progress",
         conclusion=None,
         event: str = "repository_dispatch",
+        display_title: str | None = None,
     ) -> dict:
-        return {
+        run = {
             "id": run_id,
             "event": event,
             "head_sha": head_sha,
             "status": status,
             "conclusion": conclusion,
         }
+        if display_title is not None:
+            run["display_title"] = display_title
+        return run
 
     @staticmethod
     def _matrix_jobs(
@@ -233,6 +285,65 @@ class RolloutControllerTests(unittest.TestCase):
         tap.show.side_effect = show
         tap.show_optional.side_effect = show_optional
         return rollout.load_snapshot(tap, self.head)
+
+    @contextmanager
+    def _descendant_tap(self, changes):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory) / "tap"
+            subprocess.run(
+                (
+                    "git",
+                    "clone",
+                    "--quiet",
+                    "--shared",
+                    str(self.root),
+                    str(root),
+                ),
+                check=True,
+            )
+            subprocess.run(
+                ("git", "checkout", "--quiet", "--detach", self.head),
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                ("git", "config", "user.name", "Kandelo rollout test"),
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                ("git", "config", "user.email", "rollout-test@example.invalid"),
+                cwd=root,
+                check=True,
+            )
+            for relative, replacement in changes.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                previous = path.read_text() if path.exists() else ""
+                path.write_text(
+                    replacement(previous)
+                    if callable(replacement)
+                    else replacement
+                )
+            subprocess.run(("git", "add", "--all"), cwd=root, check=True)
+            subprocess.run(
+                ("git", "commit", "--quiet", "-m", "Homebrew: test finalizer output"),
+                cwd=root,
+                check=True,
+            )
+            descendant = (
+                subprocess.run(
+                    ("git", "rev-parse", "HEAD"),
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                .stdout.strip()
+            )
+            tap = object.__new__(rollout.GitTap)
+            tap.root = root.resolve()
+            yield tap, descendant
 
     def test_exact_plan_has_63_formulae_and_70_architecture_identities(self):
         self.assertEqual(63, len(rollout.FORMULA_ORDER))
@@ -439,9 +550,14 @@ class RolloutControllerTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             state_path = pathlib.Path(directory) / "missing-rollout.json"
-            with self.assertRaisesRegex(
-                rollout.RolloutError,
-                "cannot initialize a replacement rollout state after the ABI 42 cutover",
+            with (
+                mock.patch.object(
+                    self.tap, "main_without_fetch", return_value=self.head
+                ),
+                self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    "cannot initialize a replacement rollout state after the ABI 42 cutover",
+                ),
             ):
                 rollout.dispatch_ready(
                     tap=self.tap,
@@ -488,24 +604,25 @@ class RolloutControllerTests(unittest.TestCase):
                 formula,
             )
 
-    def test_workflow_must_pin_both_call_and_source_to_frozen_sha(self):
+    def test_workflow_must_pin_publisher_source_and_exact_tap_caller(self):
         expected = "a" * 40
         vfs_expression = (
             "${{ github.event.client_payload.require_vfs_acceptance || false }}"
         )
         source = f"""\
+run-name: {rollout.WORKFLOW_RUN_NAME_SOURCE}
 on:
   repository_dispatch:
     types: [publish-kandelo-bottles]
 jobs:
   publish:
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@{expected}
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@{rollout.PUBLISHER_SHA}
     with:
       kandelo-repository: Automattic/kandelo
       kandelo-ref: {expected}
       tap-repository: kandelo-dev/homebrew-tap-core
       tap-name: kandelo-dev/tap-core
-      tap-ref: main
+      tap-ref: ${{{{ github.sha }}}}
       formulae: ${{{{ github.event.client_payload.formulae }}}}
       arches: ${{{{ github.event.client_payload.arches || 'wasm32' }}}}
       force: ${{{{ github.event.client_payload.force || false }}}}
@@ -517,6 +634,48 @@ jobs:
 """
         snapshot = dataclasses.replace(self.snapshot, workflow_source=source)
         rollout.validate_workflow(FakeGitHub(), snapshot, expected)
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "not frozen to the requested"
+        ):
+            rollout.validate_workflow(
+                FakeGitHub(),
+                dataclasses.replace(
+                    snapshot,
+                    workflow_source=source.replace(
+                        rollout.PUBLISHER_SHA,
+                        "b" * 40,
+                    ),
+                ),
+                expected,
+            )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "workflow tap-ref differs"
+        ):
+            rollout.validate_workflow(
+                FakeGitHub(),
+                dataclasses.replace(
+                    snapshot,
+                    workflow_source=source.replace(
+                        "${{ github.sha }}",
+                        "main",
+                    ),
+                ),
+                expected,
+            )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "run-name does not expose"
+        ):
+            rollout.validate_workflow(
+                FakeGitHub(),
+                dataclasses.replace(
+                    snapshot,
+                    workflow_source=source.replace(
+                        rollout.WORKFLOW_RUN_NAME_SOURCE,
+                        "Publish Kandelo bottles",
+                    ),
+                ),
+                expected,
+            )
         with self.assertRaisesRegex(
             rollout.RolloutError, "not frozen to the requested"
         ):
@@ -573,6 +732,36 @@ jobs:
                 ),
                 expected,
             )
+
+    def test_run_name_is_the_only_non_bottle_affecting_workflow_difference(self):
+        current = self.snapshot.workflow_source
+        legacy = current.replace(
+            f"run-name: {rollout.WORKFLOW_RUN_NAME_SOURCE}\n",
+            "",
+            1,
+        )
+        self.assertEqual(
+            rollout.publication_workflow_contract(legacy),
+            rollout.publication_workflow_contract(current),
+        )
+        changed_payload = current.replace(
+            "github.event.client_payload.formulae",
+            "github.event.client_payload.other_formulae",
+            1,
+        )
+        self.assertNotEqual(
+            rollout.publication_workflow_contract(changed_payload),
+            rollout.publication_workflow_contract(current),
+        )
+        changed_run_name = current.replace(
+            rollout.WORKFLOW_RUN_NAME_SOURCE,
+            "Publish Kandelo bottles",
+            1,
+        )
+        self.assertNotEqual(
+            rollout.publication_workflow_contract(changed_run_name),
+            rollout.publication_workflow_contract(current),
+        )
 
     def _finalized_snapshot(self, formula: str):
         identity = self.snapshot.identities[formula]
@@ -853,6 +1042,67 @@ jobs:
         ):
             rollout.validate_state(state, self.snapshot, "a" * 40)
 
+    def test_legacy_single_intent_ledger_upgrades_only_from_exact_workflow(self):
+        state = rollout.initial_state(self.snapshot, self.publisher_sha)
+        state.pop("pending_dispatches")
+        state["workflow_sha256"] = rollout.LEGACY_SINGLE_INTENT_WORKFLOW_SHA256
+
+        upgraded = rollout.upgrade_state(
+            state, self.snapshot, self.publisher_sha
+        )
+
+        self.assertEqual([], upgraded["pending_dispatches"])
+        self.assertEqual(
+            hashlib.sha256(self.snapshot.workflow_source.encode()).hexdigest(),
+            upgraded["workflow_sha256"],
+        )
+        corrupted = copy.deepcopy(state)
+        corrupted["workflow_sha256"] = "f" * 64
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "single-intent or token-correlated"
+        ):
+            rollout.upgrade_state(
+                corrupted, self.snapshot, self.publisher_sha
+            )
+
+    def test_multi_intent_ledger_rejects_duplicate_formulae_and_tokens(self):
+        first = "abi42-" + "1" * 32
+        second = "abi42-" + "2" * 32
+        state = self._token_state(
+            ("asa", first, "planned"),
+            ("bc", second, "submitted"),
+        )
+        rollout.validate_state(state, self.snapshot, self.publisher_sha)
+
+        duplicate_formula = copy.deepcopy(state)
+        duplicate_formula["pending_dispatches"][1]["formula"] = "asa"
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "duplicate dispatch Formula"
+        ):
+            rollout.validate_state(
+                duplicate_formula, self.snapshot, self.publisher_sha
+            )
+
+        duplicate_token = copy.deepcopy(state)
+        duplicate_token["pending_dispatches"][1]["dispatch_token"] = first
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "duplicate dispatch token"
+        ):
+            rollout.validate_state(
+                duplicate_token, self.snapshot, self.publisher_sha
+            )
+
+    def test_pending_dispatch_status_shape_is_exact(self):
+        token = "abi42-" + "3" * 32
+        state = self._token_state(("asa", token, "request-started"))
+        state["pending_dispatches"][0]["submitted_at"] = (
+            "2026-07-24T07:00:02Z"
+        )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "malformed pending dispatch"
+        ):
+            rollout.validate_state(state, self.snapshot, self.publisher_sha)
+
     def test_active_inventory_counts_every_production_wait_state(self):
         github = FakeGitHub()
         for index, status in enumerate(rollout.ACTIVE_STATUSES, start=1):
@@ -867,6 +1117,10 @@ jobs:
         inventory = rollout.active_inventory(github)
         self.assertEqual(len(rollout.ACTIVE_STATUSES), inventory.count)
         self.assertEqual((), inventory.unknown_run_ids)
+        self.assertEqual(2, len(github.run_queries))
+        self.assertTrue(
+            all(query["created"] is None for query in github.run_queries)
+        )
 
     def test_dual_arch_dependencies_follow_the_consumer_architecture(self):
         self.assertEqual("wasm32", rollout.dependency_arch("zlib", "wasm32"))
@@ -893,10 +1147,67 @@ jobs:
             "total_count": 1,
             "workflow_runs": [],
         }
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "reported 1 active runs but returned 0"
+        with (
+            mock.patch.object(rollout.time, "sleep") as sleep,
+            self.assertRaisesRegex(
+                rollout.RolloutError, "incomplete workflow run page 1"
+            ),
         ):
             rollout.active_inventory(github)
+        self.assertEqual(
+            [
+                mock.call(rollout.WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS),
+                mock.call(rollout.WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS * 2),
+            ],
+            sleep.call_args_list,
+        )
+
+    def test_active_inventory_retries_a_transient_count_page_mismatch(self):
+        class EventuallyConsistentGitHub(FakeGitHub):
+            def __init__(self) -> None:
+                super().__init__()
+                self.queued_calls = 0
+
+            def runs(self, *, per_page=100, page=1, created=None):
+                del created
+                self.queued_calls += 1
+                runs = (
+                    []
+                    if self.queued_calls == 1
+                    else [{"id": 123, "status": "queued"}]
+                )
+                start = (page - 1) * per_page
+                return {
+                    "total_count": 1,
+                    "workflow_runs": runs[start : start + per_page],
+                }
+
+        github = EventuallyConsistentGitHub()
+        github.jobs_by_run[123] = self._matrix_jobs("asa", "wasm32")
+        with mock.patch.object(rollout.time, "sleep") as sleep:
+            inventory = rollout.active_inventory(github)
+
+        self.assertEqual(1, inventory.count)
+        self.assertEqual(frozenset(("asa",)), inventory.formulae[123])
+        self.assertEqual(3, github.queued_calls)
+        sleep.assert_called_once_with(
+            rollout.WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS
+        )
+
+    def test_active_inventory_does_not_retry_malformed_run_identity(self):
+        github = FakeGitHub()
+        github.by_status["queued"] = {
+            "total_count": 1,
+            "workflow_runs": [{"id": "123", "status": "queued"}],
+        }
+        with (
+            mock.patch.object(rollout.time, "sleep") as sleep,
+            self.assertRaisesRegex(
+                rollout.RolloutError, "malformed workflow run"
+            ),
+        ):
+            rollout.active_inventory(github)
+        sleep.assert_not_called()
 
     def test_run_correlation_rejects_an_incomplete_job_page(self):
         github = rollout.GitHub()
@@ -924,10 +1235,10 @@ jobs:
         inventory = rollout.reconcile_recorded_activity(
             github,
             rollout.RunInventory(
-                count=7,
-                runs=(),
-                formulae={},
-                unknown_run_ids=(),
+                count=8,
+                runs=({"id": 123, "status": "in_progress"},),
+                formulae={123: frozenset()},
+                unknown_run_ids=(123,),
             ),
             {
                 "dispatches": [
@@ -937,6 +1248,7 @@ jobs:
         )
         self.assertEqual(8, inventory.count)
         self.assertEqual(frozenset(("asa",)), inventory.formulae[123])
+        self.assertEqual((), inventory.unknown_run_ids)
 
     def test_successful_recorded_run_waits_for_finalizer_visibility(self):
         github = FakeGitHub()
@@ -964,10 +1276,11 @@ jobs:
             return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
         with mock.patch.object(rollout, "_run", side_effect=capture):
-            for formula in rollout.FORMULA_ORDER:
+            for index, formula in enumerate(rollout.FORMULA_ORDER, start=1):
                 rollout.GitHub().dispatch(
                     formula,
                     rollout.required_arches(formula),
+                    f"abi42-{index:032x}",
                 )
         payloads = {
             payload["client_payload"]["formulae"]: payload
@@ -992,6 +1305,10 @@ jobs:
         )
         self.assertNotIn(
             "require_vfs_acceptance", zlib_payload["client_payload"]
+        )
+        self.assertRegex(
+            zlib_payload["client_payload"]["dispatch_token"],
+            rollout.DISPATCH_TOKEN_RE,
         )
         self.assertNotIn("rerun", json.dumps(calls).lower())
 
@@ -1043,6 +1360,586 @@ jobs:
                 poll_seconds=0.001,
             )
 
+    def test_token_correlation_does_not_wait_for_workflow_jobs(self):
+        token = "abi42-" + "4" * 32
+        state = self._token_state(("asa", token, "submitted"))
+        github = self._candidate_github(
+            self._run(
+                123,
+                self.head,
+                display_title=rollout.workflow_run_title("asa", token),
+            )
+        )
+
+        updated, recovered = rollout.correlate_pending_dispatches(
+            self.tap, github, state
+        )
+
+        self.assertEqual((("asa", 123),), recovered)
+        self.assertEqual([], updated["pending_dispatches"])
+        self.assertEqual(token, updated["dispatches"][-1]["dispatch_token"])
+        self.assertEqual(self.head, updated["dispatches"][-1]["source_tap_sha"])
+        self.assertEqual({}, github.jobs_by_run)
+
+    def test_batch_accepts_a_finalizer_only_source_advance_between_posts(self):
+        first_token = "abi42-" + "a1" * 16
+        second_token = "abi42-" + "b2" * 16
+        state = self._token_state(
+            ("asa", first_token, "submitted"),
+            ("bc", second_token, "submitted"),
+        )
+        with self._descendant_tap(
+            {
+                "Kandelo/reports/test-finalizer.provenance.json": (
+                    '{"schema":1,"status":"success"}\n'
+                ),
+            }
+        ) as (tap, descendant):
+            github = self._candidate_github(
+                self._run(
+                    123,
+                    self.head,
+                    display_title=rollout.workflow_run_title("asa", first_token),
+                ),
+                self._run(
+                    124,
+                    descendant,
+                    display_title=rollout.workflow_run_title("bc", second_token),
+                ),
+            )
+
+            updated, recovered = rollout.correlate_pending_dispatches(
+                tap, github, state
+            )
+
+        self.assertEqual((("asa", 123), ("bc", 124)), recovered)
+        self.assertEqual(
+            [self.head, descendant],
+            [entry["source_tap_sha"] for entry in updated["dispatches"]],
+        )
+        self.assertTrue(
+            all(entry["tap_sha"] == self.head for entry in updated["dispatches"])
+        )
+
+    def test_batch_rejects_recipe_support_and_workflow_drift(self):
+        token = "abi42-" + "c3" * 16
+        state = self._token_state(("asa", token, "submitted"))
+        changes = (
+            (
+                "recipe",
+                {
+                    "Formula/asa.rb": lambda source: source.replace(
+                        "class Asa < Formula\n",
+                        'class Asa < Formula\n  desc "drifted recipe"\n',
+                        1,
+                    )
+                },
+                "changes a Formula recipe",
+            ),
+            (
+                "support",
+                {
+                    "Kandelo/formula_support/kandelo_formula_support.rb": (
+                        lambda source: source + "\n# drifted support\n"
+                    )
+                },
+                "changes Formula support",
+            ),
+            (
+                "workflow",
+                {
+                    rollout.WORKFLOW_PATH: lambda source: source.replace(
+                        "github.event.client_payload.force || false",
+                        "true",
+                        1,
+                    )
+                },
+                "changes the normalized publication workflow",
+            ),
+            (
+                "unrelated-path",
+                {"README.md": lambda source: source + "\nunrelated drift\n"},
+                "not a finalizer-only descendant",
+            ),
+        )
+        for label, change, message in changes:
+            with self.subTest(label=label), self._descendant_tap(change) as (
+                tap,
+                descendant,
+            ):
+                github = self._candidate_github(
+                    self._run(
+                        123,
+                        descendant,
+                        display_title=rollout.workflow_run_title("asa", token),
+                    )
+                )
+                with self.assertRaisesRegex(rollout.RolloutError, message):
+                    rollout.correlate_pending_dispatches(tap, github, state)
+
+    def test_finalizer_source_path_policy_is_exact_and_auditable(self):
+        accepted = (
+            ("M", "Formula/asa.rb"),
+            ("M", "Formula/git.rb"),
+            ("M", "Kandelo/metadata.json"),
+            ("A", "Kandelo/formula/asa.json"),
+            ("M", "Kandelo/formula/git.json"),
+            ("A", "Kandelo/link/asa-15.0.0-rebuild1-wasm32.json"),
+            ("M", "Kandelo/reports/asa-15.0.0.provenance.json"),
+            ("A", "Kandelo/reports/failures/run-123-attempt-1.json"),
+            ("M", "Kandelo/reports/rollbacks/run-123.json"),
+        )
+        rejected = (
+            ("D", "Formula/asa.rb"),
+            ("R", "Kandelo/formula/asa.json"),
+            ("A", "Formula/not-in-catalog.rb"),
+            ("M", "Formula/asa.rb.bak"),
+            ("A", "Kandelo/formula/not-in-catalog.json"),
+            ("M", "Kandelo/formula/asa.json.bak"),
+            ("A", "Kandelo/link/subdirectory/asa.json"),
+            ("M", "Kandelo/link/asa.json.bak"),
+            ("A", "Kandelo/reports/../escaped.json"),
+            ("M", "Kandelo/reports/report.txt"),
+            ("A", "Kandelo/formula_support/generated.json"),
+            ("M", "README.md"),
+        )
+        for status, path in accepted:
+            with self.subTest(status=status, path=path):
+                self.assertTrue(rollout.finalizer_owned_change(status, path))
+        for status, path in rejected:
+            with self.subTest(status=status, path=path):
+                self.assertFalse(rollout.finalizer_owned_change(status, path))
+
+    def test_token_correlation_requires_exact_event_head_formula_and_token(self):
+        token = "abi42-" + "5" * 32
+        state = self._token_state(("asa", token, "submitted"))
+        title = rollout.workflow_run_title("asa", token)
+        github = self._candidate_github(
+            self._run(120, self.head, event="push", display_title=title),
+            self._run(
+                122,
+                self.head,
+                display_title=rollout.workflow_run_title("bc", token),
+            ),
+            self._run(
+                123,
+                self.head,
+                display_title=rollout.workflow_run_title(
+                    "asa", "abi42-" + "6" * 32
+                ),
+            ),
+        )
+
+        updated, recovered = rollout.correlate_pending_dispatches(
+            self.tap, github, state
+        )
+
+        self.assertEqual((), recovered)
+        self.assertEqual(state, updated)
+
+    def test_duplicate_token_runs_fail_without_mutating_the_ledger(self):
+        token = "abi42-" + "7" * 32
+        state = self._token_state(("asa", token, "submitted"))
+        title = rollout.workflow_run_title("asa", token)
+        github = self._candidate_github(
+            self._run(123, self.head, display_title=title),
+            self._run(124, self.head, display_title=title),
+        )
+
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "matched multiple runs"
+        ):
+            rollout.correlate_pending_dispatches(self.tap, github, state)
+
+        self.assertEqual(1, len(state["pending_dispatches"]))
+        self.assertEqual([], state["dispatches"])
+
+    def test_token_recovery_paginates_only_its_request_time_range(self):
+        token = "abi42-" + "7a" * 16
+        state = self._token_state(("asa", token, "submitted"))
+        irrelevant = tuple(
+            self._run(run_id, self.head)
+            for run_id in range(1, 101)
+        )
+        github = self._candidate_github(
+            *irrelevant,
+            self._run(
+                101,
+                self.head,
+                display_title=rollout.workflow_run_title("asa", token),
+            ),
+        )
+
+        updated, recovered = rollout.correlate_pending_dispatches(
+            self.tap, github, state
+        )
+
+        self.assertEqual((("asa", 101),), recovered)
+        self.assertEqual([], updated["pending_dispatches"])
+        self.assertEqual(
+            [1, 2, 1, 2],
+            [query["page"] for query in github.run_queries],
+        )
+        self.assertEqual(
+            {
+                "2026-07-24T06:55:01Z..2026-07-24T07:05:02Z",
+            },
+            {query["created"] for query in github.run_queries},
+        )
+
+    def test_workflow_run_snapshot_retries_a_torn_whole_listing(self):
+        class MovingGitHub(FakeGitHub):
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+
+            def runs(self, *, per_page=100, page=1, created=None):
+                del per_page, page, created
+                self.calls += 1
+                status = "queued" if self.calls == 1 else "in_progress"
+                return {
+                    "total_count": 1,
+                    "workflow_runs": [{"id": 123, "status": status}],
+                }
+
+        github = MovingGitHub()
+        with mock.patch.object(rollout.time, "sleep") as sleep:
+            runs = rollout.workflow_run_snapshot(github)
+
+        self.assertEqual("in_progress", runs[0]["status"])
+        self.assertEqual(4, github.calls)
+        sleep.assert_called_once_with(
+            rollout.WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS
+        )
+
+    def test_workflow_run_snapshot_rejects_duplicates_across_pages(self):
+        class DuplicateGitHub(FakeGitHub):
+            def runs(self, *, per_page=100, page=1, created=None):
+                del created
+                if page == 1:
+                    runs = [{"id": run_id} for run_id in range(1, 101)]
+                else:
+                    runs = [{"id": 100}]
+                return {
+                    "total_count": 101,
+                    "workflow_runs": runs[:per_page],
+                }
+
+        with (
+            mock.patch.object(rollout.time, "sleep") as sleep,
+            self.assertRaisesRegex(
+                rollout.RolloutError,
+                "duplicate workflow runs across pages",
+            ),
+        ):
+            rollout.workflow_run_snapshot(DuplicateGitHub())
+        self.assertEqual(2, sleep.call_count)
+
+    def test_recovery_records_visible_tokens_and_retains_late_independent_intents(self):
+        asa_token = "abi42-" + "8" * 32
+        bc_token = "abi42-" + "9" * 32
+        state = self._token_state(
+            ("asa", asa_token, "request-started"),
+            ("bc", bc_token, "submitted"),
+        )
+        github = self._candidate_github(
+            self._run(
+                123,
+                self.head,
+                display_title=rollout.workflow_run_title("asa", asa_token),
+            )
+        )
+
+        result, recovered = self._recover(github, state)
+
+        self.assertEqual((("asa", 123),), result)
+        self.assertEqual(
+            ["bc"],
+            [entry["formula"] for entry in recovered["pending_dispatches"]],
+        )
+        self.assertEqual(
+            "2026-07-24T07:00:01Z",
+            recovered["dispatches"][-1]["submitted_at"],
+        )
+
+    def test_dispatch_ready_submits_a_batch_before_one_shared_acknowledgement(self):
+        tokens = tuple(f"abi42-{value:032x}" for value in (10, 11, 12))
+        events: list[tuple[str, object]] = []
+
+        class BatchGitHub(FakeGitHub):
+            def __init__(self, head: str) -> None:
+                super().__init__()
+                self.head = head
+                self.created_runs: list[dict] = []
+
+            def runs(self, *, per_page=100, page=1, created=None):
+                del created
+                events.append(("runs-page", None))
+                start = (page - 1) * per_page
+                return {
+                    "total_count": len(self.created_runs),
+                    "workflow_runs": list(self.created_runs)[
+                        start : start + per_page
+                    ],
+                }
+
+            def dispatch(self, formula, arches, dispatch_token):
+                events.append(("dispatch", formula))
+                run_id = 200 + len(self.created_runs)
+                self.created_runs.append(
+                    {
+                        "id": run_id,
+                        "event": "repository_dispatch",
+                        "head_sha": self.head,
+                        "status": "queued",
+                        "display_title": rollout.workflow_run_title(
+                            formula, dispatch_token
+                        ),
+                    }
+                )
+
+            def jobs(self, run_id):
+                raise AssertionError(
+                    f"token acknowledgement must not inspect jobs for {run_id}"
+                )
+
+        ready = tuple(
+            rollout.FormulaStatus(
+                name=formula,
+                state="ready",
+                arches=rollout.required_arches(formula),
+                dependencies=(),
+                detail="ready",
+            )
+            for formula in ("bc", "binutils", "bzip2")
+        )
+        github = BatchGitHub(self.head)
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "rollout.json"
+            rollout.write_state(
+                state_path,
+                rollout.initial_state(self.snapshot, self.publisher_sha),
+            )
+            with (
+                mock.patch.object(
+                    self.tap, "main_without_fetch", return_value=self.head
+                ),
+                mock.patch.object(
+                    rollout, "finalization_reasons", return_value=("pending",)
+                ),
+                mock.patch.object(
+                    rollout, "calculate_statuses", return_value=ready
+                ),
+                mock.patch.object(
+                    rollout, "new_dispatch_token", side_effect=tokens
+                ),
+            ):
+                count = rollout.dispatch_ready(
+                    tap=self.tap,
+                    github=github,
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=3,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                )
+            state = rollout.read_state(state_path)
+            assert state is not None
+
+        self.assertEqual(3, count)
+        self.assertEqual(
+            [
+                ("runs-page", None),
+                ("runs-page", None),
+                ("runs-page", None),
+                ("runs-page", None),
+                ("dispatch", "bc"),
+                ("dispatch", "binutils"),
+                ("dispatch", "bzip2"),
+                ("runs-page", None),
+                ("runs-page", None),
+            ],
+            events,
+        )
+        self.assertEqual([], state["pending_dispatches"])
+        self.assertEqual(
+            ["bc", "binutils", "bzip2"],
+            [entry["formula"] for entry in state["dispatches"]],
+        )
+
+    def test_resumed_batch_drops_only_plans_superseded_by_an_active_run(self):
+        bc_token = "abi42-" + "c" * 32
+        binutils_token = "abi42-" + "d" * 32
+        state = self._token_state(
+            ("bc", bc_token, "planned"),
+            ("binutils", binutils_token, "planned"),
+        )
+
+        class CollisionGitHub(FakeGitHub):
+            def __init__(self, head: str) -> None:
+                super().__init__()
+                self.head = head
+                self.dispatched: list[str] = []
+                self.created_runs: list[dict] = []
+
+            def runs(self, *, per_page=100, page=1, created=None):
+                del created
+                active = {
+                    "id": 150,
+                    "event": "repository_dispatch",
+                    "head_sha": self.head,
+                    "status": "queued",
+                }
+                runs = [active, *self.created_runs]
+                start = (page - 1) * per_page
+                return {
+                    "total_count": len(runs),
+                    "workflow_runs": runs[start : start + per_page],
+                }
+
+            def dispatch(self, formula, arches, dispatch_token):
+                del arches
+                self.dispatched.append(formula)
+                self.created_runs.append(
+                    {
+                        "id": 200,
+                        "event": "repository_dispatch",
+                        "head_sha": self.head,
+                        "status": "queued",
+                        "display_title": rollout.workflow_run_title(
+                            formula, dispatch_token
+                        ),
+                    }
+                )
+
+        github = CollisionGitHub(self.head)
+        github.jobs_by_run[150] = self._matrix_jobs("bc", "wasm32")
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "rollout.json"
+            rollout.write_state(state_path, state)
+            with mock.patch.object(
+                self.tap, "main_without_fetch", return_value=self.head
+            ):
+                count = rollout.dispatch_ready(
+                    tap=self.tap,
+                    github=github,
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=2,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                )
+            recovered = rollout.read_state(state_path)
+            assert recovered is not None
+
+        self.assertEqual(1, count)
+        self.assertEqual(["binutils"], github.dispatched)
+        self.assertEqual([], recovered["pending_dispatches"])
+        self.assertEqual(
+            ["binutils"],
+            [entry["formula"] for entry in recovered["dispatches"]],
+        )
+
+    def test_uncertain_http_request_blocks_retry_but_preserves_later_plans(self):
+        first_token = "abi42-" + "d" * 32
+        second_token = "abi42-" + "e" * 32
+        state = self._token_state(
+            ("bc", first_token, "planned"),
+            ("binutils", second_token, "planned"),
+        )
+
+        class FailingGitHub(FakeGitHub):
+            def __init__(self) -> None:
+                super().__init__()
+                self.calls: list[tuple[str, str]] = []
+
+            def dispatch(self, formula, arches, dispatch_token):
+                del arches
+                self.calls.append((formula, dispatch_token))
+                raise rollout.RolloutError("ambiguous HTTP transport failure")
+
+        github = FailingGitHub()
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "rollout.json"
+            rollout.write_state(state_path, state)
+            with (
+                mock.patch.object(
+                    self.tap, "main_without_fetch", return_value=self.head
+                ),
+                self.assertRaisesRegex(
+                    rollout.RolloutError, "ambiguous HTTP transport failure"
+                ),
+            ):
+                rollout.dispatch_ready(
+                    tap=self.tap,
+                    github=github,
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=2,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                )
+            retained = rollout.read_state(state_path)
+            assert retained is not None
+            self.assertEqual(
+                ["request-started", "planned"],
+                [
+                    entry["status"]
+                    for entry in retained["pending_dispatches"]
+                ],
+            )
+            with (
+                mock.patch.object(
+                    self.tap, "main_without_fetch", return_value=self.head
+                ),
+                self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    "recover them before continuing",
+                ),
+            ):
+                rollout.dispatch_ready(
+                    tap=self.tap,
+                    github=github,
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=2,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                )
+        self.assertEqual([("bc", first_token)], github.calls)
+
+    def test_shared_ack_timeout_retains_every_submitted_token(self):
+        first_token = "abi42-" + "a" * 32
+        second_token = "abi42-" + "b" * 32
+        state = self._token_state(
+            ("bc", first_token, "submitted"),
+            ("binutils", second_token, "submitted"),
+        )
+        github = self._candidate_github()
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "rollout.json"
+            rollout.write_state(state_path, state)
+            original = state_path.read_bytes()
+            with self.assertRaisesRegex(
+                rollout.RolloutError,
+                "bc, binutils",
+            ):
+                rollout.acknowledge_pending_dispatches(
+                    tap=self.tap,
+                    github=github,
+                    state=state,
+                    state_path=state_path,
+                    snapshot=self.snapshot,
+                    expected_kandelo_sha=self.publisher_sha,
+                    timeout_seconds=0,
+                    poll_seconds=0.001,
+                )
+            self.assertEqual(original, state_path.read_bytes())
+
     def test_recovery_atomically_records_one_late_exact_match(self):
         state = self._submitted_state(before_run_ids=(100,))
         github = self._candidate_github(
@@ -1059,7 +1956,7 @@ jobs:
 
         result, recovered = self._recover(github, state)
 
-        self.assertEqual(("asa", 123), result)
+        self.assertEqual((("asa", 123),), result)
         self.assertIsNone(recovered["unresolved_dispatch"])
         self.assertEqual(
             {
@@ -1086,7 +1983,7 @@ jobs:
 
         result, recovered = self._recover(github, state)
 
-        self.assertEqual(("asa", 123), result)
+        self.assertEqual((("asa", 123),), result)
         self.assertEqual(123, recovered["dispatches"][-1]["run_id"])
 
     def test_recovery_with_no_new_run_fails_without_rewriting_state(self):
@@ -1238,6 +2135,31 @@ jobs:
             rollout.write_state(path, state)
             self.assertEqual(state, rollout.read_state(path))
             self.assertEqual(0o600, path.stat().st_mode & 0o777)
+
+    def test_state_write_persists_file_then_rename_then_parent_directory(self):
+        events: list[str] = []
+        real_fsync = rollout.os.fsync
+        real_replace = rollout.os.replace
+
+        def fsync(descriptor):
+            events.append("fsync")
+            return real_fsync(descriptor)
+
+        def replace(source, destination):
+            events.append("replace")
+            return real_replace(source, destination)
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            mock.patch.object(rollout.os, "fsync", side_effect=fsync),
+            mock.patch.object(rollout.os, "replace", side_effect=replace),
+        ):
+            rollout.write_state(
+                pathlib.Path(directory) / "rollout.json",
+                {"schema": 1},
+            )
+
+        self.assertEqual(["fsync", "replace", "fsync"], events)
 
     def test_state_lock_rejects_a_second_controller(self):
         with tempfile.TemporaryDirectory() as directory:
