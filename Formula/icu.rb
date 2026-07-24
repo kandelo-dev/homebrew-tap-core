@@ -342,7 +342,7 @@ class Icu < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 5
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "e55e177231052b0ff7ebf1b221d04c2a8d920c9965c52473aec59a898af69f9a"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "6215d7bc3b3d2b796b915e8a4f34621a26a20a78468213ffc0df58087618bb73"
   end
 
   private

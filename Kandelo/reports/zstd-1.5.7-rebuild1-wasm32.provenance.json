@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/zstd.json",
-      "sha256": "51e626c883b3fb9c86e80317b7ed4dee6f705b5431b96163a281ecc7e379c5c7"
+      "sha256": "8771cd78e784bd9d0258c4a22cc7df84aa2971f08242b7e5d038b43b73ad8ee1"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/zstd-1.5.7-rebuild1-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "f1e4db66efccfec460ec1e99df8d250314119ce18a99c1ec413ee3608c357241"
+      "sha256": "20eeb8ef885996e9140ac8a73b1f45a8428b714dfb603582da4310a4cd6002a1"
     },
     "provenance_json": {
       "path": "Kandelo/reports/zstd-1.5.7-rebuild1-wasm32.provenance.json",
-      "sha256": "01b65abb693388b9e5b96f9fce35aa827876dede5e9554e46f9984bec6659039"
+      "sha256": "a8ae1897a038c68380e5886dd7f1bead92a04d52760488821534c23e7eb5c2b7"
     }
   },
   "repositories": {

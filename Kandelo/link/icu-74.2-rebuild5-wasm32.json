@@ -1,0 +1,1059 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 27403795,
+    "cache_key_sha": "6215d7bc3b3d2b796b915e8a4f34621a26a20a78468213ffc0df58087618bb73",
+    "payload_root": "icu/74.2",
+    "sha256": "6215d7bc3b3d2b796b915e8a4f34621a26a20a78468213ffc0df58087618bb73",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/icu/blobs/sha256:6215d7bc3b3d2b796b915e8a4f34621a26a20a78468213ffc0df58087618bb73"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {},
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/icu/74.2",
+  "links": [
+    {
+      "source": "include/unicode/alphaindex.h",
+      "target": "include/unicode/alphaindex.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/appendable.h",
+      "target": "include/unicode/appendable.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/basictz.h",
+      "target": "include/unicode/basictz.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/brkiter.h",
+      "target": "include/unicode/brkiter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/bytestream.h",
+      "target": "include/unicode/bytestream.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/bytestrie.h",
+      "target": "include/unicode/bytestrie.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/bytestriebuilder.h",
+      "target": "include/unicode/bytestriebuilder.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/calendar.h",
+      "target": "include/unicode/calendar.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/caniter.h",
+      "target": "include/unicode/caniter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/casemap.h",
+      "target": "include/unicode/casemap.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/char16ptr.h",
+      "target": "include/unicode/char16ptr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/chariter.h",
+      "target": "include/unicode/chariter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/choicfmt.h",
+      "target": "include/unicode/choicfmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/coleitr.h",
+      "target": "include/unicode/coleitr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/coll.h",
+      "target": "include/unicode/coll.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/compactdecimalformat.h",
+      "target": "include/unicode/compactdecimalformat.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/curramt.h",
+      "target": "include/unicode/curramt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/currpinf.h",
+      "target": "include/unicode/currpinf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/currunit.h",
+      "target": "include/unicode/currunit.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/datefmt.h",
+      "target": "include/unicode/datefmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/dbbi.h",
+      "target": "include/unicode/dbbi.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/dcfmtsym.h",
+      "target": "include/unicode/dcfmtsym.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/decimfmt.h",
+      "target": "include/unicode/decimfmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/displayoptions.h",
+      "target": "include/unicode/displayoptions.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/docmain.h",
+      "target": "include/unicode/docmain.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/dtfmtsym.h",
+      "target": "include/unicode/dtfmtsym.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/dtintrv.h",
+      "target": "include/unicode/dtintrv.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/dtitvfmt.h",
+      "target": "include/unicode/dtitvfmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/dtitvinf.h",
+      "target": "include/unicode/dtitvinf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/dtptngen.h",
+      "target": "include/unicode/dtptngen.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/dtrule.h",
+      "target": "include/unicode/dtrule.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/edits.h",
+      "target": "include/unicode/edits.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/enumset.h",
+      "target": "include/unicode/enumset.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/errorcode.h",
+      "target": "include/unicode/errorcode.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/fieldpos.h",
+      "target": "include/unicode/fieldpos.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/filteredbrk.h",
+      "target": "include/unicode/filteredbrk.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/fmtable.h",
+      "target": "include/unicode/fmtable.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/format.h",
+      "target": "include/unicode/format.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/formattednumber.h",
+      "target": "include/unicode/formattednumber.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/formattedvalue.h",
+      "target": "include/unicode/formattedvalue.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/fpositer.h",
+      "target": "include/unicode/fpositer.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/gender.h",
+      "target": "include/unicode/gender.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/gregocal.h",
+      "target": "include/unicode/gregocal.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/icudataver.h",
+      "target": "include/unicode/icudataver.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/icuplug.h",
+      "target": "include/unicode/icuplug.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/idna.h",
+      "target": "include/unicode/idna.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/listformatter.h",
+      "target": "include/unicode/listformatter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/localebuilder.h",
+      "target": "include/unicode/localebuilder.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/localematcher.h",
+      "target": "include/unicode/localematcher.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/localpointer.h",
+      "target": "include/unicode/localpointer.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/locdspnm.h",
+      "target": "include/unicode/locdspnm.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/locid.h",
+      "target": "include/unicode/locid.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/measfmt.h",
+      "target": "include/unicode/measfmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/measunit.h",
+      "target": "include/unicode/measunit.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/measure.h",
+      "target": "include/unicode/measure.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/messagepattern.h",
+      "target": "include/unicode/messagepattern.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/msgfmt.h",
+      "target": "include/unicode/msgfmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/normalizer2.h",
+      "target": "include/unicode/normalizer2.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/normlzr.h",
+      "target": "include/unicode/normlzr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/nounit.h",
+      "target": "include/unicode/nounit.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/numberformatter.h",
+      "target": "include/unicode/numberformatter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/numberrangeformatter.h",
+      "target": "include/unicode/numberrangeformatter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/numfmt.h",
+      "target": "include/unicode/numfmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/numsys.h",
+      "target": "include/unicode/numsys.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/parseerr.h",
+      "target": "include/unicode/parseerr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/parsepos.h",
+      "target": "include/unicode/parsepos.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/platform.h",
+      "target": "include/unicode/platform.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/plurfmt.h",
+      "target": "include/unicode/plurfmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/plurrule.h",
+      "target": "include/unicode/plurrule.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ptypes.h",
+      "target": "include/unicode/ptypes.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/putil.h",
+      "target": "include/unicode/putil.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/rbbi.h",
+      "target": "include/unicode/rbbi.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/rbnf.h",
+      "target": "include/unicode/rbnf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/rbtz.h",
+      "target": "include/unicode/rbtz.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/regex.h",
+      "target": "include/unicode/regex.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/region.h",
+      "target": "include/unicode/region.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/reldatefmt.h",
+      "target": "include/unicode/reldatefmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/rep.h",
+      "target": "include/unicode/rep.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/resbund.h",
+      "target": "include/unicode/resbund.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/schriter.h",
+      "target": "include/unicode/schriter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/scientificnumberformatter.h",
+      "target": "include/unicode/scientificnumberformatter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/search.h",
+      "target": "include/unicode/search.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/selfmt.h",
+      "target": "include/unicode/selfmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/simpleformatter.h",
+      "target": "include/unicode/simpleformatter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/simplenumberformatter.h",
+      "target": "include/unicode/simplenumberformatter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/simpletz.h",
+      "target": "include/unicode/simpletz.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/smpdtfmt.h",
+      "target": "include/unicode/smpdtfmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/sortkey.h",
+      "target": "include/unicode/sortkey.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/std_string.h",
+      "target": "include/unicode/std_string.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/strenum.h",
+      "target": "include/unicode/strenum.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/stringoptions.h",
+      "target": "include/unicode/stringoptions.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/stringpiece.h",
+      "target": "include/unicode/stringpiece.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/stringtriebuilder.h",
+      "target": "include/unicode/stringtriebuilder.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/stsearch.h",
+      "target": "include/unicode/stsearch.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/symtable.h",
+      "target": "include/unicode/symtable.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/tblcoll.h",
+      "target": "include/unicode/tblcoll.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/timezone.h",
+      "target": "include/unicode/timezone.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/tmunit.h",
+      "target": "include/unicode/tmunit.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/tmutamt.h",
+      "target": "include/unicode/tmutamt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/tmutfmt.h",
+      "target": "include/unicode/tmutfmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/translit.h",
+      "target": "include/unicode/translit.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/tzfmt.h",
+      "target": "include/unicode/tzfmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/tznames.h",
+      "target": "include/unicode/tznames.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/tzrule.h",
+      "target": "include/unicode/tzrule.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/tztrans.h",
+      "target": "include/unicode/tztrans.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ubidi.h",
+      "target": "include/unicode/ubidi.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ubiditransform.h",
+      "target": "include/unicode/ubiditransform.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ubrk.h",
+      "target": "include/unicode/ubrk.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucal.h",
+      "target": "include/unicode/ucal.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucasemap.h",
+      "target": "include/unicode/ucasemap.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucat.h",
+      "target": "include/unicode/ucat.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uchar.h",
+      "target": "include/unicode/uchar.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucharstrie.h",
+      "target": "include/unicode/ucharstrie.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucharstriebuilder.h",
+      "target": "include/unicode/ucharstriebuilder.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uchriter.h",
+      "target": "include/unicode/uchriter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uclean.h",
+      "target": "include/unicode/uclean.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucnv.h",
+      "target": "include/unicode/ucnv.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucnv_cb.h",
+      "target": "include/unicode/ucnv_cb.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucnv_err.h",
+      "target": "include/unicode/ucnv_err.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucnvsel.h",
+      "target": "include/unicode/ucnvsel.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucol.h",
+      "target": "include/unicode/ucol.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucoleitr.h",
+      "target": "include/unicode/ucoleitr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uconfig.h",
+      "target": "include/unicode/uconfig.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucpmap.h",
+      "target": "include/unicode/ucpmap.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucptrie.h",
+      "target": "include/unicode/ucptrie.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucsdet.h",
+      "target": "include/unicode/ucsdet.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ucurr.h",
+      "target": "include/unicode/ucurr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/udat.h",
+      "target": "include/unicode/udat.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/udata.h",
+      "target": "include/unicode/udata.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/udateintervalformat.h",
+      "target": "include/unicode/udateintervalformat.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/udatpg.h",
+      "target": "include/unicode/udatpg.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/udisplaycontext.h",
+      "target": "include/unicode/udisplaycontext.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/udisplayoptions.h",
+      "target": "include/unicode/udisplayoptions.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uenum.h",
+      "target": "include/unicode/uenum.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ufieldpositer.h",
+      "target": "include/unicode/ufieldpositer.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uformattable.h",
+      "target": "include/unicode/uformattable.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uformattednumber.h",
+      "target": "include/unicode/uformattednumber.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uformattedvalue.h",
+      "target": "include/unicode/uformattedvalue.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ugender.h",
+      "target": "include/unicode/ugender.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uidna.h",
+      "target": "include/unicode/uidna.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uiter.h",
+      "target": "include/unicode/uiter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uldnames.h",
+      "target": "include/unicode/uldnames.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ulistformatter.h",
+      "target": "include/unicode/ulistformatter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uloc.h",
+      "target": "include/unicode/uloc.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ulocale.h",
+      "target": "include/unicode/ulocale.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ulocbuilder.h",
+      "target": "include/unicode/ulocbuilder.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ulocdata.h",
+      "target": "include/unicode/ulocdata.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/umachine.h",
+      "target": "include/unicode/umachine.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/umisc.h",
+      "target": "include/unicode/umisc.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/umsg.h",
+      "target": "include/unicode/umsg.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/umutablecptrie.h",
+      "target": "include/unicode/umutablecptrie.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unifilt.h",
+      "target": "include/unicode/unifilt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unifunct.h",
+      "target": "include/unicode/unifunct.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unimatch.h",
+      "target": "include/unicode/unimatch.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unirepl.h",
+      "target": "include/unicode/unirepl.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uniset.h",
+      "target": "include/unicode/uniset.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unistr.h",
+      "target": "include/unicode/unistr.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unorm.h",
+      "target": "include/unicode/unorm.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unorm2.h",
+      "target": "include/unicode/unorm2.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unum.h",
+      "target": "include/unicode/unum.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unumberformatter.h",
+      "target": "include/unicode/unumberformatter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unumberoptions.h",
+      "target": "include/unicode/unumberoptions.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unumberrangeformatter.h",
+      "target": "include/unicode/unumberrangeformatter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/unumsys.h",
+      "target": "include/unicode/unumsys.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uobject.h",
+      "target": "include/unicode/uobject.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/upluralrules.h",
+      "target": "include/unicode/upluralrules.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uregex.h",
+      "target": "include/unicode/uregex.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uregion.h",
+      "target": "include/unicode/uregion.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ureldatefmt.h",
+      "target": "include/unicode/ureldatefmt.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/urename.h",
+      "target": "include/unicode/urename.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/urep.h",
+      "target": "include/unicode/urep.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ures.h",
+      "target": "include/unicode/ures.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uscript.h",
+      "target": "include/unicode/uscript.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/usearch.h",
+      "target": "include/unicode/usearch.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uset.h",
+      "target": "include/unicode/uset.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/usetiter.h",
+      "target": "include/unicode/usetiter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ushape.h",
+      "target": "include/unicode/ushape.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/usimplenumberformatter.h",
+      "target": "include/unicode/usimplenumberformatter.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uspoof.h",
+      "target": "include/unicode/uspoof.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/usprep.h",
+      "target": "include/unicode/usprep.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ustdio.h",
+      "target": "include/unicode/ustdio.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ustream.h",
+      "target": "include/unicode/ustream.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ustring.h",
+      "target": "include/unicode/ustring.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/ustringtrie.h",
+      "target": "include/unicode/ustringtrie.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/utext.h",
+      "target": "include/unicode/utext.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/utf.h",
+      "target": "include/unicode/utf.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/utf16.h",
+      "target": "include/unicode/utf16.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/utf32.h",
+      "target": "include/unicode/utf32.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/utf8.h",
+      "target": "include/unicode/utf8.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/utf_old.h",
+      "target": "include/unicode/utf_old.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/utmscale.h",
+      "target": "include/unicode/utmscale.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/utrace.h",
+      "target": "include/unicode/utrace.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/utrans.h",
+      "target": "include/unicode/utrans.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/utypes.h",
+      "target": "include/unicode/utypes.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uvernum.h",
+      "target": "include/unicode/uvernum.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/uversion.h",
+      "target": "include/unicode/uversion.h",
+      "type": "symlink"
+    },
+    {
+      "source": "include/unicode/vtzone.h",
+      "target": "include/unicode/vtzone.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libicudata.a",
+      "target": "lib/libicudata.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libicui18n.a",
+      "target": "lib/libicui18n.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libicuio.a",
+      "target": "lib/libicuio.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libicuuc.a",
+      "target": "lib/libicuuc.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/icu-i18n.pc",
+      "target": "lib/pkgconfig/icu-i18n.pc",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/icu-io.pc",
+      "target": "lib/pkgconfig/icu-io.pc",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/icu-uc.pc",
+      "target": "lib/pkgconfig/icu-uc.pc",
+      "type": "symlink"
+    },
+    {
+      "source": "share/icu.dat",
+      "target": "share/icu.dat",
+      "type": "symlink"
+    },
+    {
+      "source": "share/icu/74.2/LICENSE",
+      "target": "share/icu/74.2/LICENSE",
+      "type": "symlink"
+    },
+    {
+      "source": "share/icu/74.2/icudt74l.dat",
+      "target": "share/icu/74.2/icudt74l.dat",
+      "type": "symlink"
+    }
+  ],
+  "package": "icu",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/icu.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "74.2"
+}
