@@ -38,6 +38,15 @@ PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
 PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 MAX_ACTIVE_RUNS = 8
 ACTIVE_STATUSES = ("queued", "in_progress", "waiting", "pending", "requested")
+ABANDONED_DISPATCH_REASON = "cancelled before any external-write job started"
+EXTERNAL_WRITE_JOB_STAGES = frozenset(
+    (
+        "upload-bottle",
+        "publish-bottle-index",
+        "finalize-tap",
+        "publish-vfs-release",
+    )
+)
 BOTTLE_ROOT = "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
 
 WAVES: tuple[tuple[str, ...], ...] = (
@@ -976,6 +985,7 @@ def initial_state(
         "workflow_sha256": hashlib.sha256(snapshot.workflow_source.encode()).hexdigest(),
         "waves": [list(wave) for wave in WAVES],
         "unresolved_dispatch": None,
+        "abandoned_dispatches": [],
         "dispatches": [],
     }
 
@@ -1023,6 +1033,43 @@ def validate_state(
         if formula in seen_formulae or run_id in seen_run_ids:
             raise RolloutError("rollout state contains a duplicate dispatch")
         seen_formulae.add(formula)
+        seen_run_ids.add(run_id)
+    abandoned_dispatches = state.get("abandoned_dispatches", [])
+    if not isinstance(abandoned_dispatches, list):
+        raise RolloutError("rollout state abandoned_dispatches is not an array")
+    for entry in abandoned_dispatches:
+        if not isinstance(entry, dict) or set(entry) != {
+            "abandoned_at",
+            "arches",
+            "formula",
+            "intent_tap_sha",
+            "reason",
+            "run_id",
+            "run_tap_sha",
+            "submitted_at",
+        }:
+            raise RolloutError("rollout state contains a malformed abandoned dispatch")
+        formula = entry.get("formula")
+        run_id = entry.get("run_id")
+        if (
+            formula not in FORMULA_ORDER
+            or entry.get("arches") != list(required_arches(formula))
+            or isinstance(run_id, bool)
+            or not isinstance(run_id, int)
+            or run_id <= 0
+            or run_id in seen_run_ids
+            or entry.get("reason") != ABANDONED_DISPATCH_REASON
+            or any(
+                not isinstance(entry.get(field), str)
+                or not re.fullmatch(r"[0-9a-f]{40}", entry[field])
+                for field in ("intent_tap_sha", "run_tap_sha")
+            )
+            or any(
+                not isinstance(entry.get(field), str) or not entry[field]
+                for field in ("submitted_at", "abandoned_at")
+            )
+        ):
+            raise RolloutError("rollout state contains a malformed abandoned dispatch")
         seen_run_ids.add(run_id)
 
 
@@ -1266,6 +1313,133 @@ def matching_dispatch_run_ids(
         if build_and_test_matrix(github.jobs(run_id)) == expected_matrix:
             candidates.append(run_id)
     return tuple(candidates)
+
+
+def external_write_job_stage(name: Any) -> str | None:
+    if not isinstance(name, str):
+        return None
+    match = re.fullmatch(
+        r"publish / ("
+        + "|".join(map(re.escape, sorted(EXTERNAL_WRITE_JOB_STAGES)))
+        + r")(?: \([^)]*\))?$",
+        name,
+    )
+    return match.group(1) if match else None
+
+
+def abandon_submitted_dispatch(
+    *,
+    tap: GitTap,
+    github: GitHub,
+    expected_kandelo_sha: str,
+    state_path: pathlib.Path,
+    run_id: int,
+    no_fetch: bool,
+) -> tuple[str, int]:
+    state = read_state(state_path)
+    if state is None:
+        raise RolloutError(f"rollout state {state_path} does not exist")
+    sha = tap.main_without_fetch() if no_fetch else tap.fetch_main()
+    snapshot = load_snapshot(tap, sha)
+    validate_workflow(github, snapshot, expected_kandelo_sha)
+    validate_state(state, snapshot, expected_kandelo_sha)
+    intent = submitted_dispatch(state)
+    if not tap.is_ancestor(intent.tap_sha, snapshot.sha):
+        raise RolloutError(
+            "unresolved dispatch tap SHA is not an ancestor of current tap main"
+        )
+
+    total_count, runs = workflow_run_page(github)
+    returned_run_ids = frozenset(run["id"] for run in runs)
+    if intent.before_run_ids:
+        if returned_run_ids.isdisjoint(intent.before_run_ids):
+            raise RolloutError(
+                "dispatch correlation window exceeded the newest 100 workflow runs"
+            )
+    elif total_count != len(runs):
+        raise RolloutError(
+            "dispatch correlation window exceeded the complete workflow history"
+        )
+
+    expected_matrix = tuple(
+        sorted((intent.formula, arch) for arch in intent.arches)
+    )
+    candidates: list[tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]] = []
+    for run in runs:
+        if run["id"] in intent.before_run_ids:
+            continue
+        jobs = github.jobs(run["id"])
+        if (
+            run.get("event") == "repository_dispatch"
+            and build_and_test_matrix(jobs) == expected_matrix
+        ):
+            candidates.append((run, jobs))
+    candidate_ids = sorted(run["id"] for run, _jobs in candidates)
+    if candidate_ids != [run_id]:
+        raise RolloutError(
+            "abandonment requires the explicit sole post-intent Formula run; "
+            f"found {candidate_ids}"
+        )
+    run, jobs = candidates[0]
+    if run.get("status") != "completed" or run.get("conclusion") != "cancelled":
+        raise RolloutError(
+            f"run {run_id} is not a completed cancelled publication"
+        )
+    run_tap_sha = run.get("head_sha")
+    if (
+        not isinstance(run_tap_sha, str)
+        or not re.fullmatch(r"[0-9a-f]{40}", run_tap_sha)
+        or not tap.is_ancestor(intent.tap_sha, run_tap_sha)
+        or not tap.is_ancestor(run_tap_sha, snapshot.sha)
+    ):
+        raise RolloutError(
+            f"run {run_id} is not on the protected-main history after the intent"
+        )
+
+    write_jobs: dict[str, list[Mapping[str, Any]]] = {
+        stage: [] for stage in EXTERNAL_WRITE_JOB_STAGES
+    }
+    for job in jobs:
+        stage = external_write_job_stage(job.get("name"))
+        if stage is not None:
+            write_jobs[stage].append(job)
+    if any(not entries for entries in write_jobs.values()):
+        missing = sorted(stage for stage, entries in write_jobs.items() if not entries)
+        raise RolloutError(
+            f"run {run_id} lacks expected external-write jobs: {', '.join(missing)}"
+        )
+    for stage, entries in write_jobs.items():
+        for job in entries:
+            if (
+                job.get("status") != "completed"
+                or job.get("conclusion") not in ("cancelled", "skipped")
+                or job.get("steps") != []
+            ):
+                raise RolloutError(
+                    f"run {run_id} {stage} may have started; refusing abandonment"
+                )
+
+    # WHY: a cancelled request whose external-write jobs never started is safe
+    # to retry, but deleting its marker would erase the only durable evidence
+    # that the original HTTP request was accepted. Preserve that evidence in
+    # the same private ledger before releasing the Formula for a fresh request.
+    abandoned_state = copy.deepcopy(state)
+    abandoned_state.setdefault("abandoned_dispatches", []).append(
+        {
+            "formula": intent.formula,
+            "arches": list(intent.arches),
+            "intent_tap_sha": intent.tap_sha,
+            "run_tap_sha": run_tap_sha,
+            "run_id": run_id,
+            "submitted_at": intent.submitted_at,
+            "abandoned_at": _utc_now(),
+            "reason": ABANDONED_DISPATCH_REASON,
+        }
+    )
+    abandoned_state["unresolved_dispatch"] = None
+    validate_state(abandoned_state, snapshot, expected_kandelo_sha)
+    write_state(state_path, abandoned_state)
+    return intent.formula, run_id
 
 
 def acknowledge_dispatch(
@@ -1583,6 +1757,15 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         action="store_true",
         help="record one exact late run for the submitted unresolved intent; never dispatch",
     )
+    action.add_argument(
+        "--abandon-dispatch-run",
+        type=int,
+        metavar="RUN_ID",
+        help=(
+            "clear one submitted intent only after proving this sole cancelled "
+            "run never started an external-write job"
+        ),
+    )
     parser.add_argument(
         "--max-dispatches",
         type=int,
@@ -1610,8 +1793,17 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[0-9a-f]{40}", args.expected_kandelo_sha):
         parser.error("--expected-kandelo-sha must be exactly 40 lowercase hex characters")
-    if (args.dispatch or args.recover_dispatch) and args.state_file is None:
-        parser.error("--state-file is required with --dispatch or --recover-dispatch")
+    if (
+        args.dispatch
+        or args.recover_dispatch
+        or args.abandon_dispatch_run is not None
+    ) and args.state_file is None:
+        parser.error(
+            "--state-file is required with --dispatch, --recover-dispatch, "
+            "or --abandon-dispatch-run"
+        )
+    if args.abandon_dispatch_run is not None and args.abandon_dispatch_run < 1:
+        parser.error("--abandon-dispatch-run must be a positive run ID")
     if args.max_dispatches < 1 or args.max_dispatches > MAX_ACTIVE_RUNS:
         parser.error(f"--max-dispatches must be between 1 and {MAX_ACTIVE_RUNS}")
     if args.ack_timeout < 1 or args.poll_seconds <= 0:
@@ -1624,6 +1816,22 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
     try:
         tap = GitTap(args.tap_root)
         github = GitHub()
+        if args.abandon_dispatch_run is not None:
+            state_path = args.state_file.resolve()
+            with state_lock(state_path):
+                formula, run_id = abandon_submitted_dispatch(
+                    tap=tap,
+                    github=github,
+                    expected_kandelo_sha=args.expected_kandelo_sha,
+                    state_path=state_path,
+                    run_id=args.abandon_dispatch_run,
+                    no_fetch=args.no_fetch,
+                )
+            print(
+                f"abandoned submitted {formula} dispatch run {run_id}; "
+                "no repository_dispatch was sent"
+            )
+            return 0
         if args.recover_dispatch:
             state_path = args.state_file.resolve()
             with state_lock(state_path):
