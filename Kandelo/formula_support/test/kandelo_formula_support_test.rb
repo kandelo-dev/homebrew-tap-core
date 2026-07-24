@@ -91,6 +91,26 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_equal allowed, used.uniq.sort
   end
 
+  def test_fork_instrumented_formulae_delegate_env_import_validation_to_shared_contract
+    formula_dir = Pathname(__dir__).join("../../..", "Formula").cleanpath
+    offenders = formula_dir.glob("*.rb").sort.filter_map do |path|
+      source = path.binread
+      next unless source.include?("kandelo_fork_instrument")
+
+      # WHY: valid fork imports are generated from Kandelo's ABI contract and
+      # can change together. A Formula-local env-import allowlist cannot see
+      # that contract, so it can reject a complete artifact after the shared
+      # structural validator has already proved the artifact valid.
+      path.basename.to_s if source.include?("<- env")
+    end
+
+    assert_empty(
+      offenders,
+      "fork-instrumented Formulae must not layer hard-coded env-import allowlists " \
+      "after kandelo_validate_wasm_artifact",
+    )
+  end
+
   # Minimal Formula double for command-construction tests.
   class Harness
     include KandeloFormulaSupport

@@ -106,16 +106,14 @@ class Dinit < Formula
       PROGRAMS.each do |program|
         artifact = buildpath/"src"/program
         fork_policy = (program == "dinit") ? :required : :forbidden
+        # WHY: this shared validator reads Kandelo's generated fork contract,
+        # including every ABI-owned env import. A Formula-local import
+        # allowlist can drift from that contract and reject valid artifacts.
         kandelo_validate_wasm_artifact(
           artifact,
           fork:            fork_policy,
           forbidden_paths: [libcxx.to_s],
         )
-
-        imports = Utils.safe_popen_read("wasm-objdump", "-x", artifact)
-                       .scan(/<- env[.]([^\s]+)/).flatten
-        unexpected = imports - %w[__channel_base memory setjmp longjmp]
-        odie "#{program} contains unresolved non-ABI env imports: #{unexpected.join(", ")}" if unexpected.any?
       end
     end
 
