@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T14:17:27Z",
+  "generated_at": "2026-07-24T14:20:55Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -160,6 +160,45 @@
       "full_name": "kandelo-dev/tap-core/bzip2",
       "name": "bzip2",
       "version": "1.0.8_2"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T14:20:55Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30098489134",
+          "built_from": {
+            "formula_sha256": "79b14b526193079e5f3791f11e56a64e2773382c06af6b2c10065be2d27c2feb",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 1781809,
+          "cache_key_sha": "492b9d4a14bce5c4ef5cc55fafd3d24b8874c661b85480f1c5d61713357fdcc2",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/coreutils-9.6-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "492b9d4a14bce5c4ef5cc55fafd3d24b8874c661b85480f1c5d61713357fdcc2",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/coreutils/blobs/sha256:492b9d4a14bce5c4ef5cc55fafd3d24b8874c661b85480f1c5d61713357fdcc2"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/coreutils.json",
+      "formula_path": "Formula/coreutils.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/coreutils",
+      "name": "coreutils",
+      "version": "9.6"
     }
   ],
   "release_tag": "bottles-abi-v42",
