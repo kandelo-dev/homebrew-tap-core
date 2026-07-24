@@ -33,7 +33,7 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # Production executes and builds from this reviewed publisher descendant.
 # ABI 42's sealed package inputs remain bound separately to the exact generation
 # that produced them, so neither side of the bootstrap cycle can move.
-CURRENT_KANDELO_WORKFLOW_SHA = "5669c1d9481a97f2a9074657d319677a1357506c"
+CURRENT_KANDELO_WORKFLOW_SHA = "01129b4ab626b16e61e5f208fd1486d3f4f2beba"
 PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
 
