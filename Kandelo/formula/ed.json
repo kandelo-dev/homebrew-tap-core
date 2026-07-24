@@ -37,7 +37,7 @@
   "name": "ed",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "6cf861153dbdf5a6f57276f959a597fc30cd6bed",
+  "tap_commit": "6a825da34f86ca7e6234453d33918efd99f1ae25",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.22.5_1"
