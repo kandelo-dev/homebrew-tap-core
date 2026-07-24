@@ -140,8 +140,8 @@ class Openssl < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 2
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "28771919820896d34648451b250255b25685fd3a7d098caa96492b09c9250768"
-    sha256 cellar: :any_skip_relocation, wasm64_kandelo: "4e63f1a907e081de3f61149d6de5b1fea4de9922d9ec2237113c6e25979668bd"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "243eaed26b099aae8991e54686c710c84ba967d7723a7ddccff6546f9b42e36c"
+    sha256 cellar: :any_skip_relocation, wasm64_kandelo: "12fbc35909849550022b20a9d6355410f19d77fd5713b28dea9ad761e09824be"
   end
 
 end

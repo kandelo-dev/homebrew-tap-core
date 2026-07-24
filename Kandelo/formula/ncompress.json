@@ -37,7 +37,7 @@
   "name": "ncompress",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "eb78ddfa62254c0a98859d4fa1cb48bed87fcfe1",
+  "tap_commit": "21467f00ef458dc29268b1beb48e6923b80a1dad",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "5.0_1"
