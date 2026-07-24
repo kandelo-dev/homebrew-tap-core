@@ -134,8 +134,8 @@ class MuslFts < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "171e1444444b810b2985b83a54c6415f091093d8ac5e94e3d5843665ce046301"
-    sha256 cellar: :any_skip_relocation, wasm64_kandelo: "4958ac4e1464bd2226ca6d83627ca165a462335963db5b45cfbf298fecd3329d"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "13ff7fbad0db232639e5bc50cf866a68b14079ef4889877c60753d010087c4a8"
+    sha256 cellar: :any_skip_relocation, wasm64_kandelo: "36535a158a686dd547a359aa6953008f581f5f9b235adca624bccba985417168"
   end
 
 end
