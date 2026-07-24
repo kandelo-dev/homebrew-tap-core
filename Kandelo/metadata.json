@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T22:57:35Z",
+  "generated_at": "2026-07-24T23:17:27Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -766,6 +766,51 @@
       "full_name": "kandelo-dev/tap-core/icu",
       "name": "icu",
       "version": "74.2"
+    },
+    {
+      "bottle_rebuild": 4,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T23:17:27Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30132254293",
+          "built_from": {
+            "formula_sha256": "4a540befbca239eb958218fd88d74b33c417bebce3cbbed8bf6ba432c401f8ef",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "0ffb3c9f2059bcedf2f404f3a39e822ec90a894a",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 322776,
+          "cache_key_sha": "287816b46a24222478b8fd4bb20f5aff5559d215ce85e28e80a55c3704feb017",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/less-668_1-rebuild4-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "287816b46a24222478b8fd4bb20f5aff5559d215ce85e28e80a55c3704feb017",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/less/blobs/sha256:287816b46a24222478b8fd4bb20f5aff5559d215ce85e28e80a55c3704feb017"
+        }
+      ],
+      "dependencies": [
+        {
+          "full_name": "kandelo-dev/tap-core/ncurses",
+          "name": "ncurses",
+          "version": "6.5"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/less.json",
+      "formula_path": "Formula/less.rb",
+      "formula_revision": 1,
+      "full_name": "kandelo-dev/tap-core/less",
+      "name": "less",
+      "version": "668_1"
     },
     {
       "bottle_rebuild": 3,
@@ -1764,7 +1809,7 @@
   ],
   "release_tag": "bottles-abi-v42",
   "schema": 1,
-  "tap_commit": "72ed849f8ea47eb26f355e8cb209e6c7b6c89f44",
+  "tap_commit": "0ffb3c9f2059bcedf2f404f3a39e822ec90a894a",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core"
 }
