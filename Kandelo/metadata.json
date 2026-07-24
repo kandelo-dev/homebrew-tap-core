@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T14:03:30Z",
+  "generated_at": "2026-07-24T14:10:06Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -82,6 +82,45 @@
       "full_name": "kandelo-dev/tap-core/bc",
       "name": "bc",
       "version": "1.07.1"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T14:10:06Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30098235676",
+          "built_from": {
+            "formula_sha256": "478a24674a874bfa97b3c116deb37f8d23ac9f629a959e5232abf89ffecef6a3",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 87257,
+          "cache_key_sha": "a2440f810e52b250951c323b43f6d55b40c3e68b28408929df53bdfe83044c85",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/bzip2-1.0.8_2-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "a2440f810e52b250951c323b43f6d55b40c3e68b28408929df53bdfe83044c85",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/bzip2/blobs/sha256:a2440f810e52b250951c323b43f6d55b40c3e68b28408929df53bdfe83044c85"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/bzip2.json",
+      "formula_path": "Formula/bzip2.rb",
+      "formula_revision": 2,
+      "full_name": "kandelo-dev/tap-core/bzip2",
+      "name": "bzip2",
+      "version": "1.0.8_2"
     }
   ],
   "release_tag": "bottles-abi-v42",
