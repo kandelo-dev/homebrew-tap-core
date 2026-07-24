@@ -672,6 +672,23 @@ def validate_workflow(
             )
 
 
+def publication_workflow_contract(source: str) -> str:
+    """Return bottle-affecting workflow bytes, excluding exact run identity."""
+    lines = source.splitlines(keepends=True)
+    run_name_lines = [
+        line
+        for line in lines
+        if re.match(r"^run-name:", line)
+    ]
+    expected = f"run-name: {WORKFLOW_RUN_NAME_SOURCE}\n"
+    if run_name_lines not in ([], [expected]):
+        # Do not normalize an unknown run-name shape. It remains a provenance
+        # mismatch instead of turning this display-only exception into a broad
+        # workflow compatibility rule.
+        return source
+    return "".join(line for line in lines if line not in run_name_lines)
+
+
 def _packages_by_name(metadata: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     packages: dict[str, Mapping[str, Any]] = {}
     values = metadata.get("packages")
@@ -828,7 +845,9 @@ def finalization_reasons(
             ):
                 reasons.append(f"{arch} source Formula support differs")
             source_workflow = tap.show(source_sha, WORKFLOW_PATH)
-            if source_workflow != snapshot.workflow_source:
+            if publication_workflow_contract(
+                source_workflow
+            ) != publication_workflow_contract(snapshot.workflow_source):
                 reasons.append(f"{arch} source publication workflow differs")
         except RolloutError as error:
             reasons.append(f"{arch} source provenance cannot be read: {error}")
