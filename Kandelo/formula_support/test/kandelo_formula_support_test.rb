@@ -1635,12 +1635,15 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_equal [%Q(  version "3.6.7"\n)], version_declarations
   end
 
-  def test_changed_tier2_formulae_advance_their_finalized_bottle_identity
+  def test_changed_tier2_formulae_keep_the_reviewed_abi42_bottle_identity
+    # These Formulae already consumed rebuild 1 when their Tier-2 isolation
+    # fixes were finalized. ABI 42 must use the next identity because GHCR's
+    # Homebrew references do not include the Kandelo ABI.
     %w[bc fbdoom lsof modeset netcat posix-utils-lite].each do |name|
       formula = File.read(File.expand_path("../../../Formula/#{name}.rb", __dir__))
       rebuild_declarations = formula.lines.grep(/^\s*rebuild /)
 
-      assert_equal [%Q(    rebuild 1\n)], rebuild_declarations, name
+      assert_equal [%Q(    rebuild 2\n)], rebuild_declarations, name
     end
   end
 
