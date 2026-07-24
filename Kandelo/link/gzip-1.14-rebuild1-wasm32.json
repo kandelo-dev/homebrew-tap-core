@@ -1,0 +1,43 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 154661,
+    "cache_key_sha": "b86faa7314d9086a95c4495992c4640cdc6ea50985097fa25694b0b7a230fbb8",
+    "payload_root": "gzip/1.14",
+    "sha256": "b86faa7314d9086a95c4495992c4640cdc6ea50985097fa25694b0b7a230fbb8",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/gzip/blobs/sha256:b86faa7314d9086a95c4495992c4640cdc6ea50985097fa25694b0b7a230fbb8"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/gzip/1.14",
+  "links": [
+    {
+      "source": "bin/gunzip",
+      "target": "bin/gunzip",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/gzip",
+      "target": "bin/gzip",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/zcat",
+      "target": "bin/zcat",
+      "type": "symlink"
+    }
+  ],
+  "package": "gzip",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/gzip.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.14"
+}
