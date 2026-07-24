@@ -30,9 +30,12 @@ REPOSITORY_CANARY_PERMISSIONS = {
 }.freeze
 CHECKOUT_ACTION = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
 RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
-# Production pins both executable workflow code and the Kandelo source checkout
-# here so a publication window cannot combine two independently moving revisions.
-CURRENT_KANDELO_WORKFLOW_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
+# Production executes and builds from this reviewed publisher descendant.
+# ABI 42's sealed package inputs remain bound separately to the exact generation
+# that produced them, so neither side of the bootstrap cycle can move.
+CURRENT_KANDELO_WORKFLOW_SHA = "dc8f83027961d8e83ba1df1aad828bc603c71f52"
+PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
+PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
 
 def check(condition, message)
   raise message unless condition
@@ -108,6 +111,11 @@ PUBLISH_INPUTS = {
 
 VFS_PUBLISH_INPUTS = PUBLISH_INPUTS.merge({
   "require-vfs-acceptance" => expression(
+    "github.event.client_payload.require_vfs_acceptance || false"
+  ),
+  "prepublication-staging-tag" => PREPUBLICATION_STAGING_TAG,
+  "prepublication-staging-kandelo-sha" => PREPUBLICATION_GENERATION_SHA,
+  "defer-vfs-acceptance-until-postpublication" => expression(
     "github.event.client_payload.require_vfs_acceptance || false"
   ),
 }).freeze
@@ -201,7 +209,9 @@ def caller_specs_for_sha(kandelo_sha)
     "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@#{kandelo_sha}"
   specs.fetch("maintenance")[:reusable] =
     "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@#{kandelo_sha}"
-  specs.fetch("publish")[:inputs] = VFS_PUBLISH_INPUTS
+  inputs = deep_copy(VFS_PUBLISH_INPUTS)
+  inputs["kandelo-ref"] = kandelo_sha
+  specs.fetch("publish")[:inputs] = inputs.freeze
   specs.fetch("publish").delete(:secrets)
   specs.freeze
 end
@@ -498,6 +508,29 @@ def self_test(callers, contract, base_contract)
       expression("github.event.client_payload.require_vfs_acceptance")
     check_caller_profile(mutated, test_profiles)
   end
+  expect_rejection("the current publisher without its sealed staging tag") do
+    mutated = deep_copy(current_callers)
+    mutated.dig("publish", "jobs", "publish", "with").delete(
+      "prepublication-staging-tag"
+    )
+    check_caller_profile(mutated, test_profiles)
+  end
+  expect_rejection("a different prepublication package generation") do
+    mutated = deep_copy(current_callers)
+    mutated.dig("publish", "jobs", "publish", "with")[
+      "prepublication-staging-kandelo-sha"
+    ] = SELF_TEST_KANDELO_WORKFLOW_SHA
+    check_caller_profile(mutated, test_profiles)
+  end
+  expect_rejection("an independently selectable VFS deferral") do
+    mutated = deep_copy(current_callers)
+    mutated.dig("publish", "jobs", "publish", "with")[
+      "defer-vfs-acceptance-until-postpublication"
+    ] = expression(
+      "github.event.client_payload.defer_vfs_acceptance_until_postpublication || false"
+    )
+    check_caller_profile(mutated, test_profiles)
+  end
   expect_rejection("VFS acceptance mapping on the dry-run caller") do
     mutated = deep_copy(current_callers)
     mutated.dig("dry-run", "jobs", "dry-run", "with")["require-vfs-acceptance"] =
@@ -671,6 +704,10 @@ begin
   check_workflow_file_set
   check(CURRENT_KANDELO_WORKFLOW_SHA.match?(/\A[0-9a-f]{40}\z/),
         "current Kandelo workflow pin is not an exact SHA")
+  check(PREPUBLICATION_GENERATION_SHA.match?(/\A[0-9a-f]{40}\z/),
+        "prepublication package-generation pin is not an exact SHA")
+  check(PREPUBLICATION_STAGING_TAG.match?(/\Apr-[1-9][0-9]*-staging\z/),
+        "prepublication staging tag is not a PR staging tag")
   {
     "repository canary" => REPOSITORY_CANARY_KANDELO_SHA,
     "retired PAT" => RETIRED_PAT_KANDELO_WORKFLOW_SHA,
@@ -683,6 +720,7 @@ begin
   end
   workflow_shas = [
     CURRENT_KANDELO_WORKFLOW_SHA,
+    PREPUBLICATION_GENERATION_SHA,
     REPOSITORY_CANARY_KANDELO_SHA,
     RETIRED_PAT_KANDELO_WORKFLOW_SHA,
     PREVIOUS_KANDELO_WORKFLOW_SHA,

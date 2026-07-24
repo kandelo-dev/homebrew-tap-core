@@ -33,6 +33,8 @@ WORKFLOW_ID = 315_324_894
 WORKFLOW_PATH = ".github/workflows/publish-bottles.yml"
 EXPECTED_ABI = 42
 EXPECTED_RELEASE_TAG = "bottles-abi-v42"
+PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
+PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 MAX_ACTIVE_RUNS = 8
 ACTIVE_STATUSES = ("queued", "in_progress", "waiting", "pending", "requested")
 BOTTLE_ROOT = "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
@@ -291,6 +293,9 @@ class GitHub:
             },
         }
         if formula == "python":
+            # WHY: the protected caller maps this one reviewed bit to both
+            # required acceptance and its temporary postpublication deferral.
+            # No other Formula can independently request either exception.
             payload["client_payload"]["require_vfs_acceptance"] = True
         # repository_dispatch intentionally returns 204 with no run ID. The
         # caller must retain its unresolved marker until acknowledge_dispatch()
@@ -591,6 +596,11 @@ def validate_workflow(
         "force": "${{ github.event.client_payload.force || false }}",
         "dry-run": "false",
         "require-vfs-acceptance": (
+            "${{ github.event.client_payload.require_vfs_acceptance || false }}"
+        ),
+        "prepublication-staging-tag": PREPUBLICATION_STAGING_TAG,
+        "prepublication-staging-kandelo-sha": PREPUBLICATION_GENERATION_SHA,
+        "defer-vfs-acceptance-until-postpublication": (
             "${{ github.event.client_payload.require_vfs_acceptance || false }}"
         ),
     }
