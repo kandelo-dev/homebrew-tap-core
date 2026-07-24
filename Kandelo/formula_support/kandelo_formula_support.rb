@@ -30,6 +30,7 @@ else
 module KandeloFormulaSupport
   KANDELO_FORMULA_SUPPORT_API_VERSION = 1
   KANDELO_CORE_TAP_FORMULA_PREFIX = "kandelo-dev/tap-core/"
+  KANDELO_PORTABLE_BINARY_CACHE_BASENAME = ".ci-test-binary-cache"
   KANDELO_TIER2_ATTESTATION_BASENAME = ".kandelo-publisher-tier2-attestation.json"
   KANDELO_TIER2_ATTESTATION_MAX_BYTES = 16_384
   KANDELO_TIER2_SOURCE_MAX_BYTES = 1_048_576
@@ -230,6 +231,7 @@ module KandeloFormulaSupport
       value = ENV.fetch(key, nil)
       [key, value.nil? ? nil : value.to_s]
     end
+    formula_binary_cache_root = nil
     formula_checker_path = nil
     checker_value = trusted_env.fetch("HOMEBREW_KANDELO_XTASK_BIN").to_s
     unless checker_value.empty?
@@ -303,11 +305,36 @@ module KandeloFormulaSupport
           raise "Kandelo Formula checker changed while it was opened: #{checker}"
         end
       end
+
+      # WHY: binaries/ contains relative links into this transported cache.
+      # Keeping both fixed below the same frozen source root preserves the
+      # package generation identity that prevents cross-package mixing.
+      binary_cache_candidate = root/KANDELO_PORTABLE_BINARY_CACHE_BASENAME
+      binary_cache_root, = exact_directory.call(
+        binary_cache_candidate, "Kandelo Formula binary cache"
+      )
+      unless binary_cache_root.parent == root &&
+             binary_cache_root.basename.to_s == KANDELO_PORTABLE_BINARY_CACHE_BASENAME
+        raise "Kandelo Formula binary cache must be the fixed direct child of " \
+              "the authoritative Kandelo root: #{binary_cache_candidate}"
+      end
+      programs_candidate = binary_cache_root/"programs"
+      programs_root, = exact_directory.call(
+        programs_candidate, "Kandelo Formula binary cache programs root"
+      )
+      unless programs_root.parent == binary_cache_root &&
+             programs_root.basename.to_s == "programs"
+        raise "Kandelo Formula binary cache programs root must be the fixed direct child of " \
+              "the Formula binary cache: #{programs_candidate}"
+      end
+
+      formula_binary_cache_root = binary_cache_root.to_s
       formula_checker_path = checker.to_s
     end
     runtime = {
       "attestation" => nil,
       "attestation_path" => attestation_path&.to_s,
+      "formula_binary_cache_root" => formula_binary_cache_root,
       "formula_checker_path" => formula_checker_path,
       "formula_path" => nil,
       "support_path" => support_path.to_s,
@@ -1061,7 +1088,8 @@ module KandeloFormulaSupport
       HOMEBREW_KANDELO_ARCH HOMEBREW_KANDELO_PRIMARY_TAP_ROOT
       HOMEBREW_KANDELO_ROOT HOMEBREW_KANDELO_SYSROOT
       KANDELO_HOMEBREW_ARCH KANDELO_HOMEBREW_KANDELO_ROOT
-      WASM_POSIX_BINARY_INDEX_URL WASM_POSIX_DEFAULT_ARCH
+      WASM_POSIX_BINARY_CACHE_ROOT WASM_POSIX_BINARY_INDEX_URL
+      WASM_POSIX_BINARY_RESOLVER_REPO_ROOT WASM_POSIX_DEFAULT_ARCH
       WASM_POSIX_INSTALL_LOCAL_MIRROR WASM_POSIX_SYSROOT
     ]
     ENV.keys.each do |key|
@@ -1070,6 +1098,12 @@ module KandeloFormulaSupport
     end
     runtime.fetch("trusted_env").each do |key, value|
       value.nil? ? ENV.delete(key) : ENV[key] = value
+    end
+    binary_cache_root = runtime.fetch("formula_binary_cache_root", nil)
+    unless binary_cache_root.nil?
+      ENV["WASM_POSIX_BINARY_CACHE_ROOT"] = binary_cache_root
+      ENV["WASM_POSIX_BINARY_RESOLVER_REPO_ROOT"] =
+        runtime.fetch("trusted_env").fetch("HOMEBREW_KANDELO_ROOT")
     end
   end
 
@@ -1249,15 +1283,34 @@ module KandeloFormulaSupport
     KANDELO_TIER2_RUNTIME.fetch("formula_checker_path")
   end
 
+  def kandelo_formula_binary_cache_root
+    KANDELO_TIER2_RUNTIME.fetch("formula_binary_cache_root")
+  end
+
+  def kandelo_formula_resolver_repo_root
+    KANDELO_TIER2_RUNTIME.fetch("trusted_env").fetch("HOMEBREW_KANDELO_ROOT")
+  end
+
   def kandelo_node_runner_environment
     checker = kandelo_formula_checker_path
     return "" if checker.nil?
 
+    binary_cache_root = kandelo_formula_binary_cache_root
+    resolver_repo_root = kandelo_formula_resolver_repo_root
+    if binary_cache_root.nil? || resolver_repo_root.to_s.empty?
+      odie "sealed Kandelo Formula runner authority is incomplete"
+    end
+
     # WHY: Homebrew preserves HOMEBREW_* variables when it re-execs Formula
-    # tests but removes WASM_POSIX_XTASK_BIN. The support loader validates and
-    # freezes that bridge once; every Node/Chromium child must receive the
-    # frozen alias explicitly so the resolver never falls back to Nix.
-    "WASM_POSIX_XTASK_BIN=#{Shellwords.escape(checker)} "
+    # tests but removes the resolver's ordinary variables. The support loader
+    # validates and freezes one source root, checker, and transported package
+    # cache before Formula code runs. Restoring that exact set keeps binaries/
+    # links bound to their complete content-addressed package generations.
+    [
+      "WASM_POSIX_BINARY_CACHE_ROOT=#{Shellwords.escape(binary_cache_root)}",
+      "WASM_POSIX_BINARY_RESOLVER_REPO_ROOT=#{Shellwords.escape(resolver_repo_root)}",
+      "WASM_POSIX_XTASK_BIN=#{Shellwords.escape(checker)}",
+    ].join(" ") << " "
   end
 
   # Run a built `.wasm` under the Node kernel host and return its stdout. The
