@@ -1,40 +1,42 @@
 {
-  "bottle_rebuild": 0,
+  "bottle_rebuild": 1,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-20T07:54:02Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724869477",
+      "built_at": "2026-07-24T17:02:17Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30109745097",
       "built_from": {
-        "formula_sha256": "634ddde30189d5328a91fa4ce427be1c1fda6cc9b04b6d9be915c54621022cb2",
-        "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+        "formula_sha256": "368e47e5005082f6cc692e652daef1dc43eb508e1af1902869e46ab9f39d96d2",
+        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+        "tap_commit": "5ac7e5e46be95fb78f9107d7e6bbf562cd027ec8",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 518954,
-      "cache_key_sha": "d9b6c0240a7727c6d306cdd3ab56bacdb6229e5688490bb6c8dea58d5f2672bb",
+      "bytes": 534583,
+      "cache_key_sha": "e0429807a455cac881779878506a095f63507ab0338c1e70cd0577b97ed42d41",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/diffutils-3.12-rebuild0-wasm32.json",
+      "kandelo_abi": 42,
+      "link_manifest": "Kandelo/link/diffutils-3.12-rebuild1-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "d9b6c0240a7727c6d306cdd3ab56bacdb6229e5688490bb6c8dea58d5f2672bb",
+      "sha256": "e0429807a455cac881779878506a095f63507ab0338c1e70cd0577b97ed42d41",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/diffutils/blobs/sha256:d9b6c0240a7727c6d306cdd3ab56bacdb6229e5688490bb6c8dea58d5f2672bb"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/diffutils/blobs/sha256:e0429807a455cac881779878506a095f63507ab0338c1e70cd0577b97ed42d41"
     }
   ],
   "dependencies": [
     {
+      "full_name": "kandelo-dev/tap-core/coreutils",
       "name": "coreutils",
       "version": "9.6"
     },
     {
+      "full_name": "kandelo-dev/tap-core/ed",
       "name": "ed",
       "version": "1.22.5_1"
     }
@@ -42,11 +44,11 @@
   "formula_path": "Formula/diffutils.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/diffutils",
-  "kandelo_abi": 41,
+  "kandelo_abi": 42,
   "name": "diffutils",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "01f9bea83ad53efff2c6fbdc92396d50d1aeabb1",
+  "tap_commit": "5ac7e5e46be95fb78f9107d7e6bbf562cd027ec8",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "3.12"

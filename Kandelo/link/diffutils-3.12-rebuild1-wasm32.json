@@ -1,0 +1,73 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 534583,
+    "cache_key_sha": "e0429807a455cac881779878506a095f63507ab0338c1e70cd0577b97ed42d41",
+    "payload_root": "diffutils/3.12",
+    "sha256": "e0429807a455cac881779878506a095f63507ab0338c1e70cd0577b97ed42d41",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/diffutils/blobs/sha256:e0429807a455cac881779878506a095f63507ab0338c1e70cd0577b97ed42d41"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/diffutils/3.12",
+  "links": [
+    {
+      "source": "bin/cmp",
+      "target": "bin/cmp",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/diff",
+      "target": "bin/diff",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/diff3",
+      "target": "bin/diff3",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sdiff",
+      "target": "bin/sdiff",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/diffutils.info",
+      "target": "share/info/diffutils.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/cmp.1",
+      "target": "share/man/man1/cmp.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/diff.1",
+      "target": "share/man/man1/diff.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/diff3.1",
+      "target": "share/man/man1/diff3.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/sdiff.1",
+      "target": "share/man/man1/sdiff.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "diffutils",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/diffutils.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "3.12"
+}

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T16:56:59Z",
+  "generated_at": "2026-07-24T17:02:17Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -277,6 +277,56 @@
       "full_name": "kandelo-dev/tap-core/dash",
       "name": "dash",
       "version": "0.5.12"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T17:02:17Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30109745097",
+          "built_from": {
+            "formula_sha256": "368e47e5005082f6cc692e652daef1dc43eb508e1af1902869e46ab9f39d96d2",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "5ac7e5e46be95fb78f9107d7e6bbf562cd027ec8",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 534583,
+          "cache_key_sha": "e0429807a455cac881779878506a095f63507ab0338c1e70cd0577b97ed42d41",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/diffutils-3.12-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "e0429807a455cac881779878506a095f63507ab0338c1e70cd0577b97ed42d41",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/diffutils/blobs/sha256:e0429807a455cac881779878506a095f63507ab0338c1e70cd0577b97ed42d41"
+        }
+      ],
+      "dependencies": [
+        {
+          "full_name": "kandelo-dev/tap-core/coreutils",
+          "name": "coreutils",
+          "version": "9.6"
+        },
+        {
+          "full_name": "kandelo-dev/tap-core/ed",
+          "name": "ed",
+          "version": "1.22.5_1"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/diffutils.json",
+      "formula_path": "Formula/diffutils.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/diffutils",
+      "name": "diffutils",
+      "version": "3.12"
     },
     {
       "bottle_rebuild": 1,
