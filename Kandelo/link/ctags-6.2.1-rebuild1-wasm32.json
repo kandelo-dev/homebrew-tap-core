@@ -1,0 +1,258 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1136263,
+    "cache_key_sha": "7bb7e08b8524702f695e4c4db1f5c1a38aaabd48336c70e1e301389ac65f574e",
+    "payload_root": "ctags/6.2.1",
+    "sha256": "7bb7e08b8524702f695e4c4db1f5c1a38aaabd48336c70e1e301389ac65f574e",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ctags/blobs/sha256:7bb7e08b8524702f695e4c4db1f5c1a38aaabd48336c70e1e301389ac65f574e"
+  },
+  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 42,
+  "keg": "/home/linuxbrew/.linuxbrew/Cellar/ctags/6.2.1",
+  "links": [
+    {
+      "source": "bin/ctags",
+      "target": "bin/ctags",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/optscript",
+      "target": "bin/optscript",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/readtags",
+      "target": "bin/readtags",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/ctags.1",
+      "target": "share/man/man1/ctags.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/readtags.1",
+      "target": "share/man/man1/readtags.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man5/ctags-json-output.5",
+      "target": "share/man/man5/ctags-json-output.5",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man5/tags.5",
+      "target": "share/man/man5/tags.5",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-client-tools.7",
+      "target": "share/man/man7/ctags-client-tools.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-faq.7",
+      "target": "share/man/man7/ctags-faq.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-incompatibilities.7",
+      "target": "share/man/man7/ctags-incompatibilities.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-asm.7",
+      "target": "share/man/man7/ctags-lang-asm.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-autoit.7",
+      "target": "share/man/man7/ctags-lang-autoit.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-automake.7",
+      "target": "share/man/man7/ctags-lang-automake.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-c++.7",
+      "target": "share/man/man7/ctags-lang-c++.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-c.7",
+      "target": "share/man/man7/ctags-lang-c.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-clojure.7",
+      "target": "share/man/man7/ctags-lang-clojure.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-cuda.7",
+      "target": "share/man/man7/ctags-lang-cuda.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-elm.7",
+      "target": "share/man/man7/ctags-lang-elm.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-emacslisp.7",
+      "target": "share/man/man7/ctags-lang-emacslisp.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-fortran.7",
+      "target": "share/man/man7/ctags-lang-fortran.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-gdscript.7",
+      "target": "share/man/man7/ctags-lang-gdscript.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-i18nrubygem.7",
+      "target": "share/man/man7/ctags-lang-i18nrubygem.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-iPythonCell.7",
+      "target": "share/man/man7/ctags-lang-iPythonCell.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-inko.7",
+      "target": "share/man/man7/ctags-lang-inko.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-javascript.7",
+      "target": "share/man/man7/ctags-lang-javascript.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-julia.7",
+      "target": "share/man/man7/ctags-lang-julia.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-kconfig.7",
+      "target": "share/man/man7/ctags-lang-kconfig.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-ldscript.7",
+      "target": "share/man/man7/ctags-lang-ldscript.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-lex.7",
+      "target": "share/man/man7/ctags-lang-lex.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-lisp.7",
+      "target": "share/man/man7/ctags-lang-lisp.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-make.7",
+      "target": "share/man/man7/ctags-lang-make.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-markdown.7",
+      "target": "share/man/man7/ctags-lang-markdown.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-meson.7",
+      "target": "share/man/man7/ctags-lang-meson.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-powershell.7",
+      "target": "share/man/man7/ctags-lang-powershell.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-python.7",
+      "target": "share/man/man7/ctags-lang-python.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-r.7",
+      "target": "share/man/man7/ctags-lang-r.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-rmarkdown.7",
+      "target": "share/man/man7/ctags-lang-rmarkdown.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-scheme.7",
+      "target": "share/man/man7/ctags-lang-scheme.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-scss.7",
+      "target": "share/man/man7/ctags-lang-scss.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-sql.7",
+      "target": "share/man/man7/ctags-lang-sql.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-systemtap.7",
+      "target": "share/man/man7/ctags-lang-systemtap.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-tcl.7",
+      "target": "share/man/man7/ctags-lang-tcl.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-terraform.7",
+      "target": "share/man/man7/ctags-lang-terraform.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-verilog.7",
+      "target": "share/man/man7/ctags-lang-verilog.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-lang-vim.7",
+      "target": "share/man/man7/ctags-lang-vim.7",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man7/ctags-optlib.7",
+      "target": "share/man/man7/ctags-optlib.7",
+      "type": "symlink"
+    }
+  ],
+  "package": "ctags",
+  "prefix": "/home/linuxbrew/.linuxbrew",
+  "receipts": [
+    ".brew/ctags.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "6.2.1"
+}

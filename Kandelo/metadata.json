@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T14:21:41Z",
+  "generated_at": "2026-07-24T14:21:50Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -199,6 +199,45 @@
       "full_name": "kandelo-dev/tap-core/coreutils",
       "name": "coreutils",
       "version": "9.6"
+    },
+    {
+      "bottle_rebuild": 1,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T14:21:50Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30098732682",
+          "built_from": {
+            "formula_sha256": "e8dc6f8cf6997bd740f49f460b4d4092f4f373ee1ac9168c9b49bf2e1df587ac",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 1136263,
+          "cache_key_sha": "7bb7e08b8524702f695e4c4db1f5c1a38aaabd48336c70e1e301389ac65f574e",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/ctags-6.2.1-rebuild1-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "7bb7e08b8524702f695e4c4db1f5c1a38aaabd48336c70e1e301389ac65f574e",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ctags/blobs/sha256:7bb7e08b8524702f695e4c4db1f5c1a38aaabd48336c70e1e301389ac65f574e"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/ctags.json",
+      "formula_path": "Formula/ctags.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/ctags",
+      "name": "ctags",
+      "version": "6.2.1"
     },
     {
       "bottle_rebuild": 1,

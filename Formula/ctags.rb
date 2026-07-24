@@ -188,7 +188,7 @@ class Ctags < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "d12a9db9fa6eccfd7359a5fb0c75ab964940f0cd312d3fbc9cd870a4de78540a"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "7bb7e08b8524702f695e4c4db1f5c1a38aaabd48336c70e1e301389ac65f574e"
   end
 
 end
