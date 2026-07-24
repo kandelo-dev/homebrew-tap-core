@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T15:06:32Z",
+  "generated_at": "2026-07-24T15:14:04Z",
   "generator": "kandelo-homebrew-publish 1",
   "kandelo_abi": 42,
   "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
@@ -693,6 +693,45 @@
       "formula_revision": 0,
       "full_name": "kandelo-dev/tap-core/lsof",
       "name": "lsof",
+      "version": "0.1.0"
+    },
+    {
+      "bottle_rebuild": 2,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_at": "2026-07-24T15:14:04Z",
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30102527435",
+          "built_from": {
+            "formula_sha256": "4f26ac3a833b89ae7277e8d6dff0ca22df1db03c672590e96f16e48d933d95b0",
+            "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "89aef97b76cb281424d039512388d138425f29d9",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 27502,
+          "cache_key_sha": "16bdc897ade4aebe335235dd140b3c65033967170c8a50e48e8c1a061645ce72",
+          "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+          "fork_instrumentation": "not-required",
+          "kandelo_abi": 42,
+          "link_manifest": "Kandelo/link/modeset-0.1.0-rebuild2-wasm32.json",
+          "prefix": "/home/linuxbrew/.linuxbrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "16bdc897ade4aebe335235dd140b3c65033967170c8a50e48e8c1a061645ce72",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/modeset/blobs/sha256:16bdc897ade4aebe335235dd140b3c65033967170c8a50e48e8c1a061645ce72"
+        }
+      ],
+      "dependencies": [],
+      "formula_metadata": "Kandelo/formula/modeset.json",
+      "formula_path": "Formula/modeset.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/modeset",
+      "name": "modeset",
       "version": "0.1.0"
     }
   ],
