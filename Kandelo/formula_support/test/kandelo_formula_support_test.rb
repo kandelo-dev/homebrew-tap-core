@@ -96,8 +96,9 @@ class KandeloFormulaSupportTest < Minitest::Test
     include KandeloFormulaSupport
 
     attr_accessor :build_path, :dependency_formulae, :formula_full_name, :formula_name, :formula_path,
-                  :formula_version, :homebrew_prefix_path, :nix_path, :prefix_path, :root_path,
-                  :runtime_formulae, :shell_result, :stable_spec, :test_path, :tier2_runtime
+                  :formula_version, :formula_checker_path, :homebrew_prefix_path, :nix_path,
+                  :prefix_path, :root_path, :runtime_formulae, :shell_result, :stable_spec,
+                  :test_path, :tier2_runtime
     attr_reader :command, :expected_status, :pty_config, :pty_config_mode, :pty_config_path,
                 :recorded_launcher, :system_args, :system_calls, :system_environment
 
@@ -138,6 +139,12 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     def kandelo_tier2_runtime!
       return tier2_runtime unless tier2_runtime.nil?
+
+      super
+    end
+
+    def kandelo_formula_checker_path
+      return formula_checker_path unless formula_checker_path.nil?
 
       super
     end
@@ -344,7 +351,9 @@ class KandeloFormulaSupportTest < Minitest::Test
     path
   end
 
-  def run_tier2_support_load(fixture, after_require, environment: {}, homebrew_filtered: false)
+  def run_tier2_support_load(
+    fixture, after_require, environment: {}, homebrew_filtered: false, simulated_owner_uid: nil
+  )
     support_paths = environment.fetch("KANDELO_TEST_SUPPORT_PATHS", [fixture.fetch(:support_path)])
     environment = environment.reject { |key, _value| key == "KANDELO_TEST_SUPPORT_PATHS" }
     env = {
@@ -358,6 +367,17 @@ class KandeloFormulaSupportTest < Minitest::Test
       "WASM_POSIX_SYSROOT"              => fixture.fetch(:sysroot).to_s,
     }.merge(environment)
     source = [
+      *(
+        if simulated_owner_uid.nil?
+          []
+        else
+          [
+            "class File::Stat",
+            "  def uid = #{Integer(simulated_owner_uid)}",
+            "end",
+          ]
+        end
+      ),
       "class Requirement",
       "  def self.fatal(*) = nil",
       "  def self.satisfy(**_options, &_block) = nil",
@@ -597,6 +617,151 @@ class KandeloFormulaSupportTest < Minitest::Test
 
       assert status.success?, stderr
       assert_equal "evaluated\n", marker.binread
+    end
+  end
+
+  def test_support_load_preserves_the_homebrew_checker_bridge_and_freezes_runner_propagation
+    with_tier2_loader_fixture do |fixture|
+      document = tier2_loader_attestation(fixture, bridge: false)
+      write_tier2_loader_attestation(fixture, JSON.generate(document))
+      checker = fixture.fetch(:root)/"target/x86_64-unknown-linux-gnu/release/xtask"
+      checker.dirname.mkpath
+      checker.binwrite("#!/bin/sh\nexit 0\n")
+      checker.chmod(0555)
+      replacement = fixture.fetch(:base)/"caller-selected-xtask"
+      replacement.binwrite("#!/bin/sh\nexit 1\n")
+      replacement.chmod(0555)
+      assertion = <<~RUBY
+        runtime = KandeloFormulaSupport::KANDELO_TIER2_RUNTIME
+        abort "publisher attestation was not active" unless runtime.fetch("attestation")
+        abort "idiomatic Formula unexpectedly gained a Tier-2 bridge" unless
+          runtime.dig("attestation", "tier2_bridge").nil?
+        captured = runtime.fetch("formula_checker_path")
+        abort "checker bridge was not captured" unless captured == #{checker.to_s.inspect}
+        abort "checker bridge was not frozen" unless captured.frozen?
+        ENV["HOMEBREW_KANDELO_XTASK_BIN"] = #{replacement.to_s.inspect}
+        ENV["WASM_POSIX_XTASK_BIN"] = #{replacement.to_s.inspect}
+        harness = Class.new do
+          include KandeloFormulaSupport
+          attr_reader :command
+          def kandelo_require_root! = ENV.fetch("HOMEBREW_KANDELO_ROOT")
+          def testpath = Pathname(ENV.fetch("HOMEBREW_KANDELO_ROOT"))
+          def shell_output(command, _expected_status = 0)
+            @command = command
+            "runtime-ok\\n"
+          end
+          def kandelo_record_node_execution!(*, **) = nil
+        end.new
+        harness.kandelo_run_wasm("program.wasm", [])
+        assignment = Shellwords.shellsplit(harness.command).select do |token|
+          token.start_with?("WASM_POSIX_XTASK_BIN=")
+        end
+        abort "runner did not receive exactly one checker" unless
+          assignment == ["WASM_POSIX_XTASK_BIN=#{checker}"]
+        abort "mutable caller environment replaced the checker" if
+          harness.command.include?(#{replacement.to_s.inspect})
+      RUBY
+      _stdout, stderr, status = run_tier2_support_load(
+        fixture,
+        assertion,
+        environment: { "HOMEBREW_KANDELO_XTASK_BIN" => checker.to_s },
+        homebrew_filtered: true,
+        simulated_owner_uid: 0,
+      )
+
+      assert status.success?, stderr
+    end
+  end
+
+  def test_support_load_rejects_unsealed_or_unbound_formula_checkers
+    mutations = {
+      "missing checker" => lambda do |fixture|
+        fixture.fetch(:root)/"target/release/missing-xtask"
+      end,
+      "writable checker" => lambda do |fixture|
+        checker = fixture.fetch(:root)/"target/release/writable-xtask"
+        checker.dirname.mkpath
+        checker.binwrite("writable\n")
+        checker.chmod(0755)
+        checker
+      end,
+      "empty checker" => lambda do |fixture|
+        checker = fixture.fetch(:root)/"target/release/empty-xtask"
+        checker.dirname.mkpath
+        checker.binwrite("")
+        checker.chmod(0555)
+        checker
+      end,
+      "checker outside root" => lambda do |fixture|
+        checker = fixture.fetch(:base)/"outside-xtask"
+        checker.binwrite("outside\n")
+        checker.chmod(0555)
+        checker
+      end,
+      "symlinked checker" => lambda do |fixture|
+        target = fixture.fetch(:root)/"target/release/real-xtask"
+        checker = fixture.fetch(:root)/"target/release/symlink-xtask"
+        target.dirname.mkpath
+        target.binwrite("real\n")
+        target.chmod(0555)
+        checker.make_symlink(target)
+        checker
+      end,
+      "multiply linked checker" => lambda do |fixture|
+        target = fixture.fetch(:root)/"target/release/real-xtask"
+        checker = fixture.fetch(:root)/"target/release/linked-xtask"
+        target.dirname.mkpath
+        target.binwrite("linked\n")
+        target.chmod(0555)
+        File.link(target, checker)
+        checker
+      end,
+    }
+    mutations.each do |label, mutation|
+      with_tier2_loader_fixture do |fixture|
+        checker = mutation.call(fixture)
+        marker = fixture.fetch(:base)/"#{label.tr(" ", "-")}-evaluated"
+        _stdout, stderr, status = run_tier2_support_load(
+          fixture,
+          "File.binwrite(#{marker.to_s.inspect}, \"evaluated\\n\")",
+          environment: { "HOMEBREW_KANDELO_XTASK_BIN" => checker.to_s },
+          homebrew_filtered: true,
+          simulated_owner_uid: 0,
+        )
+
+        refute status.success?, label
+        expected = case label
+        when "missing checker"
+          "checker is unavailable"
+        when "checker outside root", "symlinked checker"
+          "checker must be inside the authoritative Kandelo root"
+        else
+          "nonempty, root-owned, mode-0555 regular file with one link"
+        end
+        assert_includes stderr, expected, label
+        refute_path_exists marker, label
+      end
+    end
+  end
+
+  def test_support_load_rejects_a_checker_not_owned_by_root
+    with_tier2_loader_fixture do |fixture|
+      checker = fixture.fetch(:root)/"target/release/xtask"
+      checker.dirname.mkpath
+      checker.binwrite("unprivileged\n")
+      checker.chmod(0555)
+      marker = fixture.fetch(:base)/"unprivileged-checker-evaluated"
+      _stdout, stderr, status = run_tier2_support_load(
+        fixture,
+        "File.binwrite(#{marker.to_s.inspect}, \"evaluated\\n\")",
+        environment: { "HOMEBREW_KANDELO_XTASK_BIN" => checker.to_s },
+        homebrew_filtered: true,
+        simulated_owner_uid: 1,
+      )
+
+      refute status.success?
+      assert_includes stderr, "nonempty, root-owned, mode-0555 regular file with one link"
+      refute_path_exists marker
     end
   end
 
@@ -1761,6 +1926,121 @@ class KandeloFormulaSupportTest < Minitest::Test
                    build_environment.fetch("WASM_POSIX_DEP_PKG_CONFIG_PATH")
       assert_equal "/caller/selection/lib/pkgconfig", build_environment.fetch("PKG_CONFIG_PATH")
       assert_equal scoped, ENV.to_hash
+    end
+  ensure
+    ENV.replace(original) if original
+  end
+
+  def test_every_node_and_chromium_runner_propagates_only_the_captured_formula_checker
+    original = ENV.to_hash
+    Dir.mktmpdir("kandelo-formula-checker-runners") do |dir|
+      root = Pathname(dir)/"kandelo root"
+      test_path = Pathname(dir)/"formula test"
+      checker = root/"target/host triple/release/xtask"
+      [root, test_path, checker.dirname].each(&:mkpath)
+      checker.binwrite("sealed checker\n")
+      checker.chmod(0555)
+      ENV["HOMEBREW_KANDELO_XTASK_BIN"] = "/caller/mutable/xtask"
+      ENV["WASM_POSIX_XTASK_BIN"] = "/caller/raw/xtask"
+
+      harness = Harness.new
+      harness.root_path = root.to_s
+      harness.test_path = test_path
+      harness.formula_checker_path = checker.to_s.freeze
+      invocations = {
+        "default Node runner" => lambda do
+          harness.shell_result = "runtime-ok\n"
+          harness.kandelo_run_wasm("program.wasm", [])
+        end,
+        "isolated Node runner" => lambda do
+          harness.shell_result = "runtime-ok\n"
+          harness.kandelo_run_wasm("program.wasm", [], network: true)
+        end,
+        "HTTP service runner" => lambda do
+          harness.shell_result = "[]"
+          harness.kandelo_run_http_service(
+            "program.wasm", [], port: 8080, requests: [{ path: "/" }]
+          )
+        end,
+        "PTY runner" => lambda do
+          harness.shell_result = "runtime-ok\n"
+          harness.kandelo_run_pty_wasm("program.wasm", [], inputs: [])
+        end,
+        "KMS Node runner" => lambda do
+          harness.shell_result = "runtime-ok\n"
+          harness.kandelo_run_kms_wasm("program.wasm")
+        end,
+        "KMS Chromium runner" => lambda do
+          harness.shell_result = "runtime-ok\n"
+          harness.kandelo_run_kms_browser_wasm("program.wasm")
+        end,
+        "general Chromium runner" => lambda do
+          harness.shell_result = "runtime-ok\n"
+          harness.kandelo_run_browser_wasm("program.wasm", [])
+        end,
+        "framebuffer Chromium runner" => lambda do
+          harness.shell_result = "runtime-ok\n"
+          harness.kandelo_run_framebuffer_wasm("program.wasm")
+        end,
+      }
+
+      invocations.each do |label, invoke|
+        invoke.call
+        assignments = Shellwords.shellsplit(harness.command).select do |token|
+          token.start_with?("WASM_POSIX_XTASK_BIN=")
+        end
+        assert_equal(
+          ["WASM_POSIX_XTASK_BIN=#{checker}"],
+          assignments,
+          label,
+        )
+        refute_includes harness.command, "/caller/mutable/xtask", label
+        refute_includes harness.command, "/caller/raw/xtask", label
+      end
+    end
+  ensure
+    ENV.replace(original) if original
+  end
+
+  def test_formula_runners_keep_ordinary_nonpublisher_execution_when_checker_bridge_is_absent
+    harness = Harness.new
+
+    assert_equal "", harness.kandelo_node_runner_environment
+    harness.kandelo_run_wasm("program.wasm", [])
+
+    refute_includes harness.command, "WASM_POSIX_XTASK_BIN="
+  end
+
+  def test_node_process_receives_the_captured_checker_instead_of_mutable_caller_environment
+    original = ENV.to_hash
+    Dir.mktmpdir("kandelo-formula-checker-process") do |dir|
+      root = Pathname(dir)/"kandelo root"
+      fake_bin = Pathname(dir)/"fake bin"
+      checker = root/"target/host/release/xtask"
+      [root, fake_bin, checker.dirname].each(&:mkpath)
+      checker.binwrite("sealed checker\n")
+      checker.chmod(0555)
+      fake_node = fake_bin/"node"
+      fake_node.binwrite("#!/bin/sh\nprintf '%s\\n' \"$WASM_POSIX_XTASK_BIN\"\n")
+      fake_node.chmod(0755)
+      ENV["PATH"] = [fake_bin, ENV.fetch("PATH")].join(File::PATH_SEPARATOR)
+      ENV.delete("HOMEBREW_KANDELO_NODE")
+      ENV["HOMEBREW_KANDELO_XTASK_BIN"] = "/caller/homebrew/xtask"
+      ENV["WASM_POSIX_XTASK_BIN"] = "/caller/raw/xtask"
+
+      [false, true].each do |network|
+        harness = RuntimeHarness.new
+        harness.root_path = root.to_s
+        harness.formula_checker_path = checker.to_s.freeze
+
+        output = harness.kandelo_run_wasm(
+          "program.wasm", [],
+          env: { "WASM_POSIX_XTASK_BIN" => "/caller/formula-env/xtask" },
+          network:,
+        )
+
+        assert_equal "#{checker}\n", output
+      end
     end
   ensure
     ENV.replace(original) if original
