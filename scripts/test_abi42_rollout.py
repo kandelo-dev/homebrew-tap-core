@@ -11,11 +11,12 @@ import io
 import json
 import pathlib
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
 import urllib.error
-from contextlib import redirect_stderr
+from contextlib import contextmanager, redirect_stderr
 from unittest import mock
 
 
@@ -29,17 +30,34 @@ SPEC.loader.exec_module(rollout)
 
 class FakeGitHub:
     def __init__(self) -> None:
-        self.by_status: dict[str, dict] = {}
+        self.by_status: dict[str | None, dict] = {}
         self.jobs_by_run: dict[int, tuple[dict, ...]] = {}
         self.logs_by_job: dict[int, str] = {}
         self.runs_by_id: dict[int, dict] = {}
+        self.run_queries: list[dict[str, object]] = []
 
-    def runs(self, status=None, per_page=100):
-        del per_page
-        return self.by_status.get(
-            status,
-            {"total_count": 0, "workflow_runs": []},
+    def runs(self, *, per_page=100, page=1, created=None):
+        self.run_queries.append(
+            {"per_page": per_page, "page": page, "created": created}
         )
+        if None in self.by_status:
+            response = self.by_status[None]
+        else:
+            listed: list[dict] = []
+            total_count = 0
+            for response in self.by_status.values():
+                total_count += response["total_count"]
+                listed.extend(response["workflow_runs"])
+            response = {
+                "total_count": total_count,
+                "workflow_runs": listed,
+            }
+        start = (page - 1) * per_page
+        end = start + per_page
+        return {
+            "total_count": response["total_count"],
+            "workflow_runs": response["workflow_runs"][start:end],
+        }
 
     def jobs(self, run_id):
         return self.jobs_by_run.get(run_id, ())
@@ -119,7 +137,12 @@ class RolloutControllerTests(unittest.TestCase):
             cls.snapshot.workflow_source,
             flags=re.MULTILINE,
         )
-        assert match is not None
+        publisher_match = re.search(
+            r"reusable-homebrew-bottle-publish\.yml@([0-9a-f]{40})",
+            cls.snapshot.workflow_source,
+        )
+        assert match is not None and publisher_match is not None
+        assert publisher_match.group(1) == rollout.PUBLISHER_WORKFLOW_SHA
         cls.consumer_sha = match.group(1)
         cls.legacy_workflow_source = cls.tap.show(
             "71b3004a43be103b315d8d298a89799c3895e98a",
@@ -854,6 +877,65 @@ class RolloutControllerTests(unittest.TestCase):
         tap.show_optional.side_effect = show_optional
         return rollout.load_snapshot(tap, self.head)
 
+    @contextmanager
+    def _descendant_tap(self, changes):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory) / "tap"
+            subprocess.run(
+                (
+                    "git",
+                    "clone",
+                    "--quiet",
+                    "--shared",
+                    str(self.root),
+                    str(root),
+                ),
+                check=True,
+            )
+            subprocess.run(
+                ("git", "checkout", "--quiet", "--detach", self.head),
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                ("git", "config", "user.name", "Kandelo rollout test"),
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                ("git", "config", "user.email", "rollout-test@example.invalid"),
+                cwd=root,
+                check=True,
+            )
+            for relative, replacement in changes.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                previous = path.read_text() if path.exists() else ""
+                path.write_text(
+                    replacement(previous)
+                    if callable(replacement)
+                    else replacement
+                )
+            subprocess.run(("git", "add", "--all"), cwd=root, check=True)
+            subprocess.run(
+                ("git", "commit", "--quiet", "-m", "Homebrew: test finalizer output"),
+                cwd=root,
+                check=True,
+            )
+            descendant = (
+                subprocess.run(
+                    ("git", "rev-parse", "HEAD"),
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                .stdout.strip()
+            )
+            tap = object.__new__(rollout.GitTap)
+            tap.root = root.resolve()
+            yield tap, descendant
+
     def test_exact_plan_has_63_formulae_and_70_architecture_identities(self):
         self.assertEqual(63, len(rollout.FORMULA_ORDER))
         self.assertEqual(63, len(set(rollout.FORMULA_ORDER)))
@@ -1145,6 +1227,20 @@ class RolloutControllerTests(unittest.TestCase):
                     snapshot,
                     workflow_source=source.replace(
                         rollout.PUBLISHER_WORKFLOW_SHA, "b" * 40
+                    ),
+                ),
+                expected,
+            )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "tap-ref is not an allowed"
+        ):
+            rollout.validate_workflow(
+                FakeGitHub(),
+                dataclasses.replace(
+                    snapshot,
+                    workflow_source=source.replace(
+                        "${{ github.event.client_payload.tap_sha }}",
+                        "main",
                     ),
                 ),
                 expected,
@@ -1664,6 +1760,10 @@ class RolloutControllerTests(unittest.TestCase):
         inventory = rollout.active_inventory(github)
         self.assertEqual(len(rollout.ACTIVE_STATUSES), inventory.count)
         self.assertEqual((), inventory.unknown_run_ids)
+        self.assertEqual(2, len(github.run_queries))
+        self.assertTrue(
+            all(query["created"] is None for query in github.run_queries)
+        )
 
     def test_dual_arch_dependencies_follow_the_consumer_architecture(self):
         self.assertEqual("wasm32", rollout.dependency_arch("zlib", "wasm32"))
@@ -1693,14 +1793,14 @@ class RolloutControllerTests(unittest.TestCase):
         with (
             mock.patch.object(rollout.time, "sleep") as sleep,
             self.assertRaisesRegex(
-                rollout.RolloutError, "reported 1 active runs but returned 0"
+                rollout.RolloutError, "incomplete workflow run page 1"
             ),
         ):
             rollout.active_inventory(github)
         self.assertEqual(
             [
-                mock.call(rollout.ACTIVE_INVENTORY_BACKOFF_SECONDS),
-                mock.call(rollout.ACTIVE_INVENTORY_BACKOFF_SECONDS * 2),
+                mock.call(rollout.WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS),
+                mock.call(rollout.WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS * 2),
             ],
             sleep.call_args_list,
         )
@@ -1711,18 +1811,18 @@ class RolloutControllerTests(unittest.TestCase):
                 super().__init__()
                 self.queued_calls = 0
 
-            def runs(self, status=None, per_page=100):
-                del per_page
-                if status != "queued":
-                    return {"total_count": 0, "workflow_runs": []}
+            def runs(self, *, per_page=100, page=1, created=None):
+                del created
                 self.queued_calls += 1
+                runs = (
+                    []
+                    if self.queued_calls == 1
+                    else [{"id": 123, "status": "queued"}]
+                )
+                start = (page - 1) * per_page
                 return {
                     "total_count": 1,
-                    "workflow_runs": (
-                        []
-                        if self.queued_calls == 1
-                        else [{"id": 123, "status": "queued"}]
-                    ),
+                    "workflow_runs": runs[start : start + per_page],
                 }
 
         github = EventuallyConsistentGitHub()
@@ -1732,8 +1832,10 @@ class RolloutControllerTests(unittest.TestCase):
 
         self.assertEqual(1, inventory.count)
         self.assertEqual(frozenset(("asa",)), inventory.formulae[123])
-        self.assertEqual(2, github.queued_calls)
-        sleep.assert_called_once_with(rollout.ACTIVE_INVENTORY_BACKOFF_SECONDS)
+        self.assertEqual(3, github.queued_calls)
+        sleep.assert_called_once_with(
+            rollout.WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS
+        )
 
     def test_active_inventory_does_not_retry_malformed_run_identity(self):
         github = FakeGitHub()
@@ -1744,7 +1846,7 @@ class RolloutControllerTests(unittest.TestCase):
         with (
             mock.patch.object(rollout.time, "sleep") as sleep,
             self.assertRaisesRegex(
-                rollout.RolloutError, "malformed active run"
+                rollout.RolloutError, "malformed workflow run"
             ),
         ):
             rollout.active_inventory(github)
@@ -3321,7 +3423,8 @@ class RolloutControllerTests(unittest.TestCase):
                 super().__init__()
                 self.dispatches = []
 
-            def dispatch(self, formula, arches, tap_sha):
+            def dispatch(self, formula, arches, tap_sha, dispatch_token):
+                del dispatch_token
                 self.dispatches.append((formula, tuple(arches), tap_sha))
 
         github = RecordingGitHub()
@@ -3490,13 +3593,143 @@ class RolloutControllerTests(unittest.TestCase):
         )
 
         updated, recovered = rollout.correlate_pending_dispatches(
-            github, state
+            self.tap, github, state
         )
 
         self.assertEqual((("asa", 123),), recovered)
         self.assertEqual([], updated["pending_dispatches"])
         self.assertEqual(token, updated["dispatches"][-1]["dispatch_token"])
+        self.assertEqual(self.head, updated["dispatches"][-1]["caller_tap_sha"])
         self.assertEqual({}, github.jobs_by_run)
+
+    def test_batch_accepts_a_finalizer_only_source_advance_between_posts(self):
+        first_token = "abi42-" + "a1" * 16
+        second_token = "abi42-" + "b2" * 16
+        state = self._token_state(
+            ("asa", first_token, "submitted"),
+            ("bc", second_token, "submitted"),
+        )
+        with self._descendant_tap(
+            {
+                "Kandelo/reports/test-finalizer.provenance.json": (
+                    '{"schema":1,"status":"success"}\n'
+                ),
+            }
+        ) as (tap, descendant):
+            github = self._candidate_github(
+                self._run(
+                    123,
+                    self.head,
+                    display_title=rollout.workflow_run_title("asa", first_token),
+                ),
+                self._run(
+                    124,
+                    descendant,
+                    display_title=rollout.workflow_run_title("bc", second_token),
+                ),
+            )
+
+            updated, recovered = rollout.correlate_pending_dispatches(
+                tap, github, state
+            )
+
+        self.assertEqual((("asa", 123), ("bc", 124)), recovered)
+        self.assertEqual(
+            [self.head, descendant],
+            [entry["caller_tap_sha"] for entry in updated["dispatches"]],
+        )
+        self.assertTrue(
+            all(entry["tap_sha"] == self.head for entry in updated["dispatches"])
+        )
+
+    def test_batch_rejects_recipe_support_and_workflow_drift(self):
+        token = "abi42-" + "c3" * 16
+        state = self._token_state(("asa", token, "submitted"))
+        changes = (
+            (
+                "recipe",
+                {
+                    "Formula/asa.rb": lambda source: source.replace(
+                        "class Asa < Formula\n",
+                        'class Asa < Formula\n  desc "drifted recipe"\n',
+                        1,
+                    )
+                },
+                "changes a Formula recipe",
+            ),
+            (
+                "support",
+                {
+                    "Kandelo/formula_support/kandelo_formula_support.rb": (
+                        lambda source: source + "\n# drifted support\n"
+                    )
+                },
+                "changes Formula support",
+            ),
+            (
+                "workflow",
+                {
+                    rollout.WORKFLOW_PATH: lambda source: source.replace(
+                        "github.event.client_payload.force || false",
+                        "true",
+                        1,
+                    )
+                },
+                "changes the normalized publication workflow",
+            ),
+            (
+                "unrelated-path",
+                {"README.md": lambda source: source + "\nunrelated drift\n"},
+                "not a finalizer-only descendant",
+            ),
+        )
+        for label, change, message in changes:
+            with self.subTest(label=label), self._descendant_tap(change) as (
+                tap,
+                descendant,
+            ):
+                github = self._candidate_github(
+                    self._run(
+                        123,
+                        descendant,
+                        display_title=rollout.workflow_run_title("asa", token),
+                    )
+                )
+                with self.assertRaisesRegex(rollout.RolloutError, message):
+                    rollout.correlate_pending_dispatches(tap, github, state)
+
+    def test_finalizer_source_path_policy_is_exact_and_auditable(self):
+        accepted = (
+            ("M", "Formula/asa.rb"),
+            ("M", "Formula/git.rb"),
+            ("M", "Kandelo/metadata.json"),
+            ("A", "Kandelo/formula/asa.json"),
+            ("M", "Kandelo/formula/git.json"),
+            ("A", "Kandelo/link/asa-15.0.0-rebuild1-wasm32.json"),
+            ("M", "Kandelo/reports/asa-15.0.0.provenance.json"),
+            ("A", "Kandelo/reports/failures/run-123-attempt-1.json"),
+            ("M", "Kandelo/reports/rollbacks/run-123.json"),
+        )
+        rejected = (
+            ("D", "Formula/asa.rb"),
+            ("R", "Kandelo/formula/asa.json"),
+            ("A", "Formula/not-in-catalog.rb"),
+            ("M", "Formula/asa.rb.bak"),
+            ("A", "Kandelo/formula/not-in-catalog.json"),
+            ("M", "Kandelo/formula/asa.json.bak"),
+            ("A", "Kandelo/link/subdirectory/asa.json"),
+            ("M", "Kandelo/link/asa.json.bak"),
+            ("A", "Kandelo/reports/../escaped.json"),
+            ("M", "Kandelo/reports/report.txt"),
+            ("A", "Kandelo/formula_support/generated.json"),
+            ("M", "README.md"),
+        )
+        for status, path in accepted:
+            with self.subTest(status=status, path=path):
+                self.assertTrue(rollout.finalizer_owned_change(status, path))
+        for status, path in rejected:
+            with self.subTest(status=status, path=path):
+                self.assertFalse(rollout.finalizer_owned_change(status, path))
 
     def test_token_correlation_requires_exact_event_head_formula_and_token(self):
         token = "abi42-" + "5" * 32
@@ -3504,7 +3737,6 @@ class RolloutControllerTests(unittest.TestCase):
         title = rollout.workflow_run_title("asa", token)
         github = self._candidate_github(
             self._run(120, self.head, event="push", display_title=title),
-            self._run(121, "f" * 40, display_title=title),
             self._run(
                 122,
                 self.head,
@@ -3520,7 +3752,7 @@ class RolloutControllerTests(unittest.TestCase):
         )
 
         updated, recovered = rollout.correlate_pending_dispatches(
-            github, state
+            self.tap, github, state
         )
 
         self.assertEqual((), recovered)
@@ -3538,10 +3770,91 @@ class RolloutControllerTests(unittest.TestCase):
         with self.assertRaisesRegex(
             rollout.RolloutError, "matched multiple runs"
         ):
-            rollout.correlate_pending_dispatches(github, state)
+            rollout.correlate_pending_dispatches(self.tap, github, state)
 
         self.assertEqual(1, len(state["pending_dispatches"]))
         self.assertEqual([], state["dispatches"])
+
+    def test_token_recovery_paginates_only_its_request_time_range(self):
+        token = "abi42-" + "7a" * 16
+        state = self._token_state(("asa", token, "submitted"))
+        irrelevant = tuple(
+            self._run(run_id, self.head)
+            for run_id in range(1, 101)
+        )
+        github = self._candidate_github(
+            *irrelevant,
+            self._run(
+                101,
+                self.head,
+                display_title=rollout.workflow_run_title("asa", token),
+            ),
+        )
+
+        updated, recovered = rollout.correlate_pending_dispatches(
+            self.tap, github, state
+        )
+
+        self.assertEqual((("asa", 101),), recovered)
+        self.assertEqual([], updated["pending_dispatches"])
+        self.assertEqual(
+            [1, 2, 1, 2],
+            [query["page"] for query in github.run_queries],
+        )
+        self.assertEqual(
+            {
+                "2026-07-24T06:55:01Z..2026-07-24T07:05:02Z",
+            },
+            {query["created"] for query in github.run_queries},
+        )
+
+    def test_workflow_run_snapshot_retries_a_torn_whole_listing(self):
+        class MovingGitHub(FakeGitHub):
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+
+            def runs(self, *, per_page=100, page=1, created=None):
+                del per_page, page, created
+                self.calls += 1
+                status = "queued" if self.calls == 1 else "in_progress"
+                return {
+                    "total_count": 1,
+                    "workflow_runs": [{"id": 123, "status": status}],
+                }
+
+        github = MovingGitHub()
+        with mock.patch.object(rollout.time, "sleep") as sleep:
+            runs = rollout.workflow_run_snapshot(github)
+
+        self.assertEqual("in_progress", runs[0]["status"])
+        self.assertEqual(4, github.calls)
+        sleep.assert_called_once_with(
+            rollout.WORKFLOW_RUN_SNAPSHOT_BACKOFF_SECONDS
+        )
+
+    def test_workflow_run_snapshot_rejects_duplicates_across_pages(self):
+        class DuplicateGitHub(FakeGitHub):
+            def runs(self, *, per_page=100, page=1, created=None):
+                del created
+                if page == 1:
+                    runs = [{"id": run_id} for run_id in range(1, 101)]
+                else:
+                    runs = [{"id": 100}]
+                return {
+                    "total_count": 101,
+                    "workflow_runs": runs[:per_page],
+                }
+
+        with (
+            mock.patch.object(rollout.time, "sleep") as sleep,
+            self.assertRaisesRegex(
+                rollout.RolloutError,
+                "duplicate workflow runs across pages",
+            ),
+        ):
+            rollout.workflow_run_snapshot(DuplicateGitHub())
+        self.assertEqual(2, sleep.call_count)
 
     def test_recovery_records_visible_tokens_and_retains_late_independent_intents(self):
         asa_token = "abi42-" + "8" * 32
@@ -3580,17 +3893,20 @@ class RolloutControllerTests(unittest.TestCase):
                 self.head = head
                 self.created_runs: list[dict] = []
 
-            def runs(self, status=None, per_page=100):
-                del per_page
-                if status is not None:
-                    return {"total_count": 0, "workflow_runs": []}
+            def runs(self, *, per_page=100, page=1, created=None):
+                del created
                 events.append(("runs-page", None))
+                start = (page - 1) * per_page
                 return {
                     "total_count": len(self.created_runs),
-                    "workflow_runs": list(self.created_runs),
+                    "workflow_runs": list(self.created_runs)[
+                        start : start + per_page
+                    ],
                 }
 
-            def dispatch(self, formula, arches, dispatch_token):
+            def dispatch(self, formula, arches, tap_sha, dispatch_token):
+                if tap_sha != self.head:
+                    raise AssertionError(f"unexpected tap SHA {tap_sha}")
                 events.append(("dispatch", formula))
                 run_id = 200 + len(self.created_runs)
                 self.created_runs.append(
@@ -3657,9 +3973,14 @@ class RolloutControllerTests(unittest.TestCase):
         self.assertEqual(3, count)
         self.assertEqual(
             [
+                ("runs-page", None),
+                ("runs-page", None),
+                ("runs-page", None),
+                ("runs-page", None),
                 ("dispatch", "bc"),
                 ("dispatch", "binutils"),
                 ("dispatch", "bzip2"),
+                ("runs-page", None),
                 ("runs-page", None),
             ],
             events,
@@ -3685,23 +4006,25 @@ class RolloutControllerTests(unittest.TestCase):
                 self.dispatched: list[str] = []
                 self.created_runs: list[dict] = []
 
-            def runs(self, status=None, per_page=100):
-                del per_page
+            def runs(self, *, per_page=100, page=1, created=None):
+                del created
                 active = {
                     "id": 150,
                     "event": "repository_dispatch",
                     "head_sha": self.head,
                     "status": "queued",
                 }
-                if status == "queued":
-                    return {"total_count": 1, "workflow_runs": [active]}
-                if status is not None:
-                    return {"total_count": 0, "workflow_runs": []}
                 runs = [active, *self.created_runs]
-                return {"total_count": len(runs), "workflow_runs": runs}
+                start = (page - 1) * per_page
+                return {
+                    "total_count": len(runs),
+                    "workflow_runs": runs[start : start + per_page],
+                }
 
-            def dispatch(self, formula, arches, dispatch_token):
+            def dispatch(self, formula, arches, tap_sha, dispatch_token):
                 del arches
+                if tap_sha != self.head:
+                    raise AssertionError(f"unexpected tap SHA {tap_sha}")
                 self.dispatched.append(formula)
                 self.created_runs.append(
                     {
@@ -3726,7 +4049,7 @@ class RolloutControllerTests(unittest.TestCase):
                 count = rollout.dispatch_ready(
                     tap=self.tap,
                     github=github,
-                    expected_kandelo_sha=self.publisher_sha,
+                    expected_kandelo_sha=self.consumer_sha,
                     state_path=state_path,
                     no_fetch=True,
                     maximum=2,
@@ -3757,8 +4080,10 @@ class RolloutControllerTests(unittest.TestCase):
                 super().__init__()
                 self.calls: list[tuple[str, str]] = []
 
-            def dispatch(self, formula, arches, dispatch_token):
+            def dispatch(self, formula, arches, tap_sha, dispatch_token):
                 del arches
+                if tap_sha != self.head:
+                    raise AssertionError(f"unexpected tap SHA {tap_sha}")
                 self.calls.append((formula, dispatch_token))
                 raise rollout.RolloutError("ambiguous HTTP transport failure")
 
@@ -3777,7 +4102,7 @@ class RolloutControllerTests(unittest.TestCase):
                 rollout.dispatch_ready(
                     tap=self.tap,
                     github=github,
-                    expected_kandelo_sha=self.publisher_sha,
+                    expected_kandelo_sha=self.consumer_sha,
                     state_path=state_path,
                     no_fetch=True,
                     maximum=2,
@@ -3805,7 +4130,7 @@ class RolloutControllerTests(unittest.TestCase):
                 rollout.dispatch_ready(
                     tap=self.tap,
                     github=github,
-                    expected_kandelo_sha=self.publisher_sha,
+                    expected_kandelo_sha=self.consumer_sha,
                     state_path=state_path,
                     no_fetch=True,
                     maximum=2,
@@ -3831,11 +4156,12 @@ class RolloutControllerTests(unittest.TestCase):
                 "bc, binutils",
             ):
                 rollout.acknowledge_pending_dispatches(
+                    tap=self.tap,
                     github=github,
                     state=state,
                     state_path=state_path,
                     snapshot=self.snapshot,
-                    expected_kandelo_sha=self.publisher_sha,
+                    expected_kandelo_sha=self.consumer_sha,
                     timeout_seconds=0,
                     poll_seconds=0.001,
                 )
@@ -4233,6 +4559,31 @@ class RolloutControllerTests(unittest.TestCase):
             rollout.write_state(path, state)
             self.assertEqual(state, rollout.read_state(path))
             self.assertEqual(0o600, path.stat().st_mode & 0o777)
+
+    def test_state_write_persists_file_then_rename_then_parent_directory(self):
+        events: list[str] = []
+        real_fsync = rollout.os.fsync
+        real_replace = rollout.os.replace
+
+        def fsync(descriptor):
+            events.append("fsync")
+            return real_fsync(descriptor)
+
+        def replace(source, destination):
+            events.append("replace")
+            return real_replace(source, destination)
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            mock.patch.object(rollout.os, "fsync", side_effect=fsync),
+            mock.patch.object(rollout.os, "replace", side_effect=replace),
+        ):
+            rollout.write_state(
+                pathlib.Path(directory) / "rollout.json",
+                {"schema": 1},
+            )
+
+        self.assertEqual(["fsync", "replace", "fsync"], events)
 
     def test_state_lock_rejects_a_second_controller(self):
         with tempfile.TemporaryDirectory() as directory:

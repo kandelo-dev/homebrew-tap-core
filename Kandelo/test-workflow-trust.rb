@@ -667,6 +667,16 @@ def self_test(callers, contract, base_contract)
       expression("github.event.client_payload.tap_ref")
     check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
   end
+  expect_rejection("a mutable write publication tap ref") do
+    mutated = deep_copy(current_callers.fetch("publish"))
+    mutated.dig("jobs", "publish", "with")["tap-ref"] = "main"
+    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
+  end
+  expect_rejection("the caller commit substituted for reserved Formula source") do
+    mutated = deep_copy(current_callers.fetch("publish"))
+    mutated.dig("jobs", "publish", "with")["tap-ref"] = expression("github.sha")
+    check_caller(mutated, CALLER_SPECS.fetch("publish"), "publish workflow")
+  end
   expect_rejection("dry-run publication") do
     mutated = deep_copy(current_callers.fetch("dry-run"))
     mutated.dig("jobs", "dry-run", "with")["dry-run"] = false
@@ -733,6 +743,8 @@ begin
   check_workflow_file_set
   check(CURRENT_KANDELO_WORKFLOW_SHA.match?(/\A[0-9a-f]{40}\z/),
         "current Kandelo workflow pin is not an exact SHA")
+  check(CURRENT_KANDELO_CONSUMER_SHA.match?(/\A[0-9a-f]{40}\z/),
+        "current Kandelo package-consumer pin is not an exact SHA")
   check(PREPUBLICATION_GENERATION_SHA.match?(/\A[0-9a-f]{40}\z/),
         "prepublication package-generation pin is not an exact SHA")
   check(PREPUBLICATION_STAGING_TAG.match?(/\Apr-[1-9][0-9]*-staging\z/),
@@ -749,6 +761,7 @@ begin
   end
   workflow_shas = [
     CURRENT_KANDELO_WORKFLOW_SHA,
+    CURRENT_KANDELO_CONSUMER_SHA,
     PREPUBLICATION_GENERATION_SHA,
     REPOSITORY_CANARY_KANDELO_SHA,
     RETIRED_PAT_KANDELO_WORKFLOW_SHA,
