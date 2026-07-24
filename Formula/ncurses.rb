@@ -444,7 +444,7 @@ class Ncurses < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "f5fe23515865c3733ebc72b51468669f63a78041d4caabdef2d2f7bc32b81bc2"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "72e6ffbbe7c81be820a79033d203a86a159f02a8a79954c433e99b2ffe571712"
   end
 
 end

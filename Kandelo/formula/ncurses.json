@@ -1,36 +1,37 @@
 {
-  "bottle_rebuild": 0,
+  "bottle_rebuild": 1,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-20T07:51:05Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724871709",
+      "built_at": "2026-07-24T22:43:16Z",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30130487137",
       "built_from": {
-        "formula_sha256": "622f0753a5236f5950702b8a434aceb0fa4ee6c9babbb591780452236e673223",
-        "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+        "formula_sha256": "362b3ffe742bcd99ae971d1c2f0470cc1c718bd718cbebd1884ac91dd3f7a119",
+        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+        "tap_commit": "72ed849f8ea47eb26f355e8cb209e6c7b6c89f44",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 3497364,
-      "cache_key_sha": "f5fe23515865c3733ebc72b51468669f63a78041d4caabdef2d2f7bc32b81bc2",
+      "bytes": 3497401,
+      "cache_key_sha": "72e6ffbbe7c81be820a79033d203a86a159f02a8a79954c433e99b2ffe571712",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/ncurses-6.5-rebuild0-wasm32.json",
+      "kandelo_abi": 42,
+      "link_manifest": "Kandelo/link/ncurses-6.5-rebuild1-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "f5fe23515865c3733ebc72b51468669f63a78041d4caabdef2d2f7bc32b81bc2",
+      "sha256": "72e6ffbbe7c81be820a79033d203a86a159f02a8a79954c433e99b2ffe571712",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ncurses/blobs/sha256:f5fe23515865c3733ebc72b51468669f63a78041d4caabdef2d2f7bc32b81bc2"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ncurses/blobs/sha256:72e6ffbbe7c81be820a79033d203a86a159f02a8a79954c433e99b2ffe571712"
     }
   ],
   "dependencies": [
     {
+      "full_name": "kandelo-dev/tap-core/libcxx",
       "name": "libcxx",
       "version": "21.1.7_1"
     }
@@ -38,11 +39,11 @@
   "formula_path": "Formula/ncurses.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/ncurses",
-  "kandelo_abi": 41,
+  "kandelo_abi": 42,
   "name": "ncurses",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "01f9bea83ad53efff2c6fbdc92396d50d1aeabb1",
+  "tap_commit": "72ed849f8ea47eb26f355e8cb209e6c7b6c89f44",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "6.5"

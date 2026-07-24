@@ -37,7 +37,7 @@
   "name": "bzip2",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "71b3004a43be103b315d8d298a89799c3895e98a",
+  "tap_commit": "72ed849f8ea47eb26f355e8cb209e6c7b6c89f44",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.0.8_2"
