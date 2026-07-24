@@ -218,13 +218,15 @@ workflow narrows each scheduled job, and a dry run never schedules its bottle
 upload or tap-finalization jobs.
 
 Write publication accepts formulae, arches, and an optional release tag. During
-the ABI 42 bootstrap, the caller executes and builds from reviewed publisher
-descendant `d3805721b887a19382ef1c96b576fc27badc0951`. Its package inputs are
-separately fixed to generation
+the ABI 42 bootstrap, the caller executes reviewed publisher implementation
+`3545bfd34509a52b68a4620c92e4aae24c60adb0`, while the package consumer remains
+fixed to matching rootfs generation
+`d3805721b887a19382ef1c96b576fc27badc0951`. Package inputs are separately fixed
+to generation
 `437fde2524ea6ad9c44933f8abbf995a46841009` on `pr-1079-staging`; the controller
 fixes the tap source to the exact reviewed commit that it validated and
 recorded. The publisher proves that the package generation is an ancestor of
-the publisher descendant, that both commits declare the same exact `rootfs`
+the package consumer, that both commits declare the same exact `rootfs`
 closure, and that every selected staging archive matches that sealed closure
 before a bottle build may use it. This explicit bridge breaks the
 package-before-bottle cycle without making any build input mutable.
@@ -265,6 +267,23 @@ bottle on tap `main` for the selected architecture, current Kandelo ABI, and
 repository-rooted bottle namespace. A failed Formula blocks its downstream
 dependents, but it does not block unrelated ready Formulae from filling an
 available slot.
+
+For a targeted product proof, keep the complete ledger but allow the controller
+to select only an exact reviewed subset:
+
+```bash
+python3 scripts/abi42-rollout.py \
+  --tap-root "$PWD" \
+  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --state-file "$KANDELO_ROLLOUT_STATE" \
+  --dispatch \
+  --formulae ncurses,bash,ruby,curl,tar,less,vim,git
+```
+
+The allowlist is fail-closed: unknown, empty, or duplicate names are rejected.
+The controller still creates one Formula dispatch at a time and applies the
+ordinary dependency and finalization checks. Omitted Formulae stay unchanged
+in the catalog and ledger and cannot consume an available dispatch slot.
 
 The rollout controller records a durable intent before sending
 `repository_dispatch`, then waits for GitHub to expose the run's generated job
@@ -320,27 +339,101 @@ metadata has rolled over to ABI 42, the controller refuses to create a
 replacement ledger; restore the original file instead of reconstructing one
 from current tap state.
 
-After a failed publication or a publisher-pin change, submit a fresh
-`repository_dispatch`; do not select **Re-run jobs** on the old run. A rerun
-retains the original caller workflow and its pinned reusable-workflow revision,
-while a fresh dispatch loads the reviewed caller now on tap `main`, creates new
-run-local receipts, and replans against current tap state. Preserve the old run
-and failure report, and never move artifacts manually between runs. The
-[authoritative Homebrew publishing contract](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md#public-package-creation-and-legacy-namespace-retirement)
+After a controller-recorded publication fails, do not immediately dispatch it
+again. First land the reviewed Formula or publisher correction on tap `main`,
+then retire the exact failed run through the same private ledger:
+
+```bash
+: "${KANDELO_FAILED_RUN_ID:?set this to the controller-recorded failed run ID}"
+python3 scripts/abi42-rollout.py \
+  --tap-root "$PWD" \
+  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --state-file "$KANDELO_ROLLOUT_STATE" \
+  --recover-failed-run "$KANDELO_FAILED_RUN_ID"
+```
+
+Repeat `--recover-failed-run RUN_ID` in the same invocation when one reviewed
+tap change reserves or fixes multiple Formulae. The controller validates the
+complete set against one tap snapshot and either migrates all of their ledger
+entries in one file replacement or migrates none of them.
+
+A plan-stage failure can occur before GitHub expands the Formula matrix. For an
+unresolved controller intent, include that exact run ID in the same
+`--recover-failed-run` batch. Recovery then requires the sole post-intent run on
+the recorded caller head, the exact Formula and architecture inputs in the plan
+log, a failed plan job, every downstream job skipped with zero steps, and an
+anonymous 404 for the bottle identity.
+
+If an operator already sent a narrowly reviewed replacement dispatch before it
+could be recorded, retain an exact pre-matrix no-write failure explicitly:
+
+```bash
+python3 scripts/abi42-rollout.py \
+  --tap-root "$PWD" \
+  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --state-file "$KANDELO_ROLLOUT_STATE" \
+  --recover-failed-run "$KANDELO_PREVIOUS_FAILED_RUN_ID" \
+  --adopt-failed-run "make=$KANDELO_UNRECORDED_FAILED_RUN_ID"
+```
+
+Explicit adoption is deliberately limited to completed pre-matrix failures. It
+requires the production workflow ID and an explicitly approved complete caller
+hash, then parses the exact plan log to bind Formula, architectures, publisher,
+consumer, and tap source. The failed plan job must have had exactly
+`contents: read` and `metadata: read`; every downstream write-capable job must
+also be proven skipped before the anonymous-404 proof can retain the same
+identity. It cannot adopt a successful, active, post-matrix, mutable tap-source,
+write-authorized, rerun (`run_attempt > 1`), or otherwise ambiguous run.
+
+This recovery sends no event and uses no registry credential. It requires the
+exact completed failed `repository_dispatch` and Formula/architecture matrix
+recorded by the controller. It then reads the failed OCI reference anonymously:
+
+- If the reference exists, the current Formula must reserve exactly the next
+  `rebuild`, retain every last-green checksum, and change no other Formula byte.
+  The manifest's exact digest is retained in the ledger.
+- If the reference returns an exact anonymous 404, the current Formula must
+  retain the same `rebuild` and last-green checksums. Every upload, version-index,
+  successful tap-finalization, and VFS-release credential step must also be
+  proven skipped by the complete GitHub job result. A failed-attempt report on
+  tap `main` is preserved but does not occupy the bottle identity.
+
+The controller moves the old dispatch into `failed_attempts`, records its old
+and replacement catalog entries and evidence, and updates the one Formula's
+frozen catalog in the same locked mode-0600 file replacement. Any ambiguous
+run, changed stable identity, missing job or step, unexpected registry response,
+or unrelated catalog drift leaves the ledger byte-for-byte unchanged. Resume
+normal `--dispatch` operation only after recovery succeeds; that path creates
+the fresh `repository_dispatch`. Do not select **Re-run jobs** on the old run:
+a rerun retains the original caller workflow and its pinned reusable-workflow
+revision, while a fresh dispatch loads the reviewed caller now on tap `main`,
+creates new run-local receipts, and replans against current tap state. Preserve
+the old run and failure report, and never move artifacts manually between runs.
+The [authoritative Homebrew publishing contract](https://github.com/Automattic/kandelo/blob/main/docs/homebrew-publishing.md#public-package-creation-and-legacy-namespace-retirement)
 owns the complete trust, readiness, read-only acceptance, and legacy-cleanup
 procedure. This tap links to that procedure instead of duplicating operator
 commands that must change with the publisher and namespace contracts.
 
+When reviewed publisher code advances without changing the ABI 42 package
+consumer, failed-run recovery also migrates the private workflow trust root in
+that same atomic replacement. The ledger keeps the old workflow hash and
+publisher SHA in `workflow_rotations`, activates the new workflow hash and
+publisher SHA, and leaves `expected_kandelo_sha` unchanged. Historical attempts
+remain auditable without allowing a publisher update to silently select a
+different rootfs generation.
+
 If the failed run already uploaded public bottle bytes and a retry could produce
 different bytes, reserve the next bottle identity before dispatching it. Set the
-Formula to the next positive `rebuild` and keep the SHA-256 of the occupied
-public child in that temporary bottle block as reviewable evidence; do not invent
-a placeholder or overwrite the existing registry reference. The retry's trusted
-finalizer replaces the complete block with its generated checksum and matching
-sidecars. Run `homebrew-validate` before merging the reservation. A Formula with
-no generated catalog entry should remain validator-clean; if last-green
-sidecars exist, document only their temporary rebuild mismatch and do not waive
-unrelated validator failures.
+Formula to the next positive `rebuild` and keep the complete last-green checksum
+block until publication; do not invent a placeholder or overwrite the existing
+registry reference. The failed-attempt ledger preserves the occupied public
+manifest digest as evidence instead of making an unfinalized bottle appear
+installable in Formula metadata. The retry's trusted finalizer replaces the
+complete block with its generated checksum and matching sidecars. Run
+`homebrew-validate` before merging the reservation. A Formula with no generated
+catalog entry should remain validator-clean; if last-green sidecars exist,
+document only their temporary rebuild mismatch and do not waive unrelated
+validator failures.
 
 Production keeps `kandelo-dev/tap-core` as the canonical Homebrew identity for
 Formula references, OCI titles, and sidecars. Bottle transport instead uses the

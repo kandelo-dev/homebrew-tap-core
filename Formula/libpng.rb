@@ -91,7 +91,7 @@ class Libpng < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
+    rebuild 2
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "19b59336d04d75bc2fd69df42c71da9c3029b2caf3cb6fceb9e7b56ed81f05db"
   end
 
