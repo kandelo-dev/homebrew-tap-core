@@ -32,6 +32,10 @@ TAP_NAME = "kandelo-dev/tap-core"
 KANDELO_REPOSITORY = "Automattic/kandelo"
 WORKFLOW_ID = 315_324_894
 WORKFLOW_PATH = ".github/workflows/publish-bottles.yml"
+# WHY: this SHA selects trusted publisher code, not package identity. The
+# controller separately receives the Kandelo package-consumer SHA so hardened
+# workflow changes cannot silently force ABI 42 to consume a different cache.
+PUBLISHER_WORKFLOW_SHA = "3545bfd34509a52b68a4620c92e4aae24c60adb0"
 EXPECTED_ABI = 42
 EXPECTED_RELEASE_TAG = "bottles-abi-v42"
 PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
@@ -611,10 +615,15 @@ def validate_workflow(
         snapshot.workflow_source,
         flags=re.MULTILINE,
     )
-    if uses != [expected_kandelo_sha] or refs != [expected_kandelo_sha]:
+    if uses != [PUBLISHER_WORKFLOW_SHA]:
         raise RolloutError(
-            "production workflow is not frozen to the requested ABI 42 Kandelo SHA "
-            f"(uses={uses}, kandelo-ref={refs})"
+            "production workflow publisher implementation is not frozen to the "
+            f"reviewed SHA (uses={uses}, expected={PUBLISHER_WORKFLOW_SHA})"
+        )
+    if refs != [expected_kandelo_sha]:
+        raise RolloutError(
+            "production workflow package consumer is not frozen to the requested "
+            f"ABI 42 Kandelo SHA (kandelo-ref={refs})"
         )
 
     # The controller owns only formula/architecture payloads. Freeze the

@@ -13,7 +13,11 @@ jobs:
     uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@3545bfd34509a52b68a4620c92e4aae24c60adb0
     with:
       kandelo-repository: Automattic/kandelo
-      kandelo-ref: 3545bfd34509a52b68a4620c92e4aae24c60adb0
+      # WHY: the `uses` SHA selects the hardened publisher implementation,
+      # while this SHA selects the package generation consumed by that code.
+      # ABI 42's sealed archives exactly match d380's rootfs identity; later
+      # shell-package edits at 3545 intentionally have a different cache key.
+      kandelo-ref: d3805721b887a19382ef1c96b576fc27badc0951
       tap-repository: kandelo-dev/homebrew-tap-core
       tap-name: kandelo-dev/tap-core
       # WHY: repository_dispatch loads this caller from main, but Formula

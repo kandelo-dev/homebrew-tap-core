@@ -67,11 +67,12 @@ class RolloutControllerTests(unittest.TestCase):
         cls.head = cls.tap.git("rev-parse", "HEAD").stdout.strip()
         cls.snapshot = rollout.load_snapshot(cls.tap, cls.head)
         match = re.search(
-            r"reusable-homebrew-bottle-publish\.yml@([0-9a-f]{40})",
+            r"^\s+kandelo-ref:\s+([0-9a-f]{40})\s*$",
             cls.snapshot.workflow_source,
+            flags=re.MULTILINE,
         )
         assert match is not None
-        cls.publisher_sha = match.group(1)
+        cls.consumer_sha = match.group(1)
 
     def _submitted_state(
         self,
@@ -80,7 +81,7 @@ class RolloutControllerTests(unittest.TestCase):
         arches: tuple[str, ...] = ("wasm32",),
         before_run_ids: tuple[int, ...] = (),
     ) -> dict:
-        state = rollout.initial_state(self.snapshot, self.publisher_sha)
+        state = rollout.initial_state(self.snapshot, self.consumer_sha)
         state["unresolved_dispatch"] = {
             "formula": formula,
             "arches": list(arches),
@@ -120,7 +121,7 @@ class RolloutControllerTests(unittest.TestCase):
                 result = rollout.recover_submitted_dispatch(
                     tap=self.tap,
                     github=github,
-                    expected_kandelo_sha=self.publisher_sha,
+                    expected_kandelo_sha=self.consumer_sha,
                     state_path=state_path,
                     no_fetch=True,
                 )
@@ -145,7 +146,7 @@ class RolloutControllerTests(unittest.TestCase):
                 result = rollout.abandon_submitted_dispatch(
                     tap=self.tap,
                     github=github,
-                    expected_kandelo_sha=self.publisher_sha,
+                    expected_kandelo_sha=self.consumer_sha,
                     state_path=state_path,
                     run_id=run_id,
                     no_fetch=True,
@@ -174,7 +175,7 @@ class RolloutControllerTests(unittest.TestCase):
                 rollout.recover_submitted_dispatch(
                     tap=self.tap,
                     github=github,
-                    expected_kandelo_sha=self.publisher_sha,
+                    expected_kandelo_sha=self.consumer_sha,
                     state_path=state_path,
                     no_fetch=True,
                 )
@@ -201,7 +202,7 @@ class RolloutControllerTests(unittest.TestCase):
                 rollout.abandon_submitted_dispatch(
                     tap=self.tap,
                     github=github,
-                    expected_kandelo_sha=self.publisher_sha,
+                    expected_kandelo_sha=self.consumer_sha,
                     state_path=state_path,
                     run_id=run_id,
                     no_fetch=True,
@@ -407,7 +408,7 @@ class RolloutControllerTests(unittest.TestCase):
         )
         asa_bottles = asa_package["bottles"]
         historical_built_from = asa_bottles[0]["built_from"]
-        historical_publisher_sha = historical_built_from["kandelo_commit"]
+        historical_consumer_sha = historical_built_from["kandelo_commit"]
         current = dataclasses.replace(
             current,
             workflow_source=self.tap.show(
@@ -430,7 +431,7 @@ class RolloutControllerTests(unittest.TestCase):
             metadata=cutover_metadata,
             workflow_source=current.workflow_source,
         )
-        state = rollout.initial_state(cutover, historical_publisher_sha)
+        state = rollout.initial_state(cutover, historical_consumer_sha)
 
         self.assertEqual(["asa"], [
             package["name"] for package in current.metadata["packages"]
@@ -439,14 +440,14 @@ class RolloutControllerTests(unittest.TestCase):
             previous_binutils["version"],
             current.identities["binutils"].pkg_version,
         )
-        rollout.validate_state(state, current, historical_publisher_sha)
+        rollout.validate_state(state, current, historical_consumer_sha)
 
         statuses = {
             status.name: status
             for status in rollout.calculate_statuses(
                 self.tap,
                 current,
-                historical_publisher_sha,
+                historical_consumer_sha,
                 rollout.RunInventory(
                     count=0,
                     runs=(),
@@ -481,7 +482,7 @@ class RolloutControllerTests(unittest.TestCase):
             self._load_snapshot_view(formula_sidecars={"binutils": sidecar})
 
     def test_frozen_catalog_rejects_current_sidecar_version_tampering(self):
-        state = rollout.initial_state(self.snapshot, self.publisher_sha)
+        state = rollout.initial_state(self.snapshot, self.consumer_sha)
         sidecar = copy.deepcopy(self.snapshot.formula_sidecars["binutils"])
         self.assertIsNotNone(sidecar)
         sidecar["version"] = "999.0"
@@ -490,17 +491,17 @@ class RolloutControllerTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(rollout.RolloutError, "catalog differs"):
-            rollout.validate_state(state, current, self.publisher_sha)
+            rollout.validate_state(state, current, self.consumer_sha)
 
     def test_frozen_catalog_rejects_ledger_or_current_source_tampering(self):
-        state = rollout.initial_state(self.snapshot, self.publisher_sha)
+        state = rollout.initial_state(self.snapshot, self.consumer_sha)
         tampered_state = copy.deepcopy(state)
         tampered_state["catalog"]["binutils"]["version"] = "999.0"
         with self.assertRaisesRegex(rollout.RolloutError, "catalog differs"):
             rollout.validate_state(
                 tampered_state,
                 self.snapshot,
-                self.publisher_sha,
+                self.consumer_sha,
             )
 
         source = self.snapshot.formula_sources["binutils"].replace(
@@ -512,7 +513,7 @@ class RolloutControllerTests(unittest.TestCase):
             formula_sources={"binutils": source}
         )
         with self.assertRaisesRegex(rollout.RolloutError, "catalog differs"):
-            rollout.validate_state(state, current, self.publisher_sha)
+            rollout.validate_state(state, current, self.consumer_sha)
 
     def test_dispatch_cannot_recreate_a_missing_ledger_after_cutover(self):
         self.assertEqual(
@@ -533,7 +534,7 @@ class RolloutControllerTests(unittest.TestCase):
                 rollout.dispatch_ready(
                     tap=self.tap,
                     github=FakeGitHub(),
-                    expected_kandelo_sha=self.publisher_sha,
+                    expected_kandelo_sha=self.consumer_sha,
                     state_path=state_path,
                     no_fetch=True,
                     maximum=1,
@@ -575,7 +576,7 @@ class RolloutControllerTests(unittest.TestCase):
                 formula,
             )
 
-    def test_workflow_must_pin_both_call_and_source_to_frozen_sha(self):
+    def test_workflow_pins_publisher_and_package_consumer_separately(self):
         expected = "a" * 40
         vfs_expression = (
             "${{ github.event.client_payload.require_vfs_acceptance || false }}"
@@ -586,7 +587,7 @@ on:
     types: [publish-kandelo-bottles]
 jobs:
   publish:
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@{expected}
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@{rollout.PUBLISHER_WORKFLOW_SHA}
     with:
       kandelo-repository: Automattic/kandelo
       kandelo-ref: {expected}
@@ -605,7 +606,20 @@ jobs:
         snapshot = dataclasses.replace(self.snapshot, workflow_source=source)
         rollout.validate_workflow(FakeGitHub(), snapshot, expected)
         with self.assertRaisesRegex(
-            rollout.RolloutError, "not frozen to the requested"
+            rollout.RolloutError, "publisher implementation is not frozen"
+        ):
+            rollout.validate_workflow(
+                FakeGitHub(),
+                dataclasses.replace(
+                    snapshot,
+                    workflow_source=source.replace(
+                        rollout.PUBLISHER_WORKFLOW_SHA, "b" * 40
+                    ),
+                ),
+                expected,
+            )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "package consumer is not frozen"
         ):
             rollout.validate_workflow(
                 FakeGitHub(),
@@ -1371,7 +1385,7 @@ jobs:
             ],
             abandoned["abandoned_dispatches"],
         )
-        rollout.validate_state(abandoned, self.snapshot, self.publisher_sha)
+        rollout.validate_state(abandoned, self.snapshot, self.consumer_sha)
 
     def test_abandonment_rejects_any_external_write_job_step(self):
         state = self._submitted_state()
