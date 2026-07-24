@@ -128,6 +128,32 @@ class RolloutControllerTests(unittest.TestCase):
             self.assertEqual(0o600, state_path.stat().st_mode & 0o777)
             return result, recovered
 
+    def _abandon(
+        self,
+        github: FakeGitHub,
+        state: dict,
+        *,
+        run_id: int = 123,
+    ) -> tuple[tuple[str, int], dict]:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "rollout.json"
+            rollout.write_state(state_path, state)
+            with mock.patch.object(
+                self.tap, "main_without_fetch", return_value=self.head
+            ):
+                result = rollout.abandon_submitted_dispatch(
+                    tap=self.tap,
+                    github=github,
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    run_id=run_id,
+                    no_fetch=True,
+                )
+            abandoned = rollout.read_state(state_path)
+            assert abandoned is not None
+            self.assertEqual(0o600, state_path.stat().st_mode & 0o777)
+            return result, abandoned
+
     def _assert_recovery_fails_unchanged(
         self,
         pattern: str,
@@ -149,6 +175,34 @@ class RolloutControllerTests(unittest.TestCase):
                     github=github,
                     expected_kandelo_sha=self.publisher_sha,
                     state_path=state_path,
+                    no_fetch=True,
+                )
+            self.assertEqual(original, state_path.read_bytes())
+
+    def _assert_abandon_fails_unchanged(
+        self,
+        pattern: str,
+        github: FakeGitHub,
+        state: dict,
+        *,
+        run_id: int = 123,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "rollout.json"
+            rollout.write_state(state_path, state)
+            original = state_path.read_bytes()
+            with (
+                mock.patch.object(
+                    self.tap, "main_without_fetch", return_value=self.head
+                ),
+                self.assertRaisesRegex(rollout.RolloutError, pattern),
+            ):
+                rollout.abandon_submitted_dispatch(
+                    tap=self.tap,
+                    github=github,
+                    expected_kandelo_sha=self.publisher_sha,
+                    state_path=state_path,
+                    run_id=run_id,
                     no_fetch=True,
                 )
             self.assertEqual(original, state_path.read_bytes())
@@ -178,6 +232,18 @@ class RolloutControllerTests(unittest.TestCase):
         return tuple(
             {"name": f"publish / build-and-test ({formula}, {arch})"}
             for arch in arches
+        )
+
+    @staticmethod
+    def _never_started_write_jobs() -> tuple[dict, ...]:
+        return tuple(
+            {
+                "name": f"publish / {stage}",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "steps": [],
+            }
+            for stage in sorted(rollout.EXTERNAL_WRITE_JOB_STAGES)
         )
 
     @staticmethod
@@ -1228,6 +1294,163 @@ jobs:
             state,
         )
 
+    def test_abandonment_preserves_a_cancelled_never_started_request(self):
+        state = self._submitted_state(before_run_ids=(100,))
+        github = self._candidate_github(
+            self._run(100, self.head),
+            self._run(
+                123,
+                self.head,
+                status="completed",
+                conclusion="cancelled",
+            ),
+            jobs_by_run={
+                100: self._matrix_jobs("asa", "wasm32"),
+                123: (
+                    *self._matrix_jobs("asa", "wasm32"),
+                    *self._never_started_write_jobs(),
+                ),
+            },
+        )
+
+        with mock.patch.object(
+            rollout, "_utc_now", return_value="2026-07-24T17:40:00Z"
+        ):
+            result, abandoned = self._abandon(github, state)
+
+        self.assertEqual(("asa", 123), result)
+        self.assertIsNone(abandoned["unresolved_dispatch"])
+        self.assertEqual([], abandoned["dispatches"])
+        self.assertEqual(
+            [
+                {
+                    "formula": "asa",
+                    "arches": ["wasm32"],
+                    "intent_tap_sha": self.head,
+                    "run_tap_sha": self.head,
+                    "run_id": 123,
+                    "submitted_at": "2026-07-24T06:46:35Z",
+                    "abandoned_at": "2026-07-24T17:40:00Z",
+                    "reason": rollout.ABANDONED_DISPATCH_REASON,
+                }
+            ],
+            abandoned["abandoned_dispatches"],
+        )
+        rollout.validate_state(abandoned, self.snapshot, self.publisher_sha)
+
+    def test_abandonment_rejects_any_external_write_job_step(self):
+        state = self._submitted_state()
+        write_jobs = list(self._never_started_write_jobs())
+        write_jobs[0] = {
+            **write_jobs[0],
+            "steps": [
+                {
+                    "name": "Authenticate to GHCR",
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+            ],
+        }
+        github = self._candidate_github(
+            self._run(
+                123,
+                self.head,
+                status="completed",
+                conclusion="cancelled",
+            ),
+            jobs_by_run={
+                123: (
+                    *self._matrix_jobs("asa", "wasm32"),
+                    *write_jobs,
+                )
+            },
+        )
+
+        self._assert_abandon_fails_unchanged(
+            "may have started; refusing abandonment",
+            github,
+            state,
+        )
+
+    def test_abandonment_requires_the_sole_explicit_post_intent_run(self):
+        state = self._submitted_state()
+        jobs = (
+            *self._matrix_jobs("asa", "wasm32"),
+            *self._never_started_write_jobs(),
+        )
+        github = self._candidate_github(
+            self._run(
+                123,
+                self.head,
+                status="completed",
+                conclusion="cancelled",
+            ),
+            self._run(
+                124,
+                self.head,
+                status="completed",
+                conclusion="cancelled",
+            ),
+            jobs_by_run={123: jobs, 124: jobs},
+        )
+
+        self._assert_abandon_fails_unchanged(
+            "explicit sole post-intent Formula run",
+            github,
+            state,
+        )
+
+    def test_abandonment_rejects_a_non_cancelled_run(self):
+        state = self._submitted_state()
+        github = self._candidate_github(
+            self._run(
+                123,
+                self.head,
+                status="completed",
+                conclusion="failure",
+            ),
+            jobs_by_run={
+                123: (
+                    *self._matrix_jobs("asa", "wasm32"),
+                    *self._never_started_write_jobs(),
+                )
+            },
+        )
+
+        self._assert_abandon_fails_unchanged(
+            "not a completed cancelled publication",
+            github,
+            state,
+        )
+
+    def test_abandonment_requires_every_external_write_job(self):
+        state = self._submitted_state()
+        write_jobs = tuple(
+            job
+            for job in self._never_started_write_jobs()
+            if not job["name"].endswith("publish-vfs-release")
+        )
+        github = self._candidate_github(
+            self._run(
+                123,
+                self.head,
+                status="completed",
+                conclusion="cancelled",
+            ),
+            jobs_by_run={
+                123: (
+                    *self._matrix_jobs("asa", "wasm32"),
+                    *write_jobs,
+                )
+            },
+        )
+
+        self._assert_abandon_fails_unchanged(
+            "lacks expected external-write jobs: publish-vfs-release",
+            github,
+            state,
+        )
+
     def test_state_write_is_private_and_preserves_unresolved_marker(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "rollout.json"
@@ -1279,6 +1502,19 @@ jobs:
         override = rollout.parse_args((*base, "--ack-timeout", "17"))
         self.assertEqual(600, defaults.ack_timeout)
         self.assertEqual(17, override.ack_timeout)
+
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            rollout.parse_args((*base, "--abandon-dispatch-run", "123"))
+        abandon = rollout.parse_args(
+            (
+                *base,
+                "--state-file",
+                "/tmp/rollout-state.json",
+                "--abandon-dispatch-run",
+                "123",
+            )
+        )
+        self.assertEqual(123, abandon.abandon_dispatch_run)
 
 
 if __name__ == "__main__":

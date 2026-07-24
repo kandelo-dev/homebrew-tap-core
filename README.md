@@ -284,14 +284,37 @@ matches, a partial job page, or any identity mismatch leaves the unresolved
 marker unchanged. Resume normal controller dispatching only after recovery
 reports the correlated run ID.
 
+If an operator deliberately cancels the sole correlated run before any
+external-write job starts, preserve that fact and release the intent with the
+explicit run ID:
+
+```bash
+: "${KANDELO_CANCELLED_RUN_ID:?set this to the sole cancelled publication run}"
+python3 scripts/abi42-rollout.py \
+  --tap-root "$PWD" \
+  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --state-file "$KANDELO_ROLLOUT_STATE" \
+  --abandon-dispatch-run "$KANDELO_CANCELLED_RUN_ID"
+```
+
+Abandonment is narrower than recovery. It requires a completed, cancelled,
+sole post-intent run with the exact Formula and architecture matrix on the
+protected-main history. Every registry upload, index publication, tap
+finalization, and VFS release job must exist and have zero steps. A missing
+job, any started step, an ambiguous run, or an incomplete GitHub result leaves
+the marker unchanged. The controller records the cancelled run and both tap
+commits in `abandoned_dispatches` before clearing the unresolved marker; it
+sends no event.
+
 The rollout ledger is part of the write-safety boundary. Preserve the original
 private ledger after the first ABI 42 Formula is finalized: it freezes the
-reviewed catalog and retains successful, failed, and unresolved dispatch
-history. Read-only status may derive an implicit Formula version from that
-Formula's package-owned sidecar, but a write-capable controller cross-checks
-the result against the frozen ledger. Once aggregate metadata has rolled over
-to ABI 42, the controller refuses to create a replacement ledger; restore the
-original file instead of reconstructing one from current tap state.
+reviewed catalog and retains successful, failed, unresolved, and safely
+abandoned dispatch history. Read-only status may derive an implicit Formula
+version from that Formula's package-owned sidecar, but a write-capable
+controller cross-checks the result against the frozen ledger. Once aggregate
+metadata has rolled over to ABI 42, the controller refuses to create a
+replacement ledger; restore the original file instead of reconstructing one
+from current tap state.
 
 After a failed publication or a publisher-pin change, submit a fresh
 `repository_dispatch`; do not select **Re-run jobs** on the old run. A rerun
