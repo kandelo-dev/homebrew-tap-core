@@ -365,6 +365,32 @@ class RolloutControllerTests(unittest.TestCase):
         )
         return base, reservation
 
+    def _current_successor_snapshots(
+        self,
+    ) -> tuple[rollout.TapSnapshot, rollout.TapSnapshot]:
+        sources: dict[str, str] = {}
+        identities: dict[str, rollout.FormulaIdentity] = {}
+        for formula in rollout.FORMULA_ORDER:
+            successor = self.snapshot.identities[formula].bottle_rebuild + 1
+            source = rollout.source_with_rebuild(
+                self.snapshot.formula_sources[formula],
+                formula,
+                successor,
+            )
+            sources[formula] = source
+            identities[formula] = rollout.parse_formula_identity(
+                formula,
+                source,
+                self.snapshot.formula_sidecars[formula],
+            )
+        reservation = dataclasses.replace(
+            self.snapshot,
+            sha="c" * 40,
+            formula_sources=sources,
+            identities=identities,
+        )
+        return self.snapshot, reservation
+
     def _campaign_state(
         self,
         base: rollout.TapSnapshot,
@@ -382,6 +408,13 @@ class RolloutControllerTests(unittest.TestCase):
             checked_at="2026-07-25T12:00:00Z",
         )
 
+    @staticmethod
+    def _campaign_reservation_changes() -> tuple[tuple[str, str], ...]:
+        return tuple(
+            ("M", f"Formula/{formula}.rb")
+            for formula in rollout.FORMULA_ORDER
+        )
+
     def _initialize_campaign(
         self,
         *,
@@ -397,6 +430,9 @@ class RolloutControllerTests(unittest.TestCase):
             reservation.sha,
         )
         tap.is_ancestor.return_value = True
+        tap.changed_entries.return_value = (
+            self._campaign_reservation_changes()
+        )
         github = FakeGitHub()
         snapshots = {base.sha: base, reservation.sha: reservation}
         with (
@@ -1162,6 +1198,9 @@ class RolloutControllerTests(unittest.TestCase):
         base, reservation = self._campaign_snapshots()
         tap = mock.Mock()
         tap.is_ancestor.return_value = True
+        tap.changed_entries.return_value = (
+            self._campaign_reservation_changes()
+        )
         with mock.patch.object(
             rollout, "finalization_reasons", return_value=()
         ):
@@ -1205,7 +1244,7 @@ class RolloutControllerTests(unittest.TestCase):
                 rollout, "finalization_reasons", return_value=()
             ),
             self.assertRaisesRegex(
-                rollout.RolloutError, "must reserve exactly rebuild"
+                rollout.RolloutError, "must reserve exact base successor rebuild"
             ),
         ):
             rollout.validate_fresh_campaign_reservations(
@@ -1244,6 +1283,25 @@ class RolloutControllerTests(unittest.TestCase):
                 tap=tap,
                 base=base,
                 reservation=edited,
+            )
+
+        tap.changed_entries.return_value = (
+            *self._campaign_reservation_changes(),
+            ("M", "README.md"),
+        )
+        with (
+            mock.patch.object(
+                rollout, "finalization_reasons", return_value=()
+            ),
+            self.assertRaisesRegex(
+                rollout.RolloutError,
+                "changes beyond the 63 exact Formula rebuild reservations",
+            ),
+        ):
+            rollout.validate_fresh_campaign_reservations(
+                tap=tap,
+                base=base,
+                reservation=reservation,
             )
 
     def test_fresh_campaign_initialization_writes_one_complete_private_ledger(self):
@@ -1286,6 +1344,17 @@ class RolloutControllerTests(unittest.TestCase):
             advanced_source,
             sha=base.sha,
         )
+        successor_source = rollout.source_with_rebuild(
+            advanced_source,
+            formula,
+            last_green_rebuild + 3,
+        )
+        reservation = self._snapshot_with_formula_source(
+            reservation,
+            formula,
+            successor_source,
+            sha=reservation.sha,
+        )
         partial_metadata = copy.deepcopy(base.metadata)
         partial_metadata["packages"] = partial_metadata["packages"][:1]
         base = dataclasses.replace(base, metadata=partial_metadata)
@@ -1297,7 +1366,7 @@ class RolloutControllerTests(unittest.TestCase):
             base.identities[formula].bottle_rebuild,
         )
         self.assertEqual(
-            last_green_rebuild + 1,
+            last_green_rebuild + 3,
             reservation.identities[formula].bottle_rebuild,
         )
 
@@ -1319,10 +1388,176 @@ class RolloutControllerTests(unittest.TestCase):
             state["previous_catalog"][formula]["bottle_rebuild"],
         )
         self.assertEqual(
-            last_green_rebuild + 1,
+            last_green_rebuild + 2,
+            state["base_catalog"][formula]["bottle_rebuild"],
+        )
+        self.assertEqual(
+            last_green_rebuild + 3,
             state["initial_catalog"][formula]["bottle_rebuild"],
         )
         self.assertEqual(63, len(registry.calls))
+
+    def test_current_successors_avoid_all_six_historical_collisions(self):
+        base, reservation = self._current_successor_snapshots()
+        # These are the exact collisions that the old sidecar+1 rule selected:
+        # libxml2's Formula is one rebuild ahead of its sidecar and the other
+        # five are two ahead. Reserving T0+1 skips every historical identity.
+        collision_gaps = {
+            "libmagic": 2,
+            "libpng": 2,
+            "libxml2": 1,
+            "sqlite": 2,
+            "unzip": 2,
+            "what": 2,
+        }
+        collisions = tuple(collision_gaps)
+        historical = {
+            (
+                formula,
+                rollout.homebrew_top_reference(
+                    base.formula_sidecars[formula]["version"],
+                    base.formula_sidecars[formula]["bottle_rebuild"] + 1,
+                ),
+            )
+            for formula in collisions
+        }
+        for formula in collisions:
+            last_green = base.formula_sidecars[formula]["bottle_rebuild"]
+            self.assertEqual(
+                last_green + collision_gaps[formula],
+                base.identities[formula].bottle_rebuild,
+            )
+            self.assertEqual(
+                base.identities[formula].bottle_rebuild + 1,
+                reservation.identities[formula].bottle_rebuild,
+            )
+            self.assertNotIn(
+                (
+                    formula,
+                    reservation.identities[formula].top_reference,
+                ),
+                historical,
+            )
+
+        class HistoricalCollisionRegistry:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str]] = []
+
+            def manifest(self, formula, reference):
+                self.calls.append((formula, reference))
+                if (formula, reference) in historical:
+                    return rollout.RegistryManifestEvidence(
+                        exists=True,
+                        digest="sha256:" + "1" * 64,
+                    )
+                return rollout.RegistryManifestEvidence(
+                    exists=False,
+                    digest=None,
+                )
+
+        registry = HistoricalCollisionRegistry()
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "campaign.json"
+            state, _tap, _github = self._initialize_campaign(
+                base=base,
+                reservation=reservation,
+                registry=registry,
+                state_path=state_path,
+            )
+            rollout.validate_state(state, reservation, self.consumer_sha)
+
+        self.assertEqual(63, len(registry.calls))
+        self.assertTrue(historical.isdisjoint(registry.calls))
+        for formula in collisions:
+            self.assertEqual(
+                base.identities[formula].bottle_rebuild,
+                state["base_catalog"][formula]["bottle_rebuild"],
+            )
+            self.assertEqual(
+                base.identities[formula].bottle_rebuild + 1,
+                state["initial_catalog"][formula]["bottle_rebuild"],
+            )
+
+    def test_fresh_campaign_rejects_a_base_behind_its_last_green_sidecar(self):
+        base, reservation = self._campaign_snapshots()
+        formula = "asa"
+        sidecars = copy.deepcopy(base.formula_sidecars)
+        sidecars[formula]["bottle_rebuild"] = (
+            base.identities[formula].bottle_rebuild + 1
+        )
+        behind = dataclasses.replace(
+            base,
+            formula_sidecars=sidecars,
+        )
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "does not describe a finalized predecessor",
+        ):
+            rollout.validate_fresh_campaign_reservations(
+                tap=mock.Mock(),
+                base=behind,
+                reservation=reservation,
+            )
+
+    def test_fresh_campaign_rejects_last_green_checksum_drift(self):
+        base, reservation = self._campaign_snapshots()
+        formula = "asa"
+        old_digest = reservation.identities[formula].bottle_sha256["wasm32"]
+        replacement = (
+            ("0" if old_digest[0] != "0" else "1") + old_digest[1:]
+        )
+        changed = self._snapshot_with_formula_source(
+            reservation,
+            formula,
+            reservation.formula_sources[formula].replace(
+                old_digest,
+                replacement,
+                1,
+            ),
+            sha=reservation.sha,
+        )
+        tap = mock.Mock()
+        tap.is_ancestor.return_value = True
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "no longer retains the last-green wasm32 checksum",
+        ):
+            rollout.validate_fresh_campaign_reservations(
+                tap=tap,
+                base=base,
+                reservation=changed,
+            )
+
+    def test_fresh_campaign_rejects_an_occupied_base_successor(self):
+        base, reservation = self._campaign_snapshots()
+        formula = rollout.FORMULA_ORDER[0]
+        self.assertEqual(
+            base.identities[formula].bottle_rebuild + 1,
+            reservation.identities[formula].bottle_rebuild,
+        )
+        occupied = FakeRegistry(
+            rollout.RegistryManifestEvidence(
+                exists=True,
+                digest="sha256:" + "1" * 64,
+            )
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "campaign.json"
+            with self.assertRaisesRegex(
+                rollout.RolloutError,
+                "OCI identity is already occupied",
+            ):
+                self._initialize_campaign(
+                    base=base,
+                    reservation=reservation,
+                    registry=occupied,
+                    state_path=state_path,
+                )
+            self.assertFalse(state_path.exists())
+        self.assertEqual(
+            [(formula, reservation.identities[formula].top_reference)],
+            occupied.calls,
+        )
 
     def test_fresh_campaign_refuses_any_existing_ledger_before_observation(self):
         base, reservation = self._campaign_snapshots()
@@ -1360,9 +1595,6 @@ class RolloutControllerTests(unittest.TestCase):
     def test_fresh_campaign_registry_failure_never_creates_a_ledger(self):
         base, reservation = self._campaign_snapshots()
         cases = {
-            "occupied": rollout.RegistryManifestEvidence(
-                exists=True, digest="sha256:" + "1" * 64
-            ),
             "absence with digest": rollout.RegistryManifestEvidence(
                 exists=False, digest="sha256:" + "1" * 64
             ),
@@ -1502,6 +1734,15 @@ class RolloutControllerTests(unittest.TestCase):
                 },
             ),
             (
+                "base catalog",
+                ("base_catalog",),
+                {
+                    formula: value
+                    for formula, value in original["base_catalog"].items()
+                    if formula != "asa"
+                },
+            ),
+            (
                 "initial catalog",
                 ("initial_catalog",),
                 {
@@ -1557,6 +1798,30 @@ class RolloutControllerTests(unittest.TestCase):
         ):
             rollout.validate_state(extra, reservation, self.consumer_sha)
 
+        stable_field_mutations = {
+            "version": "999.0",
+            "formula_revision": (
+                original["base_catalog"]["asa"]["formula_revision"] + 1
+            ),
+            "arches": ["wasm32", "wasm64"],
+            "dependencies": ["zlib"],
+        }
+        for field, value in stable_field_mutations.items():
+            changed = copy.deepcopy(original)
+            changed["base_catalog"]["asa"][field] = value
+            with (
+                self.subTest(stable_field=field),
+                self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    f"changes stable asa field {field}",
+                ),
+            ):
+                rollout.validate_state(
+                    changed,
+                    reservation,
+                    self.consumer_sha,
+                )
+
     def test_fresh_campaign_rechecks_the_whole_selected_batch_before_dispatch(self):
         base, reservation = self._campaign_snapshots()
         state = self._campaign_state(base, reservation)
@@ -1589,6 +1854,10 @@ class RolloutControllerTests(unittest.TestCase):
         registry = OccupiedSecondRegistry()
         tap = mock.Mock()
         tap.main_without_fetch.return_value = reservation.sha
+        tap.is_ancestor.return_value = True
+        tap.changed_entries.return_value = (
+            self._campaign_reservation_changes()
+        )
         github = FakeGitHub()
         with tempfile.TemporaryDirectory() as directory:
             state_path = pathlib.Path(directory) / "campaign.json"
@@ -1596,7 +1865,11 @@ class RolloutControllerTests(unittest.TestCase):
             original = state_path.read_bytes()
             with (
                 mock.patch.object(
-                    rollout, "load_snapshot", return_value=reservation
+                    rollout,
+                    "load_snapshot",
+                    side_effect=lambda _tap, sha: (
+                        base if sha == base.sha else reservation
+                    ),
                 ),
                 mock.patch.object(
                     rollout, "finalization_reasons", return_value=("pending",)
@@ -1626,6 +1899,190 @@ class RolloutControllerTests(unittest.TestCase):
 
         self.assertEqual(
             ["asa", "bc"], [formula for formula, _reference in registry.calls]
+        )
+
+    def test_schema_two_campaign_recovers_an_accepted_request_after_client_crash(
+        self,
+    ):
+        base, reservation = self._campaign_snapshots()
+        state = self._campaign_state(base, reservation)
+        first_token = "abi42-" + "a1" * 16
+        second_token = "abi42-" + "b2" * 16
+        for formula, token in (
+            ("asa", first_token),
+            ("bc", second_token),
+        ):
+            state["pending_dispatches"].append(
+                {
+                    "formula": formula,
+                    "arches": list(rollout.required_arches(formula)),
+                    "tap_sha": reservation.sha,
+                    "dispatch_token": token,
+                    "recorded_at": "2026-07-25T12:00:00Z",
+                    "status": "planned",
+                }
+            )
+
+        class CrashAfterAcceptGitHub(FakeGitHub):
+            def __init__(self) -> None:
+                super().__init__()
+                self.calls: list[tuple[str, str]] = []
+                self.run_is_visible = False
+
+            def runs(self, *, per_page=100, page=1, created=None):
+                self.run_queries.append(
+                    {
+                        "per_page": per_page,
+                        "page": page,
+                        "created": created,
+                    }
+                )
+                runs = (
+                    [
+                        RolloutControllerTests._run(
+                            200,
+                            reservation.sha,
+                            display_title=rollout.workflow_run_title(
+                                "asa",
+                                first_token,
+                            ),
+                        )
+                    ]
+                    if self.run_is_visible
+                    else []
+                )
+                start = (page - 1) * per_page
+                return {
+                    "total_count": len(runs),
+                    "workflow_runs": runs[start : start + per_page],
+                }
+
+            def dispatch(self, formula, arches, tap_sha, dispatch_token):
+                del arches
+                self.calls.append((formula, dispatch_token))
+                if tap_sha != reservation.sha:
+                    raise AssertionError(f"unexpected tap SHA {tap_sha}")
+                # Model GitHub accepting the request while the client receives
+                # no trustworthy response. Recovery must correlate the durable
+                # token instead of issuing this request again.
+                raise rollout.RolloutError(
+                    "ambiguous HTTP transport failure"
+                )
+
+        github = CrashAfterAcceptGitHub()
+        registry = FakeRegistry(
+            rollout.RegistryManifestEvidence(exists=False, digest=None)
+        )
+        tap = mock.Mock()
+        tap.main_without_fetch.return_value = reservation.sha
+        tap.is_ancestor.return_value = True
+        tap.changed_entries.return_value = (
+            self._campaign_reservation_changes()
+        )
+        snapshots = {
+            base.sha: base,
+            reservation.sha: reservation,
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "campaign.json"
+            rollout.write_state(state_path, state)
+            with (
+                mock.patch.object(
+                    rollout,
+                    "load_snapshot",
+                    side_effect=lambda _tap, sha: snapshots[sha],
+                ),
+                mock.patch.object(
+                    rollout,
+                    "finalization_reasons",
+                    return_value=(),
+                ),
+                self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    "ambiguous HTTP transport failure",
+                ),
+            ):
+                rollout.dispatch_ready(
+                    tap=tap,
+                    github=github,
+                    expected_kandelo_sha=self.consumer_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=2,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                    registry=registry,
+                )
+
+            retained = rollout.read_state(state_path)
+            assert retained is not None
+            self.assertEqual(
+                ["request-started", "planned"],
+                [
+                    entry["status"]
+                    for entry in retained["pending_dispatches"]
+                ],
+            )
+            with (
+                mock.patch.object(
+                    rollout,
+                    "load_snapshot",
+                    side_effect=lambda _tap, sha: snapshots[sha],
+                ),
+                self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    "recover them before continuing",
+                ),
+            ):
+                rollout.dispatch_ready(
+                    tap=tap,
+                    github=github,
+                    expected_kandelo_sha=self.consumer_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=2,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                    registry=registry,
+                )
+
+            github.run_is_visible = True
+            with mock.patch.object(
+                rollout,
+                "load_snapshot",
+                side_effect=lambda _tap, sha: snapshots[sha],
+            ):
+                recovered = rollout.recover_submitted_dispatch(
+                    tap=tap,
+                    github=github,
+                    expected_kandelo_sha=self.consumer_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                )
+            final = rollout.read_state(state_path)
+            assert final is not None
+
+        self.assertEqual((("asa", 200),), recovered)
+        self.assertEqual([("asa", first_token)], github.calls)
+        self.assertEqual(
+            [
+                ("asa", reservation.identities["asa"].top_reference),
+                ("bc", reservation.identities["bc"].top_reference),
+            ],
+            registry.calls,
+        )
+        self.assertEqual(
+            ["bc"],
+            [entry["formula"] for entry in final["pending_dispatches"]],
+        )
+        self.assertEqual(
+            ["asa"],
+            [entry["formula"] for entry in final["dispatches"]],
+        )
+        self.assertEqual(
+            first_token,
+            final["dispatches"][0]["dispatch_token"],
         )
 
     def test_fresh_campaign_allowlist_must_be_dependency_closed(self):

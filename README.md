@@ -278,10 +278,13 @@ available slot.
 Every new package generation starts from two reviewed tap commits. `T0` is the
 stable base with a package-owned last-green sidecar for every Formula; its
 aggregate metadata may still contain only the product subset completed by an
-earlier campaign. `Tpre` is a strict descendant on protected `main`; it retains
-`T0`'s aggregate metadata, package-owned sidecars, Formula support, recipes,
-dependencies, architectures, and last-green hashes, and sets each Formula to
-exactly one rebuild after its own finalized sidecar.
+earlier campaign. A Formula at `T0` may already be one or more rebuilds ahead
+of that sidecar when an earlier campaign reserved an identity without replacing
+the last-green bottle. `Tpre` is a strict descendant on protected `main`; it
+retains `T0`'s aggregate metadata, package-owned sidecars, Formula support,
+recipes, dependencies, architectures, and last-green hashes, and changes only
+each Formula's `rebuild` line to the exact successor of the Formula identity
+committed at `T0`.
 
 The caller workflow at `Tpre` must be registered in
 `APPROVED_CAMPAIGN_CONTRACTS` with its complete SHA-256, reusable publisher
@@ -316,13 +319,15 @@ python3 scripts/abi42-rollout.py \
 ```
 
 Initialization sends no event. It rejects an existing state path, validates all
-63 last-green sidecars and retained checksum blocks, proves all 63 rebuild
-changes are exact, records all 70 Formula/architecture reservations, requires
-anonymous absence of the 63 new per-Formula OCI version-index references,
-requires an idle publication workflow, and rechecks protected `main`
-immediately before one mode-0600, fsynced ledger write. The 70 architecture
-entries live in 63 per-Formula indexes; upload-child tags are content-derived
-and cannot be reserved before a build.
+63 last-green sidecars and retained checksum blocks, freezes the separate
+last-green, `T0`, and `Tpre` catalogs, proves all 63 changes are exact
+`T0 rebuild + 1` edits, records all 70 Formula/architecture reservations,
+requires anonymous absence of the 63 new per-Formula OCI version-index
+references, requires an idle publication workflow, and rechecks protected
+`main` immediately before one mode-0600, fsynced ledger write. It never imports
+or reinterprets a schema-1 ledger. The 70 architecture entries live in 63
+per-Formula indexes; upload-child tags are content-derived and cannot be
+reserved before a build.
 
 Never reuse, overwrite, copy, or reconstruct an earlier campaign ledger.
 `--dispatch` requires an existing ledger and cannot initialize one implicitly.
