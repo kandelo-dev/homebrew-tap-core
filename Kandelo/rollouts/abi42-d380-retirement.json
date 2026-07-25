@@ -7,7 +7,8 @@
     "required_before_replacement_dispatch": [
       "Disable production workflow 315324894.",
       "Fill and validate every exact Kandelo and cache-key pin in the Bash rebuild-5 one-shot caller.",
-      "Merge the reviewed one-shot caller and dispatch only its unique repository_dispatch event from the exact reviewed tap commit."
+      "Merge the reviewed one-shot PR with a merge commit so its pinned rebuild-5 source remains on protected main history.",
+      "Dispatch the unique repository_dispatch event once, then immediately disable workflow 315324893 while the acknowledged run completes."
     ]
   },
   "observed_at": "2026-07-25T03:54:22Z",
@@ -46,8 +47,12 @@
     "release_tag": "bottles-abi-v42",
     "force": true,
     "require_vfs_acceptance": false,
-    "exact_generation": null,
-    "expected_cache_key": null
+    "workflow_sha": "3545bfd34509a52b68a4620c92e4aae24c60adb0",
+    "consumer_sha": "6d923c6454dd7174082f25c3d3991d03f86f5ddb",
+    "prepublication_generation_sha": "6d923c6454dd7174082f25c3d3991d03f86f5ddb",
+    "prepublication_staging_tag": "pr-1094-staging",
+    "expected_cache_key": "1d813d7f9db4979fc5c0eef6b37e213cb73a42395757cc92ef8ebeee2e62913d",
+    "tap_sha": "73825368747f3378e3c8d49badcb1b8f36cb95de"
   },
   "live_reconciliation": {
     "active_run_count": 0,

@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "yaml"
+require "open3"
 
 candidate_root = ARGV.shift
 abort "usage: test-workflow-trust.rb [candidate-root]" unless ARGV.empty?
@@ -38,6 +39,11 @@ CURRENT_KANDELO_CONSUMER_SHA = "d3805721b887a19382ef1c96b576fc27badc0951"
 PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
 BASH_REBUILD5_EVENT = "publish-kandelo-bash-rebuild5"
+BASH_REBUILD5_WORKFLOW_SHA = "3545bfd34509a52b68a4620c92e4aae24c60adb0"
+BASH_REBUILD5_CONSUMER_SHA = "6d923c6454dd7174082f25c3d3991d03f86f5ddb"
+BASH_REBUILD5_GENERATION_SHA = "6d923c6454dd7174082f25c3d3991d03f86f5ddb"
+BASH_REBUILD5_CACHE_KEY = "1d813d7f9db4979fc5c0eef6b37e213cb73a42395757cc92ef8ebeee2e62913d"
+BASH_REBUILD5_TAP_SHA = "73825368747f3378e3c8d49badcb1b8f36cb95de"
 
 def check(condition, message)
   raise message unless condition
@@ -95,6 +101,13 @@ def expect_rejection(label)
     rejected = true
   end
   check(rejected, "self-test accepted #{label}")
+end
+
+def check_reserved_commit_relationship(reserved_sha, head_sha, is_ancestor)
+  check(reserved_sha != head_sha,
+        "Bash rebuild-5 Formula source must precede its one-shot caller")
+  check(is_ancestor,
+        "Bash rebuild-5 Formula source is not an ancestor of the one-shot caller")
 end
 
 PUBLISH_INPUTS = {
@@ -230,12 +243,14 @@ def bash_rebuild5_one_shot_specs(
   workflow_sha:,
   consumer_sha:,
   generation_sha:,
-  cache_key:
+  cache_key:,
+  tap_sha:
 )
   {
     "workflow" => workflow_sha,
     "consumer" => consumer_sha,
     "generation" => generation_sha,
+    "tap" => tap_sha,
   }.each do |label, sha|
     check(sha.match?(/\A[0-9a-f]{40}\z/),
           "Bash rebuild-5 #{label} pin is not an exact SHA")
@@ -256,9 +271,7 @@ def bash_rebuild5_one_shot_specs(
       "kandelo-ref" => consumer_sha,
       "tap-repository" => "kandelo-dev/homebrew-tap-core",
       "tap-name" => "kandelo-dev/tap-core",
-      # The caller itself cannot contain its own commit SHA. This is the only
-      # event-provided build identity, and the publisher requires exact hex.
-      "tap-ref" => expression("github.event.client_payload.tap_sha"),
+      "tap-ref" => tap_sha,
       "formulae" => "bash",
       "arches" => "wasm32",
       "release-tag" => "bottles-abi-v42",
@@ -274,8 +287,17 @@ def bash_rebuild5_one_shot_specs(
   specs.freeze
 end
 
+BASH_REBUILD5_ONE_SHOT_SPECS = bash_rebuild5_one_shot_specs(
+  workflow_sha: BASH_REBUILD5_WORKFLOW_SHA,
+  consumer_sha: BASH_REBUILD5_CONSUMER_SHA,
+  generation_sha: BASH_REBUILD5_GENERATION_SHA,
+  cache_key: BASH_REBUILD5_CACHE_KEY,
+  tap_sha: BASH_REBUILD5_TAP_SHA,
+)
+
 CALLER_PROFILES = {
   "current" => CALLER_SPECS,
+  "bash-rebuild5-one-shot" => BASH_REBUILD5_ONE_SHOT_SPECS,
 }.freeze
 
 BASE_MATERIALIZE_RUN = <<~'BASH'
@@ -459,7 +481,10 @@ def check_contract_workflow(workflow)
   check(jobs.is_a?(Hash) && jobs.keys == ["publisher-trust"],
         "#{label} has an unexpected job set")
   expected_steps = [
-    { "uses" => CHECKOUT_ACTION },
+    {
+      "uses" => CHECKOUT_ACTION,
+      "with" => { "fetch-depth" => 0 },
+    },
     {
       "uses" => RUBY_ACTION,
       "with" => { "ruby-version" => "3.4" },
@@ -476,6 +501,44 @@ def check_contract_workflow(workflow)
   check(values_for_key(workflow, "uses") == [CHECKOUT_ACTION, RUBY_ACTION],
         "#{label} action set or pins changed")
   check(values_for_key(workflow, "secrets").empty?, "#{label} passes repository secrets")
+end
+
+def check_bash_rebuild5_source_ancestry
+  inside, _stderr, inside_status = Open3.capture3(
+    "git", "-C", ROOT, "rev-parse", "--is-inside-work-tree"
+  )
+  return unless inside_status.success? && inside.strip == "true"
+
+  head, stderr, head_status = Open3.capture3("git", "-C", ROOT, "rev-parse", "HEAD")
+  check(head_status.success?, "cannot resolve tap HEAD: #{stderr.strip}")
+  head = head.strip
+  ancestor_status = system(
+    "git", "-C", ROOT, "merge-base", "--is-ancestor",
+    BASH_REBUILD5_TAP_SHA, head,
+    out: File::NULL,
+    err: File::NULL
+  )
+  check_reserved_commit_relationship(
+    BASH_REBUILD5_TAP_SHA,
+    head,
+    ancestor_status
+  )
+
+  formula, stderr, formula_status = Open3.capture3(
+    "git", "-C", ROOT, "show", "#{BASH_REBUILD5_TAP_SHA}:Formula/bash.rb"
+  )
+  check(formula_status.success?,
+        "cannot read Bash rebuild-5 Formula source: #{stderr.strip}")
+  bottle_block = formula[/^  bottle do\n.*?^  end\n/m]
+  check(!bottle_block.nil?, "reserved Bash source has no bottle block")
+  check(bottle_block.match?(/^    rebuild 5$/),
+        "reserved Bash source does not own rebuild 5")
+  check(
+    bottle_block.include?(
+      'wasm32_kandelo: "297a7ea66a820ec8590e1b6ef35ac69b246164ba0e884a63567e55ed582f5df1"'
+    ),
+    "reserved Bash source does not retain the last-green checksum"
+  )
 end
 
 def check_base_contract_workflow(workflow)
@@ -540,6 +603,7 @@ def self_test(callers, contract, base_contract)
     consumer_sha: "3333333333333333333333333333333333333333",
     generation_sha: "4444444444444444444444444444444444444444",
     cache_key: "5555555555555555555555555555555555555555555555555555555555555555",
+    tap_sha: "6666666666666666666666666666666666666666",
   )
   test_profiles = { "current" => CALLER_SPECS }
   one_shot_profiles = { "bash-rebuild5-one-shot" => one_shot_specs }
@@ -586,6 +650,10 @@ def self_test(callers, contract, base_contract)
       "require-vfs-acceptance",
       expression("github.event.client_payload.require_vfs_acceptance"),
     ],
+    "tap-source selection" => [
+      "tap-ref",
+      expression("github.event.client_payload.tap_sha"),
+    ],
   }.each do |label, (key, value)|
     expect_rejection("event-provided Bash rebuild-5 #{label}") do
       mutated = deep_copy(one_shot_callers)
@@ -606,6 +674,7 @@ def self_test(callers, contract, base_contract)
       consumer_sha: "3333333333333333333333333333333333333333",
       generation_sha: "4444444444444444444444444444444444444444",
       cache_key: "5555555555555555555555555555555555555555555555555555555555555555",
+      tap_sha: "6666666666666666666666666666666666666666",
     )
   end
   expect_rejection("a malformed Bash rebuild-5 cache key") do
@@ -614,6 +683,21 @@ def self_test(callers, contract, base_contract)
       consumer_sha: "3333333333333333333333333333333333333333",
       generation_sha: "4444444444444444444444444444444444444444",
       cache_key: "not-a-cache-key",
+      tap_sha: "6666666666666666666666666666666666666666",
+    )
+  end
+  expect_rejection("an orphaned Bash rebuild-5 Formula source") do
+    check_reserved_commit_relationship(
+      "6666666666666666666666666666666666666666",
+      "7777777777777777777777777777777777777777",
+      false
+    )
+  end
+  expect_rejection("a self-referential Bash rebuild-5 Formula source") do
+    check_reserved_commit_relationship(
+      "6666666666666666666666666666666666666666",
+      "6666666666666666666666666666666666666666",
+      true
     )
   end
   expect_rejection("the retired PAT-backed caller generation") do
@@ -870,6 +954,7 @@ begin
   check_caller_profile(callers)
   check_contract_workflow(contract)
   check_base_contract_workflow(base_contract)
+  check_bash_rebuild5_source_ancestry
   puts "test-workflow-trust.rb: ok"
 rescue KeyError, Psych::Exception, RuntimeError => e
   warn "test-workflow-trust.rb: #{e.message}"
