@@ -2320,6 +2320,7 @@ def campaign_contract_from_state(
 ) -> CampaignContract | None:
     if state.get("schema") == 1:
         campaign_only = {
+            "base_catalog",
             "campaign",
             "initial_catalog",
             "previous_catalog",
@@ -2433,6 +2434,7 @@ def initial_campaign_state(
     state["expected_publisher_sha"] = contract.publisher_sha
     state["workflow_sha256"] = contract.workflow_sha256
     state["previous_catalog"] = last_green_catalog_state(base_snapshot)
+    state["base_catalog"] = catalog_state(base_snapshot)
     state["initial_catalog"] = catalog_state(snapshot)
     state["previous_formula_support_tree"] = base_snapshot.formula_support_tree
     state["previous_formula_sidecar_tree"] = base_snapshot.formula_sidecar_tree
@@ -2485,12 +2487,16 @@ def validate_campaign_state(
     if set(campaign) != expected_keys:
         raise RolloutError("campaign rollout state has an unexpected shape")
     previous_catalog = state.get("previous_catalog")
+    base_catalog = state.get("base_catalog")
     initial_catalog = state.get("initial_catalog")
-    if not isinstance(previous_catalog, dict) or not isinstance(
-        initial_catalog, dict
+    if (
+        not isinstance(previous_catalog, dict)
+        or not isinstance(base_catalog, dict)
+        or not isinstance(initial_catalog, dict)
     ):
         raise RolloutError(
-            "campaign rollout state does not retain its finalized and initial catalogs"
+            "campaign rollout state does not retain its last-green, base, "
+            "and initial catalogs"
         )
     initial_reservations = campaign_reservations_from_catalog(
         initial_catalog,
@@ -2539,6 +2545,7 @@ def validate_campaign_state(
 
     if (
         set(previous_catalog) != set(FORMULA_ORDER)
+        or set(base_catalog) != set(FORMULA_ORDER)
         or set(initial_catalog) != set(FORMULA_ORDER)
         or state.get("previous_formula_support_tree")
         != snapshot.formula_support_tree
@@ -2557,6 +2564,10 @@ def validate_campaign_state(
             f"campaign previous {formula} catalog",
             allow_zero_rebuild=True,
         )
+        base = catalog_identity_value(
+            base_catalog.get(formula),
+            f"campaign base {formula} catalog",
+        )
         initial = catalog_identity_value(
             initial_catalog.get(formula),
             f"campaign initial {formula} catalog",
@@ -2566,13 +2577,21 @@ def validate_campaign_state(
             f"campaign reserved {formula} catalog",
         )
         for field in ("version", "formula_revision", "arches", "dependencies"):
-            if previous[field] != initial[field] or initial[field] != current[field]:
+            if (
+                previous[field] != base[field]
+                or base[field] != initial[field]
+                or initial[field] != current[field]
+            ):
                 raise RolloutError(
                     f"campaign reservation changes stable {formula} field {field}"
                 )
-        if initial["bottle_rebuild"] != previous["bottle_rebuild"] + 1:
+        if previous["bottle_rebuild"] > base["bottle_rebuild"]:
             raise RolloutError(
-                f"campaign {formula} initial reservation is not exactly one rebuild"
+                f"campaign {formula} base predates its last-green sidecar"
+            )
+        if initial["bottle_rebuild"] != base["bottle_rebuild"] + 1:
+            raise RolloutError(
+                f"campaign {formula} initial reservation is not the base successor"
             )
         if current["bottle_rebuild"] < initial["bottle_rebuild"]:
             raise RolloutError(
@@ -2592,11 +2611,20 @@ def validate_campaign_main_descendant(
     if not isinstance(campaign, dict):
         raise RolloutError("campaign rollout state has no campaign contract")
     reservation_sha = campaign.get("reservation_tap_sha")
-    if not isinstance(reservation_sha, str):
-        raise RolloutError("campaign reservation tap SHA is malformed")
+    base_sha = campaign.get("base_tap_sha")
+    if not isinstance(reservation_sha, str) or not isinstance(base_sha, str):
+        raise RolloutError("campaign base or reservation tap SHA is malformed")
+    base = load_snapshot(tap, base_sha)
     reservation = load_snapshot(tap, reservation_sha)
+    validate_fresh_campaign_reservations(
+        tap=tap,
+        base=base,
+        reservation=reservation,
+    )
     if (
-        catalog_state(reservation) != state.get("initial_catalog")
+        last_green_catalog_state(base) != state.get("previous_catalog")
+        or catalog_state(base) != state.get("base_catalog")
+        or catalog_state(reservation) != state.get("initial_catalog")
         or reservation.formula_support_tree != state.get("formula_support_tree")
         or reservation.formula_sidecar_tree
         != state.get("previous_formula_sidecar_tree")
@@ -3799,8 +3827,9 @@ def validate_fresh_campaign_reservations(
     _ = campaign_base_consumer(base)
     # This deliberately uses package-owned sidecars rather than aggregate
     # membership. A previous campaign may have finalized only a product subset;
-    # each sidecar still names the immutable last-green predecessor from which
-    # this new campaign must reserve exactly one rebuild.
+    # each sidecar still names the immutable last-green checksum source. The
+    # Formula committed at T0 separately owns the next identity, because it may
+    # already be ahead of that sidecar after an earlier reservation attempt.
     _ = last_green_catalog_state(base)
 
     if reservation.metadata != base.metadata:
@@ -3836,14 +3865,23 @@ def validate_fresh_campaign_reservations(
             raise RolloutError(
                 f"{formula} finalized sidecar has an invalid bottle rebuild"
             )
-        expected_rebuild = sidecar_rebuild + 1
+        base_rebuild = base.identities[formula].bottle_rebuild
+        if sidecar_rebuild > base_rebuild:
+            raise RolloutError(
+                f"{formula} base Formula predates its last-green sidecar"
+            )
+        expected_rebuild = base_rebuild + 1
         if reservation.identities[formula].bottle_rebuild != expected_rebuild:
             raise RolloutError(
-                f"{formula} must reserve exactly rebuild {expected_rebuild}"
+                f"{formula} must reserve exact base successor rebuild "
+                f"{expected_rebuild}"
             )
+        require_last_green_formula_checksums(reservation, formula)
         # WHY: a normalized recipe hash could conceal two offsetting edits.
         # Reconstructing Tpre from T0 proves the rebuild line is the only
-        # Formula byte changed while retaining every last-green checksum.
+        # Formula byte changed. Advancing T0—not the older last-green sidecar—
+        # prevents a new campaign from reusing an identity reserved or occupied
+        # by an earlier campaign.
         expected_source = source_with_rebuild(
             base.formula_sources[formula],
             formula,
@@ -3853,7 +3891,19 @@ def validate_fresh_campaign_reservations(
             raise RolloutError(
                 f"Formula/{formula}.rb changes more than its rebuild reservation"
             )
-        require_last_green_formula_checksums(reservation, formula)
+
+    expected_changes = {
+        ("M", f"Formula/{formula}.rb") for formula in FORMULA_ORDER
+    }
+    changes = tuple(tap.changed_entries(base.sha, reservation.sha))
+    if len(changes) != len(expected_changes) or set(changes) != expected_changes:
+        # WHY: TapSnapshot covers the publication contract, but not every
+        # repository path. Checking the Git diff prevents an unrelated script,
+        # policy, or documentation edit from riding along in mechanical Tpre.
+        raise RolloutError(
+            "campaign reservation contains changes beyond the 63 exact "
+            "Formula rebuild reservations"
+        )
 
     if len(campaign_reservations(reservation)) != ARCHITECTURE_IDENTITY_COUNT:
         raise RolloutError(
