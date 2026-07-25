@@ -902,6 +902,7 @@ def validate_workflow_source(
     *,
     expected_publisher_sha: str | None = None,
     allow_legacy_tap_ref: bool = False,
+    allow_legacy_run_name: bool = False,
 ) -> None:
     publisher_sha = expected_publisher_sha or PUBLISHER_WORKFLOW_SHA
     uses = re.findall(
@@ -930,7 +931,12 @@ def validate_workflow_source(
         snapshot.workflow_source,
         flags=re.MULTILINE,
     )
-    if run_names != [WORKFLOW_RUN_NAME_SOURCE]:
+    allowed_run_names = (
+        ([], [WORKFLOW_RUN_NAME_SOURCE])
+        if allow_legacy_run_name
+        else ([WORKFLOW_RUN_NAME_SOURCE],)
+    )
+    if run_names not in allowed_run_names:
         raise RolloutError(
             "production workflow run-name does not expose the exact Formula "
             f"and dispatch-token identity: {run_names}"
@@ -1365,6 +1371,7 @@ def finalization_reasons(
                     expected_kandelo_sha,
                     expected_publisher_sha=source_publisher,
                     allow_legacy_tap_ref=source_selector == "main",
+                    allow_legacy_run_name=True,
                 )
             except RolloutError as error:
                 reasons.append(
@@ -2152,6 +2159,22 @@ def migrate_workflow_trust(
         migrated.setdefault("workflow_rotations", [])
         migrated["expected_publisher_sha"] = new_publisher
         return migrated
+
+    old_authority = APPROVED_PUBLICATION_WORKFLOWS.get(old_workflow)
+    new_authority = APPROVED_PUBLICATION_WORKFLOWS.get(new_workflow)
+    if (
+        old_authority is None
+        or new_authority is None
+        or old_authority[:2] != (old_publisher, expected_kandelo_sha)
+        or new_authority[:2] != (new_publisher, expected_kandelo_sha)
+    ):
+        # WHY: the private ledger cannot bless an arbitrary digest by naming it
+        # as its previous caller. Every link must already be an exact reviewed
+        # publication authority with the same frozen package consumer.
+        raise RolloutError(
+            "rollout state workflow_sha256 differs from the reviewed "
+            "single-intent or token-correlated workflow"
+        )
 
     # WHY: a reviewed caller rotation changes only future publication
     # authority. Preserve the old workflow-to-publisher binding so completed
@@ -3318,14 +3341,18 @@ def prepare_failed_dispatch_recovery(
         )
     dispatch_index, dispatch = matches[0]
     formula = dispatch.get("formula")
+    dispatch_token = dispatch.get("dispatch_token")
+    expected_dispatch_keys = {
+        "arches",
+        "formula",
+        "run_id",
+        "submitted_at",
+        "tap_sha",
+    }
+    if dispatch_token is not None:
+        expected_dispatch_keys.update(("caller_tap_sha", "dispatch_token"))
     if (
-        set(dispatch) != {
-            "arches",
-            "formula",
-            "run_id",
-            "submitted_at",
-            "tap_sha",
-        }
+        set(dispatch) != expected_dispatch_keys
         or dispatch["run_id"] != run_id
         or formula not in FORMULA_ORDER
         or dispatch.get("arches") != list(required_arches(formula))
@@ -3333,6 +3360,15 @@ def prepare_failed_dispatch_recovery(
         or not re.fullmatch(r"[0-9a-f]{40}", dispatch["tap_sha"])
         or not isinstance(dispatch.get("submitted_at"), str)
         or not dispatch["submitted_at"]
+        or (
+            dispatch_token is not None
+            and (
+                not isinstance(dispatch_token, str)
+                or not DISPATCH_TOKEN_RE.fullmatch(dispatch_token)
+                or not isinstance(dispatch.get("caller_tap_sha"), str)
+                or not re.fullmatch(r"[0-9a-f]{40}", dispatch["caller_tap_sha"])
+            )
+        )
     ):
         raise RolloutError(
             f"controller-recorded run {run_id} has a malformed dispatch identity"
@@ -3403,6 +3439,7 @@ def prepare_failed_dispatch_recovery(
         source_consumer,
         expected_publisher_sha=source_publisher,
         allow_legacy_tap_ref=source_selector == "main",
+        allow_legacy_run_name=True,
     )
     correlation_evidence = (
         copy.deepcopy(pre_matrix_correlation)
