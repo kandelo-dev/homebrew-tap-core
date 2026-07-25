@@ -354,6 +354,7 @@ class CampaignReuse:
 @dataclasses.dataclass(frozen=True)
 class CampaignManifest:
     campaign: str
+    rootfs_arch: str
     base_tap_sha: str
     reservation_tap_sha: str
     rebuild_formula: str
@@ -1228,6 +1229,7 @@ def load_campaign_manifest(
     )
     manifest = CampaignManifest(
         campaign=value["campaign"],
+        rootfs_arch=value["rootfs_arch"],
         base_tap_sha=value["base_tap_sha"],
         reservation_tap_sha=value["reservation_tap_sha"],
         rebuild_formula=rebuild["formula"],
@@ -3441,9 +3443,9 @@ def validate_campaign_main_descendant(
     tap: GitTap,
     state: Mapping[str, Any],
     snapshot: TapSnapshot,
-) -> None:
+) -> CampaignManifest | None:
     if state.get("schema") not in (2, 3, 4):
-        return
+        return None
     campaign = state.get("campaign")
     if not isinstance(campaign, dict):
         raise RolloutError("campaign rollout state has no campaign contract")
@@ -3474,6 +3476,7 @@ def validate_campaign_main_descendant(
         )
 
     manifest_anchor_sha: str | None = None
+    manifest: CampaignManifest | None = None
     if state.get("schema") == 4:
         manifest_anchor_sha = campaign.get("manifest_tap_sha")
         manifest_digest = campaign.get("manifest_sha256")
@@ -3558,6 +3561,7 @@ def validate_campaign_main_descendant(
             anchor.sha,
             snapshot.sha,
         )
+    return manifest
 
 
 def verify_manifest_backed_campaign(
@@ -4055,15 +4059,36 @@ def calculate_statuses(
     expected_kandelo_sha: str,
     inventory: RunInventory,
     history_blocks: Mapping[str, tuple[str, str]],
+    *,
+    campaign_manifest: CampaignManifest | None = None,
 ) -> tuple[FormulaStatus, ...]:
     active_formulae = frozenset(
         formula
         for values in inventory.formulae.values()
         for formula in values
     )
+    selection = (
+        campaign_manifest.selection
+        if campaign_manifest is not None
+        else None
+    )
+    reuse_formulae = (
+        frozenset(selection.reuse) if selection is not None else frozenset()
+    )
+    deferred_formulae = (
+        frozenset(selection.deferred) if selection is not None else frozenset()
+    )
     reasons: dict[str, tuple[str, ...]] = {}
     finalized: dict[str, bool] = {}
     for formula in FORMULA_ORDER:
+        if formula in reuse_formulae or formula in deferred_formulae:
+            # WHY: schema-4 reuse is an explicit frozen-authority disposition,
+            # not a claim that historical bottles were rebuilt by the new
+            # consumer. Deferred Formulae likewise own no identity in this
+            # campaign. Only rebuilds use ordinary new-consumer finalization.
+            reasons[formula] = ()
+            finalized[formula] = False
+            continue
         found = finalization_reasons(
             tap,
             snapshot,
@@ -4078,7 +4103,17 @@ def calculate_statuses(
     for formula in FORMULA_ORDER:
         deps = snapshot.dependencies[formula]
         arches = required_arches(formula)
-        if finalized[formula]:
+        if formula in reuse_formulae:
+            state, detail = (
+                "reused",
+                "historical bottle is bound by exact campaign authority",
+            )
+        elif formula in deferred_formulae:
+            state, detail = (
+                "deferred",
+                "Formula is outside this campaign's publication set",
+            )
+        elif finalized[formula]:
             state, detail = "finalized", "all required ABI 42 identities are on current main"
         elif formula in active_formulae:
             state, detail = "active", "a production publication run is active"
@@ -4089,6 +4124,24 @@ def calculate_statuses(
             for dep in sorted(deps):
                 for arch in arches:
                     dep_arch = dependency_arch(dep, arch)
+                    if dep in deferred_formulae:
+                        # WHY: a deferred dependency has neither a fresh
+                        # campaign build nor frozen reuse authority.
+                        missing.append(f"{dep}/{dep_arch}")
+                        continue
+                    if dep in reuse_formulae:
+                        # WHY: validate_campaign_main_descendant returned this
+                        # exact manifest only after checking current catalog,
+                        # frozen T0 sidecars/link manifests, ABI, architecture,
+                        # and protected-main lineage. Preserve built_from as
+                        # historical truth; the fresh anonymous blob proof
+                        # still gates dispatch immediately before any write.
+                        if (
+                            campaign_manifest is None
+                            or dep_arch != campaign_manifest.rootfs_arch
+                        ):
+                            missing.append(f"{dep}/{dep_arch}")
+                        continue
                     dep_reasons = finalization_reasons(
                         tap,
                         snapshot,
@@ -4103,7 +4156,11 @@ def calculate_statuses(
                 detail = "waiting for " + ", ".join(sorted(set(missing)))
             else:
                 state = "ready"
-                detail = "all same-tap dependencies are finalized"
+                detail = (
+                    "all same-tap dependencies satisfy campaign disposition"
+                    if campaign_manifest is not None
+                    else "all same-tap dependencies are finalized"
+                )
         statuses.append(
             FormulaStatus(
                 name=formula,
@@ -6319,7 +6376,9 @@ def dispatch_ready(
             campaign_contract=campaign_contract,
         )
         state = upgrade_state(state, snapshot, expected_kandelo_sha)
-        validate_campaign_main_descendant(tap, state, snapshot)
+        campaign_manifest = validate_campaign_main_descendant(
+            tap, state, snapshot
+        )
         if state.get("unresolved_dispatch") is not None:
             raise RolloutError(
                 f"{state_path} contains an unresolved dispatch; inspect it before continuing"
@@ -6391,7 +6450,12 @@ def dispatch_ready(
             }
             history_blocks = history_blocks_from_state(github, state, finalized)
             statuses = calculate_statuses(
-                tap, snapshot, expected_kandelo_sha, inventory, history_blocks
+                tap,
+                snapshot,
+                expected_kandelo_sha,
+                inventory,
+                history_blocks,
+                campaign_manifest=campaign_manifest,
             )
             selected_allowlist = allowed_formulae
             if campaign_rebuilds is not None:
@@ -7064,6 +7128,9 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
         )
         if state is not None:
             state = upgrade_state(state, snapshot, args.expected_kandelo_sha)
+            campaign_manifest = validate_campaign_main_descendant(
+                tap, state, snapshot
+            )
             if (
                 state.get("unresolved_dispatch") is not None
                 or state.get("pending_dispatches")
@@ -7071,6 +7138,8 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
                 raise RolloutError(
                     f"{args.state_file} contains unresolved dispatch intents"
                 )
+        else:
+            campaign_manifest = None
         inventory = active_inventory(github)
         if state is not None:
             inventory = reconcile_recorded_activity(github, inventory, state)
@@ -7086,7 +7155,12 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
         }
         history_blocks = history_blocks_from_state(github, state, finalized)
         statuses = calculate_statuses(
-            tap, snapshot, args.expected_kandelo_sha, inventory, history_blocks
+            tap,
+            snapshot,
+            args.expected_kandelo_sha,
+            inventory,
+            history_blocks,
+            campaign_manifest=campaign_manifest,
         )
         render_status(snapshot, inventory, statuses, as_json=args.json)
         return 0

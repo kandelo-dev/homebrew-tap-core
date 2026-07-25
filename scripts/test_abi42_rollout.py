@@ -1715,72 +1715,117 @@ class RolloutControllerTests(unittest.TestCase):
                 )
 
     def test_manifest_campaign_hashes_all_reuse_blobs_again_before_dispatch(self):
-        manifest = rollout.load_campaign_manifest(self.tap, self.head)
-        base = rollout.load_snapshot(self.tap, manifest.base_tap_sha)
-        reservation = rollout.load_snapshot(
-            self.tap, manifest.reservation_tap_sha
-        )
-        authority = self.snapshot
-        tap = mock.Mock()
-        tap.fetch_main.side_effect = (authority.sha, authority.sha)
-        tap.main_without_fetch.return_value = authority.sha
-        tap.is_ancestor.return_value = True
-        tap.changed_entries.return_value = (("M", "Formula/bash.rb"),)
-        tap.show_bytes.side_effect = self.tap.show_bytes
-        snapshots = {
-            base.sha: base,
-            reservation.sha: reservation,
-            authority.sha: authority,
-        }
+        events: list[tuple[str, str]] = []
 
         class DispatchGitHub(FakeGitHub):
             def __init__(inner_self):
                 super().__init__()
                 inner_self.dispatches = []
+                inner_self.created_runs = []
+
+            def runs(
+                inner_self, *, per_page=100, page=1, created=None
+            ):
+                del created
+                start = (page - 1) * per_page
+                return {
+                    "total_count": len(inner_self.created_runs),
+                    "workflow_runs": inner_self.created_runs[
+                        start : start + per_page
+                    ],
+                }
 
             def dispatch(
                 inner_self, formula, arches, tap_sha, dispatch_token
             ):
+                events.append(("dispatch", formula))
                 inner_self.dispatches.append(
                     (formula, tuple(arches), tap_sha, dispatch_token)
                 )
-
-        github = DispatchGitHub()
-        registry = FakeRegistry(
-            rollout.RegistryManifestEvidence(exists=False, digest=None)
-        )
-        empty_inventory = rollout.RunInventory(
-            count=0,
-            runs=(),
-            formulae={},
-            unknown_run_ids=(),
-        )
-        ready_bash = rollout.FormulaStatus(
-            name="bash",
-            state="ready",
-            arches=("wasm32",),
-            dependencies=("ncurses",),
-            detail="manifest-backed test candidate",
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            state_path = pathlib.Path(directory) / "manifest-campaign.json"
-            with mock.patch.object(
-                rollout,
-                "load_snapshot",
-                side_effect=lambda _tap, sha: snapshots[sha],
-            ):
-                state = rollout.initialize_campaign(
-                    tap=tap,
-                    github=github,
-                    registry=registry,
-                    state_path=state_path,
-                    campaign_id=rollout.CAMPAIGN_MANIFEST_ID,
-                    base_tap_sha=manifest.base_tap_sha,
-                    reservation_tap_sha=manifest.reservation_tap_sha,
-                    contract=self._campaign_contract(),
-                    no_fetch=False,
-                    manifest_authority_sha=authority.sha,
+                inner_self.created_runs.append(
+                    self._run(
+                        200 + len(inner_self.created_runs),
+                        tap_sha,
+                        status="queued",
+                        created_at=rollout._utc_now(),
+                        display_title=rollout.workflow_run_title(
+                            formula, dispatch_token
+                        ),
+                    )
                 )
+
+        class RecordingRegistry(FakeRegistry):
+            def manifest(inner_self, formula, reference):
+                events.append(("absence", formula))
+                return super().manifest(formula, reference)
+
+            def verify_blob(
+                inner_self, formula, digest, expected_bytes
+            ):
+                events.append(("blob", formula))
+                return super().verify_blob(
+                    formula, digest, expected_bytes
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            # WHY: status calculation must consume real committed T0, Tpre,
+            # and Tmanifest snapshots. A local shared clone gives the test an
+            # exact protected-main coordinate without mocking Git evidence.
+            tap_root = pathlib.Path(directory) / "tap"
+            subprocess.run(
+                [
+                    "git",
+                    "clone",
+                    "--quiet",
+                    "--shared",
+                    str(self.root),
+                    str(tap_root),
+                ],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(tap_root),
+                    "remote",
+                    "set-url",
+                    "origin",
+                    "https://github.com/Kandelo-dev/homebrew-tap-core.git",
+                ],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(tap_root),
+                    "update-ref",
+                    "refs/remotes/origin/main",
+                    self.head,
+                ],
+                check=True,
+            )
+            tap = rollout.GitTap(tap_root)
+            manifest = rollout.load_campaign_manifest(tap, self.head)
+            authority = rollout.load_snapshot(tap, self.head)
+            github = DispatchGitHub()
+            registry = RecordingRegistry(
+                rollout.RegistryManifestEvidence(exists=False, digest=None)
+            )
+            state_path = pathlib.Path(directory) / "manifest-campaign.json"
+            state = rollout.initialize_campaign(
+                tap=tap,
+                github=github,
+                registry=registry,
+                state_path=state_path,
+                campaign_id=rollout.CAMPAIGN_MANIFEST_ID,
+                base_tap_sha=manifest.base_tap_sha,
+                reservation_tap_sha=manifest.reservation_tap_sha,
+                contract=self._campaign_contract(),
+                no_fetch=True,
+                manifest_authority_sha=authority.sha,
+            )
             self.assertEqual(4, state["schema"])
             self.assertEqual(23, len(registry.blob_calls))
             self.assertEqual(
@@ -1789,92 +1834,154 @@ class RolloutControllerTests(unittest.TestCase):
             self.assertEqual(0o600, state_path.stat().st_mode & 0o777)
             pristine_state = copy.deepcopy(state)
 
-            with (
-                mock.patch.object(
-                    rollout,
-                    "load_snapshot",
-                    side_effect=lambda _tap, sha: snapshots[sha],
+            validated_manifest = rollout.validate_campaign_main_descendant(
+                tap, state, authority
+            )
+            self.assertIsNotNone(validated_manifest)
+            statuses = {
+                status.name: status
+                for status in rollout.calculate_statuses(
+                    tap,
+                    authority,
+                    self.consumer_sha,
+                    rollout.RunInventory(
+                        count=0,
+                        runs=(),
+                        formulae={},
+                        unknown_run_ids=(),
+                    ),
+                    {},
+                    campaign_manifest=validated_manifest,
+                )
+            }
+            self.assertEqual("ready", statuses["bash"].state)
+            self.assertEqual("reused", statuses["ncurses"].state)
+            self.assertEqual("reused", statuses["libcxx"].state)
+            self.assertTrue(
+                any(
+                    "another Kandelo SHA" in reason
+                    for reason in rollout.finalization_reasons(
+                        tap,
+                        authority,
+                        "ncurses",
+                        ("wasm32",),
+                        self.consumer_sha,
+                    )
                 ),
-                mock.patch.object(
-                    rollout,
-                    "active_inventory",
-                    return_value=empty_inventory,
+                "reuse must preserve ncurses' historical built_from provenance",
+            )
+            assert validated_manifest is not None
+            reuse_without_ncurses = tuple(
+                entry
+                for entry in validated_manifest.reuse
+                if entry.formula != "ncurses"
+            )
+            remaining_reuse = {
+                entry.formula for entry in reuse_without_ncurses
+            }
+            deferred_ncurses = dataclasses.replace(
+                validated_manifest,
+                reuse=reuse_without_ncurses,
+                deferred=tuple(
+                    formula
+                    for formula in rollout.FORMULA_ORDER
+                    if formula != "bash" and formula not in remaining_reuse
                 ),
-                mock.patch.object(
-                    rollout,
-                    "calculate_statuses",
-                    return_value=(ready_bash,),
-                ),
-                mock.patch.object(
-                    rollout,
-                    "finalization_reasons",
-                    return_value=("manifest-backed test candidate",),
-                ),
-                mock.patch.object(
-                    rollout,
-                    "acknowledge_pending_dispatches",
-                    side_effect=lambda **kwargs: (kwargs["state"], ()),
-                ),
+            )
+            deferred_statuses = {
+                status.name: status
+                for status in rollout.calculate_statuses(
+                    tap,
+                    authority,
+                    self.consumer_sha,
+                    rollout.RunInventory(
+                        count=0,
+                        runs=(),
+                        formulae={},
+                        unknown_run_ids=(),
+                    ),
+                    {},
+                    campaign_manifest=deferred_ncurses,
+                )
+            }
+            self.assertEqual(
+                "blocked-dependencies", deferred_statuses["bash"].state
+            )
+            self.assertIn(
+                "ncurses/wasm32", deferred_statuses["bash"].detail
+            )
+
+            events.clear()
+            dispatched = rollout.dispatch_ready(
+                tap=tap,
+                github=github,
+                expected_kandelo_sha=self.consumer_sha,
+                state_path=state_path,
+                no_fetch=True,
+                maximum=8,
+                timeout_seconds=1,
+                poll_seconds=0.001,
+                allowed_formulae=frozenset(("bash",)),
+                registry=registry,
+            )
+            successful_dispatches = list(github.dispatches)
+            successful_events = list(events)
+
+            class FlipAfterReuseRegistry(RecordingRegistry):
+                def manifest(inner_self, formula, reference):
+                    inner_self.calls.append((formula, reference))
+                    if len(inner_self.blob_calls) == 23:
+                        return rollout.RegistryManifestEvidence(
+                            exists=True,
+                            digest="sha256:" + "f" * 64,
+                        )
+                    return rollout.RegistryManifestEvidence(
+                        exists=False,
+                        digest=None,
+                    )
+
+            flip_registry = FlipAfterReuseRegistry(
+                rollout.RegistryManifestEvidence(
+                    exists=False, digest=None
+                )
+            )
+            flip_path = pathlib.Path(directory) / "flip-campaign.json"
+            rollout.write_new_state(flip_path, pristine_state)
+            flip_github = DispatchGitHub()
+            with self.assertRaisesRegex(
+                rollout.RolloutError,
+                "campaign OCI identity is already occupied",
             ):
-                dispatched = rollout.dispatch_ready(
+                rollout.dispatch_ready(
                     tap=tap,
-                    github=github,
+                    github=flip_github,
                     expected_kandelo_sha=self.consumer_sha,
-                    state_path=state_path,
+                    state_path=flip_path,
                     no_fetch=True,
                     maximum=8,
                     timeout_seconds=1,
                     poll_seconds=0.001,
                     allowed_formulae=frozenset(("bash",)),
-                    registry=registry,
+                    registry=flip_registry,
                 )
-                successful_dispatches = list(github.dispatches)
-
-                class FlipAfterReuseRegistry(FakeRegistry):
-                    def manifest(inner_self, formula, reference):
-                        inner_self.calls.append((formula, reference))
-                        if len(inner_self.blob_calls) == 23:
-                            return rollout.RegistryManifestEvidence(
-                                exists=True,
-                                digest="sha256:" + "f" * 64,
-                            )
-                        return rollout.RegistryManifestEvidence(
-                            exists=False,
-                            digest=None,
-                        )
-
-                flip_registry = FlipAfterReuseRegistry(
-                    rollout.RegistryManifestEvidence(
-                        exists=False, digest=None
-                    )
-                )
-                flip_path = pathlib.Path(directory) / "flip-campaign.json"
-                rollout.write_new_state(flip_path, pristine_state)
-                github.dispatches.clear()
-                with self.assertRaisesRegex(
-                    rollout.RolloutError,
-                    "campaign OCI identity is already occupied",
-                ):
-                    rollout.dispatch_ready(
-                        tap=tap,
-                        github=github,
-                        expected_kandelo_sha=self.consumer_sha,
-                        state_path=flip_path,
-                        no_fetch=True,
-                        maximum=8,
-                        timeout_seconds=1,
-                        poll_seconds=0.001,
-                        allowed_formulae=frozenset(("bash",)),
-                        registry=flip_registry,
-                    )
-                stalled = rollout.read_state(flip_path)
+            stalled = rollout.read_state(flip_path)
 
         self.assertEqual(1, dispatched)
         self.assertEqual(46, len(registry.blob_calls))
         self.assertEqual(1, len(successful_dispatches))
         self.assertEqual("bash", successful_dispatches[0][0])
+        self.assertNotIn("ncurses", (entry[0] for entry in successful_dispatches))
+        self.assertNotIn("libcxx", (entry[0] for entry in successful_dispatches))
+        self.assertEqual(
+            [
+                *(("blob", entry.formula) for entry in manifest.reuse),
+                ("absence", "bash"),
+                ("dispatch", "bash"),
+            ],
+            successful_events[-25:],
+        )
         self.assertEqual(23, len(flip_registry.blob_calls))
-        self.assertEqual([], github.dispatches)
+        self.assertEqual([], flip_github.dispatches)
         assert stalled is not None
         self.assertEqual(1, len(stalled["pending_dispatches"]))
         self.assertEqual(
@@ -1882,9 +1989,6 @@ class RolloutControllerTests(unittest.TestCase):
         )
         self.assertNotIn(
             "request_started_at", stalled["pending_dispatches"][0]
-        )
-        self.assertTrue(
-            all(call.args[0] != "HEAD" for call in tap.show_bytes.mock_calls)
         )
 
     def test_product_first_campaign_rejects_reuse_sidecar_from_old_abi(self):
