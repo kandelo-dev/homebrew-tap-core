@@ -152,6 +152,10 @@ class RolloutControllerTests(unittest.TestCase):
             "8b0d41714a0ecce7ca2deb38f5aeecccf9add557",
             rollout.WORKFLOW_PATH,
         )
+        cls.precutover_workflow_source = cls.tap.show(
+            "e747f724efc63c81af453eeada3b7f1453726058",
+            rollout.WORKFLOW_PATH,
+        )
         assert (
             hashlib.sha256(cls.legacy_workflow_source.encode()).hexdigest()
             in rollout.APPROVED_PUBLICATION_WORKFLOWS
@@ -159,6 +163,10 @@ class RolloutControllerTests(unittest.TestCase):
         assert (
             hashlib.sha256(cls.transitional_workflow_source.encode()).hexdigest()
             in rollout.APPROVED_NO_WRITE_ONLY_WORKFLOWS
+        )
+        assert (
+            hashlib.sha256(cls.precutover_workflow_source.encode()).hexdigest()
+            in rollout.APPROVED_PUBLICATION_WORKFLOWS
         )
         assert (
             rollout.workflow_sha256(cls.snapshot)
@@ -508,8 +516,17 @@ class RolloutControllerTests(unittest.TestCase):
         return state, tap, github
 
     @staticmethod
-    def _failed_state(snapshot, formula: str, *, run_id: int = 123) -> dict:
-        state = rollout.initial_state(snapshot, RolloutControllerTests.consumer_sha)
+    def _failed_state(
+        snapshot,
+        formula: str,
+        *,
+        run_id: int = 123,
+        consumer_sha: str | None = None,
+    ) -> dict:
+        state = rollout.initial_state(
+            snapshot,
+            consumer_sha or RolloutControllerTests.consumer_sha,
+        )
         state["dispatches"].append(
             {
                 "formula": formula,
@@ -631,7 +648,7 @@ class RolloutControllerTests(unittest.TestCase):
                         tap=self.tap,
                         github=github,
                         registry=registry,
-                        expected_kandelo_sha=self.consumer_sha,
+                        expected_kandelo_sha=state["expected_kandelo_sha"],
                         state_path=state_path,
                         run_id=run_id,
                         no_fetch=True,
@@ -641,7 +658,7 @@ class RolloutControllerTests(unittest.TestCase):
                         tap=self.tap,
                         github=github,
                         registry=registry,
-                        expected_kandelo_sha=self.consumer_sha,
+                        expected_kandelo_sha=state["expected_kandelo_sha"],
                         state_path=state_path,
                         run_ids=run_ids,
                         adopt_failed_runs=adopt_failed_runs,
@@ -691,7 +708,7 @@ class RolloutControllerTests(unittest.TestCase):
                     tap=self.tap,
                     github=github,
                     registry=registry,
-                    expected_kandelo_sha=self.consumer_sha,
+                    expected_kandelo_sha=state["expected_kandelo_sha"],
                     state_path=state_path,
                     run_id=run_id,
                     no_fetch=True,
@@ -736,7 +753,7 @@ class RolloutControllerTests(unittest.TestCase):
                     tap=self.tap,
                     github=github,
                     registry=registry,
-                    expected_kandelo_sha=self.consumer_sha,
+                    expected_kandelo_sha=state["expected_kandelo_sha"],
                     state_path=state_path,
                     run_ids=run_ids,
                     adopt_failed_runs=adopt_failed_runs,
@@ -948,8 +965,17 @@ class RolloutControllerTests(unittest.TestCase):
                 else self.transitional_workflow_source
             ),
         )
-        current = dataclasses.replace(self.snapshot, sha="c" * 40)
-        state = self._failed_state(source, "make", run_id=123)
+        current = dataclasses.replace(
+            self.snapshot,
+            sha="c" * 40,
+            workflow_source=self.precutover_workflow_source,
+        )
+        state = self._failed_state(
+            source,
+            "make",
+            run_id=123,
+            consumer_sha=rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
         github = FakeGitHub()
         github.runs_by_id[123] = self._run(
             123,
@@ -974,10 +1000,12 @@ class RolloutControllerTests(unittest.TestCase):
             formula=logged_formula,
             tap_ref=adopted_source.sha,
             publisher_sha=(
-                logged_publisher_sha or rollout.PUBLISHER_WORKFLOW_SHA
+                logged_publisher_sha
+                or rollout.LEGACY_PUBLISHER_WORKFLOW_SHA
             ),
             consumer_sha=(
-                logged_consumer_sha or rollout.PUBLISHER_WORKFLOW_SHA
+                logged_consumer_sha
+                or rollout.LEGACY_PUBLISHER_WORKFLOW_SHA
             ),
             permissions=permissions,
         )
@@ -1179,10 +1207,21 @@ class RolloutControllerTests(unittest.TestCase):
             "1.3.1_4-2",
             self.snapshot.identities["zlib"].top_reference,
         )
-        self.assertEqual("pr-1079-staging", rollout.PREPUBLICATION_STAGING_TAG)
+        self.assertRegex(
+            rollout.PREPUBLICATION_STAGING_TAG,
+            r"^package-generation-rootfs-wasm32-abi-v42-sha256-[0-9a-f]{64}$",
+        )
+        self.assertEqual(
+            rollout.CURRENT_MAIN_SHA,
+            rollout.PREPUBLICATION_GENERATION_SHA,
+        )
+        self.assertEqual(
+            "pr-1079-staging",
+            rollout.LEGACY_PREPUBLICATION_STAGING_TAG,
+        )
         self.assertEqual(
             "437fde2524ea6ad9c44933f8abbf995a46841009",
-            rollout.PREPUBLICATION_GENERATION_SHA,
+            rollout.LEGACY_PREPUBLICATION_GENERATION_SHA,
         )
 
     def test_fresh_campaign_requires_one_exact_reviewed_publication_contract(self):
@@ -1196,13 +1235,12 @@ class RolloutControllerTests(unittest.TestCase):
         )
         workflow_mutations = {
             "publisher wiring": self.snapshot.workflow_source.replace(
-                rollout.PUBLISHER_WORKFLOW_SHA, "a" * 40, 1
+                rollout.PUBLISHER_WORKFLOW_SHA, "c" * 40, 1
             ),
             "consumer wiring": self.snapshot.workflow_source.replace(
-                self.consumer_sha, "a" * 40, 1
-            ),
-            "generation wiring": self.snapshot.workflow_source.replace(
-                rollout.PREPUBLICATION_GENERATION_SHA, "a" * 40, 1
+                f"kandelo-ref: {self.consumer_sha}",
+                f"kandelo-ref: {'d' * 40}",
+                1,
             ),
             "generation tag wiring": self.snapshot.workflow_source.replace(
                 rollout.PREPUBLICATION_STAGING_TAG, "unreviewed-generation", 1
@@ -1225,9 +1263,9 @@ class RolloutControllerTests(unittest.TestCase):
                 )
 
         substitutions = {
-            "publisher": {"publisher_sha": "a" * 40},
-            "consumer": {"consumer_sha": "a" * 40},
-            "package generation": {"package_generation_sha": "a" * 40},
+            "publisher": {"publisher_sha": "c" * 40},
+            "consumer": {"consumer_sha": "d" * 40},
+            "package generation": {"package_generation_sha": "e" * 40},
             "package tag": {"package_generation_tag": "other-generation"},
             "complete workflow": {"workflow_sha256": "a" * 64},
         }
@@ -2572,111 +2610,87 @@ class RolloutControllerTests(unittest.TestCase):
                 formula,
             )
 
-    def test_workflow_pins_publisher_and_package_consumer_separately(self):
+    def test_workflow_pins_one_main_and_one_admitted_rootfs_generation(self):
         expected = self.consumer_sha
-        vfs_expression = (
-            "${{ github.event.client_payload.require_vfs_acceptance || false }}"
-        )
         source = self.snapshot.workflow_source
         snapshot = self.snapshot
         rollout.validate_workflow(FakeGitHub(), snapshot, expected)
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "publisher implementation is not frozen"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        rollout.PUBLISHER_WORKFLOW_SHA, "b" * 40
-                    ),
+        mutations = (
+            (
+                "publisher implementation is not frozen",
+                source.replace(rollout.PUBLISHER_WORKFLOW_SHA, "b" * 40),
+            ),
+            (
+                "tap-ref is not an allowed",
+                source.replace(
+                    "${{ github.event.client_payload.tap_sha }}",
+                    "main",
                 ),
-                expected,
-            )
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "tap-ref is not an allowed"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        "${{ github.event.client_payload.tap_sha }}",
-                        "main",
-                    ),
+            ),
+            (
+                "run-name does not expose",
+                source.replace(
+                    rollout.WORKFLOW_RUN_NAME_SOURCE,
+                    "Publish Kandelo bottles",
                 ),
-                expected,
-            )
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "run-name does not expose"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        rollout.WORKFLOW_RUN_NAME_SOURCE,
-                        "Publish Kandelo bottles",
-                    ),
+            ),
+            (
+                "package consumer is not frozen",
+                source.replace(
+                    f"kandelo-ref: {expected}", "kandelo-ref: main"
                 ),
-                expected,
-            )
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "package consumer is not frozen"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        f"kandelo-ref: {expected}", "kandelo-ref: main"
-                    ),
+            ),
+            (
+                "workflow force differs",
+                source.replace(
+                    "github.event.client_payload.force || false", "true"
                 ),
-                expected,
-            )
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "workflow force differs"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        "github.event.client_payload.force || false", "true"
-                    ),
+            ),
+            (
+                "package-generation-wasm32 differs",
+                source.replace(
+                    rollout.PREPUBLICATION_STAGING_TAG,
+                    "package-generation-rootfs-wasm32-abi-v42-sha256-"
+                    + "c" * 64,
                 ),
-                expected,
+            ),
+            (
+                "forbidden generation input prepublication-staging-tag",
+                source
+                + "\n      prepublication-staging-tag: pr-1079-staging\n",
+            ),
+        )
+        for source_reason, changed_source in mutations:
+            changed = dataclasses.replace(
+                snapshot,
+                workflow_source=changed_source,
             )
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "prepublication-staging-kandelo-sha differs"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        rollout.PREPUBLICATION_GENERATION_SHA,
-                        "b" * 40,
+            with (
+                self.subTest(source_reason=source_reason),
+                self.assertRaisesRegex(rollout.RolloutError, source_reason),
+            ):
+                rollout.validate_workflow_source(
+                    changed,
+                    expected,
+                    expected_publisher_sha=rollout.PUBLISHER_WORKFLOW_SHA,
+                    expected_package_generation_sha=(
+                        rollout.PREPUBLICATION_GENERATION_SHA
                     ),
-                ),
-                expected,
-            )
-        with self.assertRaisesRegex(
-            rollout.RolloutError,
-            "defer-vfs-acceptance-until-postpublication differs",
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        "defer-vfs-acceptance-until-postpublication: "
-                        f"{vfs_expression}",
-                        "defer-vfs-acceptance-until-postpublication: true",
+                    expected_package_generation_tag=(
+                        rollout.PREPUBLICATION_STAGING_TAG
                     ),
+                )
+            # WHY: source-shape diagnostics remain useful, but the production
+            # gate must also reject every byte-level caller mutation before it
+            # can become publication authority.
+            with (
+                self.subTest(approval_reason=source_reason),
+                self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    "publication workflow hash .* is not approved",
                 ),
-                expected,
-            )
+            ):
+                rollout.validate_workflow(FakeGitHub(), changed, expected)
 
     def test_run_name_is_the_only_non_bottle_affecting_workflow_difference(self):
         current = self.snapshot.workflow_source
@@ -3048,19 +3062,28 @@ class RolloutControllerTests(unittest.TestCase):
             rollout.validate_state(state, self.snapshot, "a" * 40)
 
     def test_legacy_single_intent_ledger_upgrades_only_from_exact_workflow(self):
-        state = rollout.initial_state(self.snapshot, self.consumer_sha)
+        historical = dataclasses.replace(
+            self.snapshot,
+            workflow_source=self.precutover_workflow_source,
+        )
+        state = rollout.initial_state(
+            historical,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
         state.pop("pending_dispatches")
         state.pop("expected_publisher_sha")
         state.pop("workflow_rotations")
         state["workflow_sha256"] = rollout.LEGACY_SINGLE_INTENT_WORKFLOW_SHA256
 
         upgraded = rollout.upgrade_state(
-            state, self.snapshot, self.consumer_sha
+            state,
+            historical,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
         )
 
         self.assertEqual([], upgraded["pending_dispatches"])
         self.assertEqual(
-            hashlib.sha256(self.snapshot.workflow_source.encode()).hexdigest(),
+            hashlib.sha256(historical.workflow_source.encode()).hexdigest(),
             upgraded["workflow_sha256"],
         )
         corrupted = copy.deepcopy(state)
@@ -3069,7 +3092,9 @@ class RolloutControllerTests(unittest.TestCase):
             rollout.RolloutError, "single-intent or token-correlated"
         ):
             rollout.upgrade_state(
-                corrupted, self.snapshot, self.consumer_sha
+                corrupted,
+                historical,
+                rollout.LEGACY_ABI42_CONSUMER_SHA,
             )
 
     def test_multi_intent_ledger_rejects_duplicate_formulae_and_tokens(self):
@@ -4069,8 +4094,17 @@ class RolloutControllerTests(unittest.TestCase):
             sha="b" * 40,
             workflow_source=self.transitional_workflow_source,
         )
-        current = dataclasses.replace(self.snapshot, sha="c" * 40)
-        state = self._failed_state(source, "make", run_id=123)
+        current = dataclasses.replace(
+            self.snapshot,
+            sha="c" * 40,
+            workflow_source=self.precutover_workflow_source,
+        )
+        state = self._failed_state(
+            source,
+            "make",
+            run_id=123,
+            consumer_sha=rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
         github = FakeGitHub()
         github.runs_by_id[123] = self._run(
             123,
@@ -4092,8 +4126,8 @@ class RolloutControllerTests(unittest.TestCase):
         github.logs_by_job[950] = self._plan_log(
             formula="make",
             tap_ref=adopted_source.sha,
-            publisher_sha=rollout.PUBLISHER_WORKFLOW_SHA,
-            consumer_sha=rollout.PUBLISHER_WORKFLOW_SHA,
+            publisher_sha=rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
+            consumer_sha=rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
         )
         registry = FakeRegistry(
             rollout.RegistryManifestEvidence(exists=False, digest=None)
@@ -4127,18 +4161,22 @@ class RolloutControllerTests(unittest.TestCase):
         )
         explicit = recovered["failed_attempts"][-1]["correlation_evidence"]
         self.assertEqual(
-            rollout.PUBLISHER_WORKFLOW_SHA,
+            rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
             explicit["logged_publisher_sha"],
         )
         self.assertEqual(
-            rollout.PUBLISHER_WORKFLOW_SHA,
+            rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
             explicit["logged_kandelo_ref"],
         )
         self.assertNotIn(
             explicit["source_workflow_sha256"],
             rollout.trusted_workflow_publishers(recovered),
         )
-        rollout.validate_state(recovered, current, self.consumer_sha)
+        rollout.validate_state(
+            recovered,
+            current,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
 
     def test_explicit_pre_matrix_adoption_rejects_log_formula_substitution(self):
         source = dataclasses.replace(
@@ -4321,8 +4359,8 @@ class RolloutControllerTests(unittest.TestCase):
             rollout.approved_workflow_authority(transitional)
         self.assertEqual(
             (
-                rollout.PUBLISHER_WORKFLOW_SHA,
-                rollout.PUBLISHER_WORKFLOW_SHA,
+                rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
+                rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
                 "exact",
             ),
             rollout.approved_workflow_authority(
@@ -4389,12 +4427,19 @@ class RolloutControllerTests(unittest.TestCase):
             sha="a" * 40,
         )
         current = self._snapshot_with_formula_source(
-            self.snapshot,
+            dataclasses.replace(
+                self.snapshot,
+                workflow_source=self.precutover_workflow_source,
+            ),
             "sqlite",
             rollout.source_with_rebuild(old_source, "sqlite", 2),
             sha="c" * 40,
         )
-        state = self._failed_state(source, "sqlite")
+        state = self._failed_state(
+            source,
+            "sqlite",
+            consumer_sha=rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
         state.pop("expected_publisher_sha")
         state.pop("workflow_rotations")
         github = FakeGitHub()
@@ -4422,19 +4467,29 @@ class RolloutControllerTests(unittest.TestCase):
             current_snapshot=current,
         )
 
-        self.assertEqual(self.consumer_sha, recovered["expected_kandelo_sha"])
         self.assertEqual(
-            rollout.PUBLISHER_WORKFLOW_SHA,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
+            recovered["expected_kandelo_sha"],
+        )
+        self.assertEqual(
+            rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
             recovered["expected_publisher_sha"],
         )
         self.assertEqual(1, len(recovered["workflow_rotations"]))
         rotation = recovered["workflow_rotations"][0]
-        self.assertEqual(self.consumer_sha, rotation["old_publisher_sha"])
         self.assertEqual(
-            rollout.PUBLISHER_WORKFLOW_SHA,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
+            rotation["old_publisher_sha"],
+        )
+        self.assertEqual(
+            rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
             rotation["new_publisher_sha"],
         )
-        rollout.validate_state(recovered, current, self.consumer_sha)
+        rollout.validate_state(
+            recovered,
+            current,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
 
     def test_failed_recovery_requires_a_new_rebuild_for_an_occupied_identity(self):
         old_source = rollout.source_with_rebuild(

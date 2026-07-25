@@ -38,52 +38,73 @@ TAP_NAME = "kandelo-dev/tap-core"
 KANDELO_REPOSITORY = "Automattic/kandelo"
 WORKFLOW_ID = 315_324_894
 WORKFLOW_PATH = ".github/workflows/publish-bottles.yml"
-# WHY: this SHA selects trusted publisher code, not package identity. The
-# controller separately receives the Kandelo package-consumer SHA so hardened
-# workflow changes cannot silently force ABI 42 to consume a different cache.
-PUBLISHER_WORKFLOW_SHA = "3545bfd34509a52b68a4620c92e4aae24c60adb0"
-ABI42_CONSUMER_SHA = "d3805721b887a19382ef1c96b576fc27badc0951"
+LEGACY_PUBLISHER_WORKFLOW_SHA = "3545bfd34509a52b68a4620c92e4aae24c60adb0"
+LEGACY_ABI42_CONSUMER_SHA = "d3805721b887a19382ef1c96b576fc27badc0951"
+LEGACY_PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
+LEGACY_PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
+# The next campaign deliberately keeps its authority separate from the legacy
+# d380 controller. These values are replaced only after the exact Kandelo main
+# merge and its selected rootfs generation have both been admitted.
+CURRENT_MAIN_SHA = "5f448e68ec031108de42e965f5284944861b6ea2"
+CURRENT_ROOTFS_GENERATION_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-d66825c03af08133538018dca0bad5732d8eaf5add3dfd513b3c1bce9210256e"
+CURRENT_CALLER_SHA256 = "3c6028607ad3bdbba8a814e065d602d9c1cc45c64ccd6e8e859a336d58acfeac"
+# WHY: the current write caller executes the publisher and consumes packages
+# from the same exact main commit. The selected-input admission record, rather
+# than a distinct source commit, vouches for the preserved rootfs bytes.
+PUBLISHER_WORKFLOW_SHA = CURRENT_MAIN_SHA
+ABI42_CONSUMER_SHA = CURRENT_MAIN_SHA
+PREPUBLICATION_STAGING_TAG = CURRENT_ROOTFS_GENERATION_TAG
+PREPUBLICATION_GENERATION_SHA = CURRENT_MAIN_SHA
 # These hashes bind the complete protected caller, including permissions and
 # the absence of caller-provided secrets or extra executable jobs. The
 # transitional caller selected an incompatible consumer and is therefore
 # approved only as evidence for runs proven to have stopped before all writes.
 APPROVED_PUBLICATION_WORKFLOWS = {
     "3207ecd35a5cca77fc5bb0e26bee8ab9d354efcb7fef2c1d7aa8b65a8b2bade3": (
-        ABI42_CONSUMER_SHA,
-        ABI42_CONSUMER_SHA,
+        LEGACY_ABI42_CONSUMER_SHA,
+        LEGACY_ABI42_CONSUMER_SHA,
         "main",
     ),
     "0bf3328ac4d5c0f3497b071943d875e5d43ef4c37f81b941377d7cefdbde97d8": (
-        PUBLISHER_WORKFLOW_SHA,
-        ABI42_CONSUMER_SHA,
+        LEGACY_PUBLISHER_WORKFLOW_SHA,
+        LEGACY_ABI42_CONSUMER_SHA,
         "exact",
     ),
     "0e526ce02463ee83ec77952eb0cbdaf427541b0c8549fa9cd70e9e58f9fe4376": (
-        PUBLISHER_WORKFLOW_SHA,
-        ABI42_CONSUMER_SHA,
+        LEGACY_PUBLISHER_WORKFLOW_SHA,
+        LEGACY_ABI42_CONSUMER_SHA,
+        "exact",
+    ),
+    CURRENT_CALLER_SHA256: (
+        CURRENT_MAIN_SHA,
+        CURRENT_MAIN_SHA,
         "exact",
     ),
 }
 APPROVED_NO_WRITE_ONLY_WORKFLOWS = {
     "6e425bbaa04a1c0127db59a0cab8365eebfe5f67946b44de935b76b0ec745ada": (
-        PUBLISHER_WORKFLOW_SHA,
-        PUBLISHER_WORKFLOW_SHA,
+        LEGACY_PUBLISHER_WORKFLOW_SHA,
+        LEGACY_PUBLISHER_WORKFLOW_SHA,
         "exact",
     ),
 }
 EXPECTED_ABI = 42
 EXPECTED_RELEASE_TAG = "bottles-abi-v42"
-PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
-PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 # A fresh campaign may not turn arbitrary command-line SHAs into publication
 # authority. Each complete caller hash must be reviewed with the exact reusable
 # publisher, package consumer, and sealed package generation it selects.
 APPROVED_CAMPAIGN_CONTRACTS = {
     "0e526ce02463ee83ec77952eb0cbdaf427541b0c8549fa9cd70e9e58f9fe4376": (
-        PUBLISHER_WORKFLOW_SHA,
-        ABI42_CONSUMER_SHA,
-        PREPUBLICATION_GENERATION_SHA,
-        PREPUBLICATION_STAGING_TAG,
+        LEGACY_PUBLISHER_WORKFLOW_SHA,
+        LEGACY_ABI42_CONSUMER_SHA,
+        LEGACY_PREPUBLICATION_GENERATION_SHA,
+        LEGACY_PREPUBLICATION_STAGING_TAG,
+    ),
+    CURRENT_CALLER_SHA256: (
+        CURRENT_MAIN_SHA,
+        CURRENT_MAIN_SHA,
+        CURRENT_MAIN_SHA,
+        CURRENT_ROOTFS_GENERATION_TAG,
     ),
 }
 MAX_ACTIVE_RUNS = 8
@@ -1061,12 +1082,44 @@ def validate_workflow_source(
         "require-vfs-acceptance": (
             "${{ github.event.client_payload.require_vfs_acceptance || false }}"
         ),
-        "prepublication-staging-tag": expected_package_generation_tag,
-        "prepublication-staging-kandelo-sha": expected_package_generation_sha,
-        "defer-vfs-acceptance-until-postpublication": (
-            "${{ github.event.client_payload.require_vfs_acceptance || false }}"
-        ),
     }
+    if expected_package_generation_tag.startswith(
+        "package-generation-rootfs-wasm32-"
+    ):
+        # WHY: selected-input admission moves authority to the immutable
+        # generation tag and the exact current-main consumer. The legacy source
+        # SHA and VFS deferral inputs would reopen the retired staging bridge.
+        if expected_package_generation_sha != expected_kandelo_sha:
+            raise RolloutError(
+                "selected rootfs generation authority must equal the exact "
+                "Kandelo package consumer"
+            )
+        expected_scalars["package-generation-wasm32"] = (
+            expected_package_generation_tag
+        )
+        forbidden_generation_keys = (
+            "package-generation-wasm64",
+            "prepublication-staging-tag",
+            "prepublication-staging-kandelo-sha",
+            "defer-vfs-acceptance-until-postpublication",
+        )
+    else:
+        expected_scalars.update(
+            {
+                "prepublication-staging-tag": expected_package_generation_tag,
+                "prepublication-staging-kandelo-sha": (
+                    expected_package_generation_sha
+                ),
+                "defer-vfs-acceptance-until-postpublication": (
+                    "${{ github.event.client_payload."
+                    "require_vfs_acceptance || false }}"
+                ),
+            }
+        )
+        forbidden_generation_keys = (
+            "package-generation-wasm32",
+            "package-generation-wasm64",
+        )
     for key, expected in expected_scalars.items():
         values = re.findall(
             rf"^\s+{re.escape(key)}:\s*(.+?)\s*$",
@@ -1076,6 +1129,17 @@ def validate_workflow_source(
         if values != [expected]:
             raise RolloutError(
                 f"production workflow {key} differs from {expected!r}: {values}"
+            )
+    for key in forbidden_generation_keys:
+        values = re.findall(
+            rf"^\s+{re.escape(key)}:\s*(.+?)\s*$",
+            snapshot.workflow_source,
+            flags=re.MULTILINE,
+        )
+        if values:
+            raise RolloutError(
+                f"production workflow retains forbidden generation input {key}: "
+                f"{values}"
             )
 
     tap_refs = re.findall(
@@ -1136,9 +1200,22 @@ def approved_package_generation(
     workflow_hash: str,
 ) -> tuple[str, str]:
     campaign = APPROVED_CAMPAIGN_CONTRACTS.get(workflow_hash)
-    if campaign is None:
-        return PREPUBLICATION_GENERATION_SHA, PREPUBLICATION_STAGING_TAG
-    return campaign[2], campaign[3]
+    if campaign is not None:
+        return campaign[2], campaign[3]
+    # WHY: recovery ledgers bind the caller that actually ran. Historical
+    # callers selected the admitted pre-publication generation, even after the
+    # controller's current campaign constants advance to final main.
+    if (
+        workflow_hash in APPROVED_PUBLICATION_WORKFLOWS
+        or workflow_hash in APPROVED_NO_WRITE_ONLY_WORKFLOWS
+    ):
+        return (
+            LEGACY_PREPUBLICATION_GENERATION_SHA,
+            LEGACY_PREPUBLICATION_STAGING_TAG,
+        )
+    raise RolloutError(
+        f"publication workflow hash {workflow_hash} has no approved package generation"
+    )
 
 
 def approved_publication_workflow_hash(workflow_hash: str) -> bool:
@@ -1165,27 +1242,31 @@ def validate_workflow(
         )
     if workflow.get("state") != "active":
         raise RolloutError(f"production workflow {WORKFLOW_ID} is not active")
-    publisher_sha = (
-        campaign_contract.publisher_sha
-        if campaign_contract is not None
-        else PUBLISHER_WORKFLOW_SHA
-    )
-    generation_sha = (
-        campaign_contract.package_generation_sha
-        if campaign_contract is not None
-        else PREPUBLICATION_GENERATION_SHA
-    )
-    generation_tag = (
-        campaign_contract.package_generation_tag
-        if campaign_contract is not None
-        else PREPUBLICATION_STAGING_TAG
-    )
-    if (
-        campaign_contract is not None
-        and campaign_contract.consumer_sha != expected_kandelo_sha
-    ):
-        raise RolloutError(
-            "campaign workflow contract selects another package consumer"
+    if campaign_contract is not None:
+        publisher_sha = campaign_contract.publisher_sha
+        generation_sha = campaign_contract.package_generation_sha
+        generation_tag = campaign_contract.package_generation_tag
+        if campaign_contract.consumer_sha != expected_kandelo_sha:
+            raise RolloutError(
+                "campaign workflow contract selects another package consumer"
+            )
+    else:
+        # WHY: recovery may inspect a retired but explicitly approved caller.
+        # Derive every pin from that caller's exact hash; using today's globals
+        # would either strand old ledgers or let a caller mix generations.
+        publisher_sha, approved_consumer, source_selector = (
+            approved_workflow_authority(snapshot)
+        )
+        if (
+            approved_consumer != expected_kandelo_sha
+            or source_selector != "exact"
+        ):
+            raise RolloutError(
+                "active publication workflow authority differs from the "
+                "requested consumer or exact tap-source contract"
+            )
+        generation_sha, generation_tag = approved_package_generation(
+            workflow_sha256(snapshot)
         )
     validate_workflow_source(
         snapshot,
@@ -1201,16 +1282,6 @@ def validate_workflow(
                 "reviewed workflow"
             )
         return
-    authority = approved_workflow_authority(snapshot)
-    if authority != (
-        PUBLISHER_WORKFLOW_SHA,
-        expected_kandelo_sha,
-        "exact",
-    ):
-        raise RolloutError(
-            "active publication workflow authority differs from the requested "
-            "publisher, consumer, or exact tap-source contract"
-        )
 
 
 def publication_workflow_contract(source: str) -> str:

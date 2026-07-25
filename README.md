@@ -217,34 +217,28 @@ ceiling because a called workflow cannot elevate caller authority. The reusable
 workflow narrows each scheduled job, and a dry run never schedules its bottle
 upload or tap-finalization jobs.
 
-Write publication accepts formulae, arches, and an optional release tag. During
-the ABI 42 bootstrap, the caller executes reviewed publisher implementation
-`3545bfd34509a52b68a4620c92e4aae24c60adb0`, while the package consumer remains
-fixed to matching rootfs generation
-`d3805721b887a19382ef1c96b576fc27badc0951`. Package inputs are separately fixed
-to generation
-`437fde2524ea6ad9c44933f8abbf995a46841009` on `pr-1079-staging`; the controller
-fixes the tap source to the exact reviewed commit that it validated and
-recorded. The publisher proves that the package generation is an ancestor of
-the package consumer, that both commits declare the same exact `rootfs`
-closure, and that every selected staging archive matches that sealed closure
-before a bottle build may use it. This explicit bridge breaks the
-package-before-bottle cycle without making any build input mutable.
-The protected caller itself may load from a later finalizer-only `main` commit
-than the reserved Formula source. The controller records that actual
-`repository_dispatch` source separately and accepts it only when the Formula
-catalog, support tree, and normalized caller contract remain frozen and every
-intervening path is generated finalizer output.
+Write publication accepts formulae, arches, and an optional release tag. The
+current caller pins its reusable publisher and package consumer to the same
+exact Kandelo `main` commit. It also pins one immutable
+`package-generation-rootfs-wasm32-abi-v42-sha256-...` tag admitted by that
+commit. The generation record proves that the selected rootfs build-input
+closure is identical to the preserved pre-merge closure and verifies every
+archive byte before use. The earlier staging tag remains promotion evidence;
+it is neither caller authority nor a mutable package source.
 
-Only the controller's Python dispatch requests VFS acceptance. The protected
-caller maps that one bit to both required acceptance and the temporary
-postpublication deferral; the controller leaves that bit false for the other
-62 Formulae. Python still completes its ordinary build, public upload,
-anonymous verification, index publication, and tap finalization; only its
-proof that depends on the newly published bottle waits for the
-postpublication shell stage. After the canonical ABI 42 tap and that shell
-proof are green, rotate the caller back to the landed Kandelo revision and
-remove these staging inputs in one reviewed change.
+This selected rootfs generation is a deliberately bounded bridge for the
+wasm32 Bash/M4 shell proof. It cannot select wasm64, another Formula, or the
+legacy dependency-bearing VFS acceptance graph. A write caller therefore
+cannot expand the preserved closure through event data. Dry runs remain the
+separate staging path: they may select reviewed branch or commit refs and do
+not inherit the production generation pin.
+
+The controller fixes Formula source to the exact reviewed tap commit that it
+validated and recorded. The protected caller itself may load from a later
+finalizer-only `main` commit than that reserved Formula source. The controller
+records the actual `repository_dispatch` source separately and accepts it only
+when the Formula catalog, support tree, and normalized caller contract remain
+frozen and every intervening path is generated finalizer output.
 
 Set `KANDELO_FORMULA` to the exact short name of one dependency-ready Formula,
 then submit the dispatch:
@@ -356,10 +350,17 @@ The local ledger assumes this controller remains the sole production
 dispatcher; it cannot prevent another authorized operator from manually
 publishing between anonymous registry checks.
 
-For the first mostly-lazy shell proof, the intended partition rebuilds Bash,
-reuses the already compatible libcxx and ncurses bottles after validation, and
-defers the other 60 Formulae. A dispatch allowlist may further restrict a
-campaign's rebuild set:
+For the first mostly-lazy shell proof, the intended partition rebuilds only
+Bash. It reuses these 23 public ABI-42 wasm32 bottles after digest-and-size
+validation: `bzip2`, `coreutils`, `curl`, `dash`, `diffutils`, `ed`,
+`findutils`, `gawk`, `git`, `grep`, `gzip`, `less`, `libcurl`, `libcxx`, `m4`,
+`ncurses`, `openssl`, `posix-utils-lite`, `ruby`, `sed`, `tar`, `vim`, and
+`zlib`. `libmagic` and `file-formula` remain deferred because their public
+bottles are still ABI 41; all other Formulae outside this first product closure
+are also deferred rather than rebuilt speculatively. Bzip2 already supplies
+the first-party public-bottle lifecycle proof, while the independent
+`brandonpayton/kandelo-canary` M4 bottle remains the live third-party-tap proof.
+A dispatch allowlist further confines this campaign's only rebuild:
 
 ```bash
 python3 scripts/abi42-rollout.py \
@@ -400,7 +401,7 @@ match against the same ledger:
 : "${KANDELO_ROLLOUT_STATE:?set this to the existing ABI 42 rollout ledger}"
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
-  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --recover-dispatch
 ```
@@ -430,7 +431,7 @@ explicit run ID:
 : "${KANDELO_CANCELLED_RUN_ID:?set this to the sole cancelled publication run}"
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
-  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --abandon-dispatch-run "$KANDELO_CANCELLED_RUN_ID"
 ```
@@ -469,7 +470,7 @@ then retire the exact failed run through the same private ledger:
 : "${KANDELO_FAILED_RUN_ID:?set this to the controller-recorded failed run ID}"
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
-  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --recover-failed-run "$KANDELO_FAILED_RUN_ID"
 ```
@@ -492,7 +493,7 @@ could be recorded, retain an exact pre-matrix no-write failure explicitly:
 ```bash
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
-  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --recover-failed-run "$KANDELO_PREVIOUS_FAILED_RUN_ID" \
   --adopt-failed-run "make=$KANDELO_UNRECORDED_FAILED_RUN_ID"
