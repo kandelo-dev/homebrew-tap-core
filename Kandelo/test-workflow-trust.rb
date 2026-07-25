@@ -37,6 +37,7 @@ CURRENT_KANDELO_WORKFLOW_SHA = "3545bfd34509a52b68a4620c92e4aae24c60adb0"
 CURRENT_KANDELO_CONSUMER_SHA = "d3805721b887a19382ef1c96b576fc27badc0951"
 PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
+BASH_REBUILD5_EVENT = "publish-kandelo-bash-rebuild5"
 
 def check(condition, message)
   raise message unless condition
@@ -225,6 +226,54 @@ def pat_caller_specs_for_sha(kandelo_sha)
   specs.freeze
 end
 
+def bash_rebuild5_one_shot_specs(
+  workflow_sha:,
+  consumer_sha:,
+  generation_sha:,
+  cache_key:
+)
+  {
+    "workflow" => workflow_sha,
+    "consumer" => consumer_sha,
+    "generation" => generation_sha,
+  }.each do |label, sha|
+    check(sha.match?(/\A[0-9a-f]{40}\z/),
+          "Bash rebuild-5 #{label} pin is not an exact SHA")
+  end
+  check(cache_key.match?(/\A[0-9a-f]{64}\z/),
+        "Bash rebuild-5 cache key is not an exact SHA-256")
+
+  specs = deep_copy(CALLER_SPECS)
+  specs["maintenance"] = {
+    path: File.join(WORKFLOW_ROOT, "maintain-bottles.yml"),
+    name: "Publish Kandelo Bash rebuild 5",
+    event: BASH_REBUILD5_EVENT,
+    job: "publish-bash-rebuild5",
+    reusable: "Automattic/kandelo/.github/workflows/" \
+              "reusable-homebrew-bottle-publish.yml@#{workflow_sha}",
+    inputs: {
+      "kandelo-repository" => "Automattic/kandelo",
+      "kandelo-ref" => consumer_sha,
+      "tap-repository" => "kandelo-dev/homebrew-tap-core",
+      "tap-name" => "kandelo-dev/tap-core",
+      # The caller itself cannot contain its own commit SHA. This is the only
+      # event-provided build identity, and the publisher requires exact hex.
+      "tap-ref" => expression("github.event.client_payload.tap_sha"),
+      "formulae" => "bash",
+      "arches" => "wasm32",
+      "release-tag" => "bottles-abi-v42",
+      "expected-cache-keys" => %Q({"bash":{"wasm32":"#{cache_key}"}}),
+      "force" => true,
+      "dry-run" => false,
+      "require-vfs-acceptance" => false,
+      "prepublication-staging-tag" => "pr-1094-staging",
+      "prepublication-staging-kandelo-sha" => generation_sha,
+      "defer-vfs-acceptance-until-postpublication" => false,
+    }.freeze,
+  }
+  specs.freeze
+end
+
 CALLER_PROFILES = {
   "current" => CALLER_SPECS,
 }.freeze
@@ -362,17 +411,30 @@ end
 def callers_for_specs(callers, specs)
   result = deep_copy(callers)
   specs.each do |key, spec|
-    job = result.fetch(key).fetch("jobs").fetch(spec.fetch(:job))
-    job["uses"] = spec.fetch(:reusable)
-    job["with"] = spec.fetch(:inputs)
-    expected_secrets = spec.fetch(:secrets, {})
-    if expected_secrets.empty?
-      job.delete("secrets")
-    else
-      job["secrets"] = expected_secrets
-    end
+    result[key] = caller_for_spec(spec)
   end
   result
+end
+
+def caller_for_spec(spec)
+  job = {
+    "permissions" => spec.fetch(:permissions, CALLER_PERMISSIONS),
+    "uses" => spec.fetch(:reusable),
+    "with" => spec.fetch(:inputs),
+  }
+  secrets = spec.fetch(:secrets, {})
+  job["secrets"] = secrets unless secrets.empty?
+  {
+    "name" => spec.fetch(:name),
+    "on" => {
+      "repository_dispatch" => {
+        "types" => [spec.fetch(:event)],
+      },
+    },
+    "jobs" => {
+      spec.fetch(:job) => job,
+    },
+  }
 end
 
 def check_contract_workflow(workflow)
@@ -473,19 +535,86 @@ def self_test(callers, contract, base_contract)
   previous_specs = caller_specs_for_sha(PREVIOUS_KANDELO_WORKFLOW_SHA)
   retired_specs = caller_specs_for_sha(RETIRED_KANDELO_WORKFLOW_SHA)
   arbitrary_specs = caller_specs_for_sha(SELF_TEST_KANDELO_WORKFLOW_SHA)
+  one_shot_specs = bash_rebuild5_one_shot_specs(
+    workflow_sha: "2222222222222222222222222222222222222222",
+    consumer_sha: "3333333333333333333333333333333333333333",
+    generation_sha: "4444444444444444444444444444444444444444",
+    cache_key: "5555555555555555555555555555555555555555555555555555555555555555",
+  )
   test_profiles = { "current" => CALLER_SPECS }
+  one_shot_profiles = { "bash-rebuild5-one-shot" => one_shot_specs }
   current_callers = callers_for_specs(callers, CALLER_SPECS)
   retired_pat_callers = callers_for_specs(callers, retired_pat_specs)
   previous_callers = callers_for_specs(callers, previous_specs)
   retired_callers = callers_for_specs(callers, retired_specs)
   arbitrary_callers = callers_for_specs(callers, arbitrary_specs)
+  one_shot_callers = deep_copy(current_callers)
+  one_shot_callers["maintenance"] =
+    caller_for_spec(one_shot_specs.fetch("maintenance"))
   check(check_caller_profile(current_callers, test_profiles) == "current",
         "current caller profile was not selected")
+  check(check_caller_profile(one_shot_callers, one_shot_profiles) ==
+        "bash-rebuild5-one-shot",
+        "Bash rebuild-5 one-shot caller profile was not selected")
 
   expect_rejection("mixed current and arbitrary caller generations") do
     mutated = deep_copy(current_callers)
     mutated["publish"] = deep_copy(arbitrary_callers.fetch("publish"))
     check_caller_profile(mutated, test_profiles)
+  end
+  expect_rejection("the Bash rebuild-5 one-shot as the current caller profile") do
+    check_caller_profile(one_shot_callers, test_profiles)
+  end
+  expect_rejection("the current maintenance caller as the Bash rebuild-5 one-shot") do
+    check_caller_profile(current_callers, one_shot_profiles)
+  end
+  {
+    "formula selection" => [
+      "formulae",
+      expression("github.event.client_payload.formulae"),
+    ],
+    "architecture selection" => [
+      "arches",
+      expression("github.event.client_payload.arches"),
+    ],
+    "cache-key selection" => [
+      "expected-cache-keys",
+      expression("github.event.client_payload.expected_cache_keys"),
+    ],
+    "force selection" => ["force", expression("github.event.client_payload.force")],
+    "VFS selection" => [
+      "require-vfs-acceptance",
+      expression("github.event.client_payload.require_vfs_acceptance"),
+    ],
+  }.each do |label, (key, value)|
+    expect_rejection("event-provided Bash rebuild-5 #{label}") do
+      mutated = deep_copy(one_shot_callers)
+      mutated.dig("maintenance", "jobs", "publish-bash-rebuild5", "with")[key] = value
+      check_caller_profile(mutated, one_shot_profiles)
+    end
+  end
+  expect_rejection("a reusable maintenance workflow for the Bash rebuild-5 one-shot") do
+    mutated = deep_copy(one_shot_callers)
+    mutated.dig("maintenance", "jobs", "publish-bash-rebuild5")["uses"] =
+      "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@" \
+      "2222222222222222222222222222222222222222"
+    check_caller_profile(mutated, one_shot_profiles)
+  end
+  expect_rejection("a mutable Bash rebuild-5 Kandelo workflow pin") do
+    bash_rebuild5_one_shot_specs(
+      workflow_sha: "main",
+      consumer_sha: "3333333333333333333333333333333333333333",
+      generation_sha: "4444444444444444444444444444444444444444",
+      cache_key: "5555555555555555555555555555555555555555555555555555555555555555",
+    )
+  end
+  expect_rejection("a malformed Bash rebuild-5 cache key") do
+    bash_rebuild5_one_shot_specs(
+      workflow_sha: "2222222222222222222222222222222222222222",
+      consumer_sha: "3333333333333333333333333333333333333333",
+      generation_sha: "4444444444444444444444444444444444444444",
+      cache_key: "not-a-cache-key",
+    )
   end
   expect_rejection("the retired PAT-backed caller generation") do
     check_caller_profile(retired_pat_callers, test_profiles)
