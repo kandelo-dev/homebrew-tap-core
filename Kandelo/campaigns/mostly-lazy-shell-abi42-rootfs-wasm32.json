@@ -1,0 +1,432 @@
+{
+  "schema": 1,
+  "campaign": "mostly-lazy-shell-abi42-rootfs-wasm32",
+  "kandelo_abi": 42,
+  "rootfs_arch": "wasm32",
+  "registry_namespace": "kandelo-dev/homebrew-tap-core",
+  "base_tap_sha": "a0a3afe4ad63e1efd64c8c63d97edc5587a8d755",
+  "reservation_tap_sha": "1939b1fbaf12989f28b2d8dca188d73ba0edc1a8",
+  "rebuild": {
+    "formula": "bash",
+    "version": "5.2.37_2",
+    "formula_revision": 2,
+    "old_bottle_rebuild": 4,
+    "reserved_bottle_rebuild": 5
+  },
+  "reuse": [
+    {
+      "formula": "bzip2",
+      "version": "1.0.8_2",
+      "formula_revision": 2,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "a2440f810e52b250951c323b43f6d55b40c3e68b28408929df53bdfe83044c85",
+        "bytes": 87257
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/bzip2.json",
+        "sha256": "ea4e275f8d20b24fcba5a9993813eb97a300c806324996f5b5e48c0c65bbdd70"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/bzip2-1.0.8_2-rebuild1-wasm32.json",
+        "sha256": "0195d1ac3b46f16c1c44c2865d1c5d0f490653ef369ed950c7809f195eb8c246"
+      }
+    },
+    {
+      "formula": "coreutils",
+      "version": "9.6",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "492b9d4a14bce5c4ef5cc55fafd3d24b8874c661b85480f1c5d61713357fdcc2",
+        "bytes": 1781809
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/coreutils.json",
+        "sha256": "90890f416861aac54a82c92596167f971fdef298f02df49eea17abec67a3f9cd"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/coreutils-9.6-rebuild1-wasm32.json",
+        "sha256": "4e9c980473919adde6b510820f0e71607f25a824380c9bf7d520cdbfd283849c"
+      }
+    },
+    {
+      "formula": "curl",
+      "version": "8.11.1",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "c286edbaea2b8cac64d905b1ebd85df0d10d68a843d7a64de90e16903ba8347a",
+        "bytes": 1318565
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/curl.json",
+        "sha256": "f3212ea7ec8b2378b2c73a8a8081fad5751afd819ec37f37bb03c7e4d00eb537"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/curl-8.11.1-rebuild1-wasm32.json",
+        "sha256": "f1e5fe5ad72c733fcb1468a50c5952befc68a542b042ec7ba40105146ab600ae"
+      }
+    },
+    {
+      "formula": "dash",
+      "version": "0.5.12",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "93ae2b1153a5f7073eb7d2ca4a86feca138e6e5130f2a7b5e15d7bb2b35c92b8",
+        "bytes": 165887
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/dash.json",
+        "sha256": "632d5a0ea2618afedd44138dbe75c54490bb96b7ceaa2ec12a8cfa2867ff540a"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/dash-0.5.12-rebuild1-wasm32.json",
+        "sha256": "2ef44cd7820fff8023bd1ee297b54934128554073c0ebe7c8151296960ebe1d2"
+      }
+    },
+    {
+      "formula": "diffutils",
+      "version": "3.12",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "e0429807a455cac881779878506a095f63507ab0338c1e70cd0577b97ed42d41",
+        "bytes": 534583
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/diffutils.json",
+        "sha256": "0b3f86890e13c35bbc542791fcbf2908cf756eea5001691007840280f834d154"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/diffutils-3.12-rebuild1-wasm32.json",
+        "sha256": "2e51e084640e60048c4072cbaba37c5c79bdbaa5cbf71cef24425b8f9378c70e"
+      }
+    },
+    {
+      "formula": "ed",
+      "version": "1.22.5_1",
+      "formula_revision": 1,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "3a7d19c8b266e35d67caf4e61946d4f3f042de72ffd5aa8cef70f824b7e11a73",
+        "bytes": 104388
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/ed.json",
+        "sha256": "6db8c65b589bb266cf3ec37e47903c8c03f0753412a07a273de505cc1b25a6e5"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/ed-1.22.5_1-rebuild1-wasm32.json",
+        "sha256": "e7d90c5f7b8d0aa46f7ca6a73bb18f99b0d71cefb555ee6607098e4d33482a42"
+      }
+    },
+    {
+      "formula": "findutils",
+      "version": "4.10.0",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "6b35b405280a50d10ac1f9dce5583aa4eda34c1b07e531f8174bc52b29085c44",
+        "bytes": 770421
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/findutils.json",
+        "sha256": "1f0b607c69441000b06389b07824d65d190bc27d781317f2c367e9be7c0ab0b8"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/findutils-4.10.0-rebuild1-wasm32.json",
+        "sha256": "c68f452be3bba94864fd12e2c81798deb3c066e290168dc8759243527d06ef3f"
+      }
+    },
+    {
+      "formula": "gawk",
+      "version": "5.3.0",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "d79b3af6327266ddb6521dfbcc6413b8ec3f041176f7db917606adab381e8b63",
+        "bytes": 650444
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/gawk.json",
+        "sha256": "1ae8688de8bf703cbce4671467944b3ea7e48bff15b3bceeb890b2ecf6dd8572"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/gawk-5.3.0-rebuild1-wasm32.json",
+        "sha256": "0652efec798396ff56cdd89958d2cc95928a6cce292176e7ddbbee81e5241830"
+      }
+    },
+    {
+      "formula": "git",
+      "version": "2.47.1_1",
+      "formula_revision": 1,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "61e6dabaca0b17c726a2747c639aaddfe8b982d86be05b283f72caff9f40ae6f",
+        "bytes": 7428078
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/git.json",
+        "sha256": "31f509df3ea4f64ecac2091a47a57b7e8af2680c10539bf717833dc3aace2dd7"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/git-2.47.1_1-rebuild1-wasm32.json",
+        "sha256": "7e5829e5b047878dc948dea04541dafccb0845e75b3b31f081d458858fc99937"
+      }
+    },
+    {
+      "formula": "grep",
+      "version": "3.11",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "c6a7f5c110cefd41832d07f417fdf643bd967746d6aed9e3c54fc00b816a9e07",
+        "bytes": 343679
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/grep.json",
+        "sha256": "13e515c14ecf8e25bc4e7acb66c730c6f40d888fc0fa065926a553775dc0233f"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/grep-3.11-rebuild1-wasm32.json",
+        "sha256": "32d1756f4713700d972f84b2b4240eda955e5cb1e83f314c4030202e34fc0c3a"
+      }
+    },
+    {
+      "formula": "gzip",
+      "version": "1.14",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "b86faa7314d9086a95c4495992c4640cdc6ea50985097fa25694b0b7a230fbb8",
+        "bytes": 154661
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/gzip.json",
+        "sha256": "ba0ca89fd0d09dd3fb8802f20b8e6e1528c92352e7f4a7469293467537e5c371"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/gzip-1.14-rebuild1-wasm32.json",
+        "sha256": "b9d52604aa194cbb29f1b5aa9f2973353f903bb6d96f2d8b76bba64a83518edb"
+      }
+    },
+    {
+      "formula": "less",
+      "version": "668_1",
+      "formula_revision": 1,
+      "bottle_rebuild": 4,
+      "blob": {
+        "sha256": "287816b46a24222478b8fd4bb20f5aff5559d215ce85e28e80a55c3704feb017",
+        "bytes": 322776
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/less.json",
+        "sha256": "5757a9732fa6893e2755ed18d7304e5d521ac880f7459e2bc27a090e16f3d58f"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/less-668_1-rebuild4-wasm32.json",
+        "sha256": "115d1d534e86caf5e11bf485e3f635d13e550bc5d3ce03f5b75ff93adc940cb0"
+      }
+    },
+    {
+      "formula": "libcurl",
+      "version": "8.11.1_1",
+      "formula_revision": 1,
+      "bottle_rebuild": 3,
+      "blob": {
+        "sha256": "4dfb1d19a164cd33ead2f3f9991525965bce6be40054d5fa8c06502906f30a59",
+        "bytes": 850734
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/libcurl.json",
+        "sha256": "1d1acb7b2f2c3a519d7c7d6cef35b35aeb15c3812b7e16da94749064cdcb1694"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/libcurl-8.11.1_1-rebuild3-wasm32.json",
+        "sha256": "5200123903b802a64fab65df36b9e57dfdb8d08c9b6602ada346c761a07bb27d"
+      }
+    },
+    {
+      "formula": "libcxx",
+      "version": "21.1.7_1",
+      "formula_revision": 1,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "387896ea098b312942a3694ffdf1b2351da234cfc4fde58b451f32abc0feb119",
+        "bytes": 2673408
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/libcxx.json",
+        "sha256": "6feb42512f04b9bac20806e1243c81d880c97c1dfdec0971181262ff0a881c1b"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/libcxx-21.1.7_1-rebuild1-wasm32.json",
+        "sha256": "594bc3136dfe5defb08f9b104bfe0e682b32e2c0b2bf7611483387d737274057"
+      }
+    },
+    {
+      "formula": "m4",
+      "version": "1.4.21",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "26d0358b99a8fac315257bf054718dbf5902322433a65440ae0ac0f287f56a84",
+        "bytes": 467539
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/m4.json",
+        "sha256": "e4be1a3d9689e04fe5faea6180b89f914ac7733c7bf85b43198a106ffc57388b"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/m4-1.4.21-rebuild1-wasm32.json",
+        "sha256": "e313ac9be02fcb230722a93902d20d6baffdc26dd5fef79f15747ec5864bac1f"
+      }
+    },
+    {
+      "formula": "ncurses",
+      "version": "6.5",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "72e6ffbbe7c81be820a79033d203a86a159f02a8a79954c433e99b2ffe571712",
+        "bytes": 3497401
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/ncurses.json",
+        "sha256": "8911bc0c484a9806f1c8d9d4a1d0c56383652057b615cc5852551ba6f0b01d20"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/ncurses-6.5-rebuild1-wasm32.json",
+        "sha256": "101eacdf2df3f3960421133dee7b978fb014b7cc0a65a6b7b87f93b5d1638521"
+      }
+    },
+    {
+      "formula": "openssl",
+      "version": "3.3.2_2",
+      "formula_revision": 2,
+      "bottle_rebuild": 2,
+      "blob": {
+        "sha256": "243eaed26b099aae8991e54686c710c84ba967d7723a7ddccff6546f9b42e36c",
+        "bytes": 3028001
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/openssl.json",
+        "sha256": "506944e7c7f2d335315c14a9ee1e0c0c761b4de547418dd97d15f920168f62f8"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/openssl-3.3.2_2-rebuild2-wasm32.json",
+        "sha256": "928c5b12b51632259d37beeff23f06a6c7251a8f536e8995396883b35d397741"
+      }
+    },
+    {
+      "formula": "posix-utils-lite",
+      "version": "0.1.0",
+      "formula_revision": 0,
+      "bottle_rebuild": 2,
+      "blob": {
+        "sha256": "dc2dc2e5a8fe268cf71ada257cc09ae77496c46c5d23af70921f878fb3e2d555",
+        "bytes": 60408
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/posix-utils-lite.json",
+        "sha256": "4970e6a79c5ec849c3a4188af39dadf2f3aae46bd86a1ca7716a618199b8f918"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/posix-utils-lite-0.1.0-rebuild2-wasm32.json",
+        "sha256": "d2fe6849cce1b6a064fc4df49ae23b9d0c3b5b8c1b78d5dddad896cdc74d555f"
+      }
+    },
+    {
+      "formula": "ruby",
+      "version": "4.0.5_1",
+      "formula_revision": 1,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "bd3129e6d39b077e104b98a99d6539939ee38f353b83612fc0aef0581a41f3db",
+        "bytes": 7263556
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/ruby.json",
+        "sha256": "4cf300e559835c4bcc07d7d7e4414be354bdcb3c28a5dc96b8ea3d6194484dd5"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/ruby-4.0.5_1-rebuild1-wasm32.json",
+        "sha256": "e2c5affc69e883c6d8bdce406c73afef1ad6d1fc799ee3e2a8030b8fd67cbaa7"
+      }
+    },
+    {
+      "formula": "sed",
+      "version": "4.9",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "49217f1c99b44bb6ec11e0ca5416a1b6330106bfbdde32df40ee8bd2f61db41e",
+        "bytes": 189318
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/sed.json",
+        "sha256": "bc1d975f1045d5b18ddfcc002a92ffe801ca26fd36b8c77aea66c9a15412b50f"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/sed-4.9-rebuild1-wasm32.json",
+        "sha256": "157a325ab7b778f11ebe4ad49f5fbea213e425ee6d6154c4dcf7ee36fde77b4c"
+      }
+    },
+    {
+      "formula": "tar",
+      "version": "1.35",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "057a97a7c9eccaa898ddb1f9abefd73767b893d458487b1424880b1c610f8548",
+        "bytes": 1089706
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/tar.json",
+        "sha256": "aea58fde64be14d6801d0b31ef183885c69935d22cc1a2d722e06c8f64611f47"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/tar-1.35-rebuild1-wasm32.json",
+        "sha256": "9ca8f8bd828250fc133480ba3c62806592b875f6302b4fbffa6f09b95e545e73"
+      }
+    },
+    {
+      "formula": "vim",
+      "version": "9.2.0750",
+      "formula_revision": 0,
+      "bottle_rebuild": 1,
+      "blob": {
+        "sha256": "491e88d76446ffeb66be85e8afb5315666b1abdbf579d914b7ae9310d69e2ad0",
+        "bytes": 11347096
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/vim.json",
+        "sha256": "180c5324de5541f94abd3b987936ef28b4567c76c5860cec1c5d707cf27eaefc"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/vim-9.2.0750-rebuild1-wasm32.json",
+        "sha256": "b01af0204228107e24a1e0753601f5d0e0a2cace5b08d4bc0842c8b7896812cc"
+      }
+    },
+    {
+      "formula": "zlib",
+      "version": "1.3.1_4",
+      "formula_revision": 4,
+      "bottle_rebuild": 2,
+      "blob": {
+        "sha256": "56156bebb6c58add889785458ed2a9ee78a8932bb3ed750b4f53ec3dbb13a792",
+        "bytes": 107543
+      },
+      "sidecar": {
+        "path": "Kandelo/formula/zlib.json",
+        "sha256": "a62d5dad4711c043e0cdcb87cc6ef79f2e2d331b09680f651bbba8acb99b6ff3"
+      },
+      "link_manifest": {
+        "path": "Kandelo/link/zlib-1.3.1_4-rebuild2-wasm32.json",
+        "sha256": "6b3686238d8ff3cbd5b9061b704ee0223f8a54ff9b4ba0ef8d1cbbd8fdda324f"
+      }
+    }
+  ]
+}

@@ -87,12 +87,16 @@ class FakeRegistry:
     def __init__(self, evidence: rollout.RegistryManifestEvidence) -> None:
         self.evidence = evidence
         self.calls: list[tuple[str, str]] = []
+        self.blob_calls: list[tuple[str, str, int]] = []
 
     def manifest(
         self, formula: str, reference: str
     ) -> rollout.RegistryManifestEvidence:
         self.calls.append((formula, reference))
         return self.evidence
+
+    def verify_blob(self, formula: str, digest: str, expected_bytes: int):
+        self.blob_calls.append((formula, digest, expected_bytes))
 
 
 class FakeHttpResponse:
@@ -108,6 +112,7 @@ class FakeHttpResponse:
         self.body = body
         self.headers = headers or {}
         self.status = status
+        self.offset = 0
 
     def __enter__(self):
         return self
@@ -122,7 +127,13 @@ class FakeHttpResponse:
         return self.status
 
     def read(self, limit=-1):
-        return self.body if limit < 0 else self.body[:limit]
+        if limit < 0:
+            result = self.body[self.offset :]
+            self.offset = len(self.body)
+            return result
+        result = self.body[self.offset : self.offset + limit]
+        self.offset += len(result)
+        return result
 
 
 class RolloutControllerTests(unittest.TestCase):
@@ -1476,6 +1487,354 @@ class RolloutControllerTests(unittest.TestCase):
             rollout.validate_state(
                 invalid_dispatch, reservation, self.consumer_sha
             )
+
+    def test_committed_shell_manifest_is_the_exact_production_partition(self):
+        manifest = rollout.load_campaign_manifest(self.tap, self.head)
+        expected_reuse = (
+            "bzip2",
+            "coreutils",
+            "curl",
+            "dash",
+            "diffutils",
+            "ed",
+            "findutils",
+            "gawk",
+            "git",
+            "grep",
+            "gzip",
+            "less",
+            "libcurl",
+            "libcxx",
+            "m4",
+            "ncurses",
+            "openssl",
+            "posix-utils-lite",
+            "ruby",
+            "sed",
+            "tar",
+            "vim",
+            "zlib",
+        )
+        self.assertEqual(rollout.CAMPAIGN_BASE_TAP_SHA, manifest.base_tap_sha)
+        self.assertEqual(
+            rollout.CAMPAIGN_MANIFEST_SHA256, manifest.sha256
+        )
+        self.assertEqual("bash", manifest.rebuild_formula)
+        self.assertEqual("5.2.37_2", manifest.rebuild_version)
+        self.assertEqual(2, manifest.rebuild_formula_revision)
+        self.assertEqual(4, manifest.old_bottle_rebuild)
+        self.assertEqual(5, manifest.reserved_bottle_rebuild)
+        self.assertEqual(
+            expected_reuse,
+            tuple(entry.formula for entry in manifest.reuse),
+        )
+        self.assertEqual(
+            set(rollout.FORMULA_ORDER),
+            {
+                *manifest.selection.rebuild,
+                *manifest.selection.reuse,
+                *manifest.selection.deferred,
+            },
+        )
+        base = rollout.load_snapshot(self.tap, manifest.base_tap_sha)
+        reservation = rollout.load_snapshot(
+            self.tap, manifest.reservation_tap_sha
+        )
+        rollout.validate_campaign_manifest_sources(
+            self.tap, manifest, base, reservation
+        )
+        registry = FakeRegistry(
+            rollout.RegistryManifestEvidence(exists=False, digest=None)
+        )
+        rollout.verify_campaign_reuse_blobs(registry, manifest)
+        self.assertEqual(23, len(registry.blob_calls))
+
+        authority_snapshot = dataclasses.replace(
+            self.snapshot,
+            workflow_source=self.snapshot.workflow_source,
+        )
+        state = rollout.initial_campaign_state(
+            authority_snapshot,
+            campaign_id=rollout.CAMPAIGN_MANIFEST_ID,
+            base_snapshot=base,
+            contract=self._campaign_contract(),
+            absent_oci_references={
+                "bash": reservation.identities["bash"].top_reference
+            },
+            checked_at="2026-07-25T12:00:00Z",
+            manifest=manifest,
+            manifest_authority_sha=self.head,
+            reservation_snapshot=reservation,
+        )
+        self.assertEqual(4, state["schema"])
+        self.assertEqual(
+            self.head, state["campaign"]["manifest_tap_sha"]
+        )
+        self.assertEqual(
+            manifest.sha256, state["campaign"]["manifest_sha256"]
+        )
+        self.assertEqual(
+            rollout.CAMPAIGN_BASE_TAP_SHA,
+            state["campaign"]["base_tap_sha"],
+        )
+        self.assertEqual(
+            list(manifest.selection.reuse),
+            state["campaign"]["reuse_formulae"],
+        )
+        self.assertEqual(
+            list(manifest.selection.deferred),
+            state["campaign"]["deferred_formulae"],
+        )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "cannot override"
+        ):
+            rollout.initial_campaign_state(
+                authority_snapshot,
+                campaign_id=rollout.CAMPAIGN_MANIFEST_ID,
+                base_snapshot=base,
+                contract=self._campaign_contract(),
+                absent_oci_references={
+                    "bash": reservation.identities["bash"].top_reference
+                },
+                checked_at="2026-07-25T12:00:00Z",
+                selection=manifest.selection,
+                manifest=manifest,
+                manifest_authority_sha=self.head,
+                reservation_snapshot=reservation,
+            )
+
+    def test_shell_manifest_rejects_partition_and_t0_substitution(self):
+        raw = (self.root / rollout.CAMPAIGN_MANIFEST_PATH).read_bytes()
+        value = json.loads(raw)
+
+        class BytesTap:
+            def __init__(self, body):
+                self.body = body
+                self.calls = []
+
+            def show_bytes(self, revision, path):
+                self.calls.append((revision, path))
+                return self.body
+
+        def encoded(candidate):
+            return (json.dumps(candidate, indent=2) + "\n").encode()
+
+        for label, mutate, message in (
+            (
+                "remove",
+                lambda candidate: candidate["reuse"].pop(),
+                "canonical production authority",
+            ),
+            (
+                "add arbitrary asa",
+                lambda candidate: candidate["reuse"].append(
+                    {
+                        **copy.deepcopy(candidate["reuse"][0]),
+                        "formula": "asa",
+                        "sidecar": {
+                            **candidate["reuse"][0]["sidecar"],
+                            "path": "Kandelo/formula/asa.json",
+                        },
+                    }
+                ),
+                "canonical production authority",
+            ),
+            (
+                "substitute",
+                lambda candidate: candidate["reuse"][0].update(
+                    {"formula": "asa"}
+                ),
+                "canonical production authority",
+            ),
+            (
+                "different T0",
+                lambda candidate: candidate.update(
+                    {"base_tap_sha": "f" * 40}
+                ),
+                "canonical production authority",
+            ),
+        ):
+            candidate = copy.deepcopy(value)
+            mutate(candidate)
+            with (
+                self.subTest(label=label),
+                self.assertRaisesRegex(rollout.RolloutError, message),
+            ):
+                rollout.load_campaign_manifest(
+                    BytesTap(encoded(candidate)),
+                    "a" * 40,
+                )
+
+        exact = BytesTap(raw)
+        manifest = rollout.load_campaign_manifest(exact, "b" * 40)
+        self.assertEqual(
+            [("b" * 40, rollout.CAMPAIGN_MANIFEST_PATH)],
+            exact.calls,
+        )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "bytes differ from the private ledger"
+        ):
+            rollout.load_campaign_manifest(
+                exact,
+                "b" * 40,
+                expected_sha256="0" * 64,
+            )
+        self.assertEqual(
+            hashlib.sha256(raw).hexdigest(), manifest.sha256
+        )
+
+    def test_shell_manifest_rejects_stale_raw_sidecar_and_link_bytes(self):
+        manifest = rollout.load_campaign_manifest(self.tap, self.head)
+        base = rollout.load_snapshot(self.tap, manifest.base_tap_sha)
+        reservation = rollout.load_snapshot(
+            self.tap, manifest.reservation_tap_sha
+        )
+        first = manifest.reuse[0]
+
+        class TamperedTap:
+            def __init__(self, changed_path):
+                self.changed_path = changed_path
+
+            def show_bytes(inner_self, revision, path):
+                raw = self.tap.show_bytes(revision, path)
+                return raw + b" " if path == inner_self.changed_path else raw
+
+        for path, message in (
+            (first.sidecar_path, "sidecar bytes differ at T0"),
+            (first.link_manifest_path, "link bytes differ at T0"),
+        ):
+            with (
+                self.subTest(path=path),
+                self.assertRaisesRegex(rollout.RolloutError, message),
+            ):
+                rollout.validate_campaign_manifest_sources(
+                    TamperedTap(path),
+                    manifest,
+                    base,
+                    reservation,
+                )
+
+    def test_manifest_campaign_hashes_all_reuse_blobs_again_before_dispatch(self):
+        manifest = rollout.load_campaign_manifest(self.tap, self.head)
+        base = rollout.load_snapshot(self.tap, manifest.base_tap_sha)
+        reservation = rollout.load_snapshot(
+            self.tap, manifest.reservation_tap_sha
+        )
+        authority = self.snapshot
+        tap = mock.Mock()
+        tap.fetch_main.side_effect = (authority.sha, authority.sha)
+        tap.main_without_fetch.return_value = authority.sha
+        tap.is_ancestor.return_value = True
+        tap.changed_entries.return_value = (("M", "Formula/bash.rb"),)
+        tap.show_bytes.side_effect = self.tap.show_bytes
+        snapshots = {
+            base.sha: base,
+            reservation.sha: reservation,
+            authority.sha: authority,
+        }
+
+        class DispatchGitHub(FakeGitHub):
+            def __init__(inner_self):
+                super().__init__()
+                inner_self.dispatches = []
+
+            def dispatch(
+                inner_self, formula, arches, tap_sha, dispatch_token
+            ):
+                inner_self.dispatches.append(
+                    (formula, tuple(arches), tap_sha, dispatch_token)
+                )
+
+        github = DispatchGitHub()
+        registry = FakeRegistry(
+            rollout.RegistryManifestEvidence(exists=False, digest=None)
+        )
+        empty_inventory = rollout.RunInventory(
+            count=0,
+            runs=(),
+            formulae={},
+            unknown_run_ids=(),
+        )
+        ready_bash = rollout.FormulaStatus(
+            name="bash",
+            state="ready",
+            arches=("wasm32",),
+            dependencies=("ncurses",),
+            detail="manifest-backed test candidate",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "manifest-campaign.json"
+            with mock.patch.object(
+                rollout,
+                "load_snapshot",
+                side_effect=lambda _tap, sha: snapshots[sha],
+            ):
+                state = rollout.initialize_campaign(
+                    tap=tap,
+                    github=github,
+                    registry=registry,
+                    state_path=state_path,
+                    campaign_id=rollout.CAMPAIGN_MANIFEST_ID,
+                    base_tap_sha=manifest.base_tap_sha,
+                    reservation_tap_sha=manifest.reservation_tap_sha,
+                    contract=self._campaign_contract(),
+                    no_fetch=False,
+                    manifest_authority_sha=authority.sha,
+                )
+            self.assertEqual(4, state["schema"])
+            self.assertEqual(23, len(registry.blob_calls))
+            self.assertEqual(
+                manifest.sha256, state["campaign"]["manifest_sha256"]
+            )
+            self.assertEqual(0o600, state_path.stat().st_mode & 0o777)
+
+            with (
+                mock.patch.object(
+                    rollout,
+                    "load_snapshot",
+                    side_effect=lambda _tap, sha: snapshots[sha],
+                ),
+                mock.patch.object(
+                    rollout,
+                    "active_inventory",
+                    return_value=empty_inventory,
+                ),
+                mock.patch.object(
+                    rollout,
+                    "calculate_statuses",
+                    return_value=(ready_bash,),
+                ),
+                mock.patch.object(
+                    rollout,
+                    "finalization_reasons",
+                    return_value=("manifest-backed test candidate",),
+                ),
+                mock.patch.object(
+                    rollout,
+                    "acknowledge_pending_dispatches",
+                    side_effect=lambda **kwargs: (kwargs["state"], ()),
+                ),
+            ):
+                dispatched = rollout.dispatch_ready(
+                    tap=tap,
+                    github=github,
+                    expected_kandelo_sha=self.consumer_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=8,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                    allowed_formulae=frozenset(("bash",)),
+                    registry=registry,
+                )
+
+        self.assertEqual(1, dispatched)
+        self.assertEqual(46, len(registry.blob_calls))
+        self.assertEqual(1, len(github.dispatches))
+        self.assertEqual("bash", github.dispatches[0][0])
+        self.assertTrue(
+            all(call.args[0] != "HEAD" for call in tap.show_bytes.mock_calls)
+        )
 
     def test_product_first_campaign_rejects_reuse_sidecar_from_old_abi(self):
         base, reservation, selection = (
@@ -3359,6 +3718,110 @@ class RolloutControllerTests(unittest.TestCase):
         ):
             rollout.AnonymousRegistry(opener=opener).manifest(
                 "dinit", "0.19.4-1"
+            )
+
+    def test_anonymous_registry_streams_exact_blob_without_leaking_bearer(self):
+        body = b"public-bottle-bytes"
+        digest = hashlib.sha256(body).hexdigest()
+        blob_url = (
+            f"{rollout.BOTTLE_ROOT}/bzip2/blobs/sha256:{digest}"
+        )
+        storage_url = (
+            "https://pkg-containers.githubusercontent.com/ghcrblobs09/blobs/"
+            f"sha256:{digest}?sig=short-lived"
+        )
+        requests = []
+
+        def opener(request, timeout):
+            self.assertEqual(30, timeout)
+            requests.append(request)
+            if len(requests) == 1:
+                return FakeHttpResponse(
+                    url=request.full_url,
+                    body=b'{"token":"anonymous-read-token"}',
+                )
+            if len(requests) == 2:
+                raise urllib.error.HTTPError(
+                    blob_url,
+                    307,
+                    "Temporary Redirect",
+                    {"Location": storage_url},
+                    None,
+                )
+            return FakeHttpResponse(
+                url=storage_url,
+                body=body,
+                headers={"Content-Length": str(len(body))},
+            )
+
+        rollout.AnonymousRegistry(opener=opener).verify_blob(
+            "bzip2", digest, len(body)
+        )
+
+        self.assertEqual(3, len(requests))
+        self.assertIsNone(requests[0].get_header("Authorization"))
+        self.assertEqual(
+            "Bearer anonymous-read-token",
+            requests[1].get_header("Authorization"),
+        )
+        self.assertEqual(blob_url, requests[1].full_url)
+        self.assertEqual(storage_url, requests[2].full_url)
+        self.assertIsNone(requests[2].get_header("Authorization"))
+
+    def test_anonymous_registry_rejects_blob_redirect_digest_and_size_drift(self):
+        body = b"public-bottle-bytes"
+        digest = hashlib.sha256(body).hexdigest()
+        blob_url = (
+            f"{rollout.BOTTLE_ROOT}/bzip2/blobs/sha256:{digest}"
+        )
+
+        def registry_for(*, host="pkg-containers.githubusercontent.com", payload=body):
+            calls = 0
+            storage_url = (
+                f"https://{host}/ghcrblobs09/blobs/sha256:{digest}"
+                "?sig=short-lived"
+            )
+
+            def opener(request, timeout):
+                nonlocal calls
+                del timeout
+                calls += 1
+                if calls == 1:
+                    return FakeHttpResponse(
+                        url=request.full_url,
+                        body=b'{"token":"anonymous-read-token"}',
+                    )
+                if calls == 2:
+                    raise urllib.error.HTTPError(
+                        blob_url,
+                        307,
+                        "Temporary Redirect",
+                        {"Location": storage_url},
+                        None,
+                    )
+                return FakeHttpResponse(
+                    url=storage_url,
+                    body=payload,
+                    headers={"Content-Length": str(len(payload))},
+                )
+
+            return rollout.AnonymousRegistry(opener=opener)
+
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "outside approved storage"
+        ):
+            registry_for(host="example.com").verify_blob(
+                "bzip2", digest, len(body)
+            )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "size differs from authority"
+        ):
+            registry_for().verify_blob("bzip2", digest, len(body) + 1)
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "digest differs from authority"
+        ):
+            registry_for(payload=b"changed-bottle-byte").verify_blob(
+                "bzip2", digest, len(b"changed-bottle-byte")
             )
 
     def test_recorded_active_run_cannot_disappear_during_status_transitions(self):
@@ -6133,9 +6596,10 @@ class RolloutControllerTests(unittest.TestCase):
             self.consumer_sha,
         )
         options = (
-            ("--campaign-id", "shell-bottles-2026-07-25"),
+            ("--campaign-id", rollout.CAMPAIGN_MANIFEST_ID),
             ("--campaign-base-tap-sha", "a" * 40),
             ("--campaign-reservation-tap-sha", "b" * 40),
+            ("--campaign-manifest-tap-sha", "c" * 40),
             ("--expected-publisher-sha", rollout.PUBLISHER_WORKFLOW_SHA),
             (
                 "--expected-package-generation-sha",
@@ -6164,7 +6628,7 @@ class RolloutControllerTests(unittest.TestCase):
         )
         self.assertTrue(valid.initialize_campaign)
         self.assertEqual(
-            "shell-bottles-2026-07-25", valid.campaign_id
+            rollout.CAMPAIGN_MANIFEST_ID, valid.campaign_id
         )
         self.assertIsNone(valid.campaign_selection)
 
@@ -6177,43 +6641,20 @@ class RolloutControllerTests(unittest.TestCase):
             "--campaign-deferred-formulae",
             ",".join(selection.deferred),
         )
-        selected = rollout.parse_args(
-            (
-                *common,
-                "--state-file",
-                "/tmp/fresh-campaign.json",
-                "--initialize-campaign",
-                *campaign_args,
-                *selection_args,
-            )
-        )
-        self.assertEqual(selection, selected.campaign_selection)
-        for omitted in (
-            "--campaign-rebuild-formulae",
-            "--campaign-reuse-formulae",
-            "--campaign-deferred-formulae",
+        with (
+            redirect_stderr(io.StringIO()),
+            self.assertRaises(SystemExit),
         ):
-            retained = tuple(
-                value
-                for index in range(0, len(selection_args), 2)
-                if selection_args[index] != omitted
-                for value in selection_args[index : index + 2]
-            )
-            with (
-                self.subTest(missing=omitted),
-                redirect_stderr(io.StringIO()),
-                self.assertRaises(SystemExit),
-            ):
-                rollout.parse_args(
-                    (
-                        *common,
-                        "--state-file",
-                        "/tmp/fresh-campaign.json",
-                        "--initialize-campaign",
-                        *campaign_args,
-                        *retained,
-                    )
+            rollout.parse_args(
+                (
+                    *common,
+                    "--state-file",
+                    "/tmp/fresh-campaign.json",
+                    "--initialize-campaign",
+                    *campaign_args,
+                    *selection_args,
                 )
+            )
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             rollout.parse_args(
                 (
