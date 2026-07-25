@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "decision": {
+    "status": "retirement-prepared",
+    "reason": "The accelerated shell proof now needs a fresh, fork-correct Bash bottle from a new sealed package generation. The original 63-Formula controller cannot safely replace its already-finalized Bash identity or select the new package generation without changing the catalog-wide trust boundary.",
+    "enforced": false,
+    "required_before_replacement_dispatch": [
+      "Disable production workflow 315324894.",
+      "Fill and validate every exact Kandelo and cache-key pin in the Bash rebuild-5 one-shot caller.",
+      "Merge the reviewed one-shot caller and dispatch only its unique repository_dispatch event from the exact reviewed tap commit."
+    ]
+  },
+  "observed_at": "2026-07-25T03:54:22Z",
+  "tap": {
+    "repository": "Kandelo-dev/homebrew-tap-core",
+    "main_sha": "31663f7c574c0db8f784b1261b47c0f9dabebc95"
+  },
+  "controller": {
+    "abi": 42,
+    "consumer_sha": "d3805721b887a19382ef1c96b576fc27badc0951",
+    "publisher_sha": "3545bfd34509a52b68a4620c92e4aae24c60adb0",
+    "prepublication_generation_sha": "437fde2524ea6ad9c44933f8abbf995a46841009",
+    "prepublication_staging_tag": "pr-1079-staging",
+    "workflow_id": 315324894,
+    "workflow_path": ".github/workflows/publish-bottles.yml",
+    "workflow_state": "active",
+    "workflow_sha256": "0bf3328ac4d5c0f3497b071943d875e5d43ef4c37f81b941377d7cefdbde97d8",
+    "private_ledger": {
+      "schema": 1,
+      "sha256": "05efbe6bc25a5515fa43b86837d2514c2f42b7df275b09257443a9be9bc3b57e",
+      "dispatch_count": 47,
+      "failed_attempt_count": 9,
+      "abandoned_dispatch_count": 1,
+      "unresolved_dispatch": null,
+      "retention": "The mode-0600 ledger remains private and authoritative. This public record binds its observed bytes and summary but does not reconstruct or replace it."
+    }
+  },
+  "replacement_caller": {
+    "workflow_id": 315324893,
+    "workflow_path": ".github/workflows/maintain-bottles.yml",
+    "workflow_state": "disabled_manually",
+    "event": "publish-kandelo-bash-rebuild5",
+    "formula": "bash",
+    "arch": "wasm32",
+    "bottle_rebuild": 5,
+    "release_tag": "bottles-abi-v42",
+    "force": true,
+    "require_vfs_acceptance": false,
+    "exact_generation": null,
+    "expected_cache_key": null
+  },
+  "live_reconciliation": {
+    "active_run_count": 0,
+    "unknown_active_run_ids": [],
+    "finalized_formula_count": 44,
+    "unfinished_formula_count": 19,
+    "ready": [
+      "sqlite",
+      "unzip",
+      "what",
+      "libmagic",
+      "libpng",
+      "make",
+      "patch",
+      "pax",
+      "python",
+      "tcl",
+      "wget",
+      "nano",
+      "nethack"
+    ],
+    "blocked_failed": [
+      {
+        "formula": "dinit",
+        "run_id": 30110019621
+      },
+      {
+        "formula": "erlang",
+        "run_id": 30110243829
+      },
+      {
+        "formula": "libxml2",
+        "run_id": 30126465973
+      }
+    ],
+    "blocked_dependencies": [
+      {
+        "formula": "zip",
+        "waiting_for": [
+          "unzip/wasm32"
+        ]
+      },
+      {
+        "formula": "file-formula",
+        "waiting_for": [
+          "libmagic/wasm32"
+        ]
+      },
+      {
+        "formula": "texlive",
+        "waiting_for": [
+          "libpng/wasm32"
+        ]
+      }
+    ]
+  },
+  "github_evidence": {
+    "production_run_count": 255,
+    "latest_production_run": {
+      "id": 30133968991,
+      "head_sha": "fae9503735927f5f63e227b0b5b487ffea7ab0fc",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "created_at": "2026-07-24T23:30:34Z",
+      "updated_at": "2026-07-25T00:20:55Z",
+      "url": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30133968991"
+    },
+    "queries": [
+      "GET /repos/Kandelo-dev/homebrew-tap-core/actions/workflows/315324893",
+      "GET /repos/Kandelo-dev/homebrew-tap-core/actions/workflows/315324894",
+      "GET /repos/Kandelo-dev/homebrew-tap-core/actions/workflows/315324894/runs?event=repository_dispatch",
+      "scripts/abi42-rollout.py --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 --state-file <private-ledger> --json"
+    ]
+  }
+}
