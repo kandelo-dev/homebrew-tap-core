@@ -273,8 +273,65 @@ repository-rooted bottle namespace. A failed Formula blocks its downstream
 dependents, but it does not block unrelated ready Formulae from filling an
 available slot.
 
+### Fresh publication campaigns
+
+Every new package generation starts from two reviewed tap commits. `T0` is the
+stable base with a package-owned last-green sidecar for every Formula; its
+aggregate metadata may still contain only the product subset completed by an
+earlier campaign. `Tpre` is a strict descendant on protected `main`; it retains
+`T0`'s aggregate metadata, package-owned sidecars, Formula support, recipes,
+dependencies, architectures, and last-green hashes, and sets each Formula to
+exactly one rebuild after its own finalized sidecar.
+
+The caller workflow at `Tpre` must be registered in
+`APPROVED_CAMPAIGN_CONTRACTS` with its complete SHA-256, reusable publisher
+SHA, Kandelo package-consumer SHA, and sealed package-generation SHA and tag.
+Command-line values select that reviewed authority; they cannot bless an
+arbitrary workflow.
+
+Create a new private ledger before dispatching anything:
+
+```bash
+: "${KANDELO_ROLLOUT_STATE:?choose a new private state-file path}"
+: "${KANDELO_CAMPAIGN_ID:?set a stable campaign name}"
+: "${KANDELO_T0:?set the exact reviewed last-green base tap SHA}"
+: "${KANDELO_TPRE:?set the exact 63-Formula reservation tap SHA}"
+: "${KANDELO_CONSUMER_SHA:?set the reviewed package-consumer SHA}"
+: "${KANDELO_PUBLISHER_SHA:?set the reviewed reusable publisher SHA}"
+: "${KANDELO_GENERATION_SHA:?set the reviewed package-generation SHA}"
+: "${KANDELO_GENERATION_TAG:?set the reviewed package-generation tag}"
+: "${KANDELO_CALLER_SHA256:?set the reviewed complete caller SHA-256}"
+python3 scripts/abi42-rollout.py \
+  --tap-root "$PWD" \
+  --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
+  --state-file "$KANDELO_ROLLOUT_STATE" \
+  --initialize-campaign \
+  --campaign-id "$KANDELO_CAMPAIGN_ID" \
+  --campaign-base-tap-sha "$KANDELO_T0" \
+  --campaign-reservation-tap-sha "$KANDELO_TPRE" \
+  --expected-publisher-sha "$KANDELO_PUBLISHER_SHA" \
+  --expected-package-generation-sha "$KANDELO_GENERATION_SHA" \
+  --expected-package-generation-tag "$KANDELO_GENERATION_TAG" \
+  --expected-workflow-sha256 "$KANDELO_CALLER_SHA256"
+```
+
+Initialization sends no event. It rejects an existing state path, validates all
+63 last-green sidecars and retained checksum blocks, proves all 63 rebuild
+changes are exact, records all 70 Formula/architecture reservations, requires
+anonymous absence of the 63 new per-Formula OCI version-index references,
+requires an idle publication workflow, and rechecks protected `main`
+immediately before one mode-0600, fsynced ledger write. The 70 architecture
+entries live in 63 per-Formula indexes; upload-child tags are content-derived
+and cannot be reserved before a build.
+
+Never reuse, overwrite, copy, or reconstruct an earlier campaign ledger.
+`--dispatch` requires an existing ledger and cannot initialize one implicitly.
+The local ledger assumes this controller remains the sole production
+dispatcher; it cannot prevent another authorized operator from manually
+publishing between anonymous registry checks.
+
 For a targeted product proof, keep the complete ledger but allow the controller
-to select only an exact reviewed subset:
+to select only an exact reviewed, dependency-closed subset:
 
 ```bash
 python3 scripts/abi42-rollout.py \
@@ -282,20 +339,23 @@ python3 scripts/abi42-rollout.py \
   --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --dispatch \
-  --formulae ncurses,bash,ruby,curl,tar,less,vim,git
+  --formulae coreutils,dash,ed,grep,gzip,libcxx,openssl,sed,zlib,diffutils,libcurl,ncurses,ruby,tar,bash,curl,less,vim,git
 ```
 
 The allowlist is fail-closed: unknown, empty, or duplicate names are rejected.
-The controller applies the ordinary dependency and finalization checks, then
-reserves and submits a capacity-bounded batch drawn only from that subset.
-Omitted Formulae stay unchanged in the catalog and ledger and cannot consume an
-available dispatch slot.
+For a fresh campaign, every transitive same-tap dependency must also appear in
+the allowlist. The controller applies the ordinary dependency and finalization
+checks, anonymously rechecks every selected OCI reference, then journals and
+submits a capacity-bounded batch drawn only from that subset. Omitted Formulae
+remain recorded in the complete 63-Formula campaign catalog and can be selected
+by a later unfiltered pass; they cannot consume a slot in the current pass.
 
-The rollout controller first reserves every Formula in the available
-capacity-bounded batch in its private ledger. Before each HTTP request it
-records a random `abi42-…` dispatch token and a `request-started` marker, then
-submits the independent requests back-to-back. The caller exposes the Formula
-and token in the workflow run name, so one workflow-run snapshot can
+The rollout controller first journals every Formula in the available
+capacity-bounded batch in its already initialized private ledger. Before each
+HTTP request it records a random `abi42-…` dispatch token and a
+`request-started` marker, then submits the independent requests back-to-back.
+The caller exposes the Formula and token in the workflow run name, so one
+workflow-run snapshot can
 acknowledge the whole batch as soon as GitHub creates the outer runs; the
 controller does not wait several minutes for each reusable workflow's
 generated job matrix. Active capacity comes from one unfiltered, paginated
@@ -358,17 +418,19 @@ sends no event.
 The rollout ledger is part of the write-safety boundary. Each replacement
 fsyncs both the file and its parent directory so a host crash cannot erase a
 durable request marker while leaving its GitHub dispatch alive. Preserve the
-original private ledger after the first ABI 42 Formula is finalized: it freezes the
-reviewed catalog and retains successful, failed, planned, request-started, and
-submitted, unresolved, and safely abandoned dispatch history. The controller
-migrates the earlier single-intent shape only through its explicitly reviewed
-workflow trust chain; it does not reinterpret an arbitrary old ledger.
+original private ledger after the first Formula is finalized: it freezes the
+reviewed base, initial reservation catalog, complete publication authority, and
+successful, failed, planned, request-started, submitted, unresolved, and safely
+abandoned dispatch history. Schema-1 ABI 42 ledgers retain their explicitly
+reviewed workflow-trust migration for recovery. Fresh schema-2 ledgers never
+inherit or reinterpret that older campaign state and never rotate their
+complete authority implicitly.
 Read-only status may derive an implicit Formula version from that Formula's
 package-owned sidecar, but a write-capable
-controller cross-checks the result against the frozen ledger. Once aggregate
-metadata has rolled over to ABI 42, the controller refuses to create a
-replacement ledger; restore the original file instead of reconstructing one
-from current tap state.
+controller cross-checks the result against the frozen ledger. A missing ledger
+always blocks dispatch; either restore that campaign's original file or create
+a genuinely new campaign from a reviewed last-green `T0` and mechanical
+reservation `Tpre`.
 
 After a controller-recorded publication fails, do not immediately dispatch it
 again. First land the reviewed Formula or publisher correction on tap `main`,

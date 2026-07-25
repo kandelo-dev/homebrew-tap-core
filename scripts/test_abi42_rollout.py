@@ -294,6 +294,134 @@ class RolloutControllerTests(unittest.TestCase):
             dependencies=dependencies,
         )
 
+    def _campaign_contract(self) -> rollout.CampaignContract:
+        return rollout.CampaignContract(
+            publisher_sha=rollout.PUBLISHER_WORKFLOW_SHA,
+            consumer_sha=self.consumer_sha,
+            package_generation_sha=rollout.PREPUBLICATION_GENERATION_SHA,
+            package_generation_tag=rollout.PREPUBLICATION_STAGING_TAG,
+            workflow_sha256=rollout.workflow_sha256(self.snapshot),
+        )
+
+    def _campaign_snapshots(
+        self,
+    ) -> tuple[rollout.TapSnapshot, rollout.TapSnapshot]:
+        """Build a complete finalized base and its rebuild-only reservation."""
+        base_sources: dict[str, str] = {}
+        reservation_sources: dict[str, str] = {}
+        base_identities: dict[str, rollout.FormulaIdentity] = {}
+        reservation_identities: dict[str, rollout.FormulaIdentity] = {}
+        sidecars = copy.deepcopy(self.snapshot.formula_sidecars)
+        metadata = copy.deepcopy(self.snapshot.metadata)
+        metadata["kandelo_abi"] = rollout.EXPECTED_ABI
+        metadata["release_tag"] = rollout.EXPECTED_RELEASE_TAG
+        metadata["kandelo_commit"] = self.consumer_sha
+
+        for formula in rollout.FORMULA_ORDER:
+            sidecar = sidecars[formula]
+            assert isinstance(sidecar, dict)
+            # Some checked-in sidecars predate their first ABI 42 finalization
+            # and therefore use rebuild zero. A fresh campaign starts only
+            # after that rollout is finalized, so model its base as rebuild one
+            # or later without changing the package-owned last-green hashes.
+            base_rebuild = max(1, sidecar["bottle_rebuild"])
+            sidecar["bottle_rebuild"] = base_rebuild
+            base_source = rollout.source_with_rebuild(
+                self.snapshot.formula_sources[formula],
+                formula,
+                base_rebuild,
+            )
+            reservation_source = rollout.source_with_rebuild(
+                base_source,
+                formula,
+                base_rebuild + 1,
+            )
+            base_sources[formula] = base_source
+            reservation_sources[formula] = reservation_source
+            base_identities[formula] = rollout.parse_formula_identity(
+                formula, base_source, sidecar
+            )
+            reservation_identities[formula] = rollout.parse_formula_identity(
+                formula, reservation_source, sidecar
+            )
+
+        metadata["packages"] = [
+            copy.deepcopy(sidecars[formula])
+            for formula in rollout.FORMULA_ORDER
+        ]
+        base = dataclasses.replace(
+            self.snapshot,
+            sha="a" * 40,
+            metadata=metadata,
+            formula_sources=base_sources,
+            formula_sidecars=sidecars,
+            identities=base_identities,
+        )
+        reservation = dataclasses.replace(
+            base,
+            sha="b" * 40,
+            formula_sources=reservation_sources,
+            identities=reservation_identities,
+        )
+        return base, reservation
+
+    def _campaign_state(
+        self,
+        base: rollout.TapSnapshot,
+        reservation: rollout.TapSnapshot,
+    ) -> dict:
+        return rollout.initial_campaign_state(
+            reservation,
+            campaign_id="shell-bottles-2026-07-25",
+            base_snapshot=base,
+            contract=self._campaign_contract(),
+            absent_oci_references={
+                formula: reservation.identities[formula].top_reference
+                for formula in rollout.FORMULA_ORDER
+            },
+            checked_at="2026-07-25T12:00:00Z",
+        )
+
+    def _initialize_campaign(
+        self,
+        *,
+        base: rollout.TapSnapshot,
+        reservation: rollout.TapSnapshot,
+        registry,
+        state_path: pathlib.Path,
+        observed_main: tuple[str, ...] | None = None,
+    ) -> tuple[dict, mock.Mock, FakeGitHub]:
+        tap = mock.Mock()
+        tap.fetch_main.side_effect = observed_main or (
+            reservation.sha,
+            reservation.sha,
+        )
+        tap.is_ancestor.return_value = True
+        github = FakeGitHub()
+        snapshots = {base.sha: base, reservation.sha: reservation}
+        with (
+            mock.patch.object(
+                rollout,
+                "load_snapshot",
+                side_effect=lambda _tap, sha: snapshots[sha],
+            ),
+            mock.patch.object(
+                rollout, "finalization_reasons", return_value=()
+            ),
+        ):
+            state = rollout.initialize_campaign(
+                tap=tap,
+                github=github,
+                registry=registry,
+                state_path=state_path,
+                campaign_id="shell-bottles-2026-07-25",
+                base_tap_sha=base.sha,
+                reservation_tap_sha=reservation.sha,
+                contract=self._campaign_contract(),
+                no_fetch=False,
+            )
+        return state, tap, github
+
     @staticmethod
     def _failed_state(snapshot, formula: str, *, run_id: int = 123) -> dict:
         state = rollout.initial_state(snapshot, RolloutControllerTests.consumer_sha)
@@ -970,6 +1098,547 @@ class RolloutControllerTests(unittest.TestCase):
         self.assertEqual(
             "437fde2524ea6ad9c44933f8abbf995a46841009",
             rollout.PREPUBLICATION_GENERATION_SHA,
+        )
+
+    def test_fresh_campaign_requires_one_exact_reviewed_publication_contract(self):
+        contract = self._campaign_contract()
+        rollout.validate_campaign_contract(contract)
+        rollout.validate_workflow(
+            FakeGitHub(),
+            self.snapshot,
+            self.consumer_sha,
+            campaign_contract=contract,
+        )
+        workflow_mutations = {
+            "publisher wiring": self.snapshot.workflow_source.replace(
+                rollout.PUBLISHER_WORKFLOW_SHA, "a" * 40, 1
+            ),
+            "consumer wiring": self.snapshot.workflow_source.replace(
+                self.consumer_sha, "a" * 40, 1
+            ),
+            "generation wiring": self.snapshot.workflow_source.replace(
+                rollout.PREPUBLICATION_GENERATION_SHA, "a" * 40, 1
+            ),
+            "generation tag wiring": self.snapshot.workflow_source.replace(
+                rollout.PREPUBLICATION_STAGING_TAG, "unreviewed-generation", 1
+            ),
+            "complete caller bytes": self.snapshot.workflow_source
+            + "# unreviewed executable caller bytes\n",
+        }
+        for label, workflow_source in workflow_mutations.items():
+            with (
+                self.subTest(workflow=label),
+                self.assertRaises(rollout.RolloutError),
+            ):
+                rollout.validate_workflow(
+                    FakeGitHub(),
+                    dataclasses.replace(
+                        self.snapshot, workflow_source=workflow_source
+                    ),
+                    self.consumer_sha,
+                    campaign_contract=contract,
+                )
+
+        substitutions = {
+            "publisher": {"publisher_sha": "a" * 40},
+            "consumer": {"consumer_sha": "a" * 40},
+            "package generation": {"package_generation_sha": "a" * 40},
+            "package tag": {"package_generation_tag": "other-generation"},
+            "complete workflow": {"workflow_sha256": "a" * 64},
+        }
+        for label, replacement in substitutions.items():
+            with (
+                self.subTest(field=label),
+                self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    "not an exact reviewed authority",
+                ),
+            ):
+                rollout.validate_campaign_contract(
+                    dataclasses.replace(contract, **replacement)
+                )
+
+    def test_fresh_campaign_reserves_every_formula_and_architecture_exactly_once(self):
+        base, reservation = self._campaign_snapshots()
+        tap = mock.Mock()
+        tap.is_ancestor.return_value = True
+        with mock.patch.object(
+            rollout, "finalization_reasons", return_value=()
+        ):
+            rollout.validate_fresh_campaign_reservations(
+                tap=tap,
+                base=base,
+                reservation=reservation,
+            )
+
+        reservations = rollout.campaign_reservations(reservation)
+        self.assertEqual(63, len(reservation.identities))
+        self.assertEqual(70, len(reservations))
+        self.assertEqual(70, len({
+            (entry["formula"], entry["arch"], entry["reference"])
+            for entry in reservations
+        }))
+        self.assertEqual(
+            set(rollout.FORMULA_ORDER),
+            {entry["formula"] for entry in reservations},
+        )
+        for formula in rollout.FORMULA_ORDER:
+            self.assertEqual(
+                base.identities[formula].bottle_rebuild + 1,
+                reservation.identities[formula].bottle_rebuild,
+            )
+
+        formula = "asa"
+        over_bumped_source = rollout.source_with_rebuild(
+            reservation.formula_sources[formula],
+            formula,
+            reservation.identities[formula].bottle_rebuild + 1,
+        )
+        over_bumped = self._snapshot_with_formula_source(
+            reservation,
+            formula,
+            over_bumped_source,
+            sha=reservation.sha,
+        )
+        with (
+            mock.patch.object(
+                rollout, "finalization_reasons", return_value=()
+            ),
+            self.assertRaisesRegex(
+                rollout.RolloutError, "must reserve exactly rebuild"
+            ),
+        ):
+            rollout.validate_fresh_campaign_reservations(
+                tap=tap,
+                base=base,
+                reservation=over_bumped,
+            )
+
+        edited_source = reservation.formula_sources[formula].replace(
+            f"class {formula.capitalize()} < Formula",
+            f"class {formula.capitalize()} < Formula\n  # Unreviewed recipe edit.",
+            1,
+        )
+        # ASA's class spelling is not guaranteed to follow capitalize(), so
+        # make the mutation independently of package-specific Ruby naming.
+        if edited_source == reservation.formula_sources[formula]:
+            edited_source = (
+                "# Unreviewed recipe edit.\n"
+                + reservation.formula_sources[formula]
+            )
+        edited = self._snapshot_with_formula_source(
+            reservation,
+            formula,
+            edited_source,
+            sha=reservation.sha,
+        )
+        with (
+            mock.patch.object(
+                rollout, "finalization_reasons", return_value=()
+            ),
+            self.assertRaisesRegex(
+                rollout.RolloutError, "changes more than its rebuild reservation"
+            ),
+        ):
+            rollout.validate_fresh_campaign_reservations(
+                tap=tap,
+                base=base,
+                reservation=edited,
+            )
+
+    def test_fresh_campaign_initialization_writes_one_complete_private_ledger(self):
+        base, reservation = self._campaign_snapshots()
+        registry = FakeRegistry(
+            rollout.RegistryManifestEvidence(exists=False, digest=None)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "campaign.json"
+            state, tap, _github = self._initialize_campaign(
+                base=base,
+                reservation=reservation,
+                registry=registry,
+                state_path=state_path,
+            )
+            persisted = rollout.read_state(state_path)
+            self.assertEqual(state, persisted)
+            self.assertEqual(0o600, state_path.stat().st_mode & 0o777)
+            rollout.validate_state(state, reservation, self.consumer_sha)
+
+        self.assertEqual(2, tap.fetch_main.call_count)
+        tap.ensure_commit.assert_called_once_with(base.sha)
+        self.assertEqual(63, len(registry.calls))
+        self.assertEqual(63, len(state["campaign"]["formulae"]))
+        self.assertEqual(70, len(state["campaign"]["reservations"]))
+        self.assertEqual(63, len(state["campaign"]["absent_oci_references"]))
+
+    def test_fresh_campaign_uses_sidecars_when_the_partial_base_is_ahead(self):
+        base, reservation = self._campaign_snapshots()
+        formula = "asa"
+        last_green_rebuild = base.formula_sidecars[formula]["bottle_rebuild"]
+        advanced_source = rollout.source_with_rebuild(
+            base.formula_sources[formula],
+            formula,
+            last_green_rebuild + 2,
+        )
+        base = self._snapshot_with_formula_source(
+            base,
+            formula,
+            advanced_source,
+            sha=base.sha,
+        )
+        partial_metadata = copy.deepcopy(base.metadata)
+        partial_metadata["packages"] = partial_metadata["packages"][:1]
+        base = dataclasses.replace(base, metadata=partial_metadata)
+        reservation = dataclasses.replace(
+            reservation, metadata=copy.deepcopy(partial_metadata)
+        )
+        self.assertEqual(
+            last_green_rebuild + 2,
+            base.identities[formula].bottle_rebuild,
+        )
+        self.assertEqual(
+            last_green_rebuild + 1,
+            reservation.identities[formula].bottle_rebuild,
+        )
+
+        registry = FakeRegistry(
+            rollout.RegistryManifestEvidence(exists=False, digest=None)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "campaign.json"
+            state, _tap, _github = self._initialize_campaign(
+                base=base,
+                reservation=reservation,
+                registry=registry,
+                state_path=state_path,
+            )
+            rollout.validate_state(state, reservation, self.consumer_sha)
+
+        self.assertEqual(
+            last_green_rebuild,
+            state["previous_catalog"][formula]["bottle_rebuild"],
+        )
+        self.assertEqual(
+            last_green_rebuild + 1,
+            state["initial_catalog"][formula]["bottle_rebuild"],
+        )
+        self.assertEqual(63, len(registry.calls))
+
+    def test_fresh_campaign_refuses_any_existing_ledger_before_observation(self):
+        base, reservation = self._campaign_snapshots()
+        for contents in (
+            b"",
+            b'{"schema":1}\n',
+            b'{"schema":2,"campaign":{}}\n',
+        ):
+            with self.subTest(contents=contents):
+                with tempfile.TemporaryDirectory() as directory:
+                    state_path = pathlib.Path(directory) / "campaign.json"
+                    state_path.write_bytes(contents)
+                    tap = mock.Mock()
+                    github = mock.Mock()
+                    registry = mock.Mock()
+                    with self.assertRaisesRegex(
+                        rollout.RolloutError, "already exists"
+                    ):
+                        rollout.initialize_campaign(
+                            tap=tap,
+                            github=github,
+                            registry=registry,
+                            state_path=state_path,
+                            campaign_id="shell-bottles-2026-07-25",
+                            base_tap_sha=base.sha,
+                            reservation_tap_sha=reservation.sha,
+                            contract=self._campaign_contract(),
+                            no_fetch=False,
+                        )
+                    self.assertEqual(contents, state_path.read_bytes())
+                    self.assertEqual([], tap.mock_calls)
+                    self.assertEqual([], github.mock_calls)
+                    self.assertEqual([], registry.mock_calls)
+
+    def test_fresh_campaign_registry_failure_never_creates_a_ledger(self):
+        base, reservation = self._campaign_snapshots()
+        cases = {
+            "occupied": rollout.RegistryManifestEvidence(
+                exists=True, digest="sha256:" + "1" * 64
+            ),
+            "absence with digest": rollout.RegistryManifestEvidence(
+                exists=False, digest="sha256:" + "1" * 64
+            ),
+            "malformed type": {
+                "exists": False,
+                "digest": None,
+            },
+        }
+        for label, evidence in cases.items():
+            with self.subTest(case=label):
+                registry = FakeRegistry(evidence)
+                with tempfile.TemporaryDirectory() as directory:
+                    state_path = pathlib.Path(directory) / "campaign.json"
+                    with self.assertRaisesRegex(
+                        rollout.RolloutError, "OCI identity is already occupied"
+                    ):
+                        self._initialize_campaign(
+                            base=base,
+                            reservation=reservation,
+                            registry=registry,
+                            state_path=state_path,
+                        )
+                    self.assertFalse(state_path.exists())
+                    self.assertEqual(1, len(registry.calls))
+
+        registry = mock.Mock()
+        registry.manifest.side_effect = rollout.RolloutError(
+            "anonymous registry response is malformed"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "campaign.json"
+            with self.assertRaisesRegex(
+                rollout.RolloutError, "registry response is malformed"
+            ):
+                self._initialize_campaign(
+                    base=base,
+                    reservation=reservation,
+                    registry=registry,
+                    state_path=state_path,
+                )
+            self.assertFalse(state_path.exists())
+
+    def test_fresh_campaign_rechecks_protected_main_before_writing(self):
+        base, reservation = self._campaign_snapshots()
+        registry = FakeRegistry(
+            rollout.RegistryManifestEvidence(exists=False, digest=None)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "campaign.json"
+            with self.assertRaisesRegex(
+                rollout.RolloutError,
+                "protected tap main moved during campaign initialization",
+            ):
+                self._initialize_campaign(
+                    base=base,
+                    reservation=reservation,
+                    registry=registry,
+                    state_path=state_path,
+                    observed_main=(reservation.sha, "c" * 40),
+                )
+            self.assertFalse(state_path.exists())
+        self.assertEqual(63, len(registry.calls))
+
+    def test_schema_two_campaign_rejects_every_contract_surface_mutation(self):
+        base, reservation = self._campaign_snapshots()
+        original = self._campaign_state(base, reservation)
+        rollout.validate_state(original, reservation, self.consumer_sha)
+
+        absent = copy.deepcopy(
+            original["campaign"]["absent_oci_references"]
+        )
+        absent.pop("asa")
+        mutations = (
+            ("schema downgrade", ("schema",), 1),
+            ("campaign id", ("campaign", "id"), ""),
+            ("base SHA", ("campaign", "base_tap_sha"), reservation.sha),
+            ("reservation SHA", ("campaign", "reservation_tap_sha"), "c" * 40),
+            ("initialized time", ("campaign", "initialized_at"), ""),
+            (
+                "publisher",
+                ("campaign", "expected_publisher_sha"),
+                "c" * 40,
+            ),
+            (
+                "consumer",
+                ("campaign", "expected_consumer_sha"),
+                "c" * 40,
+            ),
+            (
+                "package generation",
+                ("campaign", "expected_package_generation_sha"),
+                "c" * 40,
+            ),
+            (
+                "package generation tag",
+                ("campaign", "expected_package_generation_tag"),
+                "unreviewed-generation",
+            ),
+            (
+                "workflow",
+                ("campaign", "expected_workflow_sha256"),
+                "c" * 64,
+            ),
+            ("prior consumer", ("campaign", "prior_kandelo_sha"), "invalid"),
+            (
+                "formula set",
+                ("campaign", "formulae"),
+                list(rollout.FORMULA_ORDER[:-1]),
+            ),
+            (
+                "architecture count",
+                ("campaign", "architecture_identity_count"),
+                69,
+            ),
+            (
+                "reservation set",
+                ("campaign", "reservations"),
+                original["campaign"]["reservations"][:-1],
+            ),
+            (
+                "absence set",
+                ("campaign", "absent_oci_references"),
+                absent,
+            ),
+            (
+                "absence time",
+                ("campaign", "absent_oci_checked_at"),
+                "",
+            ),
+            (
+                "previous catalog",
+                ("previous_catalog",),
+                {
+                    formula: value
+                    for formula, value in original["previous_catalog"].items()
+                    if formula != "asa"
+                },
+            ),
+            (
+                "initial catalog",
+                ("initial_catalog",),
+                {
+                    formula: value
+                    for formula, value in original["initial_catalog"].items()
+                    if formula != "asa"
+                },
+            ),
+            (
+                "previous support",
+                ("previous_formula_support_tree",),
+                "c" * 40,
+            ),
+            (
+                "previous sidecars",
+                ("previous_formula_sidecar_tree",),
+                "not-a-tree",
+            ),
+            (
+                "reserved catalog",
+                ("catalog", "asa", "bottle_rebuild"),
+                original["catalog"]["asa"]["bottle_rebuild"] + 1,
+            ),
+            (
+                "top-level publisher",
+                ("expected_publisher_sha",),
+                "c" * 40,
+            ),
+            (
+                "top-level workflow",
+                ("workflow_sha256",),
+                "c" * 64,
+            ),
+        )
+        for label, path, value in mutations:
+            changed = copy.deepcopy(original)
+            target = changed
+            for component in path[:-1]:
+                target = target[component]
+            target[path[-1]] = value
+            with (
+                self.subTest(field=label),
+                self.assertRaises(rollout.RolloutError),
+            ):
+                rollout.validate_state(
+                    changed, reservation, self.consumer_sha
+                )
+
+        extra = copy.deepcopy(original)
+        extra["campaign"]["unreviewed"] = True
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "unexpected shape"
+        ):
+            rollout.validate_state(extra, reservation, self.consumer_sha)
+
+    def test_fresh_campaign_rechecks_the_whole_selected_batch_before_dispatch(self):
+        base, reservation = self._campaign_snapshots()
+        state = self._campaign_state(base, reservation)
+        statuses = tuple(
+            rollout.FormulaStatus(
+                name=formula,
+                state="ready",
+                arches=rollout.required_arches(formula),
+                dependencies=(),
+                detail="ready",
+            )
+            for formula in ("asa", "bc")
+        )
+
+        class OccupiedSecondRegistry:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str]] = []
+
+            def manifest(self, formula, reference):
+                self.calls.append((formula, reference))
+                if formula == "bc":
+                    return rollout.RegistryManifestEvidence(
+                        exists=True,
+                        digest="sha256:" + "1" * 64,
+                    )
+                return rollout.RegistryManifestEvidence(
+                    exists=False, digest=None
+                )
+
+        registry = OccupiedSecondRegistry()
+        tap = mock.Mock()
+        tap.main_without_fetch.return_value = reservation.sha
+        github = FakeGitHub()
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "campaign.json"
+            rollout.write_state(state_path, state)
+            original = state_path.read_bytes()
+            with (
+                mock.patch.object(
+                    rollout, "load_snapshot", return_value=reservation
+                ),
+                mock.patch.object(
+                    rollout, "finalization_reasons", return_value=("pending",)
+                ),
+                mock.patch.object(
+                    rollout, "history_blocks_from_state", return_value={}
+                ),
+                mock.patch.object(
+                    rollout, "calculate_statuses", return_value=statuses
+                ),
+                self.assertRaisesRegex(
+                    rollout.RolloutError, "OCI identity is already occupied"
+                ),
+            ):
+                rollout.dispatch_ready(
+                    tap=tap,
+                    github=github,
+                    expected_kandelo_sha=self.consumer_sha,
+                    state_path=state_path,
+                    no_fetch=True,
+                    maximum=2,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                    registry=registry,
+                )
+            self.assertEqual(original, state_path.read_bytes())
+
+        self.assertEqual(
+            ["asa", "bc"], [formula for formula, _reference in registry.calls]
+        )
+
+    def test_fresh_campaign_allowlist_must_be_dependency_closed(self):
+        _base, reservation = self._campaign_snapshots()
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "allowlist is not dependency-closed"
+        ):
+            rollout.require_dependency_closed_allowlist(
+                reservation, frozenset(("python",))
+            )
+        rollout.require_dependency_closed_allowlist(
+            reservation,
+            frozenset(("python", "dash", "zlib")),
         )
 
     def test_explicit_base_version_becomes_canonical_homebrew_pkg_version(self):
@@ -4659,6 +5328,33 @@ class RolloutControllerTests(unittest.TestCase):
 
         self.assertEqual(["fsync", "replace", "fsync"], events)
 
+    def test_fresh_state_creation_never_replaces_a_racing_ledger(self):
+        competing = b'{"schema":2,"owner":"another controller"}\n'
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "campaign.json"
+
+            def race(_temporary, destination):
+                pathlib.Path(destination).write_bytes(competing)
+                raise FileExistsError(destination)
+
+            with (
+                mock.patch.object(rollout.os, "link", side_effect=race),
+                self.assertRaisesRegex(
+                    rollout.RolloutError, "appeared during initialization"
+                ),
+            ):
+                rollout.write_new_state(
+                    path,
+                    {"schema": 2, "owner": "this controller"},
+                )
+
+            self.assertEqual(competing, path.read_bytes())
+            self.assertEqual(
+                [path],
+                list(path.parent.iterdir()),
+                "the losing controller must clean up only its temporary file",
+            )
+
     def test_state_lock_rejects_a_second_controller(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "rollout.json"
@@ -4682,6 +5378,119 @@ class RolloutControllerTests(unittest.TestCase):
                 )
             )
         self.assertIn("--state-file is required with --dispatch", stderr.getvalue())
+
+    def test_cli_requires_the_complete_campaign_contract_only_for_initialization(self):
+        common = (
+            "--tap-root",
+            str(self.root),
+            "--expected-kandelo-sha",
+            self.consumer_sha,
+        )
+        options = (
+            ("--campaign-id", "shell-bottles-2026-07-25"),
+            ("--campaign-base-tap-sha", "a" * 40),
+            ("--campaign-reservation-tap-sha", "b" * 40),
+            ("--expected-publisher-sha", rollout.PUBLISHER_WORKFLOW_SHA),
+            (
+                "--expected-package-generation-sha",
+                rollout.PREPUBLICATION_GENERATION_SHA,
+            ),
+            (
+                "--expected-package-generation-tag",
+                rollout.PREPUBLICATION_STAGING_TAG,
+            ),
+            (
+                "--expected-workflow-sha256",
+                rollout.workflow_sha256(self.snapshot),
+            ),
+        )
+        campaign_args = tuple(
+            value for option in options for value in option
+        )
+        valid = rollout.parse_args(
+            (
+                *common,
+                "--state-file",
+                "/tmp/fresh-campaign.json",
+                "--initialize-campaign",
+                *campaign_args,
+            )
+        )
+        self.assertTrue(valid.initialize_campaign)
+        self.assertEqual(
+            "shell-bottles-2026-07-25", valid.campaign_id
+        )
+
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            rollout.parse_args(
+                (*common, "--initialize-campaign", *campaign_args)
+            )
+
+        for omitted_option, _omitted_value in options:
+            retained = tuple(
+                value
+                for option in options
+                if option[0] != omitted_option
+                for value in option
+            )
+            with (
+                self.subTest(missing=omitted_option),
+                redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit),
+            ):
+                rollout.parse_args(
+                    (
+                        *common,
+                        "--state-file",
+                        "/tmp/fresh-campaign.json",
+                        "--initialize-campaign",
+                        *retained,
+                    )
+                )
+
+        for option, value in options:
+            with (
+                self.subTest(without_action=option),
+                redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit),
+            ):
+                rollout.parse_args((*common, option, value))
+
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            rollout.parse_args(
+                (
+                    *common,
+                    "--state-file",
+                    "/tmp/fresh-campaign.json",
+                    "--initialize-campaign",
+                    *campaign_args,
+                    "--dispatch",
+                )
+            )
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            rollout.parse_args(
+                (
+                    *common,
+                    "--state-file",
+                    "/tmp/fresh-campaign.json",
+                    "--initialize-campaign",
+                    *campaign_args,
+                    "--formulae",
+                    "asa",
+                )
+            )
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            rollout.parse_args(
+                (
+                    *common,
+                    "--state-file",
+                    "/tmp/fresh-campaign.json",
+                    "--initialize-campaign",
+                    *campaign_args,
+                    "--adopt-failed-run",
+                    "asa=123",
+                )
+            )
 
     def test_cli_requires_state_for_recovery_and_preserves_timeout_override(self):
         base = (
