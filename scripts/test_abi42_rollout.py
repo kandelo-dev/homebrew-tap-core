@@ -1787,6 +1787,7 @@ class RolloutControllerTests(unittest.TestCase):
                 manifest.sha256, state["campaign"]["manifest_sha256"]
             )
             self.assertEqual(0o600, state_path.stat().st_mode & 0o777)
+            pristine_state = copy.deepcopy(state)
 
             with (
                 mock.patch.object(
@@ -1827,11 +1828,61 @@ class RolloutControllerTests(unittest.TestCase):
                     allowed_formulae=frozenset(("bash",)),
                     registry=registry,
                 )
+                successful_dispatches = list(github.dispatches)
+
+                class FlipAfterReuseRegistry(FakeRegistry):
+                    def manifest(inner_self, formula, reference):
+                        inner_self.calls.append((formula, reference))
+                        if len(inner_self.blob_calls) == 23:
+                            return rollout.RegistryManifestEvidence(
+                                exists=True,
+                                digest="sha256:" + "f" * 64,
+                            )
+                        return rollout.RegistryManifestEvidence(
+                            exists=False,
+                            digest=None,
+                        )
+
+                flip_registry = FlipAfterReuseRegistry(
+                    rollout.RegistryManifestEvidence(
+                        exists=False, digest=None
+                    )
+                )
+                flip_path = pathlib.Path(directory) / "flip-campaign.json"
+                rollout.write_new_state(flip_path, pristine_state)
+                github.dispatches.clear()
+                with self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    "campaign OCI identity is already occupied",
+                ):
+                    rollout.dispatch_ready(
+                        tap=tap,
+                        github=github,
+                        expected_kandelo_sha=self.consumer_sha,
+                        state_path=flip_path,
+                        no_fetch=True,
+                        maximum=8,
+                        timeout_seconds=1,
+                        poll_seconds=0.001,
+                        allowed_formulae=frozenset(("bash",)),
+                        registry=flip_registry,
+                    )
+                stalled = rollout.read_state(flip_path)
 
         self.assertEqual(1, dispatched)
         self.assertEqual(46, len(registry.blob_calls))
-        self.assertEqual(1, len(github.dispatches))
-        self.assertEqual("bash", github.dispatches[0][0])
+        self.assertEqual(1, len(successful_dispatches))
+        self.assertEqual("bash", successful_dispatches[0][0])
+        self.assertEqual(23, len(flip_registry.blob_calls))
+        self.assertEqual([], github.dispatches)
+        assert stalled is not None
+        self.assertEqual(1, len(stalled["pending_dispatches"]))
+        self.assertEqual(
+            "planned", stalled["pending_dispatches"][0]["status"]
+        )
+        self.assertNotIn(
+            "request_started_at", stalled["pending_dispatches"][0]
+        )
         self.assertTrue(
             all(call.args[0] != "HEAD" for call in tap.show_bytes.mock_calls)
         )

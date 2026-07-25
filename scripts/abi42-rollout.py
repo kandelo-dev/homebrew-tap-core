@@ -6225,11 +6225,11 @@ def initialize_campaign(
         raise RolloutError(
             "cannot initialize a fresh campaign while publication runs are active"
         )
+    if manifest is not None:
+        verify_campaign_reuse_blobs(registry, manifest)
     absent = require_absent_campaign_references(
         registry, reservation, selected_campaign.rebuild
     )
-    if manifest is not None:
-        verify_campaign_reuse_blobs(registry, manifest)
     checked_at = _utc_now()
 
     # Re-observe both mutable coordination surfaces immediately before the
@@ -6517,6 +6517,16 @@ def dispatch_ready(
                 raise RolloutError(
                     "a selected Formula started during manifest verification"
                 )
+            # WHY: hashing all reused bytes is intentionally expensive. A
+            # competing publisher can occupy Bash after the earlier planning
+            # check, so recheck the complete planned batch only after every
+            # long read and mutable coordination check, immediately before any
+            # intent is marked request-started.
+            require_absent_campaign_references(
+                registry,
+                snapshot,
+                tuple(intent.formula for intent in planned),
+            )
         submitted = 0
         for intent in planned:
             value = next(

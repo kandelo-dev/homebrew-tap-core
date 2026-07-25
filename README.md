@@ -392,9 +392,13 @@ ready. Immediately before the first write dispatch in every controller
 invocation, the controller reloads and hashes the manifest from exact
 `Tmanifest`, revalidates every raw `T0` sidecar and link manifest, and
 anonymously streams and hashes all 23 complete reused blobs again. It then
-anonymously rechecks every selected successor and journals and submits a
-capacity-bounded batch drawn only from the rebuild partition. Reused and
-deferred Formulae can never consume a dispatch slot in that campaign.
+rechecks protected main, active capacity, active Formulae, and anonymous
+absence of every planned successor. That final absence check occurs
+immediately before the first planned intent becomes `request-started`; an
+identity occupied during the long blob proof leaves the whole batch planned
+and sends nothing. The controller then submits a capacity-bounded batch drawn
+only from the rebuild partition. Reused and deferred Formulae can never
+consume a dispatch slot in that campaign.
 
 The rollout controller first journals every Formula in the available
 capacity-bounded batch in its already initialized private ledger. Before each
