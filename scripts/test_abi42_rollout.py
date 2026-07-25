@@ -1439,6 +1439,63 @@ class RolloutControllerTests(unittest.TestCase):
                 invalid_dispatch, reservation, self.consumer_sha
             )
 
+    def test_product_first_campaign_rejects_reuse_sidecar_from_old_abi(self):
+        base, reservation, selection = (
+            self._product_first_campaign_snapshots()
+        )
+        sidecars = copy.deepcopy(base.formula_sidecars)
+        sidecars["libcxx"]["kandelo_abi"] = 41
+        base = dataclasses.replace(base, formula_sidecars=sidecars)
+        reservation = dataclasses.replace(
+            reservation,
+            formula_sidecars=copy.deepcopy(sidecars),
+        )
+        tap = mock.Mock()
+        tap.is_ancestor.return_value = True
+        tap.changed_entries.return_value = (("M", "Formula/bash.rb"),)
+
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "libcxx reuse sidecar ABI is not 42",
+        ):
+            rollout.validate_fresh_campaign_reservations(
+                tap=tap,
+                base=base,
+                reservation=reservation,
+                selection=selection,
+            )
+
+    def test_product_first_campaign_rejects_reuse_bottle_from_old_abi(self):
+        base, reservation, selection = (
+            self._product_first_campaign_snapshots()
+        )
+        sidecars = copy.deepcopy(base.formula_sidecars)
+        wasm32 = next(
+            bottle
+            for bottle in sidecars["libcxx"]["bottles"]
+            if bottle["arch"] == "wasm32"
+        )
+        wasm32["kandelo_abi"] = 41
+        base = dataclasses.replace(base, formula_sidecars=sidecars)
+        reservation = dataclasses.replace(
+            reservation,
+            formula_sidecars=copy.deepcopy(sidecars),
+        )
+        tap = mock.Mock()
+        tap.is_ancestor.return_value = True
+        tap.changed_entries.return_value = (("M", "Formula/bash.rb"),)
+
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "libcxx reuse wasm32 bottle ABI is not 42",
+        ):
+            rollout.validate_fresh_campaign_reservations(
+                tap=tap,
+                base=base,
+                reservation=reservation,
+                selection=selection,
+            )
+
     def test_product_first_campaign_rejects_partition_and_unselected_edits(self):
         base, reservation, selection = (
             self._product_first_campaign_snapshots()
