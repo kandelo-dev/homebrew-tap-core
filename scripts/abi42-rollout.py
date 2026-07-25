@@ -243,6 +243,69 @@ class CampaignContract:
 
 
 @dataclasses.dataclass(frozen=True)
+class CampaignSelection:
+    """One exact partition of the tap catalog for a fresh campaign."""
+
+    rebuild: tuple[str, ...]
+    reuse: tuple[str, ...]
+    deferred: tuple[str, ...]
+
+    @staticmethod
+    def _ordered(values: Iterable[str], label: str) -> tuple[str, ...]:
+        selected = tuple(values)
+        if (
+            len(selected) != len(set(selected))
+            or any(value not in FORMULA_ORDER for value in selected)
+        ):
+            raise RolloutError(
+                f"campaign {label} must contain distinct known Formulae"
+            )
+        wanted = set(selected)
+        ordered = tuple(formula for formula in FORMULA_ORDER if formula in wanted)
+        if selected != ordered:
+            raise RolloutError(
+                f"campaign {label} must follow the canonical Formula order"
+            )
+        return ordered
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        rebuild: Iterable[str],
+        reuse: Iterable[str],
+        deferred: Iterable[str],
+    ) -> "CampaignSelection":
+        selection = cls(
+            rebuild=cls._ordered(rebuild, "rebuild set"),
+            reuse=cls._ordered(reuse, "reuse set"),
+            deferred=cls._ordered(deferred, "deferred set"),
+        )
+        sets = tuple(map(set, dataclasses.astuple(selection)))
+        if sets[0] & sets[1] or sets[0] & sets[2] or sets[1] & sets[2]:
+            raise RolloutError("campaign Formula partitions overlap")
+        if set().union(*sets) != set(FORMULA_ORDER):
+            raise RolloutError(
+                "campaign rebuild, reuse, and deferred sets must partition "
+                "the complete Formula catalog"
+            )
+        if not selection.rebuild:
+            raise RolloutError("campaign rebuild set must not be empty")
+        return selection
+
+    @classmethod
+    def all_rebuild(cls) -> "CampaignSelection":
+        return cls.create(rebuild=FORMULA_ORDER, reuse=(), deferred=())
+
+    def state_value(self) -> dict[str, list[str]]:
+        return {
+            "rebuild_formulae": list(self.rebuild),
+            "reuse_formulae": list(self.reuse),
+            "deferred_formulae": list(self.deferred),
+        }
+
+
+@dataclasses.dataclass(frozen=True)
 class TapSnapshot:
     sha: str
     metadata: Mapping[str, Any]
@@ -2159,7 +2222,7 @@ def read_state(path: pathlib.Path) -> dict[str, Any] | None:
         state = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise RolloutError(f"cannot read rollout state {path}") from error
-    if not isinstance(state, dict) or state.get("schema") not in (1, 2):
+    if not isinstance(state, dict) or state.get("schema") not in (1, 2, 3):
         raise RolloutError(f"rollout state {path} has an unsupported schema")
     return state
 
@@ -2334,7 +2397,7 @@ def campaign_contract_from_state(
                 "schema-1 rollout state contains schema-2 campaign fields"
             )
         return None
-    if state.get("schema") != 2:
+    if state.get("schema") not in (2, 3):
         raise RolloutError("rollout state has an unsupported schema")
     campaign = state.get("campaign")
     if not isinstance(campaign, dict):
@@ -2367,19 +2430,49 @@ def campaign_contract_from_state(
     return contract
 
 
-def campaign_reservations(snapshot: TapSnapshot) -> list[dict[str, str]]:
+def campaign_selection_from_state(
+    state: Mapping[str, Any],
+) -> CampaignSelection | None:
+    schema = state.get("schema")
+    if schema == 1:
+        return None
+    if schema == 2:
+        return CampaignSelection.all_rebuild()
+    if schema != 3:
+        raise RolloutError("rollout state has an unsupported schema")
+    campaign = state.get("campaign")
+    if not isinstance(campaign, dict):
+        raise RolloutError("campaign rollout state has no campaign selection")
+    try:
+        return CampaignSelection.create(
+            rebuild=campaign["rebuild_formulae"],
+            reuse=campaign["reuse_formulae"],
+            deferred=campaign["deferred_formulae"],
+        )
+    except (KeyError, TypeError) as error:
+        raise RolloutError(
+            "campaign rollout state has a malformed Formula partition"
+        ) from error
+
+
+def campaign_reservations(
+    snapshot: TapSnapshot,
+    formulae: Sequence[str] = FORMULA_ORDER,
+) -> list[dict[str, str]]:
     reservations = [
         {
             "formula": formula,
             "arch": arch,
             "reference": snapshot.identities[formula].top_reference,
         }
-        for formula in FORMULA_ORDER
+        for formula in formulae
         for arch in required_arches(formula)
     ]
-    if len(reservations) != ARCHITECTURE_IDENTITY_COUNT:
+    expected_count = sum(len(required_arches(formula)) for formula in formulae)
+    if len(reservations) != expected_count:
         raise RolloutError(
-            "campaign reservation set does not contain 70 architecture identities"
+            "campaign reservation set does not contain every selected "
+            "architecture identity"
         )
     return reservations
 
@@ -2388,9 +2481,10 @@ def campaign_reservations_from_catalog(
     catalog: Mapping[str, Any],
     *,
     rebuild_increment: int = 0,
+    formulae: Sequence[str] = FORMULA_ORDER,
 ) -> list[dict[str, str]]:
     reservations: list[dict[str, str]] = []
-    for formula in FORMULA_ORDER:
+    for formula in formulae:
         identity = catalog_identity_value(
             catalog.get(formula),
             f"campaign {formula} catalog",
@@ -2404,9 +2498,19 @@ def campaign_reservations_from_catalog(
             reservations.append(
                 {"formula": formula, "arch": arch, "reference": reference}
             )
-    if len(reservations) != ARCHITECTURE_IDENTITY_COUNT:
+    expected_count = sum(
+        len(
+            catalog_identity_value(
+                catalog.get(formula),
+                f"campaign {formula} catalog",
+                allow_zero_rebuild=rebuild_increment > 0,
+            )["arches"]
+        )
+        for formula in formulae
+    )
+    if len(reservations) != expected_count:
         raise RolloutError(
-            "campaign catalog does not contain 70 architecture identities"
+            "campaign catalog does not contain every selected architecture identity"
         )
     return reservations
 
@@ -2419,6 +2523,7 @@ def initial_campaign_state(
     contract: CampaignContract,
     absent_oci_references: Mapping[str, str],
     checked_at: str,
+    selection: CampaignSelection | None = None,
 ) -> dict[str, Any]:
     if not isinstance(campaign_id, str) or not CAMPAIGN_ID_RE.fullmatch(
         campaign_id
@@ -2429,8 +2534,9 @@ def initial_campaign_state(
         raise RolloutError(
             "campaign reservation commit must differ from its base commit"
         )
+    selected_campaign = selection or CampaignSelection.all_rebuild()
     state = initial_state(snapshot, contract.consumer_sha)
-    state["schema"] = 2
+    state["schema"] = 3 if selection is not None else 2
     state["expected_publisher_sha"] = contract.publisher_sha
     state["workflow_sha256"] = contract.workflow_sha256
     state["previous_catalog"] = last_green_catalog_state(base_snapshot)
@@ -2445,15 +2551,22 @@ def initial_campaign_state(
         "initialized_at": _utc_now(),
         **contract.state_value(),
         "prior_kandelo_sha": base_snapshot.metadata.get("kandelo_commit"),
-        "formulae": list(FORMULA_ORDER),
-        "architecture_identity_count": ARCHITECTURE_IDENTITY_COUNT,
-        # WHY: an allowlist controls scheduling only. Recording every
-        # Formula/architecture identity here makes it impossible for a
-        # product-first dispatch pass to silently shrink the campaign.
-        "reservations": campaign_reservations(snapshot),
+        "formulae": list(selected_campaign.rebuild),
+        "architecture_identity_count": sum(
+            len(required_arches(formula))
+            for formula in selected_campaign.rebuild
+        ),
+        # WHY: only payloads whose build closure changed acquire a new OCI
+        # identity. Reused and deferred Formulae remain explicit in schema 3,
+        # but reserving them would turn validation into an accidental rebuild.
+        "reservations": campaign_reservations(
+            snapshot, selected_campaign.rebuild
+        ),
         "absent_oci_references": dict(absent_oci_references),
         "absent_oci_checked_at": checked_at,
     }
+    if selection is not None:
+        state["campaign"].update(selected_campaign.state_value())
     return state
 
 
@@ -2467,6 +2580,8 @@ def validate_campaign_state(
         return None
     campaign = state.get("campaign")
     assert isinstance(campaign, dict)
+    selection = campaign_selection_from_state(state)
+    assert selection is not None
     expected_keys = {
         "absent_oci_checked_at",
         "absent_oci_references",
@@ -2484,6 +2599,10 @@ def validate_campaign_state(
         "reservation_tap_sha",
         "reservations",
     }
+    if state.get("schema") == 3:
+        expected_keys.update(
+            ("rebuild_formulae", "reuse_formulae", "deferred_formulae")
+        )
     if set(campaign) != expected_keys:
         raise RolloutError("campaign rollout state has an unexpected shape")
     previous_catalog = state.get("previous_catalog")
@@ -2500,6 +2619,7 @@ def validate_campaign_state(
         )
     initial_reservations = campaign_reservations_from_catalog(
         initial_catalog,
+        formulae=selection.rebuild,
     )
     initial_references = {
         entry["formula"]: entry["reference"]
@@ -2516,9 +2636,12 @@ def validate_campaign_state(
         )
         or campaign.get("base_tap_sha")
         == campaign.get("reservation_tap_sha")
-        or campaign.get("formulae") != list(FORMULA_ORDER)
+        or campaign.get("formulae") != list(selection.rebuild)
         or campaign.get("architecture_identity_count")
-        != ARCHITECTURE_IDENTITY_COUNT
+        != sum(
+            len(required_arches(formula))
+            for formula in selection.rebuild
+        )
         or campaign.get("reservations") != initial_reservations
         or campaign.get("absent_oci_references")
         != initial_references
@@ -2589,13 +2712,21 @@ def validate_campaign_state(
             raise RolloutError(
                 f"campaign {formula} base predates its last-green sidecar"
             )
-        if initial["bottle_rebuild"] != base["bottle_rebuild"] + 1:
+        if formula in selection.rebuild:
+            if initial["bottle_rebuild"] != base["bottle_rebuild"] + 1:
+                raise RolloutError(
+                    f"campaign {formula} initial reservation is not the base successor"
+                )
+            if current["bottle_rebuild"] < initial["bottle_rebuild"]:
+                raise RolloutError(
+                    f"campaign {formula} reservation predates its fresh identity"
+                )
+        elif initial != base or current != base:
+            # WHY: a reuse or deferred payload owns no fresh OCI identity in
+            # this campaign. Any Formula identity movement must be reviewed as
+            # a later campaign rather than hidden beside a selected rebuild.
             raise RolloutError(
-                f"campaign {formula} initial reservation is not the base successor"
-            )
-        if current["bottle_rebuild"] < initial["bottle_rebuild"]:
-            raise RolloutError(
-                f"campaign {formula} reservation predates its fresh identity"
+                f"campaign {formula} changed outside the rebuild partition"
             )
     return contract
 
@@ -2605,7 +2736,7 @@ def validate_campaign_main_descendant(
     state: Mapping[str, Any],
     snapshot: TapSnapshot,
 ) -> None:
-    if state.get("schema") != 2:
+    if state.get("schema") not in (2, 3):
         return
     campaign = state.get("campaign")
     if not isinstance(campaign, dict):
@@ -2616,10 +2747,13 @@ def validate_campaign_main_descendant(
         raise RolloutError("campaign base or reservation tap SHA is malformed")
     base = load_snapshot(tap, base_sha)
     reservation = load_snapshot(tap, reservation_sha)
+    selection = campaign_selection_from_state(state)
+    assert selection is not None
     validate_fresh_campaign_reservations(
         tap=tap,
         base=base,
         reservation=reservation,
+        selection=selection,
     )
     if (
         last_green_catalog_state(base) != state.get("previous_catalog")
@@ -2872,7 +3006,7 @@ def upgrade_state(
     upgraded = copy.deepcopy(state)
     if "pending_dispatches" not in upgraded:
         upgraded["pending_dispatches"] = []
-    if upgraded.get("schema") == 2:
+    if upgraded.get("schema") in (2, 3):
         # A fresh campaign starts with batching and an exact complete caller
         # authority. Rotating it implicitly would make the private ledger bless
         # code outside the initialization review.
@@ -2892,10 +3026,16 @@ def validate_state(
     snapshot: TapSnapshot,
     expected_kandelo_sha: str,
 ) -> None:
-    if state.get("schema") not in (1, 2):
+    if state.get("schema") not in (1, 2, 3):
         raise RolloutError("rollout state has an unsupported schema")
     campaign_contract = validate_campaign_state(
         state, snapshot, expected_kandelo_sha
+    )
+    campaign_selection = campaign_selection_from_state(state)
+    campaign_rebuilds = (
+        set(campaign_selection.rebuild)
+        if campaign_selection is not None
+        else set(FORMULA_ORDER)
     )
     fixed = {
         "repository": REPOSITORY,
@@ -2948,9 +3088,13 @@ def validate_state(
         tap_sha = entry.get("tap_sha")
         caller_tap_sha = entry.get("caller_tap_sha")
         submitted_at = entry.get("submitted_at")
+        if formula in FORMULA_ORDER and formula not in campaign_rebuilds:
+            raise RolloutError(
+                "rollout state dispatches outside its campaign rebuild partition"
+            )
         if (
             set(entry) != expected_entry_keys
-            or formula not in FORMULA_ORDER
+            or formula not in campaign_rebuilds
             or entry.get("arches") != list(required_arches(formula))
             or type(run_id) is not int
             or run_id <= 0
@@ -3000,6 +3144,11 @@ def validate_state(
             raise RolloutError("rollout state contains a malformed abandoned dispatch")
         formula = entry.get("formula")
         run_id = entry.get("run_id")
+        if formula in FORMULA_ORDER and formula not in campaign_rebuilds:
+            raise RolloutError(
+                "rollout state abandons a Formula outside its campaign "
+                "rebuild partition"
+            )
         if (
             formula not in FORMULA_ORDER
             or entry.get("arches") != list(required_arches(formula))
@@ -3024,6 +3173,15 @@ def validate_state(
     if not isinstance(failed_attempts, list):
         raise RolloutError("rollout state failed_attempts is not an array")
     for entry in failed_attempts:
+        if (
+            isinstance(entry, dict)
+            and entry.get("formula") in FORMULA_ORDER
+            and entry["formula"] not in campaign_rebuilds
+        ):
+            raise RolloutError(
+                "rollout state recovers a Formula outside its campaign "
+                "rebuild partition"
+            )
         validate_failed_attempt(
             entry,
             seen_run_ids,
@@ -3033,6 +3191,10 @@ def validate_state(
 
     pending = pending_dispatches(state)
     for intent in pending:
+        if intent.formula not in campaign_rebuilds:
+            raise RolloutError(
+                "rollout state dispatches outside its campaign rebuild partition"
+            )
         if intent.formula in seen_formulae:
             raise RolloutError("rollout state contains a duplicate dispatch Formula")
         if intent.dispatch_token in seen_tokens:
@@ -3042,6 +3204,11 @@ def validate_state(
 
     if state.get("unresolved_dispatch") is not None:
         legacy = submitted_dispatch(state)
+        if legacy.formula not in campaign_rebuilds:
+            raise RolloutError(
+                "rollout state has an unresolved Formula outside its campaign "
+                "rebuild partition"
+            )
         if legacy.formula in seen_formulae:
             raise RolloutError("rollout state contains a duplicate dispatch Formula")
 
@@ -3819,6 +3986,7 @@ def validate_fresh_campaign_reservations(
     tap: GitTap,
     base: TapSnapshot,
     reservation: TapSnapshot,
+    selection: CampaignSelection | None = None,
 ) -> None:
     if base.sha == reservation.sha or not tap.is_ancestor(base.sha, reservation.sha):
         raise RolloutError(
@@ -3831,6 +3999,7 @@ def validate_fresh_campaign_reservations(
     # Formula committed at T0 separately owns the next identity, because it may
     # already be ahead of that sidecar after an earlier reservation attempt.
     _ = last_green_catalog_state(base)
+    selected_campaign = selection or CampaignSelection.all_rebuild()
 
     if reservation.metadata != base.metadata:
         raise RolloutError(
@@ -3870,44 +4039,71 @@ def validate_fresh_campaign_reservations(
             raise RolloutError(
                 f"{formula} base Formula predates its last-green sidecar"
             )
-        expected_rebuild = base_rebuild + 1
-        if reservation.identities[formula].bottle_rebuild != expected_rebuild:
-            raise RolloutError(
-                f"{formula} must reserve exact base successor rebuild "
-                f"{expected_rebuild}"
+        if formula in selected_campaign.rebuild:
+            expected_rebuild = base_rebuild + 1
+            if reservation.identities[formula].bottle_rebuild != expected_rebuild:
+                raise RolloutError(
+                    f"{formula} must reserve exact base successor rebuild "
+                    f"{expected_rebuild}"
+                )
+            require_last_green_formula_checksums(reservation, formula)
+            # WHY: a normalized recipe hash could conceal two offsetting edits.
+            # Reconstructing Tpre from T0 proves the rebuild line is the only
+            # Formula byte changed. Advancing T0—not the older last-green
+            # sidecar—prevents a new campaign from reusing an identity reserved
+            # or occupied by an earlier campaign.
+            expected_source = source_with_rebuild(
+                base.formula_sources[formula],
+                formula,
+                expected_rebuild,
             )
-        require_last_green_formula_checksums(reservation, formula)
-        # WHY: a normalized recipe hash could conceal two offsetting edits.
-        # Reconstructing Tpre from T0 proves the rebuild line is the only
-        # Formula byte changed. Advancing T0—not the older last-green sidecar—
-        # prevents a new campaign from reusing an identity reserved or occupied
-        # by an earlier campaign.
-        expected_source = source_with_rebuild(
-            base.formula_sources[formula],
-            formula,
-            expected_rebuild,
-        )
+        else:
+            expected_source = base.formula_sources[formula]
+            if (
+                reservation.identities[formula].state_value()
+                != base.identities[formula].state_value()
+            ):
+                raise RolloutError(
+                    f"{formula} changed outside the campaign rebuild partition"
+                )
         if reservation.formula_sources[formula] != expected_source:
+            if formula in selected_campaign.rebuild:
+                raise RolloutError(
+                    f"Formula/{formula}.rb changes more than its rebuild reservation"
+                )
             raise RolloutError(
-                f"Formula/{formula}.rb changes more than its rebuild reservation"
+                f"Formula/{formula}.rb changes beyond its campaign disposition"
             )
 
     expected_changes = {
-        ("M", f"Formula/{formula}.rb") for formula in FORMULA_ORDER
+        ("M", f"Formula/{formula}.rb")
+        for formula in selected_campaign.rebuild
     }
     changes = tuple(tap.changed_entries(base.sha, reservation.sha))
     if len(changes) != len(expected_changes) or set(changes) != expected_changes:
         # WHY: TapSnapshot covers the publication contract, but not every
         # repository path. Checking the Git diff prevents an unrelated script,
         # policy, or documentation edit from riding along in mechanical Tpre.
+        if selection is None:
+            raise RolloutError(
+                "campaign reservation contains changes beyond the 63 exact "
+                "Formula rebuild reservations"
+            )
         raise RolloutError(
-            "campaign reservation contains changes beyond the 63 exact "
-            "Formula rebuild reservations"
+            "campaign reservation contains changes beyond its exact Formula "
+            "rebuild reservations"
         )
 
-    if len(campaign_reservations(reservation)) != ARCHITECTURE_IDENTITY_COUNT:
+    expected_identity_count = sum(
+        len(required_arches(formula))
+        for formula in selected_campaign.rebuild
+    )
+    if (
+        len(campaign_reservations(reservation, selected_campaign.rebuild))
+        != expected_identity_count
+    ):
         raise RolloutError(
-            "campaign reservation does not contain all 70 architecture identities"
+            "campaign reservation does not contain every selected architecture identity"
         )
 
 
@@ -5094,6 +5290,7 @@ def ready_dispatch_candidates(
 def require_dependency_closed_allowlist(
     snapshot: TapSnapshot,
     allowed_formulae: frozenset[str] | None,
+    campaign_rebuilds: frozenset[str] | None = None,
 ) -> None:
     if allowed_formulae is None:
         return
@@ -5102,6 +5299,14 @@ def require_dependency_closed_allowlist(
     while pending:
         formula = pending.pop()
         for dependency in snapshot.dependencies[formula]:
+            if (
+                campaign_rebuilds is not None
+                and dependency not in campaign_rebuilds
+            ):
+                # WHY: a reuse dependency is validated in place and has no
+                # dispatchable successor. Requiring it in a build allowlist
+                # would contradict the campaign partition.
+                continue
             if dependency not in closure:
                 closure.add(dependency)
                 pending.append(dependency)
@@ -5124,6 +5329,7 @@ def initialize_campaign(
     reservation_tap_sha: str,
     contract: CampaignContract,
     no_fetch: bool,
+    selection: CampaignSelection | None = None,
 ) -> dict[str, Any]:
     # WHY: even a valid old ledger contains dispatch history that cannot be
     # inferred from Git or GHCR. Refuse before any network observation rather
@@ -5161,6 +5367,7 @@ def initialize_campaign(
         tap=tap,
         base=base,
         reservation=reservation,
+        selection=selection,
     )
 
     inventory = active_inventory(github)
@@ -5168,7 +5375,10 @@ def initialize_campaign(
         raise RolloutError(
             "cannot initialize a fresh campaign while publication runs are active"
         )
-    absent = require_absent_campaign_references(registry, reservation)
+    selected_campaign = selection or CampaignSelection.all_rebuild()
+    absent = require_absent_campaign_references(
+        registry, reservation, selected_campaign.rebuild
+    )
     checked_at = _utc_now()
 
     # Re-observe both mutable coordination surfaces immediately before the
@@ -5193,6 +5403,7 @@ def initialize_campaign(
         contract=contract,
         absent_oci_references=absent,
         checked_at=checked_at,
+        selection=selection,
     )
     validate_state(state, reservation, contract.consumer_sha)
     write_new_state(state_path, state)
@@ -5225,8 +5436,26 @@ def dispatch_ready(
         campaign_contract = campaign_contract_from_state(
             state, expected_kandelo_sha
         )
+        campaign_selection = campaign_selection_from_state(state)
+        campaign_rebuilds = (
+            frozenset(campaign_selection.rebuild)
+            if campaign_selection is not None
+            else None
+        )
         if campaign_contract is not None:
-            require_dependency_closed_allowlist(snapshot, allowed_formulae)
+            if (
+                allowed_formulae is not None
+                and campaign_rebuilds is not None
+                and not allowed_formulae.issubset(campaign_rebuilds)
+            ):
+                raise RolloutError(
+                    "Formula allowlist contains a reuse or deferred Formula"
+                )
+            require_dependency_closed_allowlist(
+                snapshot,
+                allowed_formulae,
+                campaign_rebuilds=campaign_rebuilds,
+            )
         validate_workflow(
             github,
             snapshot,
@@ -5308,7 +5537,14 @@ def dispatch_ready(
             statuses = calculate_statuses(
                 tap, snapshot, expected_kandelo_sha, inventory, history_blocks
             )
-            ready = ready_dispatch_candidates(statuses, allowed_formulae)
+            selected_allowlist = allowed_formulae
+            if campaign_rebuilds is not None:
+                selected_allowlist = (
+                    campaign_rebuilds
+                    if selected_allowlist is None
+                    else selected_allowlist & campaign_rebuilds
+                )
+            ready = ready_dispatch_candidates(statuses, selected_allowlist)
             if not ready:
                 return 0
 
@@ -5595,6 +5831,27 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="reviewed complete caller SHA-256 for --initialize-campaign",
     )
     parser.add_argument(
+        "--campaign-rebuild-formulae",
+        help=(
+            "canonical comma-separated Formulae whose payload closures changed "
+            "and therefore reserve successor identities"
+        ),
+    )
+    parser.add_argument(
+        "--campaign-reuse-formulae",
+        help=(
+            "canonical comma-separated Formulae retained with new validation "
+            "evidence; use an empty value when none"
+        ),
+    )
+    parser.add_argument(
+        "--campaign-deferred-formulae",
+        help=(
+            "canonical comma-separated Formulae intentionally outside this "
+            "campaign; use an empty value when none"
+        ),
+    )
+    parser.add_argument(
         "--max-dispatches",
         type=int,
         default=MAX_ACTIVE_RUNS,
@@ -5650,6 +5907,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         args.expected_package_generation_tag,
         args.expected_workflow_sha256,
     )
+    selection_values = (
+        args.campaign_rebuild_formulae,
+        args.campaign_reuse_formulae,
+        args.campaign_deferred_formulae,
+    )
     if args.initialize_campaign:
         if any(value is None for value in campaign_values):
             parser.error(
@@ -5679,8 +5941,38 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
             )
         ):
             parser.error("--initialize-campaign contains an invalid identity")
+        if any(value is not None for value in selection_values) and any(
+            value is None for value in selection_values
+        ):
+            parser.error(
+                "selected campaigns require all three rebuild, reuse, and "
+                "deferred Formula partitions"
+            )
     elif any(value is not None for value in campaign_values):
         parser.error("campaign contract flags require --initialize-campaign")
+    elif any(value is not None for value in selection_values):
+        parser.error("campaign Formula partitions require --initialize-campaign")
+    if all(value is not None for value in selection_values):
+        def parse_campaign_partition(value: str) -> tuple[str, ...]:
+            if value == "":
+                return ()
+            parts = tuple(value.split(","))
+            if any(not part for part in parts):
+                raise RolloutError(
+                    "campaign Formula partitions contain an empty entry"
+                )
+            return parts
+
+        try:
+            args.campaign_selection = CampaignSelection.create(
+                rebuild=parse_campaign_partition(args.campaign_rebuild_formulae),
+                reuse=parse_campaign_partition(args.campaign_reuse_formulae),
+                deferred=parse_campaign_partition(args.campaign_deferred_formulae),
+            )
+        except RolloutError as error:
+            parser.error(str(error))
+    else:
+        args.campaign_selection = None
     if args.abandon_dispatch_run is not None and args.abandon_dispatch_run < 1:
         parser.error("--abandon-dispatch-run must be a positive run ID")
     if args.recover_failed_run is not None and (
@@ -5762,11 +6054,15 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
                     reservation_tap_sha=args.campaign_reservation_tap_sha,
                     contract=contract,
                     no_fetch=args.no_fetch,
+                    selection=args.campaign_selection,
                 )
+            selection = args.campaign_selection or CampaignSelection.all_rebuild()
             print(
                 f"initialized campaign {state['campaign']['id']} with "
-                f"{len(FORMULA_ORDER)} Formulae and "
-                f"{ARCHITECTURE_IDENTITY_COUNT} architecture identities; "
+                f"{len(selection.rebuild)} rebuild, {len(selection.reuse)} reuse, "
+                f"and {len(selection.deferred)} deferred Formulae; "
+                f"{sum(len(required_arches(formula)) for formula in selection.rebuild)} "
+                "new architecture identities; "
                 "no repository_dispatch was sent"
             )
             return 0

@@ -365,6 +365,48 @@ class RolloutControllerTests(unittest.TestCase):
         )
         return base, reservation
 
+    @staticmethod
+    def _product_first_selection() -> rollout.CampaignSelection:
+        rebuild = ("bash",)
+        reuse_names = {"libcxx", "ncurses"}
+        reuse = tuple(
+            formula
+            for formula in rollout.FORMULA_ORDER
+            if formula in reuse_names
+        )
+        deferred = tuple(
+            formula
+            for formula in rollout.FORMULA_ORDER
+            if formula not in {*rebuild, *reuse}
+        )
+        return rollout.CampaignSelection.create(
+            rebuild=rebuild,
+            reuse=reuse,
+            deferred=deferred,
+        )
+
+    def _product_first_campaign_snapshots(
+        self,
+    ) -> tuple[
+        rollout.TapSnapshot,
+        rollout.TapSnapshot,
+        rollout.CampaignSelection,
+    ]:
+        base, all_reserved = self._campaign_snapshots()
+        selection = self._product_first_selection()
+        sources = dict(base.formula_sources)
+        identities = dict(base.identities)
+        for formula in selection.rebuild:
+            sources[formula] = all_reserved.formula_sources[formula]
+            identities[formula] = all_reserved.identities[formula]
+        reservation = dataclasses.replace(
+            base,
+            sha=all_reserved.sha,
+            formula_sources=sources,
+            identities=identities,
+        )
+        return base, reservation, selection
+
     def _current_successor_snapshots(
         self,
     ) -> tuple[rollout.TapSnapshot, rollout.TapSnapshot]:
@@ -423,6 +465,7 @@ class RolloutControllerTests(unittest.TestCase):
         registry,
         state_path: pathlib.Path,
         observed_main: tuple[str, ...] | None = None,
+        selection: rollout.CampaignSelection | None = None,
     ) -> tuple[dict, mock.Mock, FakeGitHub]:
         tap = mock.Mock()
         tap.fetch_main.side_effect = observed_main or (
@@ -430,8 +473,13 @@ class RolloutControllerTests(unittest.TestCase):
             reservation.sha,
         )
         tap.is_ancestor.return_value = True
-        tap.changed_entries.return_value = (
-            self._campaign_reservation_changes()
+        tap.changed_entries.return_value = tuple(
+            ("M", f"Formula/{formula}.rb")
+            for formula in (
+                selection.rebuild
+                if selection is not None
+                else rollout.FORMULA_ORDER
+            )
         )
         github = FakeGitHub()
         snapshots = {base.sha: base, reservation.sha: reservation}
@@ -455,6 +503,7 @@ class RolloutControllerTests(unittest.TestCase):
                 reservation_tap_sha=reservation.sha,
                 contract=self._campaign_contract(),
                 no_fetch=False,
+                selection=selection,
             )
         return state, tap, github
 
@@ -1302,6 +1351,134 @@ class RolloutControllerTests(unittest.TestCase):
                 tap=tap,
                 base=base,
                 reservation=reservation,
+            )
+
+    def test_product_first_campaign_reserves_only_changed_payloads(self):
+        base, reservation, selection = (
+            self._product_first_campaign_snapshots()
+        )
+        tap = mock.Mock()
+        tap.is_ancestor.return_value = True
+        tap.changed_entries.return_value = (("M", "Formula/bash.rb"),)
+        rollout.validate_fresh_campaign_reservations(
+            tap=tap,
+            base=base,
+            reservation=reservation,
+            selection=selection,
+        )
+
+        registry = FakeRegistry(
+            rollout.RegistryManifestEvidence(exists=False, digest=None)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = pathlib.Path(directory) / "campaign.json"
+            state, _tap, _github = self._initialize_campaign(
+                base=base,
+                reservation=reservation,
+                registry=registry,
+                state_path=state_path,
+                selection=selection,
+            )
+            rollout.validate_state(state, reservation, self.consumer_sha)
+            rollout.require_dependency_closed_allowlist(
+                reservation,
+                frozenset(("bash",)),
+                campaign_rebuilds=frozenset(selection.rebuild),
+            )
+
+        self.assertEqual(3, state["schema"])
+        self.assertEqual(["bash"], state["campaign"]["rebuild_formulae"])
+        self.assertEqual(
+            list(selection.reuse), state["campaign"]["reuse_formulae"]
+        )
+        self.assertEqual(
+            list(selection.deferred), state["campaign"]["deferred_formulae"]
+        )
+        self.assertEqual(["bash"], state["campaign"]["formulae"])
+        self.assertEqual(1, state["campaign"]["architecture_identity_count"])
+        self.assertEqual(
+            [
+                {
+                    "formula": "bash",
+                    "arch": "wasm32",
+                    "reference": reservation.identities["bash"].top_reference,
+                }
+            ],
+            state["campaign"]["reservations"],
+        )
+        self.assertEqual(
+            {"bash": reservation.identities["bash"].top_reference},
+            state["campaign"]["absent_oci_references"],
+        )
+        self.assertEqual(
+            [("bash", reservation.identities["bash"].top_reference)],
+            registry.calls,
+        )
+        for formula in (*selection.reuse, *selection.deferred):
+            self.assertEqual(
+                base.formula_sources[formula],
+                reservation.formula_sources[formula],
+                formula,
+            )
+
+        invalid_dispatch = copy.deepcopy(state)
+        invalid_dispatch["dispatches"] = [
+            {
+                "formula": "libcxx",
+                "arches": ["wasm32", "wasm64"],
+                "tap_sha": reservation.sha,
+                "run_id": 123,
+                "submitted_at": "2026-07-25T12:01:00Z",
+            }
+        ]
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "dispatches outside its campaign rebuild partition",
+        ):
+            rollout.validate_state(
+                invalid_dispatch, reservation, self.consumer_sha
+            )
+
+    def test_product_first_campaign_rejects_partition_and_unselected_edits(self):
+        base, reservation, selection = (
+            self._product_first_campaign_snapshots()
+        )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "Formula partitions overlap"
+        ):
+            rollout.CampaignSelection.create(
+                rebuild=("bash",),
+                reuse=("bash",),
+                deferred=selection.deferred,
+            )
+
+        formula = "libcxx"
+        changed_source = rollout.source_with_rebuild(
+            reservation.formula_sources[formula],
+            formula,
+            reservation.identities[formula].bottle_rebuild + 1,
+        )
+        changed = self._snapshot_with_formula_source(
+            reservation,
+            formula,
+            changed_source,
+            sha=reservation.sha,
+        )
+        tap = mock.Mock()
+        tap.is_ancestor.return_value = True
+        tap.changed_entries.return_value = (
+            ("M", "Formula/bash.rb"),
+            ("M", "Formula/libcxx.rb"),
+        )
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "libcxx changed outside the campaign rebuild partition",
+        ):
+            rollout.validate_fresh_campaign_reservations(
+                tap=tap,
+                base=base,
+                reservation=changed,
+                selection=selection,
             )
 
     def test_fresh_campaign_initialization_writes_one_complete_private_ledger(self):
@@ -5877,6 +6054,66 @@ class RolloutControllerTests(unittest.TestCase):
         self.assertEqual(
             "shell-bottles-2026-07-25", valid.campaign_id
         )
+        self.assertIsNone(valid.campaign_selection)
+
+        selection = self._product_first_selection()
+        selection_args = (
+            "--campaign-rebuild-formulae",
+            ",".join(selection.rebuild),
+            "--campaign-reuse-formulae",
+            ",".join(selection.reuse),
+            "--campaign-deferred-formulae",
+            ",".join(selection.deferred),
+        )
+        selected = rollout.parse_args(
+            (
+                *common,
+                "--state-file",
+                "/tmp/fresh-campaign.json",
+                "--initialize-campaign",
+                *campaign_args,
+                *selection_args,
+            )
+        )
+        self.assertEqual(selection, selected.campaign_selection)
+        for omitted in (
+            "--campaign-rebuild-formulae",
+            "--campaign-reuse-formulae",
+            "--campaign-deferred-formulae",
+        ):
+            retained = tuple(
+                value
+                for index in range(0, len(selection_args), 2)
+                if selection_args[index] != omitted
+                for value in selection_args[index : index + 2]
+            )
+            with (
+                self.subTest(missing=omitted),
+                redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit),
+            ):
+                rollout.parse_args(
+                    (
+                        *common,
+                        "--state-file",
+                        "/tmp/fresh-campaign.json",
+                        "--initialize-campaign",
+                        *campaign_args,
+                        *retained,
+                    )
+                )
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            rollout.parse_args(
+                (
+                    *common,
+                    "--campaign-rebuild-formulae",
+                    "bash",
+                    "--campaign-reuse-formulae",
+                    "libcxx,ncurses",
+                    "--campaign-deferred-formulae",
+                    ",".join(selection.deferred),
+                )
+            )
 
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             rollout.parse_args(

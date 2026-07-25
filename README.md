@@ -282,9 +282,20 @@ earlier campaign. A Formula at `T0` may already be one or more rebuilds ahead
 of that sidecar when an earlier campaign reserved an identity without replacing
 the last-green bottle. `Tpre` is a strict descendant on protected `main`; it
 retains `T0`'s aggregate metadata, package-owned sidecars, Formula support,
-recipes, dependencies, architectures, and last-green hashes, and changes only
-each Formula's `rebuild` line to the exact successor of the Formula identity
-committed at `T0`.
+recipes, dependencies, architectures, and last-green hashes. Its reviewed
+campaign plan partitions the complete catalog into `rebuild`, `reuse`, and
+`deferred`. `Tpre` changes only the rebuild partition's `rebuild` lines to the
+exact successors of their Formula identities at `T0`; reused and deferred
+Formulae remain byte-for-byte unchanged.
+
+A compatible Kandelo kernel or host-runtime change does not by itself make a
+bottle payload stale. Keep the bottle's original `built_from` provenance and
+place it in `reuse` only after digest-bound validation against the new main
+commit. Put a Formula in `rebuild` when a real payload input changed: its
+recipe/source, architecture, ABI contract, SDK/libc/sysroot, applicable fork
+instrumenter, or a build dependency payload. Put intentionally unvalidated
+Formulae in `deferred`. Never reserve a successor merely to make its producer
+commit equal the current kernel commit.
 
 The caller workflow at `Tpre` must be registered in
 `APPROVED_CAMPAIGN_CONTRACTS` with its complete SHA-256, reusable publisher
@@ -298,12 +309,15 @@ Create a new private ledger before dispatching anything:
 : "${KANDELO_ROLLOUT_STATE:?choose a new private state-file path}"
 : "${KANDELO_CAMPAIGN_ID:?set a stable campaign name}"
 : "${KANDELO_T0:?set the exact reviewed last-green base tap SHA}"
-: "${KANDELO_TPRE:?set the exact 63-Formula reservation tap SHA}"
+: "${KANDELO_TPRE:?set the exact selected-reservation tap SHA}"
 : "${KANDELO_CONSUMER_SHA:?set the reviewed package-consumer SHA}"
 : "${KANDELO_PUBLISHER_SHA:?set the reviewed reusable publisher SHA}"
 : "${KANDELO_GENERATION_SHA:?set the reviewed package-generation SHA}"
 : "${KANDELO_GENERATION_TAG:?set the reviewed package-generation tag}"
 : "${KANDELO_CALLER_SHA256:?set the reviewed complete caller SHA-256}"
+: "${KANDELO_REBUILD_FORMULAE:?set the canonical reviewed rebuild list}"
+: "${KANDELO_REUSE_FORMULAE:?set the canonical reviewed reuse list}"
+: "${KANDELO_DEFERRED_FORMULAE:?set the canonical reviewed deferred list}"
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
   --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
@@ -315,19 +329,23 @@ python3 scripts/abi42-rollout.py \
   --expected-publisher-sha "$KANDELO_PUBLISHER_SHA" \
   --expected-package-generation-sha "$KANDELO_GENERATION_SHA" \
   --expected-package-generation-tag "$KANDELO_GENERATION_TAG" \
-  --expected-workflow-sha256 "$KANDELO_CALLER_SHA256"
+  --expected-workflow-sha256 "$KANDELO_CALLER_SHA256" \
+  --campaign-rebuild-formulae "$KANDELO_REBUILD_FORMULAE" \
+  --campaign-reuse-formulae "$KANDELO_REUSE_FORMULAE" \
+  --campaign-deferred-formulae "$KANDELO_DEFERRED_FORMULAE"
 ```
 
 Initialization sends no event. It rejects an existing state path, validates all
 63 last-green sidecars and retained checksum blocks, freezes the separate
-last-green, `T0`, and `Tpre` catalogs, proves all 63 changes are exact
-`T0 rebuild + 1` edits, records all 70 Formula/architecture reservations,
-requires anonymous absence of the 63 new per-Formula OCI version-index
-references, requires an idle publication workflow, and rechecks protected
-`main` immediately before one mode-0600, fsynced ledger write. It never imports
-or reinterprets a schema-1 ledger. The 70 architecture entries live in 63
-per-Formula indexes; upload-child tags are content-derived and cannot be
-reserved before a build.
+last-green, `T0`, and `Tpre` catalogs, and requires the three lists to be a
+disjoint, canonically ordered partition of all 63 Formulae. It proves every
+rebuild change is exactly `T0 rebuild + 1`, proves reused and deferred Formulae
+did not change, records only the selected rebuild architecture identities, and
+requires anonymous absence only of those new per-Formula OCI version-index
+references. It also requires an idle publication workflow and rechecks
+protected `main` immediately before one mode-0600, fsynced ledger write. It
+never imports or reinterprets an older ledger. Upload-child tags are
+content-derived and cannot be reserved before a build.
 
 Never reuse, overwrite, copy, or reconstruct an earlier campaign ledger.
 `--dispatch` requires an existing ledger and cannot initialize one implicitly.
@@ -335,25 +353,28 @@ The local ledger assumes this controller remains the sole production
 dispatcher; it cannot prevent another authorized operator from manually
 publishing between anonymous registry checks.
 
-For a targeted product proof, keep the complete ledger but allow the controller
-to select only an exact reviewed, dependency-closed subset:
+For the first mostly-lazy shell proof, the intended partition rebuilds Bash,
+reuses the already compatible libcxx and ncurses bottles after validation, and
+defers the other 60 Formulae. A dispatch allowlist may further restrict a
+campaign's rebuild set:
 
 ```bash
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
-  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --dispatch \
-  --formulae coreutils,dash,ed,grep,gzip,libcxx,openssl,sed,zlib,diffutils,libcurl,ncurses,ruby,tar,bash,curl,less,vim,git
+  --formulae bash
 ```
 
 The allowlist is fail-closed: unknown, empty, or duplicate names are rejected.
-For a fresh campaign, every transitive same-tap dependency must also appear in
-the allowlist. The controller applies the ordinary dependency and finalization
-checks, anonymously rechecks every selected OCI reference, then journals and
-submits a capacity-bounded batch drawn only from that subset. Omitted Formulae
-remain recorded in the complete 63-Formula campaign catalog and can be selected
-by a later unfiltered pass; they cannot consume a slot in the current pass.
+Every transitive dependency that also belongs to the rebuild partition must
+appear in the allowlist. Reused dependencies are not dispatchable; their
+validation must already be finalized on tap main before a dependent becomes
+ready. The controller anonymously rechecks every selected successor, then
+journals and submits a capacity-bounded batch drawn only from the rebuild
+partition. Reused and deferred Formulae can never consume a dispatch slot in
+that campaign.
 
 The rollout controller first journals every Formula in the available
 capacity-bounded batch in its already initialized private ledger. Before each
