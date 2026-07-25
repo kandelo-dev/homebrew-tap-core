@@ -404,6 +404,8 @@ class RolloutControllerTests(unittest.TestCase):
                     return_value=current_snapshot.sha,
                 ),
                 mock.patch.object(self.tap, "is_ancestor", return_value=True),
+                mock.patch.object(self.tap, "ensure_commit"),
+                mock.patch.object(self.tap, "changed_entries", return_value=()),
                 mock.patch.object(
                     rollout, "load_snapshot", side_effect=load_snapshot
                 ),
@@ -1688,6 +1690,8 @@ class RolloutControllerTests(unittest.TestCase):
     def test_legacy_single_intent_ledger_upgrades_only_from_exact_workflow(self):
         state = rollout.initial_state(self.snapshot, self.consumer_sha)
         state.pop("pending_dispatches")
+        state.pop("expected_publisher_sha")
+        state.pop("workflow_rotations")
         state["workflow_sha256"] = rollout.LEGACY_SINGLE_INTENT_WORKFLOW_SHA256
 
         upgraded = rollout.upgrade_state(
@@ -2099,6 +2103,56 @@ class RolloutControllerTests(unittest.TestCase):
                 github, recovered, {"sqlite": False}
             ),
         )
+
+    def test_failed_token_run_uses_its_recorded_caller_not_bottle_source(self):
+        old_source = rollout.source_with_rebuild(
+            self.snapshot.formula_sources["sqlite"], "sqlite", 1
+        )
+        source = self._snapshot_with_formula_source(
+            self.snapshot, "sqlite", old_source, sha="a" * 40
+        )
+        caller = dataclasses.replace(source, sha="b" * 40)
+        current = self._snapshot_with_formula_source(
+            source,
+            "sqlite",
+            rollout.source_with_rebuild(old_source, "sqlite", 2),
+            sha="c" * 40,
+        )
+        state = self._failed_state(source, "sqlite")
+        state["dispatches"][0].update(
+            {
+                "caller_tap_sha": caller.sha,
+                "dispatch_token": "abi42-" + "1" * 32,
+            }
+        )
+        github = FakeGitHub()
+        github.runs_by_id[123] = self._run(
+            123,
+            caller.sha,
+            status="completed",
+            conclusion="failure",
+        )
+        github.jobs_by_run[123] = self._matrix_jobs(
+            "sqlite", "wasm32", "wasm64"
+        )
+
+        result, recovered = self._recover_failed(
+            github=github,
+            registry=FakeRegistry(
+                rollout.RegistryManifestEvidence(
+                    exists=True,
+                    digest="sha256:" + "d" * 64,
+                )
+            ),
+            state=state,
+            source_snapshot=source,
+            current_snapshot=current,
+            additional_source_snapshots=(caller,),
+        )
+
+        self.assertEqual("sqlite", result[0])
+        self.assertEqual(123, result[1])
+        self.assertEqual([], recovered["dispatches"])
 
     def test_failed_recovery_migrates_a_multi_formula_reservation_as_one_batch(self):
         formulae = ("sqlite", "unzip", "what")
@@ -3424,8 +3478,21 @@ class RolloutControllerTests(unittest.TestCase):
                 self.dispatches = []
 
             def dispatch(self, formula, arches, tap_sha, dispatch_token):
-                del dispatch_token
                 self.dispatches.append((formula, tuple(arches), tap_sha))
+                self.by_status[None] = {
+                    "total_count": 1,
+                    "workflow_runs": [
+                        {
+                            "id": 123,
+                            "event": "repository_dispatch",
+                            "head_sha": tap_sha,
+                            "status": "queued",
+                            "display_title": rollout.workflow_run_title(
+                                formula, dispatch_token
+                            ),
+                        }
+                    ],
+                }
 
         github = RecordingGitHub()
         inventory = rollout.RunInventory(
@@ -3498,6 +3565,7 @@ class RolloutControllerTests(unittest.TestCase):
                     side_effect=(
                         "2026-07-24T22:00:00Z",
                         "2026-07-24T22:00:01Z",
+                        "2026-07-24T22:00:02Z",
                     ),
                 ),
                 mock.patch("sys.stdout", new=io.StringIO()),
@@ -3530,7 +3598,12 @@ class RolloutControllerTests(unittest.TestCase):
         with self.assertRaisesRegex(
             rollout.RolloutError, "exact lowercase tap commit SHA"
         ):
-            rollout.GitHub().dispatch("zlib", ("wasm32",), "main")
+            rollout.GitHub().dispatch(
+                "zlib",
+                ("wasm32",),
+                "main",
+                "abi42-" + "0" * 32,
+            )
 
     def test_absent_dispatch_run_id_fails_closed(self):
         github = FakeGitHub()
@@ -4078,6 +4151,7 @@ class RolloutControllerTests(unittest.TestCase):
         class FailingGitHub(FakeGitHub):
             def __init__(self) -> None:
                 super().__init__()
+                self.head = RolloutControllerTests.head
                 self.calls: list[tuple[str, str]] = []
 
             def dispatch(self, formula, arches, tap_sha, dispatch_token):
