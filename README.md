@@ -295,7 +295,10 @@ commit. Put a Formula in `rebuild` when a real payload input changed: its
 recipe/source, architecture, ABI contract, SDK/libc/sysroot, applicable fork
 instrumenter, or a build dependency payload. Put intentionally unvalidated
 Formulae in `deferred`. Never reserve a successor merely to make its producer
-commit equal the current kernel commit.
+commit equal the current kernel commit. Initialization also rejects a reused
+Formula unless its package-owned sidecar and every required architecture
+already identify ABI 42; an older-ABI bottle belongs in `rebuild` or
+`deferred`, never `reuse`.
 
 The caller workflow at `Tpre` must be registered in
 `APPROVED_CAMPAIGN_CONTRACTS` with its complete SHA-256, reusable publisher

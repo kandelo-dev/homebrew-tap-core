@@ -1841,6 +1841,31 @@ def last_green_catalog_state(snapshot: TapSnapshot) -> dict[str, Any]:
     return result
 
 
+def require_reuse_target_abi(
+    snapshot: TapSnapshot, formulae: Sequence[str]
+) -> None:
+    """Require every retained bottle to already satisfy this campaign ABI."""
+    for formula in formulae:
+        sidecar = snapshot.formula_sidecars.get(formula)
+        if not isinstance(sidecar, dict):
+            raise RolloutError(f"{formula} reuse Formula has no finalized sidecar")
+        if sidecar.get("kandelo_abi") != EXPECTED_ABI:
+            raise RolloutError(
+                f"{formula} reuse sidecar ABI is not {EXPECTED_ABI}"
+            )
+        bottles = _bottles_by_arch(sidecar, f"reuse {formula}")
+        for arch in required_arches(formula):
+            bottle = bottles.get(arch)
+            if not isinstance(bottle, dict):
+                raise RolloutError(
+                    f"{formula} reuse sidecar omits required architecture {arch}"
+                )
+            if bottle.get("kandelo_abi") != EXPECTED_ABI:
+                raise RolloutError(
+                    f"{formula} reuse {arch} bottle ABI is not {EXPECTED_ABI}"
+                )
+
+
 def catalog_identity_value(
     value: Mapping[str, Any],
     label: str,
@@ -4000,6 +4025,10 @@ def validate_fresh_campaign_reservations(
     # already be ahead of that sidecar after an earlier reservation attempt.
     _ = last_green_catalog_state(base)
     selected_campaign = selection or CampaignSelection.all_rebuild()
+    # WHY: an unchanged Formula is reusable only if its retained bytes already
+    # implement the target ABI. Without this check an ABI-41 sidecar could be
+    # placed in an ABI-42 reuse partition and never receive a successor build.
+    require_reuse_target_abi(base, selected_campaign.reuse)
 
     if reservation.metadata != base.metadata:
         raise RolloutError(
