@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "dependencies": [
+
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 25235,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "305cfab5a1619b6a3c6e864f44689273fcf7fbbd71e8a4f1f7725eff72340766"
+    },
+    {
+      "bytes": 4557,
+      "mode": "0644",
+      "path": "config.site-wasm32-posix",
+      "sha256": "3b36f48229d9ba35d770d7649c2a825393b4f98a38ebac2174be481dde7163b0"
+    },
+    {
+      "bytes": 6381,
+      "mode": "0644",
+      "path": "patches/patch-global-h.py",
+      "sha256": "467c1358ff12eb2b02c1af5bc8d0b643666da6286cbe682bdb1ed2e09067bba1"
+    }
+  ]
+}
