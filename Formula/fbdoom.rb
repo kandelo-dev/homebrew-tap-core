@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Fbdoom < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   FBDOOM_COMMIT = "17280163bc95e5d954d2efaa0633489b763b4cd1".freeze
   CHOCOLATE_DOOM_COMMIT = "35fb1372d10756ca27eca05665bd8a7cebc71c05".freeze
@@ -18,6 +18,7 @@ class Fbdoom < Formula
   license "GPL-2.0-or-later"
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on "gpatch" => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/fbdoom"
@@ -40,9 +41,9 @@ class Fbdoom < Formula
     chocolate_source = resource_root/"chocolate-doom"
     resource_root.mkpath
 
-    # Transitional Tier-2 bridge: preserve the registry recipe's reviewed
-    # fbdev/input/audio patch set. Homebrew verifies both pinned archives; the
-    # registry recipe copies and patches them only in caller-owned work space.
+    # Preserve the reviewed fbdev/input/audio patch set. Homebrew verifies both
+    # pinned archives; the tap recipe copies and patches them only in
+    # caller-owned work space.
     resource("chocolate-doom").stage do
       chocolate_source.mkpath
       Pathname.pwd.children.each do |entry|
@@ -50,11 +51,14 @@ class Fbdoom < Formula
       end
     end
 
-    out_dir = kandelo_build_package(script_env: {
-      "FBDOOM_CHOCOLATE_DOOM_SOURCE_DIR"    => chocolate_source,
-      "FBDOOM_CHOCOLATE_DOOM_SOURCE_SHA256" => CHOCOLATE_DOOM_SHA256,
-      "FBDOOM_CHOCOLATE_DOOM_SOURCE_URL"    => CHOCOLATE_DOOM_URL,
-    })
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "c7d700b058460fec33110a10789f9b19442cb0d540d0ae6df29a4f86efdefea5",
+      script_env: {
+        "FBDOOM_CHOCOLATE_DOOM_SOURCE_DIR"    => chocolate_source,
+        "FBDOOM_CHOCOLATE_DOOM_SOURCE_SHA256" => CHOCOLATE_DOOM_SHA256,
+        "FBDOOM_CHOCOLATE_DOOM_SOURCE_URL"    => CHOCOLATE_DOOM_URL,
+      },
+    )
     kandelo_validate_wasm_artifact(out_dir/"fbdoom.wasm", fork: :forbidden)
     kandelo_install_bin(out_dir, "fbdoom.wasm", "fbdoom")
   end
