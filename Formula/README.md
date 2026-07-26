@@ -99,10 +99,13 @@ rather than reaching `prefix.install`.
 Changing recipe inputs requires updating `recipe.json` and its Formula literal;
 the resulting Formula SHA-256 invalidates reuse for that Formula only.
 
-Formula tests must execute produced Wasm through Kandelo. Formula `version`
-plus `revision` defines the Homebrew package version; a bottle `rebuild`
-distinguishes a new bottle for that same package version. A retry may keep that
-identity only when its package source, Formula and support closure,
+Formula tests must execute produced Wasm through Kandelo. A support-data
+Formula with no Wasm program, such as `homebrew-bootstrap`, must instead verify
+its complete installed archive contract in `test do`; the guest lifecycle gate
+remains responsible for proving the support data with real Kandelo processes.
+Formula `version` plus `revision` defines the Homebrew package version; a bottle
+`rebuild` distinguishes a new bottle for that same package version. A retry may
+keep that identity only when its package source, Formula and support closure,
 dependencies, target outputs, pinned Homebrew, and build environment remain
 unchanged. Any input change that can change bottle bytes requires a new
 supported Formula revision or bottle rebuild. Never replace bytes under an

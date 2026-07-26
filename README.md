@@ -18,6 +18,8 @@ and runtime-test mechanics live in
 
 Formula source currently present in this repository includes:
 
+- `homebrew-bootstrap`, the deterministic patched Homebrew source tree and
+  guest environment policy used to activate `brew` lazily inside Kandelo;
 - `zlib` and `ruby`, the first dependency and heavy-runtime Formulae;
 - `python`, CPython 3.13.3 with its complete standard library and license tree;
 - `erlang`, an embedded Erlang/OTP 28.2 runtime with the real `erlexec`, BEAM,
@@ -97,6 +99,14 @@ Formula source currently present in this repository includes:
 - `redis`, the Redis 7.2.5 threaded in-memory service and command-line client,
   built directly from the checksum-pinned upstream source; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
+
+`homebrew-bootstrap` owns a closed build recipe under
+`Kandelo/recipes/homebrew-bootstrap/`. The Formula binds its complete recipe
+tree and permitted environment without receiving Kandelo's registry resolver,
+package cache, or local-binary installer. The recipe independently
+reconstructs the upstream Git tree from Homebrew's verified archive before
+applying the reviewed Kandelo platform patch, then packages the patched tree
+and guest policy as one Formula bottle.
 
 The `bc`, `lsof`, `modeset`, `netcat`, `posix-utils-lite`, `nethack`, and
 `fbdoom` Formulae own closed build recipes under `Kandelo/recipes/`. Each
