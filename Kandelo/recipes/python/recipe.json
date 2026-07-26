@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "dependencies": [
+    "kandelo-dev/tap-core/zlib"
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 10086,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "0fa5137c8f158aba2f1bb0820f4fbe761996b28de238997d35192c3fa1dfe977"
+    },
+    {
+      "bytes": 2153,
+      "mode": "0644",
+      "path": "config.site-wasm32-posix",
+      "sha256": "e32b2bbd6eced139ea372cb2bdfda2bfb60059801fc0f01484315cb738386ee6"
+    }
+  ]
+}
