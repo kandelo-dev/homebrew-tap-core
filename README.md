@@ -95,7 +95,11 @@ Formula source currently present in this repository includes:
 - `tcl`, the threaded Tcl 9 interpreter, standard library, extension loader,
   and development files;
 - `redis`, the Redis 7.2.5 threaded in-memory service and command-line client,
-  built directly from the checksum-pinned upstream source; and
+  built directly from the checksum-pinned upstream source;
+- `mariadb`, the relational database server and upstream test client for both
+  wasm32 and wasm64; its native generators are isolated from target SDK
+  activation, and its closed recipe consumes the tap's libcxx, PCRE2, and Zlib
+  kegs through a private build sysroot; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
 
 These seven exact-shell Formulae and Ruby intentionally use the transitional
