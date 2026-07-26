@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${KANDELO_RUBY_WORK_DIR:?KANDELO_RUBY_WORK_DIR must name the Ruby package work root}"
+: "${KANDELO_RUBY_SOURCE_DIR:?KANDELO_RUBY_SOURCE_DIR must name the verified Ruby source root}"
+STABLE_RUBY_BUILD_ROOT="/usr/src/kandelo-packages/ruby"
+STABLE_RUBY_SOURCE_ROOT="/usr/src/ruby-4.0.5"
+
+# Ruby retains __FILE__ strings from assertions in its optimized runtime.
+# WHY: schema-3 stages Homebrew's verified source separately from the recipe
+# work root. Map both roots so compiler metadata remains truthful but the
+# resulting bottle does not depend on either caller-owned temporary path.
+exec wasm32posix-cc \
+    "-ffile-prefix-map=${KANDELO_RUBY_WORK_DIR}=${STABLE_RUBY_BUILD_ROOT}" \
+    "-fdebug-prefix-map=${KANDELO_RUBY_WORK_DIR}=${STABLE_RUBY_BUILD_ROOT}" \
+    "-fmacro-prefix-map=${KANDELO_RUBY_WORK_DIR}=${STABLE_RUBY_BUILD_ROOT}" \
+    "-ffile-prefix-map=${KANDELO_RUBY_SOURCE_DIR}=${STABLE_RUBY_SOURCE_ROOT}" \
+    "-fdebug-prefix-map=${KANDELO_RUBY_SOURCE_DIR}=${STABLE_RUBY_SOURCE_ROOT}" \
+    "-fmacro-prefix-map=${KANDELO_RUBY_SOURCE_DIR}=${STABLE_RUBY_SOURCE_ROOT}" \
+    "$@"
