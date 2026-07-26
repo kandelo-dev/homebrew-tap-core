@@ -3436,23 +3436,40 @@ class KandeloFormulaSupportTest < Minitest::Test
     ENV.replace(original) if original
   end
 
-  def test_ruby_declares_every_registry_script_native_build_dependency
+  def test_ruby_declares_every_closed_recipe_native_build_dependency
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
     native_declarations = formula.lines.grep(
-      /^\s*depends_on (?:"(?:rust|unzip)"|KandeloFormulaSupport::WabtRequirement)/,
+      /^\s*depends_on (?:"(?:gpatch|llvm|make|perl|python@3\.13|rust|unzip)"|KandeloFormulaSupport::(?:Binaryen|Wabt)Requirement) => :build/,
     )
 
     assert_equal [
+      %Q(  depends_on "gpatch" => :build\n),
+      "  depends_on KandeloFormulaSupport::BinaryenRequirement => :build\n",
+      "  depends_on KandeloFormulaSupport::WabtRequirement => :build\n",
+      %Q(  depends_on "llvm" => :build\n),
+      %Q(  depends_on "make" => :build\n),
+      %Q(  depends_on "perl" => :build\n),
+      %Q(  depends_on "python@3.13" => :build\n),
       %Q(  depends_on "rust" => :build\n),
       %Q(  depends_on "unzip" => :build\n),
-      "  depends_on KandeloFormulaSupport::WabtRequirement => :build\n",
     ], native_declarations
+
+    assert_includes formula, "  KANDELO_TAP_RECIPE = true\n"
+    assert_includes formula, 'depends_on "kandelo-dev/tap-core/libyaml"'
+    assert_includes formula, "kandelo_build_tap_recipe("
+    refute_includes formula, "KANDELO_REGISTRY_BRIDGE"
+    refute_includes formula, "kandelo_build_package("
+
+    recipe = File.read(File.expand_path("../../recipes/ruby/build.sh", __dir__), encoding: "UTF-8")
+    refute_match(/\b(?:curl|wget)\b/, recipe)
+    refute_includes recipe, "build-deps resolve"
+    refute_includes recipe, "install-local-binary"
   end
 
   def test_ruby_exercises_the_installed_guest_runtime_without_rubylib
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
 
-    assert_includes formula, "  revision 1\n"
+    assert_includes formula, "  revision 2\n"
     assert_includes formula, '"WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX'
     assert_includes formula, "guest_files: runtime_files"
     assert_includes formula, "raise 'RUBYLIB leaked into installed runtime test'"

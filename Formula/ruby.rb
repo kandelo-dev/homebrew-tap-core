@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Ruby < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   RUBY_API_VERSION = "4.0.0".freeze
   GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/ruby".freeze
@@ -15,30 +15,34 @@ class Ruby < Formula
   version "4.0.5"
   sha256 "7d6149079a63f8ae1d326c9fa65c6019ba2dc3155eae7b39159817911c88958e"
   license any_of: ["Ruby", "BSD-2-Clause"]
-  revision 1
+  revision 2
 
-  # No bottle block yet: bottles are machine-generated on publish (Track C) via
-  # brew bottle / pr-pull. Until then ordinary installs must fail rather than
-  # enter this protected publisher-only source bridge. A hand-written
-  # placeholder sha would make a default install try to pour a nonexistent
-  # bottle and obscure that publication boundary.
-  # The registry bridge resolves its host target with rustc and builds
-  # wasm-local-root-spill with cargo/rustc inside caller-owned scratch. Keep
-  # that native toolchain explicit instead of depending on the publisher PATH.
+  depends_on "gpatch" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
+  depends_on "llvm" => :build
+  depends_on "make" => :build
+  depends_on "perl" => :build
+  depends_on "python@3.13" => :build
+  # wasm-local-root-spill is a trusted Kandelo build transform implemented in
+  # Rust. Keep its toolchain explicit instead of inheriting publisher state.
   depends_on "rust" => :build
   depends_on "unzip" => :build
-  depends_on KandeloFormulaSupport::WabtRequirement => :build
+  depends_on "kandelo-dev/tap-core/libyaml"
   depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin"
   skip_clean "lib/ruby"
 
   def install
-    out_dir = kandelo_build_package(script_env: {
-      "RUBY_VERSION"                => version.to_s,
-      "WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX,
-      "WASM_POSIX_DEP_ZLIB_DIR"     => formula_opt_prefix("kandelo-dev/tap-core/zlib"),
-    })
+    kandelo_require_arch!("wasm32")
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "f4b5ecd7092796bbc5f03bed70db8341669dcc9384bc19ade18e5f073b5af49a",
+      script_env:      {
+        "WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX,
+      },
+    )
+    kandelo_validate_wasm_artifact(out_dir/"ruby.wasm", fork: :required)
     kandelo_install_bin(out_dir, "ruby.wasm", "ruby")
 
     runtime_stage = buildpath/"ruby-runtime-stage"
@@ -155,11 +159,4 @@ class Ruby < Formula
       assert_equal expected, output, command
     end
   end
-
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "bd3129e6d39b077e104b98a99d6539939ee38f353b83612fc0aef0581a41f3db"
-  end
-
 end
