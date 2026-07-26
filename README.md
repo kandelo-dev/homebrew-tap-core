@@ -18,6 +18,8 @@ and runtime-test mechanics live in
 
 Formula source currently present in this repository includes:
 
+- `homebrew-bootstrap`, the deterministic patched Homebrew source tree and
+  guest environment policy used to activate `brew` lazily inside Kandelo;
 - `zlib` and `ruby`, the first dependency and heavy-runtime Formulae;
 - `python`, CPython 3.13.3 with its complete standard library and license tree;
 - `erlang`, an embedded Erlang/OTP 28.2 runtime with the real `erlexec`, BEAM,
@@ -105,6 +107,15 @@ shell output, validate final Wasm artifacts, and run through Kandelo.
 The six recipes that accept already-extracted source isolate Homebrew's
 checksum-verified tree from sibling caller-owned work and output roots; neither
 the verified source nor the reviewed Kandelo checkout is a build destination.
+
+`homebrew-bootstrap` owns a closed build recipe under
+`Kandelo/recipes/homebrew-bootstrap/`. The Formula binds its complete recipe
+tree and permitted environment without receiving Kandelo's registry resolver,
+package cache, or local-binary installer. The recipe independently
+reconstructs the upstream Git tree from Homebrew's verified archive before
+applying the reviewed Kandelo platform patch, then packages the patched tree
+and guest policy as one Formula bottle.
+
 NetHack compiles and tests its data lookup against
 `/home/linuxbrew/.linuxbrew/opt/nethack/share/nethack`, so a composed image must
 link both its executable and installed share tree at the poured guest opt path.

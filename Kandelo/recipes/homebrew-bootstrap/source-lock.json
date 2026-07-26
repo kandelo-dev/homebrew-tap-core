@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "kind": "kandelo-homebrew-bootstrap-tap-recipe-lock",
+  "package": {
+    "name": "homebrew-bootstrap",
+    "version": "6.0.3-4-g4ead861",
+    "arch": "wasm32"
+  },
+  "source": {
+    "repository": "https://github.com/Homebrew/brew.git",
+    "revision": "4ead8619231cb15cbe15e8e8188081e347d6f7cd",
+    "archive_url": "https://github.com/Homebrew/brew/archive/4ead8619231cb15cbe15e8e8188081e347d6f7cd.tar.gz",
+    "archive_sha256": "4b9fdfb4872bd2fbff001c69f91ec7b2c2b7a956459132b6c3adba878f551155",
+    "tree_git_oid": "6b79e77f57960a9e03fdc4934fd065cfacd9cb0c",
+    "commit_timestamp": 1782142555
+  },
+  "patch": {
+    "path": "patches/0001-add-kandelo-wasm-bottle-tags.patch",
+    "sha256": "9c52238d811616c210cd1ecdd23b0192a3e0333219a70b34d8ea6d77dbcfbf74"
+  },
+  "license": {
+    "expression": "BSD-2-Clause AND GPL-2.0-or-later",
+    "upstream": {
+      "spdx": "BSD-2-Clause",
+      "path": "LICENSE.txt",
+      "sha256": "f80329e58613ad669c0e73cb132d8060b9b2c55e339c73848068e4d1567f4627",
+      "bytes": 1334
+    },
+    "kandelo_patch": {
+      "spdx": "GPL-2.0-or-later",
+      "evidence_path": "PATCH-LICENSE.md",
+      "evidence_sha256": "22eef64e04c8d9dc0dbff51ce5e79622914789391b85aa908316cb62dd19094c"
+    }
+  },
+  "prepared": {
+    "patched_tree_git_oid": "55de49b411de0ca122ec9eb8f0fc8b0a7a32dca6",
+    "patched_tree_sha256": "5b4dc5392afc6ccab74e77abde590bc8353a89f8be4665cb3b296700a0236c22",
+    "portable_ruby_version": "4.0.5_1",
+    "archive_format": "kandelo-deterministic-zip-v1"
+  },
+  "outputs": {
+    "archive": {
+      "path": "homebrew-bootstrap.zip",
+      "sha256": "68095c118c8bb99245124fe8558f9211bf6d22e2331852ed27541bd34b725eb9",
+      "bytes": 5026784
+    },
+    "environment": {
+      "path": "homebrew-brew.env",
+      "sha256": "2eb3f05703b6a6f23feabda24f622bacd068115c7f74a0eac51bb4085e9eec5a",
+      "bytes": 210
+    }
+  }
+}
