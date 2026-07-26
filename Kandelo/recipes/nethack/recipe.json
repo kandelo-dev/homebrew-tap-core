@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "dependencies": [
+    "kandelo-dev/tap-core/ncurses"
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 20458,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "184e772cb24fa74b5dbe29d8e224709e9a8228328bd16ae451db1ad809361c3e"
+    }
+  ]
+}

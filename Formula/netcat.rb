@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Netcat < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   desc "GNU network utility for Kandelo"
   homepage "https://netcat.sourceforge.net/"
@@ -22,9 +22,12 @@ class Netcat < Formula
   def install
     kandelo_require_arch!("wasm32")
 
-    # Transitional Tier-2 bridge: the registry recipe owns the reviewed
-    # network compatibility patch set and its exact configure assertions.
-    out_dir = kandelo_build_package(script_env: {})
+    # The closed tap recipe owns the reviewed network compatibility patches
+    # and exact cross-configure assertions.
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "dcb564efa9895ed1a6c6f189c1c3e45298023b4109b612a0268bd08f19c94b36",
+      script_env: {},
+    )
     kandelo_validate_wasm_artifact(out_dir/"nc.wasm", fork: :forbidden)
     kandelo_install_bin(out_dir, "nc.wasm", "nc")
   end

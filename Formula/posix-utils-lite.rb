@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class PosixUtilsLite < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   UTILITIES = %w[
     ar asa cal cflow compress ctags cxref ed ex fuser gencat getconf gettext
@@ -27,10 +27,13 @@ class PosixUtilsLite < Formula
   def install
     kandelo_require_arch!("wasm32")
 
-    # Transitional Tier-2 bridge: keep the current 37-command multicall
-    # recipe intact for the exact-shell proof. Splitting commands into their
-    # maintained upstream Formulae remains explicit migration debt.
-    out_dir = kandelo_build_package(script_env: {})
+    # Keep the current 37-command multicall recipe intact for the exact-shell
+    # proof. Splitting commands into maintained upstream Formulae remains
+    # explicit follow-up work.
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "f08d235dbe6d43cb3e44a4295c17af1d36b79513cd9e955a9947898a12723649",
+      script_env: {},
+    )
     UTILITIES.each do |utility|
       kandelo_validate_wasm_artifact(out_dir/"#{utility}.wasm", fork: :forbidden)
     end

@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Bc < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   desc "Arbitrary-precision numeric processing language for Kandelo"
   homepage "https://www.gnu.org/software/bc/"
@@ -16,13 +16,19 @@ class Bc < Formula
   depends_on "bison" => :build
   depends_on "flex" => :build
   depends_on "m4" => :build
+  depends_on "python@3.13" => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/bc"
 
   def install
     kandelo_require_arch!("wasm32")
-    out_dir = kandelo_build_package(script_env: {})
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "643bd3d7034a8f2dfc7a9596055a3ba723f7df31de52341a19ccef7137d6ee61",
+      script_env: {
+        "BC_PYTHON" => formula_opt_libexec("python@3.13")/"bin/python3",
+      },
+    )
     kandelo_validate_wasm_artifact(out_dir/"bc.wasm", fork: :forbidden)
     kandelo_install_bin(out_dir, "bc.wasm", "bc")
   end
