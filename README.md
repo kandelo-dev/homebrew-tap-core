@@ -101,8 +101,21 @@ Formula source currently present in this repository includes:
   data, shell-worker support, and Node.js/Chromium host-runtime coverage;
 - `node`, the Node.js 22 compatibility command composed without copying
   SpiderMonkey's Wasm module, with exact embedded-bootstrap provenance and
-  package-owned Node.js/Chromium runtime coverage; and
+  package-owned Node.js/Chromium runtime coverage;
+- `npm`, the complete npm 10.9.2 CLI and bundled dependency tree, composed on
+  the `node` Formula without copying Node or SpiderMonkey bytes and tested with
+  an offline local package install and execution on Node.js and Chromium; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
+
+The historical `packages/registry/npm` directory is a fetch-only support
+directory, not a standalone `package.toml` recipe. The `npm` Formula therefore
+defines its smallest truthful replacement ownership unit: the exact upstream
+CLI archive, its complete bundled module/docs/manual tree, the Kandelo
+compatibility runner and modules, and the `npm`/`npx` launchers. Its declared
+`node` dependency remains the only route to Node/SpiderMonkey engine bytes.
+Writable project state, demo metadata, and the base shell remain image-owned,
+so the same npm bottle can be selected lazily from the default shell or
+precomposed into the Node demo without creating a second npm recipe.
 
 These seven exact-shell Formulae and Ruby intentionally use the transitional
 `kandelo_build_package` bridge for their first bottle proof. Their Formulae pin
