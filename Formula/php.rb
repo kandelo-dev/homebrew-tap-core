@@ -354,7 +354,9 @@ class Php < Formula
           disabled_shared_build.match?(s.inreplace_string)
       end
 
-      system host_make, "-j#{ENV.make_jobs}", "cli", "fpm"
+      # Validation canary: test whether the hosted runner is exhausting memory
+      # while compiling PHP at Homebrew's default parallelism.
+      system host_make, "-j2", "V=1", "cli", "fpm"
 
       extension_units = {
         "opcache"   => %w[
