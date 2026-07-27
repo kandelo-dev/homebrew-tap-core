@@ -73,7 +73,12 @@ async function waitForProcessTreeRemoval(
         })),
       ),
     ]);
-    livePids = liveProcesses.map((candidate) => candidate.pid);
+    // The kernel intentionally retains a synthetic init identity and may host
+    // other unrelated processes. This launch owns only the PIDs observed
+    // through its process events, so scope both lifecycle views to that set.
+    livePids = liveProcesses
+      .filter((candidate) => observedPids.has(candidate.pid))
+      .map((candidate) => candidate.pid);
     retainedPids = ownership
       .filter(({ maps }) => maps !== null)
       .map(({ pid }) => pid);
