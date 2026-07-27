@@ -49,7 +49,6 @@ class Spidermonkey < Formula
   depends_on "llvm" => :build
   depends_on "node" => :build
   depends_on "python@3.13" => :build
-  depends_on "rust" => :build
   depends_on "kandelo-dev/tap-core/libcxx"
   depends_on "kandelo-dev/tap-core/openssl"
   depends_on "kandelo-dev/tap-core/zlib"
@@ -164,9 +163,9 @@ class Spidermonkey < Formula
       # graph. Name every declared native tool explicitly, while the CC/CXX
       # variables below keep all engine objects on Kandelo's SDK path.
       kandelo_prepend_path! formula_opt_bin("python@3.13")
-      kandelo_prepend_path! formula_opt_bin("rust")
       kandelo_prepend_path! formula_opt_bin("cbindgen")
       kandelo_prepend_path! formula_opt_bin("node")
+      rustc, cargo = kandelo_pinned_rust_tools
 
       prefix_maps = {
         buildpath => stable_source,
@@ -225,8 +224,8 @@ class Spidermonkey < Formula
       ENV["STRIP"] = kandelo_tool("strip", root)
       ENV["HOST_CC"] = host_llvm/"bin/clang"
       ENV["HOST_CXX"] = host_llvm/"bin/clang++"
-      ENV["RUSTC"] = formula_opt_bin("rust")/"rustc"
-      ENV["CARGO"] = formula_opt_bin("rust")/"cargo"
+      ENV["RUSTC"] = rustc
+      ENV["CARGO"] = cargo
       ENV["CBINDGEN"] = formula_opt_bin("cbindgen")/"cbindgen"
       ENV["NODEJS"] = formula_opt_bin("node")/"node"
       ENV["CFLAGS"] = [
@@ -586,6 +585,26 @@ class Spidermonkey < Formula
   end
 
   private
+
+  def kandelo_pinned_rust_tools
+    # WHY: Homebrew's host Rust bottle does not ship the wasm32 standard
+    # library. Kandelo's reviewed rust-toolchain.toml does, and the publisher
+    # already evaluates that exact M4 dev shell. Resolve it once rather than
+    # entering Nix for every rustc process Mozilla launches.
+    shell = kandelo_host_tool("sh")
+    candidates = Utils.safe_popen_read(
+      shell, "-c", "command -v rustc && command -v cargo"
+    ).lines.map(&:strip).select { |line| line.start_with?("/nix/store/") }
+    tools = candidates.to_h do |path|
+      candidate = Pathname(path)
+      [candidate.basename.to_s, candidate]
+    end
+    valid = tools.keys.sort == %w[cargo rustc] && candidates.length == 2 &&
+            tools.values.all?(&:executable?)
+    odie "Kandelo dev shell did not expose immutable rustc and cargo paths" unless valid
+
+    [tools.fetch("rustc"), tools.fetch("cargo")]
+  end
 
   def staged_resource_bytes(name)
     bytes = nil
