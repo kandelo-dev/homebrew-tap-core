@@ -1,2 +1,6 @@
 # Unified-diff context markers are patch syntax, not source whitespace errors.
 Kandelo/patches/**/*.patch -whitespace
+
+# WHY: These are functional recipe patch payloads whose context and added
+# whitespace must remain byte-preserved, so source whitespace checks do not apply.
+Kandelo/recipes/**/patches/*.patch -whitespace
