@@ -5,6 +5,7 @@ class Spidermonkey < Formula
 
   KANDELO_SOURCE_COMMIT = "88d26f4c627a363e01e567574916aff4e00828ee".freeze
   NODE_COMPAT_VERSION = "22.0.0".freeze
+  STABLE_TOOLCHAIN_SOURCE = "/usr/src/kandelo-toolchain-store".freeze
   NODE_COMPAT_COMPONENT_SHA256 = {
     "adapter"   => "381433bd5b55e2269feb905e70474abfaeba06fb51f546ec8ea2b38fc3a5e60a",
     "bootstrap" => "799e78a91f00b203a701dc353a47e038b82e9c37b9ae7b7c06bbbf9a87738788",
@@ -167,13 +168,19 @@ class Spidermonkey < Formula
       kandelo_prepend_path! formula_opt_bin("node")
       rustc, cargo = kandelo_pinned_rust_tools
 
-      prefix_maps = {
-        buildpath => stable_source,
-        root      => "/usr/src/kandelo",
-        libcxx    => "/usr/src/kandelo-deps/libcxx",
-        openssl   => "/usr/src/kandelo-deps/openssl",
-        zlib      => "/usr/src/kandelo-deps/zlib",
-      }.flat_map do |from, to|
+      # WHY: SpiderMonkey intentionally retains source locations in runtime
+      # diagnostics. Remap every compiler-owned root to a stable virtual source
+      # tree instead of stripping useful locations or leaking the randomized
+      # Homebrew build directory and content-addressed Nix store path.
+      source_prefixes = {
+        buildpath              => stable_source,
+        root                   => "/usr/src/kandelo",
+        libcxx                 => "/usr/src/kandelo-deps/libcxx",
+        openssl                => "/usr/src/kandelo-deps/openssl",
+        zlib                   => "/usr/src/kandelo-deps/zlib",
+        Pathname("/nix/store") => STABLE_TOOLCHAIN_SOURCE,
+      }
+      prefix_maps = source_prefixes.flat_map do |from, to|
         [Pathname(from), Pathname(from).realpath].uniq.flat_map do |source|
           [
             "-ffile-prefix-map=#{source}=#{to}",
@@ -182,9 +189,14 @@ class Spidermonkey < Formula
           ]
         end
       end
+      rust_prefix_maps = source_prefixes.flat_map do |from, to|
+        [Pathname(from), Pathname(from).realpath].uniq.map do |source|
+          "--remap-path-prefix=#{source}=#{to}"
+        end
+      end
 
       mozconfig.write <<~MOZCONFIG
-        export RUSTFLAGS='-Ctarget-feature=+atomics,+bulk-memory,+mutable-globals --cfg=getrandom_backend="custom" --remap-path-prefix=#{buildpath}=#{stable_source}'
+        export RUSTFLAGS='-Ctarget-feature=+atomics,+bulk-memory,+mutable-globals --cfg=getrandom_backend="custom" #{rust_prefix_maps.join(" ")}'
         ac_add_options --enable-project=js
         ac_add_options --target=wasm32-unknown-linux-musl
         ac_add_options --disable-debug
@@ -309,6 +321,11 @@ class Spidermonkey < Formula
   test do
     assert_path_exists share/"licenses/spidermonkey/LICENSE-MPL-2.0"
     assert_path_exists share/"licenses/spidermonkey/COPYING-GPL-2.0-or-later"
+    artifact = (bin/"js").binread
+    refute_includes artifact, "/nix/store/"
+    refute_match %r{/tmp/kandelo-homebrew\.[^/]+/tmp/spidermonkey-[^/]+/}, artifact
+    assert_includes artifact, "/usr/src/firefox-#{version}/"
+    assert_includes artifact, "#{STABLE_TOOLCHAIN_SOURCE}/"
     assert_equal EXPECTED_IMPORTS, wasm_imports(bin/"js")
     node_compat_manifest = JSON.parse((share/"kandelo/spidermonkey/node-compat.json").read)
     assert_equal 1, node_compat_manifest.fetch("schema")
