@@ -8,6 +8,8 @@ interface BrowserSmokeRequest {
   timeoutMs: number;
   guestProgram: string;
   vfsUrl: string;
+  launchCount: number;
+  maxProcessMemoryBytes?: number;
 }
 
 interface BrowserSmokeResult {
@@ -34,6 +36,32 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+async function waitForProcessMemory(
+  kernel: BrowserKernel,
+  pid: number,
+  timeoutMs: number,
+): Promise<number> {
+  const deadline = Date.now() + Math.min(timeoutMs, 10_000);
+  while (Date.now() < deadline) {
+    const process = (await kernel.enumProcs()).find((candidate) => candidate.pid === pid);
+    if (process?.memoryBytes != null) return process.memoryBytes;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`formula browser process ${pid} did not report its memory size`);
+}
+
+async function waitForProcessRemoval(
+  kernel: BrowserKernel,
+  pid: number,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if (!(await kernel.enumProcs()).some((candidate) => candidate.pid === pid)) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`formula browser process ${pid} remained after exit`);
 }
 
 async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
@@ -81,7 +109,7 @@ async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
       ["PATH", "/usr/local/bin:/usr/bin:/bin"],
       ...Object.entries(request.env),
     ]);
-    const process = await kernel.boot({
+    const firstProcess = await kernel.boot({
       kernelWasm,
       vfsImage,
       argv: [request.guestProgram, ...request.argv],
@@ -91,10 +119,37 @@ async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
       gid: 0,
       stdin: new Uint8Array(),
     });
-    const exitCode = await withTimeout(
-      process.exit,
-      request.timeoutMs,
-    );
+    let exitCode = 0;
+    for (let index = 0; index < request.launchCount; index++) {
+      const process = index === 0
+        ? firstProcess
+        : await kernel.spawnFromVfs(
+          request.guestProgram,
+          [request.guestProgram, ...request.argv],
+          {
+            env: [...guestEnv].map(([key, value]) => `${key}=${value}`),
+            cwd: "/root",
+            uid: 0,
+            gid: 0,
+            stdin: new Uint8Array(),
+          },
+        );
+      const memoryBytes = request.maxProcessMemoryBytes === undefined
+        ? null
+        : await waitForProcessMemory(kernel, process.pid, request.timeoutMs);
+      exitCode = await withTimeout(process.exit, request.timeoutMs);
+      await waitForProcessRemoval(kernel, process.pid);
+      if (
+        memoryBytes !== null &&
+        memoryBytes >= request.maxProcessMemoryBytes!
+      ) {
+        throw new Error(
+          `formula browser process ${process.pid} used ${memoryBytes} bytes; ` +
+          `expected less than ${request.maxProcessMemoryBytes}`,
+        );
+      }
+      if (exitCode !== request.expectedStatus) break;
+    }
     stdout += stdoutDecoder.decode();
     stderr += stderrDecoder.decode();
     const mergedBytes = new Uint8Array(

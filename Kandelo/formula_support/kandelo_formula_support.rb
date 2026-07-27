@@ -900,8 +900,8 @@ module KandeloFormulaSupport
   # and Binaryen as build dependencies because the authoritative guards inspect
   # Wasm sections with wasm-objdump and use Binaryen for fallback extraction.
   def kandelo_validate_wasm_artifact(wasm_path, fork: :auto, forbidden_paths: [])
-    unless [:auto, :required, :forbidden].include?(fork)
-      odie "invalid Kandelo fork policy #{fork.inspect}; expected :auto, :required, or :forbidden"
+    unless [:auto, :required, :forbidden, :disabled].include?(fork)
+      odie "invalid Kandelo fork policy #{fork.inspect}; expected :auto, :required, :forbidden, or :disabled"
     end
 
     root = kandelo_require_root!
@@ -927,6 +927,15 @@ module KandeloFormulaSupport
           echo "ERROR: fork-free artifact imports kernel.kernel_fork: $artifact" >&2
           exit 1
         fi
+        wasm_require_no_fork_instrumentation "$artifact"
+      SH
+    when :disabled
+      <<~SH
+        # WHY: A very large Wasm program may deliberately retain libc's
+        # otherwise-unused fork import while a documented engine boundary
+        # prevents the continuation rewrite. This policy still rejects stale
+        # or partial instrumentation; the Formula must separately freeze its
+        # exact import surface so a newly reachable fork path cannot hide here.
         wasm_require_no_fork_instrumentation "$artifact"
       SH
     else
@@ -1674,13 +1683,25 @@ module KandeloFormulaSupport
   # the same absolute-path and bounded-rootfs contract as Node formula tests.
   # `expected_status:` and `merge_stderr:` permit exact negative-path checks
   # without converting a guest failure into a browser-runner failure.
+  # `launch_count:` runs the program repeatedly in one browser kernel;
+  # `max_process_memory_bytes:` also bounds each launch's reported initial
+  # memory and requires every exited PID to disappear from the process table.
   def kandelo_run_browser_wasm(
     bin_path, argv, argv0: nil, guest_program_path: nil, env: {}, exec_programs: {}, guest_files: {},
-    timeout_ms: 120_000, allow_stderr: false, merge_stderr: false, expected_status: 0
+    timeout_ms: 120_000, allow_stderr: false, merge_stderr: false, expected_status: 0,
+    launch_count: 1, max_process_memory_bytes: nil
   )
     root = kandelo_require_root!
     valid_status = expected_status.is_a?(Integer) && expected_status.between?(0, 255)
     odie "expected browser status must be an integer from 0 through 255" unless valid_status
+    valid_launch_count = launch_count.is_a?(Integer) && launch_count.between?(1, 16)
+    odie "browser launch count must be an integer from 1 through 16" unless valid_launch_count
+    valid_memory_limit = max_process_memory_bytes.nil? ||
+                         (max_process_memory_bytes.is_a?(Integer) &&
+                          max_process_memory_bytes.between?(1, 1_073_741_824))
+    unless valid_memory_limit
+      odie "browser process memory limit must be nil or an integer from 1 through 1073741824"
+    end
     if (node = ENV.fetch("HOMEBREW_KANDELO_NODE", nil)).to_s != ""
       ENV.prepend_path "PATH", File.dirname(node)
     end
@@ -1700,7 +1721,9 @@ module KandeloFormulaSupport
       allowStderr:    allow_stderr,
       mergeStderr:    merge_stderr,
       expectedStatus: expected_status,
+      launchCount:    launch_count,
     }
+    config_values[:maxProcessMemoryBytes] = max_process_memory_bytes unless max_process_memory_bytes.nil?
     config_values[:guestProgram] = guest_program_path unless guest_program_path.nil?
     config = JSON.generate(config_values)
     guest_files_manifest = testpath/"#{wasm_path.basename}.browser-guest-files.json"
