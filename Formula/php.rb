@@ -354,7 +354,15 @@ class Php < Formula
           disabled_shared_build.match?(s.inreplace_string)
       end
 
-      system host_make, "-j#{ENV.make_jobs}", "cli", "fpm"
+      # Validation canary: expose the command stream and the status that
+      # Homebrew's abbreviated failure report did not preserve.
+      system "bash", "-c", <<~SH, "--", host_make.to_s, ENV.make_jobs.to_s
+        set +e
+        "$1" "-j$2" V=1 cli fpm
+        status=$?
+        printf 'KANDELO_PHP_GMAKE_EXIT_STATUS=%s\n' "$status" >&2
+        exit "$status"
+      SH
 
       extension_units = {
         "opcache"   => %w[
