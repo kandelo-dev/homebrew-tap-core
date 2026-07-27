@@ -7,15 +7,71 @@ patches, installation, bottles, and `test do`. Kandelo-specific SDK activation,
 wasm cross-compilation, and kernel-backed tests belong in the shared
 `KandeloFormulaSupport` mixin.
 
-Simple packages build Homebrew's staged source directly in `install`. The
+Simple packages build Homebrew's staged source directly in `install`. A port
+that still needs a substantial script should own a closed tap recipe at
+`Kandelo/recipes/<formula>/` and invoke `kandelo_build_tap_recipe`. The
 transitional `kandelo_build_package` registry-script bridge is reserved for
-heavy ports whose build logic has not yet been decomposed, and each use remains
-explicit migration debt. That bridge is executable only in the protected
-publisher after it installs a fixed, read-only Tier-2 attestation binding the
-complete Formula and registry-build input closure. Ordinary `brew install`
-consumers do not receive that authority: they must pour a published bottle, and
-a registry-bridged Formula without a bottle must fail closed rather than fall
-back to source.
+ports that have not yet moved, and each use remains explicit migration debt.
+Both helpers are executable only in the protected publisher after it installs
+a fixed, read-only attestation. Ordinary `brew install` consumers do not
+receive that authority: they must pour a published bottle, and a scripted
+Formula without a bottle must fail closed rather than fall back to source.
+
+A tap recipe contains `recipe.json` plus every script, patch, or configuration
+input it uses. The manifest lists the sorted direct target Formula dependencies,
+one `.sh` entrypoint, and every other member's canonical relative path, byte
+count, `0644`/`0755` mode, and SHA-256. The Formula repeats the manifest
+SHA-256 as a literal:
+
+```ruby
+KANDELO_TAP_RECIPE = true
+
+def install
+  out_dir = kandelo_build_tap_recipe(
+    manifest_sha256: "...",
+    script_env: {
+      "EXAMPLE_FEATURE" => "enabled",
+    },
+  )
+  prefix.install out_dir.children
+end
+```
+
+Do not copy a registry build script unchanged. Convert source reads to
+`WASM_POSIX_DEP_SOURCE_DIR`, scratch writes to `WASM_POSIX_DEP_WORK_DIR`, final
+artifacts to `WASM_POSIX_DEP_OUT_DIR`, patches and other recipe inputs to
+`WASM_POSIX_DEP_RECIPE_DIR`, and each direct target dependency to its
+`WASM_POSIX_DEP_<NAME>_DIR` Homebrew keg. Tap recipes receive the SDK, sysroot,
+and fork instrumenter, but the publisher makes the package registry, resolver,
+local-binary mirror, transported registry cache, and
+`scripts/install-local-binary.sh` inaccessible.
+
+Closed recipes do not execute as the Formula build user. Formula support sends
+one bounded, canonical request through the publisher's fixed root-owned client
+to a one-request root supervisor. The supervisor starts a network-disabled
+transient service under a distinct recipe uid, mounts only the attested
+recipe/source/platform/sysroot/dependency closure, waits for the entrypoint,
+kills and collects the entire recipe cgroup, validates the result, and copies it
+into a root-owned read-only tree. The Formula receives only that sealed tree.
+The supervisor, client, and sealed-output parent are outside the platform
+projection and are never mounted into the recipe service; putting the client
+below `HOMEBREW_KANDELO_ROOT` would let a recipe invoke the privileged boundary
+recursively.
+
+The preflight, Formula runtime, and root runner independently reject undeclared
+or changed input nodes, dependency environment-name collisions, traversal,
+symlinks or hard links at authority boundaries, invalid modes, dependency
+drift, and environment overrides. Output paths are canonical UTF-8 without
+control characters and are bounded to 4,096 bytes. Output is limited to
+262,144 entries, 1 GiB per regular file, and 2 GiB of aggregate logical file
+bytes; sparse files do not bypass the logical-byte limits. Directories must be
+`0555`/`0755`, regular files must be `0444`/`0555`/`0644`/`0755`, and special,
+set-id, or writable-by-group/other nodes are rejected. Formula support hashes
+the complete sealed tree again before returning it, so a changed response or
+post-seal mutation fails rather than reaching `prefix.install`.
+
+Changing recipe inputs requires updating `recipe.json` and its Formula literal;
+the resulting Formula SHA-256 invalidates reuse for that Formula only.
 
 Formula tests must execute produced Wasm through Kandelo. Formula `version`
 plus `revision` defines the Homebrew package version; a bottle `rebuild`
@@ -47,6 +103,15 @@ Ruby declares `rust` as an ordinary build dependency and WABT through the
 allowlisted Requirement because its bridge resolves the host target with
 `rustc`, builds `wasm-local-root-spill` with `cargo` and `rustc` inside
 caller-owned scratch space, and inspects the result with `wasm-objdump`.
+
+Closed recipes must not call `kandelo_host_tool`, Nix, `scripts/dev-shell.sh`,
+or a Cargo fallback in the Kandelo source tree. Declare ordinary host tools as
+unqualified Homebrew `:build` dependencies; Formula support sends their exact
+versioned keg roots to the runner, which checks the recipe `PATH` against those
+kegs and the publisher's sealed native requirements. Fork instrumentation and
+local-root spilling use the publisher's prebuilt, root-owned
+`WASM_POSIX_FORK_INSTRUMENT` and `WASM_POSIX_LOCAL_ROOT_SPILL` executables from
+the minimal platform projection.
 
 Final linked programs must declare the WABT and Binaryen Requirements with
 `:build` and call `kandelo_validate_wasm_artifact` after their last optimizer
