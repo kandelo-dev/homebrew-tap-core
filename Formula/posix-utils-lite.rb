@@ -31,8 +31,8 @@ class PosixUtilsLite < Formula
     # proof. Splitting commands into maintained upstream Formulae remains
     # explicit follow-up work.
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "f08d235dbe6d43cb3e44a4295c17af1d36b79513cd9e955a9947898a12723649",
-      script_env: {},
+      manifest_sha256: "4b02297159d900c58a1d44839337581f61cb63bcbc650725afbd33f4a71c3adb",
+      script_env:      {},
     )
     UTILITIES.each do |utility|
       kandelo_validate_wasm_artifact(out_dir/"#{utility}.wasm", fork: :forbidden)

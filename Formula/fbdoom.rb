@@ -6,9 +6,6 @@ class Fbdoom < Formula
   KANDELO_TAP_RECIPE = true
 
   FBDOOM_COMMIT = "17280163bc95e5d954d2efaa0633489b763b4cd1".freeze
-  CHOCOLATE_DOOM_COMMIT = "35fb1372d10756ca27eca05665bd8a7cebc71c05".freeze
-  CHOCOLATE_DOOM_URL = "https://github.com/chocolate-doom/chocolate-doom/archive/#{CHOCOLATE_DOOM_COMMIT}.tar.gz".freeze
-  CHOCOLATE_DOOM_SHA256 = "dc62c13cab469e19e0ad295b2dd7e460263c637a39c51d3771e96dabb08ecab2".freeze
 
   desc "Framebuffer Doom engine for Kandelo"
   homepage "https://github.com/maximevince/fbDOOM"
@@ -24,9 +21,9 @@ class Fbdoom < Formula
   skip_clean "bin/fbdoom"
 
   resource "chocolate-doom" do
-    url CHOCOLATE_DOOM_URL
+    url "https://github.com/chocolate-doom/chocolate-doom/archive/35fb1372d10756ca27eca05665bd8a7cebc71c05.tar.gz"
     version "3.1.0"
-    sha256 CHOCOLATE_DOOM_SHA256
+    sha256 "dc62c13cab469e19e0ad295b2dd7e460263c637a39c51d3771e96dabb08ecab2"
   end
 
   resource "doom-shareware" do
@@ -37,27 +34,10 @@ class Fbdoom < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-    resource_root = buildpath/"kandelo-package-resources"
-    chocolate_source = resource_root/"chocolate-doom"
-    resource_root.mkpath
-
-    # Preserve the reviewed fbdev/input/audio patch set. Homebrew verifies both
-    # pinned archives; the tap recipe copies and patches them only in
-    # caller-owned work space.
-    resource("chocolate-doom").stage do
-      chocolate_source.mkpath
-      Pathname.pwd.children.each do |entry|
-        cp_r(entry, chocolate_source/entry.basename)
-      end
-    end
-
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "c7d700b058460fec33110a10789f9b19442cb0d540d0ae6df29a4f86efdefea5",
-      script_env: {
-        "FBDOOM_CHOCOLATE_DOOM_SOURCE_DIR"    => chocolate_source,
-        "FBDOOM_CHOCOLATE_DOOM_SOURCE_SHA256" => CHOCOLATE_DOOM_SHA256,
-        "FBDOOM_CHOCOLATE_DOOM_SOURCE_URL"    => CHOCOLATE_DOOM_URL,
-      },
+      manifest_sha256: "ca42552694867b177c089696ec6df67e67eefe1d275087fdb27c10c99dd4df98",
+      resources:       ["chocolate-doom"],
+      script_env:      {},
     )
     kandelo_validate_wasm_artifact(out_dir/"fbdoom.wasm", fork: :forbidden)
     kandelo_install_bin(out_dir, "fbdoom.wasm", "fbdoom")

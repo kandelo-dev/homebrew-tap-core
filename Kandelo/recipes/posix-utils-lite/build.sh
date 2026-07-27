@@ -5,6 +5,9 @@ set -euo pipefail
 # Output: WASM_POSIX_DEP_OUT_DIR/<utility>.wasm.
 
 SOURCE_ROOT="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+# WHY: this path names the immutable source file inside the attested Kandelo
+# archive. The tap recipe owns the build; it does not consult the legacy
+# registry manifest, resolver, build script, or binary index at this path.
 SRC="$SOURCE_ROOT/packages/registry/posix-utils-lite/src/posix-utils-lite.c"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
 SYSROOT="${WASM_POSIX_SYSROOT:?}"

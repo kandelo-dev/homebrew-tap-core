@@ -8,18 +8,16 @@ set -euo pipefail
 
 HERE="${WASM_POSIX_DEP_RECIPE_DIR:?}"
 SRC="${WASM_POSIX_DEP_SOURCE_DIR:?}"
-CDOOM_SRC="${FBDOOM_CHOCOLATE_DOOM_SOURCE_DIR:?}"
+CDOOM_SRC="${WASM_POSIX_DEP_RESOURCE_CHOCOLATE_DOOM_DIR:?}"
 OUT_BIN="${WASM_POSIX_DEP_OUT_DIR:?}/fbdoom.wasm"
 
 # fbDOOM has no release tarball, so pin the exact upstream commit represented
 # by both the package manifest and Homebrew Formula. fbDOOM removed its
-# OPL/MIDI/MUS sources with SDL; pin chocolate-doom 3.1.0 for those files.
+# OPL/MIDI/MUS sources with SDL. The publisher separately attests and projects
+# the Chocolate Doom 3.1.0 resource at CDOOM_SRC for those files.
 FBDOOM_COMMIT="17280163bc95e5d954d2efaa0633489b763b4cd1"
 FBDOOM_SOURCE_URL="${WASM_POSIX_DEP_SOURCE_URL:?}"
 FBDOOM_SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
-CDOOM_COMMIT="35fb1372d10756ca27eca05665bd8a7cebc71c05"
-CDOOM_SOURCE_URL="${FBDOOM_CHOCOLATE_DOOM_SOURCE_URL:?}"
-CDOOM_SOURCE_SHA256="${FBDOOM_CHOCOLATE_DOOM_SOURCE_SHA256:?}"
 
 [ "${WASM_POSIX_DEP_TARGET_ARCH:?}" = "wasm32" ] &&
     [ "${WASM_POSIX_DEP_VERSION:?}" = "0.1.0" ] || {
@@ -27,10 +25,12 @@ CDOOM_SOURCE_SHA256="${FBDOOM_CHOCOLATE_DOOM_SOURCE_SHA256:?}"
     exit 2
 }
 [ "$FBDOOM_SOURCE_URL" = "https://github.com/maximevince/fbDOOM/archive/${FBDOOM_COMMIT}.tar.gz" ] &&
-    [ "$FBDOOM_SOURCE_SHA256" = "77f57cee68fed438dffdba96f6070b8975c16652a63ddf4fb967994e5585a38a" ] &&
-    [ "$CDOOM_SOURCE_URL" = "https://github.com/chocolate-doom/chocolate-doom/archive/${CDOOM_COMMIT}.tar.gz" ] &&
-    [ "$CDOOM_SOURCE_SHA256" = "dc62c13cab469e19e0ad295b2dd7e460263c637a39c51d3771e96dabb08ecab2" ] || {
+    [ "$FBDOOM_SOURCE_SHA256" = "77f57cee68fed438dffdba96f6070b8975c16652a63ddf4fb967994e5585a38a" ] || {
     echo "ERROR: fbDOOM source identity differs from the reviewed recipe" >&2
+    exit 2
+}
+[ -d "$CDOOM_SRC" ] && [ ! -L "$CDOOM_SRC" ] || {
+    echo "ERROR: projected Chocolate Doom resource is unavailable" >&2
     exit 2
 }
 
