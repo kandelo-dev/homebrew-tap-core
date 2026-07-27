@@ -83,6 +83,8 @@ Formula source currently present in this repository includes:
   preserving the exact current shell output set while maintained upstream
   replacements continue to move into independent Formulae;
 - `netcat`, GNU's virtual-network client and server utility;
+- `msmtpd`, the minimal local SMTP listener used to capture or relay messages
+  through a Dash-backed delivery command;
 - `lsof`, Kandelo's procfs-aware open-file reporter;
 - `nethack`, the ncurses game binary and its complete immutable data tree;
 - `fbdoom`, the pinned framebuffer Doom engine with its reviewed Kandelo
