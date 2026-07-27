@@ -36,7 +36,7 @@ class Node < Formula
       using: :nounzip
   version "22.0.0"
   sha256 "799e78a91f00b203a701dc353a47e038b82e9c37b9ae7b7c06bbbf9a87738788"
-  license "MPL-2.0"
+  license all_of: ["MPL-2.0", "GPL-2.0-or-later"]
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
@@ -73,9 +73,25 @@ class Node < Formula
     end
     (share/"kandelo/node-compat").install bootstrap => "bootstrap.js"
 
-    engine_license = spidermonkey/"share/licenses/spidermonkey/LICENSE"
-    odie "SpiderMonkey dependency did not install its MPL license" unless engine_license.file?
-    (share/"licenses/node").install_symlink engine_license => "LICENSE"
+    engine_licenses = spidermonkey/"share/licenses/spidermonkey"
+    %w[LICENSE-MPL-2.0 COPYING-GPL-2.0-or-later].each do |license_name|
+      engine_license = engine_licenses/license_name
+      odie "SpiderMonkey dependency did not install #{license_name}" unless engine_license.file?
+      (share/"licenses/node").install_symlink engine_license
+    end
+  end
+
+  def caveats
+    <<~EOS
+      This command is Kandelo's SpiderMonkey-backed Node.js API compatibility
+      runtime. It reports the compatibility target v22.0.0, but it is not the
+      upstream Node.js or V8 runtime.
+
+      The child_process exec/spawn surface is a popen-backed compatibility
+      subset; child_process.fork, native .node addons, and V8-specific APIs are
+      not implemented. worker_threads supports the tested eval-worker and
+      SharedArrayBuffer/Atomics subset, not the complete Node worker protocol.
+    EOS
   end
 
   test do
@@ -89,7 +105,8 @@ class Node < Formula
     assert_path_exists share/"kandelo/node-compat/bootstrap.js"
     assert_equal NODE_COMPAT_COMPONENT_SHA256.fetch("bootstrap"),
       Digest::SHA256.file(share/"kandelo/node-compat/bootstrap.js").hexdigest
-    assert_path_exists share/"licenses/node/LICENSE"
+    assert_path_exists share/"licenses/node/LICENSE-MPL-2.0"
+    assert_path_exists share/"licenses/node/COPYING-GPL-2.0-or-later"
 
     guest_sources = {
       "/opt/node-formula-test/data.json"                => JSON.generate({ "value" => 41 }),
