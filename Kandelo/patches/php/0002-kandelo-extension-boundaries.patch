@@ -1,0 +1,103 @@
+--- a/ext/dba/dba.c
++++ b/ext/dba/dba.c
+@@ -454,7 +454,25 @@
+ 	return NULL;
+ }
+ /* }}} */
++
++/*
++ * WHY: DB-lock mode canonicalizes info->path only after PHP's first
++ * same-process conflict check. Repeat the same guard after canonicalization so
++ * a relative-path handle cannot bypass an existing canonical-path lock.
++ */
++static bool php_dba_lock_conflicts(const dba_info *info, int lock_mode)
++{
++	dba_info *other;
+ 
++	if ((other = php_dba_find(info->path)) == NULL) {
++		return false;
++	}
++
++	return ( (lock_mode&LOCK_EX)        && (other->lock.mode&(LOCK_EX|LOCK_SH)) )
++	    || ( (other->lock.mode&LOCK_EX) && (lock_mode&(LOCK_EX|LOCK_SH))        );
++}
++/* wasm-dba-db-lock-path-conflict patch applied */
++
+ static zend_always_inline zend_string *php_dba_zend_string_dup_safe(zend_string *s, bool persistent)
+ {
+ 	if (ZSTR_IS_INTERNED(s) && !persistent) {
+@@ -475,7 +493,7 @@
+ static void php_dba_open(INTERNAL_FUNCTION_PARAMETERS, bool persistent)
+ {
+ 	dba_mode_t modenr;
+-	dba_info *info, *other;
++	dba_info *info;
+ 	const dba_handler *hptr;
+ 	const char *error = NULL;
+ 	int lock_mode, lock_flag = 0;
+@@ -750,14 +768,8 @@
+ 	 * check if we already have a locking call open that should block this call
+ 	 * the problem is some systems would allow read during write
+ 	 */
+-	if (hptr->flags & DBA_LOCK_ALL) {
+-		if ((other = php_dba_find(info->path)) != NULL) {
+-			if (   ( (lock_mode&LOCK_EX)        && (other->lock.mode&(LOCK_EX|LOCK_SH)) )
+-			    || ( (other->lock.mode&LOCK_EX) && (lock_mode&(LOCK_EX|LOCK_SH))        )
+-			   ) {
+-				error = "Unable to establish lock (database file already open)"; /* force failure exit */
+-			}
+-		}
++	if ((hptr->flags & DBA_LOCK_ALL) && php_dba_lock_conflicts(info, lock_mode)) {
++		error = "Unable to establish lock (database file already open)"; /* force failure exit */
+ 	}
+ 
+ #ifdef PHP_WIN32
+@@ -810,6 +822,9 @@
+ 			FREE_PERSISTENT_RESOURCE_KEY();
+ 			RETURN_FALSE;
+ 		}
++		if (!error && is_db_lock && (hptr->flags & DBA_LOCK_ALL) && php_dba_lock_conflicts(info, lock_mode)) {
++			error = "Unable to establish lock (database file already open)"; /* force failure exit */
++		}
+ 		if (!error && !php_stream_supports_lock(info->lock.fp)) {
+ 			error = "Stream does not support locking";
+ 		}
+--- a/ext/opcache/ZendAccelerator.c
++++ b/ext/opcache/ZendAccelerator.c
+@@ -3177,6 +3177,21 @@
+ /********************************************/
+ /* End of non-SHM dependent initializations */
+ /********************************************/
++/*
++ * WHY: Kandelo process memories cannot provide coherent cross-process
++ * MAP_SHARED writes. Opcache remains supported through its file cache, but
++ * starting its shared-memory backend would give FPM workers divergent cache
++ * and lock state.
++ */
++#if defined(__wasm__) /* kandelo-opcache-file-cache-only */
++	if (!ZCG(accel_directives).file_cache_only) {
++		accel_startup_ok = false;
++		zend_accel_error_noreturn(
++			ACCEL_LOG_FATAL,
++			"Kandelo requires opcache.file_cache_only=1 because cross-process MAP_SHARED is unavailable.");
++		return SUCCESS;
++	}
++#endif
+ 	file_cache_only = ZCG(accel_directives).file_cache_only;
+ 	if (!file_cache_only) {
+ 		size_t shm_size = ZCG(accel_directives).memory_consumption;
+--- a/ext/sockets/sockets.c
++++ b/ext/sockets/sockets.c
+@@ -1965,7 +1965,11 @@
+ 		}
+ #endif
+ 
+-#ifdef SO_ATTACH_REUSEPORT_CBPF
++/*
++ * WHY: Kandelo exposes the numeric socket option for source compatibility,
++ * but without Linux filter.h it does not have sock_filter or sock_fprog.
++ */
++#if defined(SO_ATTACH_REUSEPORT_CBPF) && defined(HAVE_LINUX_FILTER_H)
+ 		case SO_ATTACH_REUSEPORT_CBPF: {
+ 			convert_to_long(arg4);
+ 
