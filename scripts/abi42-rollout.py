@@ -293,7 +293,7 @@ class CampaignContract:
 
 @dataclasses.dataclass(frozen=True)
 class CampaignSelection:
-    """One exact partition of the tap catalog for a fresh campaign."""
+    """One exact partition of the campaign-owned Formula catalog."""
 
     rebuild: tuple[str, ...]
     reuse: tuple[str, ...]
@@ -1545,12 +1545,16 @@ def load_snapshot(tap: GitTap, sha: str) -> TapSnapshot:
     )
     actual_formulae = tap.formula_names(sha)
     expected_formulae = frozenset(FORMULA_ORDER)
-    if actual_formulae != expected_formulae:
+    if not expected_formulae.issubset(actual_formulae):
         missing = sorted(expected_formulae - actual_formulae)
-        extra = sorted(actual_formulae - expected_formulae)
         raise RolloutError(
-            f"tap catalog differs from the 63-Formula plan; missing={missing}, extra={extra}"
+            f"tap is missing Formulae from the frozen 63-Formula campaign: {missing}"
         )
+    # WHY: FORMULA_ORDER is the immutable ABI-42 shell campaign, not a
+    # repository-wide prohibition on future packages. Unrelated Formulae stay
+    # outside this snapshot, its dependency waves, and its dispatch authority.
+    # Source-pair validation still rejects adding one between a reserved source
+    # and a finalizer caller, so this does not widen an in-flight campaign.
 
     sources: dict[str, str] = {}
     sidecars: dict[str, Mapping[str, Any] | None] = {}

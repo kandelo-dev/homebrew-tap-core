@@ -1131,6 +1131,25 @@ class RolloutControllerTests(unittest.TestCase):
         tap.show_optional.side_effect = show_optional
         return rollout.load_snapshot(tap, self.head)
 
+    def test_snapshot_keeps_new_formulae_outside_the_frozen_campaign(self):
+        self.assertIn("msmtpd", self.tap.formula_names(self.head))
+        self.assertNotIn("msmtpd", self.snapshot.formula_sources)
+        self.assertEqual(
+            set(rollout.FORMULA_ORDER),
+            set(self.snapshot.formula_sources),
+        )
+
+    def test_snapshot_still_rejects_a_missing_campaign_formula(self):
+        tap = mock.Mock(wraps=self.tap)
+        tap.formula_names.return_value = frozenset(rollout.FORMULA_ORDER[1:])
+
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "tap is missing Formulae from the frozen 63-Formula campaign: "
+            r"\['asa'\]",
+        ):
+            rollout.load_snapshot(tap, self.head)
+
     @contextmanager
     def _descendant_tap(self, changes):
         with tempfile.TemporaryDirectory() as directory:
