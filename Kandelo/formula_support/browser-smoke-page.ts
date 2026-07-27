@@ -52,15 +52,41 @@ async function waitForProcessMemory(
   throw new Error(`formula browser process ${pid} did not report its memory size`);
 }
 
-async function waitForProcessTreeRemoval(kernel: BrowserKernel): Promise<void> {
+async function waitForProcessTreeRemoval(
+  kernel: BrowserKernel,
+  observedPids: Set<number>,
+): Promise<void> {
   const deadline = Date.now() + 5_000;
+  let livePids: number[] = [];
+  let retainedPids: number[] = [];
   while (Date.now() < deadline) {
-    if ((await kernel.enumProcs()).length === 0) return;
+    // WHY: enumProcs() is intentionally a live-process view and omits exited
+    // and limbo entries. readProcMaps() stays non-null while the kernel still
+    // owns an observed PID, so the two queries together distinguish worker
+    // exit from actual process-table reaping.
+    const [liveProcesses, ownership] = await Promise.all([
+      kernel.enumProcs(),
+      Promise.all(
+        [...observedPids].map(async (pid) => ({
+          pid,
+          maps: await kernel.readProcMaps(pid),
+        })),
+      ),
+    ]);
+    livePids = liveProcesses.map((candidate) => candidate.pid);
+    retainedPids = ownership
+      .filter(({ maps }) => maps !== null)
+      .map(({ pid }) => pid);
+    if (livePids.length === 0 && retainedPids.length === 0) {
+      observedPids.clear();
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  const remaining = (await kernel.enumProcs()).map((candidate) => candidate.pid);
   throw new Error(
-    `formula browser process tree remained after exit: ${remaining.join(",")}`,
+    "formula browser process tree remained after exit: " +
+      `live ${livePids.join(",") || "none"}; ` +
+      `retained ${retainedPids.join(",") || "none"}`,
   );
 }
 
@@ -72,10 +98,14 @@ async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
   const mergedChunks: Uint8Array[] = [];
   let stdout = "";
   let stderr = "";
+  const observedPids = new Set<number>();
   const kernel = new BrowserKernel({
     kernelOwnedFs: true,
     maxWorkers: 6,
     maxMemoryPages: 16_384,
+    onProcessEvent: (event) => {
+      if (event.kind === "spawn") observedPids.add(event.pid);
+    },
     onStdout: (data) => {
       stdout += stdoutDecoder.decode(data, { stream: true });
       mergedChunks.push(data.slice());
@@ -134,6 +164,9 @@ async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
             stdin: new Uint8Array(),
           },
         );
+      // Keep the directly launched process in the ownership check even if a
+      // future host changes the timing of its main-thread process event.
+      observedPids.add(process.pid);
       const memoryBytes = request.maxProcessMemoryBytes === undefined
         ? null
         : await waitForProcessMemory(kernel, process.pid, request.timeoutMs);
@@ -141,7 +174,7 @@ async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
       // WHY: a parent exit is not sufficient lifecycle evidence. Require every
       // child and zombie from this launch to disappear before reusing the same
       // kernel for the next launch.
-      await waitForProcessTreeRemoval(kernel);
+      await waitForProcessTreeRemoval(kernel, observedPids);
       if (
         memoryBytes !== null &&
         memoryBytes >= request.maxProcessMemoryBytes!
