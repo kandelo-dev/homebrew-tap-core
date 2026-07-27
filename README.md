@@ -75,6 +75,8 @@ Formula source currently present in this repository includes:
   `sysconf`, `pathconf`, and `confstr` interfaces.
 - `ctags`, Universal Ctags' maintained tag generator, `readtags` query client,
   and optscript interpreter with complete C and C++ workflows.
+- `nginx`, the forked HTTP and reverse proxy service with PCRE2 rewrite and
+  zlib compression support.
 - `tar`, the GNU archive creation and extraction CLI.
 - `wget`, GNU HTTP and HTTPS retrieval linked against the tap TLS and compression roots.
 - `coreutils`, the GNU filesystem, text, checksum, and shell utility suite.
