@@ -106,7 +106,11 @@ class Php < Formula
     end
 
     kandelo_wasm_build do |root|
-      host_make = formula_opt_bin("make")/"gmake"
+      # WHY: this is the declared build-only native GNU Make, not the tap's
+      # wasm `make` program. Homebrew names that native executable `gmake` on
+      # macOS to avoid replacing the system tool, but simply `make` on Linux.
+      host_make = formula_opt_bin("make")/(OS.mac? ? "gmake" : "make")
+      odie "PHP requires the declared native GNU Make executable: #{host_make}" unless host_make.executable?
       stable_source = "/usr/src/php-#{version}"
       # WHY: the SDK's C++ driver treats its sysroot as one coherent C/C++
       # toolchain. Prepending libc++ headers from a bottle while leaving
