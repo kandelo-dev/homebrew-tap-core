@@ -1131,6 +1131,25 @@ class RolloutControllerTests(unittest.TestCase):
         tap.show_optional.side_effect = show_optional
         return rollout.load_snapshot(tap, self.head)
 
+    def test_snapshot_keeps_new_formulae_outside_the_frozen_campaign(self):
+        self.assertIn("msmtpd", self.tap.formula_names(self.head))
+        self.assertNotIn("msmtpd", self.snapshot.formula_sources)
+        self.assertEqual(
+            set(rollout.FORMULA_ORDER),
+            set(self.snapshot.formula_sources),
+        )
+
+    def test_snapshot_still_rejects_a_missing_campaign_formula(self):
+        tap = mock.Mock(wraps=self.tap)
+        tap.formula_names.return_value = frozenset(rollout.FORMULA_ORDER[1:])
+
+        with self.assertRaisesRegex(
+            rollout.RolloutError,
+            "tap is missing Formulae from the frozen 63-Formula campaign: "
+            r"\['asa'\]",
+        ):
+            rollout.load_snapshot(tap, self.head)
+
     @contextmanager
     def _descendant_tap(self, changes):
         with tempfile.TemporaryDirectory() as directory:
@@ -1233,6 +1252,54 @@ class RolloutControllerTests(unittest.TestCase):
         self.assertEqual(
             "437fde2524ea6ad9c44933f8abbf995a46841009",
             rollout.LEGACY_PREPUBLICATION_GENERATION_SHA,
+        )
+
+    def test_failed_m3_campaign_authority_remains_auditable(self):
+        self.assertEqual(
+            (
+                rollout.FAILED_M3_MAIN_SHA,
+                rollout.FAILED_M3_MAIN_SHA,
+                "exact",
+            ),
+            rollout.APPROVED_PUBLICATION_WORKFLOWS[
+                rollout.FAILED_M3_CALLER_SHA256
+            ],
+        )
+        self.assertEqual(
+            (
+                rollout.FAILED_M3_MAIN_SHA,
+                rollout.FAILED_M3_MAIN_SHA,
+                rollout.FAILED_M3_MAIN_SHA,
+                rollout.FAILED_M3_ROOTFS_GENERATION_TAG,
+            ),
+            rollout.APPROVED_CAMPAIGN_CONTRACTS[
+                rollout.FAILED_M3_CALLER_SHA256
+            ],
+        )
+        failed = dataclasses.replace(
+            self._campaign_contract(),
+            publisher_sha=rollout.FAILED_M3_MAIN_SHA,
+            consumer_sha=rollout.FAILED_M3_MAIN_SHA,
+            package_generation_sha=rollout.FAILED_M3_MAIN_SHA,
+            package_generation_tag=rollout.FAILED_M3_ROOTFS_GENERATION_TAG,
+            workflow_sha256=rollout.FAILED_M3_CALLER_SHA256,
+        )
+        rollout.validate_campaign_contract(failed)
+        # WHY: map membership alone would not prove that the exact caller
+        # committed in the failed-run ledger still satisfies workflow wiring.
+        historical_snapshot = rollout.load_snapshot(
+            self.tap,
+            "44cac58162ee06c700226578663f34362770286f",
+        )
+        self.assertEqual(
+            rollout.FAILED_M3_CALLER_SHA256,
+            rollout.workflow_sha256(historical_snapshot),
+        )
+        rollout.validate_workflow(
+            FakeGitHub(),
+            historical_snapshot,
+            rollout.FAILED_M3_MAIN_SHA,
+            campaign_contract=failed,
         )
 
     def test_fresh_campaign_requires_one_exact_reviewed_publication_contract(self):
@@ -5520,6 +5587,7 @@ class RolloutControllerTests(unittest.TestCase):
                             "event": "repository_dispatch",
                             "head_sha": tap_sha,
                             "status": "queued",
+                            "run_attempt": 1,
                             "display_title": rollout.workflow_run_title(
                                 formula, dispatch_token
                             ),
@@ -5837,6 +5905,32 @@ class RolloutControllerTests(unittest.TestCase):
             with self.subTest(status=status, path=path):
                 self.assertFalse(rollout.finalizer_owned_change(status, path))
 
+    def test_token_correlation_rejects_a_rerun_attempt(self):
+        token = "abi42-" + "4a" * 16
+        title = rollout.workflow_run_title("asa", token)
+        for run_attempt in (None, True, 2):
+            with self.subTest(run_attempt=run_attempt):
+                state = self._token_state(("asa", token, "submitted"))
+                github = self._candidate_github(
+                    self._run(
+                        123,
+                        self.head,
+                        run_attempt=run_attempt,
+                        display_title=title,
+                    )
+                )
+                with self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    "is a rerun; only attempt 1 is eligible",
+                ):
+                    rollout.correlate_pending_dispatches(
+                        self.tap,
+                        github,
+                        state,
+                    )
+                self.assertEqual(1, len(state["pending_dispatches"]))
+                self.assertEqual([], state["dispatches"])
+
     def test_token_correlation_requires_exact_event_head_formula_and_token(self):
         token = "abi42-" + "5" * 32
         state = self._token_state(("asa", token, "submitted"))
@@ -6021,6 +6115,7 @@ class RolloutControllerTests(unittest.TestCase):
                         "event": "repository_dispatch",
                         "head_sha": self.head,
                         "status": "queued",
+                        "run_attempt": 1,
                         "display_title": rollout.workflow_run_title(
                             formula, dispatch_token
                         ),
@@ -6138,6 +6233,7 @@ class RolloutControllerTests(unittest.TestCase):
                         "event": "repository_dispatch",
                         "head_sha": self.head,
                         "status": "queued",
+                        "run_attempt": 1,
                         "display_title": rollout.workflow_run_title(
                             formula, dispatch_token
                         ),

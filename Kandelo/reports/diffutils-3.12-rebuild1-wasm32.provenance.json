@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/diffutils.json",
-      "sha256": "0b3f86890e13c35bbc542791fcbf2908cf756eea5001691007840280f834d154"
+      "sha256": "0eda26ce7ec5721fd581f0c169142a125536756767adfa9dd380eb6ad5b7951f"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/diffutils-3.12-rebuild1-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "80c08da0680c874b8f8de1936ca7ae0c10a4ed19ed56b24aeead9af2bc8ec1b1"
+      "sha256": "bf9014ebcc9aff269d403c418b6e083d06b76d59d90c87f456a4584abe857134"
     },
     "provenance_json": {
       "path": "Kandelo/reports/diffutils-3.12-rebuild1-wasm32.provenance.json",
-      "sha256": "41306515e1111bdc8d4c61e15040c630fd070fb004fc5547dfaa63b94b71a27d"
+      "sha256": "0c40562816c9f0099045d8aefc4e5eecd11f1d630864e76688036564ae3b9c0d"
     }
   },
   "repositories": {

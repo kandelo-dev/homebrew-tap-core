@@ -34,9 +34,9 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # main commit. Its rootfs package generation is admitted separately by a
 # content-addressed release tag, so preserved staging data can never become
 # caller authority. Dry runs retain independently selectable staging sources.
-CURRENT_KANDELO_WORKFLOW_SHA = "5f448e68ec031108de42e965f5284944861b6ea2"
+CURRENT_KANDELO_WORKFLOW_SHA = "88d26f4c627a363e01e567574916aff4e00828ee"
 CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
-PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-d66825c03af08133538018dca0bad5732d8eaf5add3dfd513b3c1bce9210256e"
+PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-adc14c9c0923787e260585b7ddc4517b5b9013f642212e039804f32bf892a5f9"
 
 def check(condition, message)
   raise message unless condition

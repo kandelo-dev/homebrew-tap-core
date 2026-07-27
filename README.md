@@ -88,13 +88,17 @@ Formula source currently present in this repository includes:
   preserving the exact current shell output set while maintained upstream
   replacements continue to move into independent Formulae;
 - `netcat`, GNU's virtual-network client and server utility;
+- `msmtpd`, the minimal local SMTP listener used to capture or relay messages
+  through a Dash-backed delivery command;
 - `lsof`, Kandelo's procfs-aware open-file reporter;
 - `nethack`, the ncurses game binary and its complete immutable data tree;
 - `fbdoom`, the pinned framebuffer Doom engine with its reviewed Kandelo
   input, audio, and save-path adaptations (the shareware IWAD remains an
   external, integrity-checked demo asset);
 - `tcl`, the threaded Tcl 9 interpreter, standard library, extension loader,
-  and development files; and
+  and development files;
+- `redis`, the Redis 7.2.5 threaded in-memory service and command-line client,
+  built directly from the checksum-pinned upstream source; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
 
 These seven exact-shell Formulae and Ruby intentionally use the transitional
@@ -481,6 +485,20 @@ abandoned dispatch history. Schema-1 ABI 42 ledgers retain their explicitly
 reviewed workflow-trust migration for recovery. The manifest-backed shell
 campaign uses schema 4; it never inherits or reinterprets older campaign state
 and never rotates its complete authority implicitly.
+
+If a schema-4 campaign fails before its selected rebuild is published and the
+repair advances the Kandelo consumer or package generation, preserve that
+campaign's private ledger and committed failure report as historical evidence.
+Do not recover, overwrite, or reuse the failed ledger. Land the corrected
+publisher, consumer, generation tag, and complete caller hash together on a new
+protected `Tmanifest`, then initialize a fresh mode-0600 ledger from that exact
+authority. The typed manifest remains byte-identical, including all 23 reused
+bottle identities and digests; only the caller authority changes.
+
+Token-based dispatch acknowledgement accepts only workflow attempt 1. A
+manual rerun retains the original run ID, title, token, and caller commit, but
+it does not represent a new request journaled by the campaign ledger.
+
 Read-only status may derive an implicit Formula version from that Formula's
 package-owned sidecar, but a write-capable
 controller cross-checks the result against the frozen ledger. A missing ledger
