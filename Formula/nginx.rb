@@ -14,6 +14,7 @@ class Nginx < Formula
   sha256 "e5823dc6f45610993def93ebf6cfce68264af4958c77e874b7d20f3709001b8f"
   license "BSD-2-Clause"
 
+  depends_on "kandelo-dev/tap-core/dash" => [:build, :test]
   depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
   depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
   depends_on "kandelo-dev/tap-core/pcre2"
@@ -23,6 +24,7 @@ class Nginx < Formula
 
   def install
     kandelo_require_arch!("wasm32")
+    dash = formula_opt_bin("kandelo-dev/tap-core/dash")/"dash"
     pcre2 = formula_opt_prefix("kandelo-dev/tap-core/pcre2")
     zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
 
@@ -52,21 +54,20 @@ class Nginx < Formula
       # probes must exercise the exact checkout that owns this SDK and ABI.
       rm_r Pathname(root)/"host/dist", force: true
       target_runner = buildpath/"kandelo-nginx-configure-runner"
-      configure_runner = Pathname(root)/"examples/run-example.ts"
+      # WHY: Formula#path identifies the exact reviewed Formula source. Its
+      # sibling support runtime is already sealed into the source closure, so
+      # resolving from that identity avoids a second mutable Tap lookup.
+      configure_runner =
+        Pathname(path).realpath.parent.parent/"Kandelo/formula_support/run-network-wasm.ts"
       node = ENV.fetch("HOMEBREW_KANDELO_NODE", "node")
       node = "node" if node.empty?
       runner_environment = kandelo_node_runner_environment
-      runner_invocation = if runner_environment.empty?
-        # Outside the isolated publisher there is no sealed program-index
-        # checker to restore. Re-enter this checkout's declared dev shell and
-        # remove target compiler variables before the host resolver runs.
-        "PATH=/nix/var/nix/profiles/default/bin:$PATH exec " \
-          "#{(Pathname(root)/"scripts/dev-shell.sh").to_s.shellescape} " \
-          "env -u CC -u CXX -u AR -u RANLIB -u NM -u STRIP -u PKG_CONFIG " \
-          "#{node.shellescape}"
-      else
-        "#{runner_environment}exec #{node.shellescape}"
-      end
+      runner_exec_programs = JSON.generate("/bin/sh" => dash.to_s)
+      runner_guest_env = JSON.generate("PATH" => "/bin")
+      runner_contract =
+        "KANDELO_FORMULA_EXEC_PROGRAMS_JSON=#{runner_exec_programs.shellescape} " \
+        "KANDELO_FORMULA_GUEST_ENV_JSON=#{runner_guest_env.shellescape} "
+      runner_invocation = "#{runner_environment}#{runner_contract}exec #{node.shellescape}"
       target_runner.write <<~SH
         #!/bin/sh
         set -eu
@@ -74,17 +75,15 @@ class Nginx < Formula
           /*) program="$1" ;;
           *) program="$PWD/$1" ;;
         esac
-        # run-example.ts recognizes absolute Wasm paths by their suffix, while
-        # nginx deliberately names configure probes without an extension.
-        # A sibling hard link preserves the probe bytes and is removed by
-        # nginx's existing autotest cleanup.
-        wasm_program="$program.wasm"
-        ln -f "$program" "$wasm_program"
         cd #{root.to_s.shellescape}
+        # WHY: configure probes are individual target programs, not the full
+        # example shell. The isolated Formula runner stages an explicitly
+        # declared /bin/sh without resolving Kandelo's unrelated demo catalog
+        # or emitting dev-shell setup text into output-valued probes.
         #{runner_invocation} \
           --experimental-wasm-exnref --import tsx/esm \
           #{configure_runner.to_s.shellescape} \
-          "$wasm_program" </dev/null
+          #{root.to_s.shellescape} "$program" </dev/null
       SH
       chmod 0755, target_runner
       ENV["NGX_TEST_RUNNER"] = target_runner
@@ -175,8 +174,8 @@ class Nginx < Formula
       forbidden_paths: [pcre2, zlib],
     )
 
-    assert_path_exists conf/"mime.types"
-    assert_path_exists conf/"fastcgi_params"
+    assert_path_exists prefix/"conf/mime.types"
+    assert_path_exists prefix/"conf/fastcgi_params"
     assert_path_exists man8/"nginx.8"
     assert_path_exists pkgshare/"LICENSE"
     assert_path_exists prefix/"html/index.html"
@@ -258,5 +257,183 @@ class Nginx < Formula
     assert_equal "gzip", gzip_headers["content-encoding"]
     assert responses[1]["body"].start_with?("H4sI")
     assert_equal 404, responses[2]["status"]
+
+    browser_probe_source = testpath/"nginx-browser-probe.c"
+    browser_probe = testpath/"nginx-browser-probe.wasm"
+    browser_probe_source.write <<~'C'
+      #define _POSIX_C_SOURCE 200809L
+
+      #include <arpa/inet.h>
+      #include <netinet/in.h>
+      #include <stdio.h>
+      #include <stdlib.h>
+      #include <string.h>
+      #include <sys/socket.h>
+      #include <time.h>
+      #include <unistd.h>
+
+      static int request(
+          int port,
+          const char *path,
+          const char *extra_header,
+          int expected_status,
+          const char *expected_text,
+          int expect_gzip) {
+        struct sockaddr_in address;
+        struct timespec pause = { .tv_sec = 0, .tv_nsec = 20 * 1000 * 1000 };
+        char request_bytes[512];
+        char response[65536];
+        int fd = -1;
+
+        memset(&address, 0, sizeof(address));
+        address.sin_family = AF_INET;
+        address.sin_port = htons((unsigned short)port);
+        address.sin_addr.s_addr = htonl(0x7f000001UL);
+
+        for (int attempt = 0; attempt < 500; attempt++) {
+          fd = socket(AF_INET, SOCK_STREAM, 0);
+          if (fd < 0) return 10;
+          if (connect(fd, (struct sockaddr *)&address, sizeof(address)) == 0) break;
+          close(fd);
+          fd = -1;
+          nanosleep(&pause, NULL);
+        }
+        if (fd < 0) return 11;
+
+        int request_length = snprintf(
+          request_bytes,
+          sizeof(request_bytes),
+          "GET %s HTTP/1.1\r\n"
+          "Host: localhost\r\n"
+          "%s"
+          "Connection: close\r\n\r\n",
+          path,
+          extra_header);
+        if (request_length < 0 || (size_t)request_length >= sizeof(request_bytes)) return 12;
+
+        size_t sent = 0;
+        while (sent < (size_t)request_length) {
+          ssize_t count = send(fd, request_bytes + sent, (size_t)request_length - sent, 0);
+          if (count <= 0) return 13;
+          sent += (size_t)count;
+        }
+
+        size_t used = 0;
+        while (used < sizeof(response) - 1) {
+          ssize_t count = recv(fd, response + used, sizeof(response) - 1 - used, 0);
+          if (count < 0) return 14;
+          if (count == 0) break;
+          used += (size_t)count;
+        }
+        close(fd);
+        response[used] = '\0';
+
+        char expected_status_line[32];
+        snprintf(
+          expected_status_line,
+          sizeof(expected_status_line),
+          "HTTP/1.1 %d ",
+          expected_status);
+        if (strncmp(response, expected_status_line, strlen(expected_status_line)) != 0) return 15;
+
+        char *body = strstr(response, "\r\n\r\n");
+        if (body == NULL) return 16;
+        body += 4;
+        if (expected_text != NULL && strstr(body, expected_text) == NULL) return 17;
+
+        if (expect_gzip) {
+          if (strstr(response, "\r\nContent-Encoding: gzip\r\n") == NULL) return 18;
+          unsigned char *cursor = (unsigned char *)body;
+          unsigned char *end = (unsigned char *)response + used;
+          int found_magic = 0;
+          while (cursor + 1 < end) {
+            if (cursor[0] == 0x1f && cursor[1] == 0x8b) {
+              found_magic = 1;
+              break;
+            }
+            cursor++;
+          }
+          if (!found_magic) return 19;
+        }
+        return 0;
+      }
+
+      int main(int argc, char **argv) {
+        if (argc != 2) return 2;
+        int port = atoi(argv[1]);
+        if (port < 1 || port > 65535) return 3;
+
+        int result = request(
+          port,
+          "/old/message.txt",
+          "",
+          200,
+          "nginx rewrite and gzip through Kandelo\n",
+          0);
+        if (result != 0) return result;
+
+        result = request(
+          port,
+          "/new/message.txt",
+          "Accept-Encoding: gzip\r\n",
+          200,
+          NULL,
+          1);
+        if (result != 0) return result;
+
+        result = request(port, "/missing", "", 404, NULL, 0);
+        if (result != 0) return result;
+
+        puts("nginx-browser-http-ok");
+        return 0;
+      }
+    C
+    kandelo_wasm_build do
+      system kandelo_cc, "-std=c17", "-O2", browser_probe_source, "-o", browser_probe
+      kandelo_validate_wasm_artifact(browser_probe, fork: :forbidden)
+    end
+
+    browser_root = "/opt/kandelo-nginx-test"
+    browser_config = testpath/"nginx-browser.conf"
+    # WHY: the Node lifecycle uses a writable /tmp host mount, while the
+    # browser runner stages immutable fixture files outside its scratch mounts.
+    browser_config.write((testpath/"nginx.conf").read.sub(guest_testpath, browser_root))
+    browser_script = <<~SH
+      set -eu
+      server=#{GUEST_OPT_PREFIX}/bin/nginx
+      "$server" -p #{browser_root}/ -c #{browser_root}/nginx.conf &
+      server_pid=$!
+      cleanup() {
+        kill -QUIT "$server_pid" 2>/dev/null || :
+        wait "$server_pid" 2>/dev/null || :
+      }
+      trap cleanup EXIT HUP INT TERM
+
+      /usr/local/bin/nginx-browser-probe 18080
+      kill -QUIT "$server_pid"
+      wait "$server_pid"
+      trap - EXIT HUP INT TERM
+      printf 'nginx-browser-service-ok\n'
+    SH
+    dash = formula_opt_bin("kandelo-dev/tap-core/dash")/"dash"
+    browser_output = kandelo_run_browser_wasm(
+      dash,
+      ["-c", browser_script],
+      argv0:              "sh",
+      guest_program_path: "/bin/sh",
+      exec_programs:      {
+        "#{GUEST_OPT_PREFIX}/bin/nginx"      => artifact,
+        "/usr/local/bin/nginx-browser-probe" => browser_probe,
+      },
+      guest_files:        {
+        "#{GUEST_OPT_PREFIX}/conf/mime.types"  => prefix/"conf/mime.types",
+        "#{browser_root}/nginx.conf"           => browser_config,
+        "#{browser_root}/html/new/message.txt" => testpath/"html/new/message.txt",
+      },
+      timeout_ms:         180_000,
+      merge_stderr:       true,
+    )
+    assert_includes browser_output, "nginx-browser-http-ok\n"
+    assert_includes browser_output, "nginx-browser-service-ok\n"
   end
 end
