@@ -52,16 +52,16 @@ async function waitForProcessMemory(
   throw new Error(`formula browser process ${pid} did not report its memory size`);
 }
 
-async function waitForProcessRemoval(
-  kernel: BrowserKernel,
-  pid: number,
-): Promise<void> {
+async function waitForProcessTreeRemoval(kernel: BrowserKernel): Promise<void> {
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
-    if (!(await kernel.enumProcs()).some((candidate) => candidate.pid === pid)) return;
+    if ((await kernel.enumProcs()).length === 0) return;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  throw new Error(`formula browser process ${pid} remained after exit`);
+  const remaining = (await kernel.enumProcs()).map((candidate) => candidate.pid);
+  throw new Error(
+    `formula browser process tree remained after exit: ${remaining.join(",")}`,
+  );
 }
 
 async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
@@ -138,7 +138,10 @@ async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
         ? null
         : await waitForProcessMemory(kernel, process.pid, request.timeoutMs);
       exitCode = await withTimeout(process.exit, request.timeoutMs);
-      await waitForProcessRemoval(kernel, process.pid);
+      // WHY: a parent exit is not sufficient lifecycle evidence. Require every
+      // child and zombie from this launch to disappear before reusing the same
+      // kernel for the next launch.
+      await waitForProcessTreeRemoval(kernel);
       if (
         memoryBytes !== null &&
         memoryBytes >= request.maxProcessMemoryBytes!

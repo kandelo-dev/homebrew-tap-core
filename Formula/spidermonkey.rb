@@ -33,7 +33,7 @@ class Spidermonkey < Formula
   url "https://ftp.mozilla.org/pub/firefox/releases/140.11.0esr/source/firefox-140.11.0esr.source.tar.xz"
   version "140.11.0esr"
   sha256 "1b034d2117356fda24807a151055132315c6ba58ad2bdf7ec71ee707fac5e028"
-  license "MPL-2.0"
+  license all_of: ["MPL-2.0", "GPL-2.0-or-later"]
 
   depends_on "cbindgen" => :build
   depends_on "gpatch" => :build
@@ -133,6 +133,11 @@ class Spidermonkey < Formula
   resource "kandelo-node-suffix" do
     url "https://raw.githubusercontent.com/Automattic/kandelo/#{KANDELO_SOURCE_COMMIT}/packages/registry/spidermonkey/node-compat/suffix.js"
     sha256 "49fac5a3039bbad287ac815d533cf3abd4b4217920cbe2c93bb34a6e30003142"
+  end
+
+  resource "kandelo-gpl-license" do
+    url "https://raw.githubusercontent.com/Automattic/kandelo/#{KANDELO_SOURCE_COMMIT}/COPYING"
+    sha256 "ead02ff1f91603ff84965fe76e86976a3587dc7faf45fb48affe02536b744b86"
   end
 
   def install
@@ -249,11 +254,30 @@ class Spidermonkey < Formula
 
     license_file = buildpath/"LICENSE"
     odie "Firefox source is missing its MPL license file" unless license_file.file?
-    (share/"licenses/spidermonkey").install license_file
+    license_dir = share/"licenses/spidermonkey"
+    license_dir.install license_file => "LICENSE-MPL-2.0"
+    (license_dir/"COPYING-GPL-2.0-or-later").binwrite(
+      staged_resource_bytes("kandelo-gpl-license"),
+    )
+  end
+
+  def caveats
+    <<~EOS
+      This is Mozilla's SpiderMonkey shell, not upstream Node.js. The same
+      engine contains Kandelo's Node compatibility entry point, which the
+      separate node Formula exposes under the node command.
+
+      The shell does not expose POSIX fork. Its universal libc still retains
+      an unreachable kernel_fork import, and the module intentionally remains
+      uninstrumented because rewriting this C++ control-flow graph currently
+      exhausts Chromium's Wasm call stack. A future reachable fork API must
+      remove this exception or fail the Formula's frozen-import validation.
+    EOS
   end
 
   test do
-    assert_path_exists share/"licenses/spidermonkey/LICENSE"
+    assert_path_exists share/"licenses/spidermonkey/LICENSE-MPL-2.0"
+    assert_path_exists share/"licenses/spidermonkey/COPYING-GPL-2.0-or-later"
     assert_equal EXPECTED_IMPORTS, wasm_imports(bin/"js")
 
     behavior_source = <<~JAVASCRIPT
@@ -424,6 +448,58 @@ class Spidermonkey < Formula
       bin/"js", ["/opt/spidermonkey-test/args.js", "alpha", "beta"],
       argv0: "js", guest_files: { "/opt/spidermonkey-test/args.js" => script },
       timeout_ms: 180_000
+    )
+
+    # The engine owns the exact compatibility bootstrap bytes. Exercise that
+    # embedded entry point here as well as the standalone JS shell so the
+    # later zero-copy node Formula cannot become the first place a bad engine
+    # build is discovered.
+    node_source = <<~JAVASCRIPT
+      const assert = require("assert");
+      const crypto = require("crypto");
+      const zlib = require("zlib");
+      const { execFileSync } = require("child_process");
+      const { Worker } = require("worker_threads");
+
+      assert.strictEqual(process.version, "v22.0.0");
+      assert.strictEqual(Buffer.from("node-mode").toString("hex"), "6e6f64652d6d6f6465");
+      assert.strictEqual(
+        crypto.createHash("sha256").update("abc").digest("hex"),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      );
+      assert.strictEqual(
+        zlib.gunzipSync(zlib.gzipSync(Buffer.from("embedded-node"))).toString(),
+        "embedded-node",
+      );
+      assert.strictEqual(
+        execFileSync("/bin/sh", ["-c", "printf child-ok"], { encoding: "utf8" }),
+        "child-ok",
+      );
+
+      const shared = new SharedArrayBuffer(8);
+      const values = new Int32Array(shared);
+      const worker = new Worker(
+        "const values = new Int32Array(workerData);" +
+        "Atomics.store(values, 0, 42); Atomics.store(values, 1, 1); Atomics.notify(values, 1);",
+        { eval: true, workerData: shared },
+      );
+      if (Atomics.load(values, 1) === 0) Atomics.wait(values, 1, 0, 10000);
+      assert.strictEqual(Atomics.load(values, 1), 1);
+      assert.strictEqual(Atomics.load(values, 0), 42);
+      worker.terminate();
+      console.log("embedded-node-ok");
+    JAVASCRIPT
+    assert_equal "embedded-node-ok\n", kandelo_run_wasm(
+      bin/"js", ["-e", node_source],
+      argv0: "/usr/bin/node", expected_fork_descendants: 1
+    )
+    assert_equal "embedded-node-ok\n" * 3, kandelo_run_browser_wasm(
+      bin/"js", ["-e", node_source],
+      argv0:                    "node",
+      guest_program_path:       "/usr/bin/node",
+      timeout_ms:               180_000,
+      launch_count:             3,
+      max_process_memory_bytes: 512 * 1024 * 1024
     )
 
     syntax_error = kandelo_run_wasm(
