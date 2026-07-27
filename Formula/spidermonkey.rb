@@ -199,11 +199,19 @@ class Spidermonkey < Formula
       MOZCONFIG
 
       target_defines = "-D__linux__=1 -D__unix__=1"
+      target_cxx_headers = [
+        "-nostdinc++",
+        "-isystem", libcxx/"include/c++/v1"
+      ].join(" ")
       ENV["MOZCONFIG"] = mozconfig
       ENV["MOZBUILD_STATE_PATH"] = buildpath/".mozbuild"
       ENV["MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE"] = "system"
       ENV["CC"] = "#{kandelo_cc(root)} #{target_defines}"
-      ENV["CXX"] = "#{kandelo_tool("c++", root)} #{target_defines}"
+      # WHY: Mozilla probes the target compiler's default C++ library before
+      # it applies CXXFLAGS. Put the Formula-owned libc++ headers in the
+      # compiler identity so configure sees the same dependency as the build,
+      # without writing dependency symlinks into Kandelo's shared sysroot.
+      ENV["CXX"] = "#{kandelo_tool("c++", root)} #{target_defines} #{target_cxx_headers}"
       ENV["AS"] = "#{kandelo_cc(root)} #{target_defines}"
       ENV["AR"] = kandelo_ar(root)
       ENV["RANLIB"] = kandelo_ranlib(root)
@@ -219,8 +227,7 @@ class Spidermonkey < Formula
         "-O2", "-D_GNU_SOURCE", "-I#{openssl}/include", "-I#{zlib}/include", *prefix_maps
       ].join(" ")
       ENV["CXXFLAGS"] = [
-        "-O2", "-D_GNU_SOURCE", "-fexceptions", "-nostdinc++",
-        "-isystem", libcxx/"include/c++/v1",
+        "-O2", "-D_GNU_SOURCE", "-fexceptions",
         "-I#{openssl}/include", "-I#{zlib}/include", *prefix_maps
       ].join(" ")
       ENV["LDFLAGS"] = [
