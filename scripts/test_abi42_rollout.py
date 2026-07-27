@@ -87,12 +87,16 @@ class FakeRegistry:
     def __init__(self, evidence: rollout.RegistryManifestEvidence) -> None:
         self.evidence = evidence
         self.calls: list[tuple[str, str]] = []
+        self.blob_calls: list[tuple[str, str, int]] = []
 
     def manifest(
         self, formula: str, reference: str
     ) -> rollout.RegistryManifestEvidence:
         self.calls.append((formula, reference))
         return self.evidence
+
+    def verify_blob(self, formula: str, digest: str, expected_bytes: int):
+        self.blob_calls.append((formula, digest, expected_bytes))
 
 
 class FakeHttpResponse:
@@ -108,6 +112,7 @@ class FakeHttpResponse:
         self.body = body
         self.headers = headers or {}
         self.status = status
+        self.offset = 0
 
     def __enter__(self):
         return self
@@ -122,7 +127,13 @@ class FakeHttpResponse:
         return self.status
 
     def read(self, limit=-1):
-        return self.body if limit < 0 else self.body[:limit]
+        if limit < 0:
+            result = self.body[self.offset :]
+            self.offset = len(self.body)
+            return result
+        result = self.body[self.offset : self.offset + limit]
+        self.offset += len(result)
+        return result
 
 
 class RolloutControllerTests(unittest.TestCase):
@@ -152,6 +163,10 @@ class RolloutControllerTests(unittest.TestCase):
             "8b0d41714a0ecce7ca2deb38f5aeecccf9add557",
             rollout.WORKFLOW_PATH,
         )
+        cls.precutover_workflow_source = cls.tap.show(
+            "e747f724efc63c81af453eeada3b7f1453726058",
+            rollout.WORKFLOW_PATH,
+        )
         assert (
             hashlib.sha256(cls.legacy_workflow_source.encode()).hexdigest()
             in rollout.APPROVED_PUBLICATION_WORKFLOWS
@@ -159,6 +174,10 @@ class RolloutControllerTests(unittest.TestCase):
         assert (
             hashlib.sha256(cls.transitional_workflow_source.encode()).hexdigest()
             in rollout.APPROVED_NO_WRITE_ONLY_WORKFLOWS
+        )
+        assert (
+            hashlib.sha256(cls.precutover_workflow_source.encode()).hexdigest()
+            in rollout.APPROVED_PUBLICATION_WORKFLOWS
         )
         assert (
             rollout.workflow_sha256(cls.snapshot)
@@ -508,8 +527,17 @@ class RolloutControllerTests(unittest.TestCase):
         return state, tap, github
 
     @staticmethod
-    def _failed_state(snapshot, formula: str, *, run_id: int = 123) -> dict:
-        state = rollout.initial_state(snapshot, RolloutControllerTests.consumer_sha)
+    def _failed_state(
+        snapshot,
+        formula: str,
+        *,
+        run_id: int = 123,
+        consumer_sha: str | None = None,
+    ) -> dict:
+        state = rollout.initial_state(
+            snapshot,
+            consumer_sha or RolloutControllerTests.consumer_sha,
+        )
         state["dispatches"].append(
             {
                 "formula": formula,
@@ -631,7 +659,7 @@ class RolloutControllerTests(unittest.TestCase):
                         tap=self.tap,
                         github=github,
                         registry=registry,
-                        expected_kandelo_sha=self.consumer_sha,
+                        expected_kandelo_sha=state["expected_kandelo_sha"],
                         state_path=state_path,
                         run_id=run_id,
                         no_fetch=True,
@@ -641,7 +669,7 @@ class RolloutControllerTests(unittest.TestCase):
                         tap=self.tap,
                         github=github,
                         registry=registry,
-                        expected_kandelo_sha=self.consumer_sha,
+                        expected_kandelo_sha=state["expected_kandelo_sha"],
                         state_path=state_path,
                         run_ids=run_ids,
                         adopt_failed_runs=adopt_failed_runs,
@@ -691,7 +719,7 @@ class RolloutControllerTests(unittest.TestCase):
                     tap=self.tap,
                     github=github,
                     registry=registry,
-                    expected_kandelo_sha=self.consumer_sha,
+                    expected_kandelo_sha=state["expected_kandelo_sha"],
                     state_path=state_path,
                     run_id=run_id,
                     no_fetch=True,
@@ -736,7 +764,7 @@ class RolloutControllerTests(unittest.TestCase):
                     tap=self.tap,
                     github=github,
                     registry=registry,
-                    expected_kandelo_sha=self.consumer_sha,
+                    expected_kandelo_sha=state["expected_kandelo_sha"],
                     state_path=state_path,
                     run_ids=run_ids,
                     adopt_failed_runs=adopt_failed_runs,
@@ -948,8 +976,17 @@ class RolloutControllerTests(unittest.TestCase):
                 else self.transitional_workflow_source
             ),
         )
-        current = dataclasses.replace(self.snapshot, sha="c" * 40)
-        state = self._failed_state(source, "make", run_id=123)
+        current = dataclasses.replace(
+            self.snapshot,
+            sha="c" * 40,
+            workflow_source=self.precutover_workflow_source,
+        )
+        state = self._failed_state(
+            source,
+            "make",
+            run_id=123,
+            consumer_sha=rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
         github = FakeGitHub()
         github.runs_by_id[123] = self._run(
             123,
@@ -974,10 +1011,12 @@ class RolloutControllerTests(unittest.TestCase):
             formula=logged_formula,
             tap_ref=adopted_source.sha,
             publisher_sha=(
-                logged_publisher_sha or rollout.PUBLISHER_WORKFLOW_SHA
+                logged_publisher_sha
+                or rollout.LEGACY_PUBLISHER_WORKFLOW_SHA
             ),
             consumer_sha=(
-                logged_consumer_sha or rollout.PUBLISHER_WORKFLOW_SHA
+                logged_consumer_sha
+                or rollout.LEGACY_PUBLISHER_WORKFLOW_SHA
             ),
             permissions=permissions,
         )
@@ -1179,10 +1218,21 @@ class RolloutControllerTests(unittest.TestCase):
             "1.3.1_4-2",
             self.snapshot.identities["zlib"].top_reference,
         )
-        self.assertEqual("pr-1079-staging", rollout.PREPUBLICATION_STAGING_TAG)
+        self.assertRegex(
+            rollout.PREPUBLICATION_STAGING_TAG,
+            r"^package-generation-rootfs-wasm32-abi-v42-sha256-[0-9a-f]{64}$",
+        )
+        self.assertEqual(
+            rollout.CURRENT_MAIN_SHA,
+            rollout.PREPUBLICATION_GENERATION_SHA,
+        )
+        self.assertEqual(
+            "pr-1079-staging",
+            rollout.LEGACY_PREPUBLICATION_STAGING_TAG,
+        )
         self.assertEqual(
             "437fde2524ea6ad9c44933f8abbf995a46841009",
-            rollout.PREPUBLICATION_GENERATION_SHA,
+            rollout.LEGACY_PREPUBLICATION_GENERATION_SHA,
         )
 
     def test_fresh_campaign_requires_one_exact_reviewed_publication_contract(self):
@@ -1196,13 +1246,12 @@ class RolloutControllerTests(unittest.TestCase):
         )
         workflow_mutations = {
             "publisher wiring": self.snapshot.workflow_source.replace(
-                rollout.PUBLISHER_WORKFLOW_SHA, "a" * 40, 1
+                rollout.PUBLISHER_WORKFLOW_SHA, "c" * 40, 1
             ),
             "consumer wiring": self.snapshot.workflow_source.replace(
-                self.consumer_sha, "a" * 40, 1
-            ),
-            "generation wiring": self.snapshot.workflow_source.replace(
-                rollout.PREPUBLICATION_GENERATION_SHA, "a" * 40, 1
+                f"kandelo-ref: {self.consumer_sha}",
+                f"kandelo-ref: {'d' * 40}",
+                1,
             ),
             "generation tag wiring": self.snapshot.workflow_source.replace(
                 rollout.PREPUBLICATION_STAGING_TAG, "unreviewed-generation", 1
@@ -1225,9 +1274,9 @@ class RolloutControllerTests(unittest.TestCase):
                 )
 
         substitutions = {
-            "publisher": {"publisher_sha": "a" * 40},
-            "consumer": {"consumer_sha": "a" * 40},
-            "package generation": {"package_generation_sha": "a" * 40},
+            "publisher": {"publisher_sha": "c" * 40},
+            "consumer": {"consumer_sha": "d" * 40},
+            "package generation": {"package_generation_sha": "e" * 40},
             "package tag": {"package_generation_tag": "other-generation"},
             "complete workflow": {"workflow_sha256": "a" * 64},
         }
@@ -1438,6 +1487,509 @@ class RolloutControllerTests(unittest.TestCase):
             rollout.validate_state(
                 invalid_dispatch, reservation, self.consumer_sha
             )
+
+    def test_committed_shell_manifest_is_the_exact_production_partition(self):
+        manifest = rollout.load_campaign_manifest(self.tap, self.head)
+        expected_reuse = (
+            "bzip2",
+            "coreutils",
+            "curl",
+            "dash",
+            "diffutils",
+            "ed",
+            "findutils",
+            "gawk",
+            "git",
+            "grep",
+            "gzip",
+            "less",
+            "libcurl",
+            "libcxx",
+            "m4",
+            "ncurses",
+            "openssl",
+            "posix-utils-lite",
+            "ruby",
+            "sed",
+            "tar",
+            "vim",
+            "zlib",
+        )
+        self.assertEqual(rollout.CAMPAIGN_BASE_TAP_SHA, manifest.base_tap_sha)
+        self.assertEqual(
+            rollout.CAMPAIGN_MANIFEST_SHA256, manifest.sha256
+        )
+        self.assertEqual("bash", manifest.rebuild_formula)
+        self.assertEqual("5.2.37_2", manifest.rebuild_version)
+        self.assertEqual(2, manifest.rebuild_formula_revision)
+        self.assertEqual(4, manifest.old_bottle_rebuild)
+        self.assertEqual(5, manifest.reserved_bottle_rebuild)
+        self.assertEqual(
+            expected_reuse,
+            tuple(entry.formula for entry in manifest.reuse),
+        )
+        self.assertEqual(
+            set(rollout.FORMULA_ORDER),
+            {
+                *manifest.selection.rebuild,
+                *manifest.selection.reuse,
+                *manifest.selection.deferred,
+            },
+        )
+        base = rollout.load_snapshot(self.tap, manifest.base_tap_sha)
+        reservation = rollout.load_snapshot(
+            self.tap, manifest.reservation_tap_sha
+        )
+        rollout.validate_campaign_manifest_sources(
+            self.tap, manifest, base, reservation
+        )
+        registry = FakeRegistry(
+            rollout.RegistryManifestEvidence(exists=False, digest=None)
+        )
+        rollout.verify_campaign_reuse_blobs(registry, manifest)
+        self.assertEqual(23, len(registry.blob_calls))
+
+        authority_snapshot = dataclasses.replace(
+            self.snapshot,
+            workflow_source=self.snapshot.workflow_source,
+        )
+        state = rollout.initial_campaign_state(
+            authority_snapshot,
+            campaign_id=rollout.CAMPAIGN_MANIFEST_ID,
+            base_snapshot=base,
+            contract=self._campaign_contract(),
+            absent_oci_references={
+                "bash": reservation.identities["bash"].top_reference
+            },
+            checked_at="2026-07-25T12:00:00Z",
+            manifest=manifest,
+            manifest_authority_sha=self.head,
+            reservation_snapshot=reservation,
+        )
+        self.assertEqual(4, state["schema"])
+        self.assertEqual(
+            self.head, state["campaign"]["manifest_tap_sha"]
+        )
+        self.assertEqual(
+            manifest.sha256, state["campaign"]["manifest_sha256"]
+        )
+        self.assertEqual(
+            rollout.CAMPAIGN_BASE_TAP_SHA,
+            state["campaign"]["base_tap_sha"],
+        )
+        self.assertEqual(
+            list(manifest.selection.reuse),
+            state["campaign"]["reuse_formulae"],
+        )
+        self.assertEqual(
+            list(manifest.selection.deferred),
+            state["campaign"]["deferred_formulae"],
+        )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "cannot override"
+        ):
+            rollout.initial_campaign_state(
+                authority_snapshot,
+                campaign_id=rollout.CAMPAIGN_MANIFEST_ID,
+                base_snapshot=base,
+                contract=self._campaign_contract(),
+                absent_oci_references={
+                    "bash": reservation.identities["bash"].top_reference
+                },
+                checked_at="2026-07-25T12:00:00Z",
+                selection=manifest.selection,
+                manifest=manifest,
+                manifest_authority_sha=self.head,
+                reservation_snapshot=reservation,
+            )
+
+    def test_shell_manifest_rejects_partition_and_t0_substitution(self):
+        raw = (self.root / rollout.CAMPAIGN_MANIFEST_PATH).read_bytes()
+        value = json.loads(raw)
+
+        class BytesTap:
+            def __init__(self, body):
+                self.body = body
+                self.calls = []
+
+            def show_bytes(self, revision, path):
+                self.calls.append((revision, path))
+                return self.body
+
+        def encoded(candidate):
+            return (json.dumps(candidate, indent=2) + "\n").encode()
+
+        for label, mutate, message in (
+            (
+                "remove",
+                lambda candidate: candidate["reuse"].pop(),
+                "canonical production authority",
+            ),
+            (
+                "add arbitrary asa",
+                lambda candidate: candidate["reuse"].append(
+                    {
+                        **copy.deepcopy(candidate["reuse"][0]),
+                        "formula": "asa",
+                        "sidecar": {
+                            **candidate["reuse"][0]["sidecar"],
+                            "path": "Kandelo/formula/asa.json",
+                        },
+                    }
+                ),
+                "canonical production authority",
+            ),
+            (
+                "substitute",
+                lambda candidate: candidate["reuse"][0].update(
+                    {"formula": "asa"}
+                ),
+                "canonical production authority",
+            ),
+            (
+                "different T0",
+                lambda candidate: candidate.update(
+                    {"base_tap_sha": "f" * 40}
+                ),
+                "canonical production authority",
+            ),
+        ):
+            candidate = copy.deepcopy(value)
+            mutate(candidate)
+            with (
+                self.subTest(label=label),
+                self.assertRaisesRegex(rollout.RolloutError, message),
+            ):
+                rollout.load_campaign_manifest(
+                    BytesTap(encoded(candidate)),
+                    "a" * 40,
+                )
+
+        exact = BytesTap(raw)
+        manifest = rollout.load_campaign_manifest(exact, "b" * 40)
+        self.assertEqual(
+            [("b" * 40, rollout.CAMPAIGN_MANIFEST_PATH)],
+            exact.calls,
+        )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "bytes differ from the private ledger"
+        ):
+            rollout.load_campaign_manifest(
+                exact,
+                "b" * 40,
+                expected_sha256="0" * 64,
+            )
+        self.assertEqual(
+            hashlib.sha256(raw).hexdigest(), manifest.sha256
+        )
+
+    def test_shell_manifest_rejects_stale_raw_sidecar_and_link_bytes(self):
+        manifest = rollout.load_campaign_manifest(self.tap, self.head)
+        base = rollout.load_snapshot(self.tap, manifest.base_tap_sha)
+        reservation = rollout.load_snapshot(
+            self.tap, manifest.reservation_tap_sha
+        )
+        first = manifest.reuse[0]
+
+        class TamperedTap:
+            def __init__(self, changed_path):
+                self.changed_path = changed_path
+
+            def show_bytes(inner_self, revision, path):
+                raw = self.tap.show_bytes(revision, path)
+                return raw + b" " if path == inner_self.changed_path else raw
+
+        for path, message in (
+            (first.sidecar_path, "sidecar bytes differ at T0"),
+            (first.link_manifest_path, "link bytes differ at T0"),
+        ):
+            with (
+                self.subTest(path=path),
+                self.assertRaisesRegex(rollout.RolloutError, message),
+            ):
+                rollout.validate_campaign_manifest_sources(
+                    TamperedTap(path),
+                    manifest,
+                    base,
+                    reservation,
+                )
+
+    def test_manifest_campaign_hashes_all_reuse_blobs_again_before_dispatch(self):
+        events: list[tuple[str, str]] = []
+
+        class DispatchGitHub(FakeGitHub):
+            def __init__(inner_self):
+                super().__init__()
+                inner_self.dispatches = []
+                inner_self.created_runs = []
+
+            def runs(
+                inner_self, *, per_page=100, page=1, created=None
+            ):
+                del created
+                start = (page - 1) * per_page
+                return {
+                    "total_count": len(inner_self.created_runs),
+                    "workflow_runs": inner_self.created_runs[
+                        start : start + per_page
+                    ],
+                }
+
+            def dispatch(
+                inner_self, formula, arches, tap_sha, dispatch_token
+            ):
+                events.append(("dispatch", formula))
+                inner_self.dispatches.append(
+                    (formula, tuple(arches), tap_sha, dispatch_token)
+                )
+                inner_self.created_runs.append(
+                    self._run(
+                        200 + len(inner_self.created_runs),
+                        tap_sha,
+                        status="queued",
+                        created_at=rollout._utc_now(),
+                        display_title=rollout.workflow_run_title(
+                            formula, dispatch_token
+                        ),
+                    )
+                )
+
+        class RecordingRegistry(FakeRegistry):
+            def manifest(inner_self, formula, reference):
+                events.append(("absence", formula))
+                return super().manifest(formula, reference)
+
+            def verify_blob(
+                inner_self, formula, digest, expected_bytes
+            ):
+                events.append(("blob", formula))
+                return super().verify_blob(
+                    formula, digest, expected_bytes
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            # WHY: status calculation must consume real committed T0, Tpre,
+            # and Tmanifest snapshots. A local shared clone gives the test an
+            # exact protected-main coordinate without mocking Git evidence.
+            tap_root = pathlib.Path(directory) / "tap"
+            subprocess.run(
+                [
+                    "git",
+                    "clone",
+                    "--quiet",
+                    "--shared",
+                    str(self.root),
+                    str(tap_root),
+                ],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(tap_root),
+                    "remote",
+                    "set-url",
+                    "origin",
+                    "https://github.com/Kandelo-dev/homebrew-tap-core.git",
+                ],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(tap_root),
+                    "update-ref",
+                    "refs/remotes/origin/main",
+                    self.head,
+                ],
+                check=True,
+            )
+            tap = rollout.GitTap(tap_root)
+            manifest = rollout.load_campaign_manifest(tap, self.head)
+            authority = rollout.load_snapshot(tap, self.head)
+            github = DispatchGitHub()
+            registry = RecordingRegistry(
+                rollout.RegistryManifestEvidence(exists=False, digest=None)
+            )
+            state_path = pathlib.Path(directory) / "manifest-campaign.json"
+            state = rollout.initialize_campaign(
+                tap=tap,
+                github=github,
+                registry=registry,
+                state_path=state_path,
+                campaign_id=rollout.CAMPAIGN_MANIFEST_ID,
+                base_tap_sha=manifest.base_tap_sha,
+                reservation_tap_sha=manifest.reservation_tap_sha,
+                contract=self._campaign_contract(),
+                no_fetch=True,
+                manifest_authority_sha=authority.sha,
+            )
+            self.assertEqual(4, state["schema"])
+            self.assertEqual(23, len(registry.blob_calls))
+            self.assertEqual(
+                manifest.sha256, state["campaign"]["manifest_sha256"]
+            )
+            self.assertEqual(0o600, state_path.stat().st_mode & 0o777)
+            pristine_state = copy.deepcopy(state)
+
+            validated_manifest = rollout.validate_campaign_main_descendant(
+                tap, state, authority
+            )
+            self.assertIsNotNone(validated_manifest)
+            statuses = {
+                status.name: status
+                for status in rollout.calculate_statuses(
+                    tap,
+                    authority,
+                    self.consumer_sha,
+                    rollout.RunInventory(
+                        count=0,
+                        runs=(),
+                        formulae={},
+                        unknown_run_ids=(),
+                    ),
+                    {},
+                    campaign_manifest=validated_manifest,
+                )
+            }
+            self.assertEqual("ready", statuses["bash"].state)
+            self.assertEqual("reused", statuses["ncurses"].state)
+            self.assertEqual("reused", statuses["libcxx"].state)
+            self.assertTrue(
+                any(
+                    "another Kandelo SHA" in reason
+                    for reason in rollout.finalization_reasons(
+                        tap,
+                        authority,
+                        "ncurses",
+                        ("wasm32",),
+                        self.consumer_sha,
+                    )
+                ),
+                "reuse must preserve ncurses' historical built_from provenance",
+            )
+            assert validated_manifest is not None
+            reuse_without_ncurses = tuple(
+                entry
+                for entry in validated_manifest.reuse
+                if entry.formula != "ncurses"
+            )
+            remaining_reuse = {
+                entry.formula for entry in reuse_without_ncurses
+            }
+            deferred_ncurses = dataclasses.replace(
+                validated_manifest,
+                reuse=reuse_without_ncurses,
+                deferred=tuple(
+                    formula
+                    for formula in rollout.FORMULA_ORDER
+                    if formula != "bash" and formula not in remaining_reuse
+                ),
+            )
+            deferred_statuses = {
+                status.name: status
+                for status in rollout.calculate_statuses(
+                    tap,
+                    authority,
+                    self.consumer_sha,
+                    rollout.RunInventory(
+                        count=0,
+                        runs=(),
+                        formulae={},
+                        unknown_run_ids=(),
+                    ),
+                    {},
+                    campaign_manifest=deferred_ncurses,
+                )
+            }
+            self.assertEqual(
+                "blocked-dependencies", deferred_statuses["bash"].state
+            )
+            self.assertIn(
+                "ncurses/wasm32", deferred_statuses["bash"].detail
+            )
+
+            events.clear()
+            dispatched = rollout.dispatch_ready(
+                tap=tap,
+                github=github,
+                expected_kandelo_sha=self.consumer_sha,
+                state_path=state_path,
+                no_fetch=True,
+                maximum=8,
+                timeout_seconds=1,
+                poll_seconds=0.001,
+                allowed_formulae=frozenset(("bash",)),
+                registry=registry,
+            )
+            successful_dispatches = list(github.dispatches)
+            successful_events = list(events)
+
+            class FlipAfterReuseRegistry(RecordingRegistry):
+                def manifest(inner_self, formula, reference):
+                    inner_self.calls.append((formula, reference))
+                    if len(inner_self.blob_calls) == 23:
+                        return rollout.RegistryManifestEvidence(
+                            exists=True,
+                            digest="sha256:" + "f" * 64,
+                        )
+                    return rollout.RegistryManifestEvidence(
+                        exists=False,
+                        digest=None,
+                    )
+
+            flip_registry = FlipAfterReuseRegistry(
+                rollout.RegistryManifestEvidence(
+                    exists=False, digest=None
+                )
+            )
+            flip_path = pathlib.Path(directory) / "flip-campaign.json"
+            rollout.write_new_state(flip_path, pristine_state)
+            flip_github = DispatchGitHub()
+            with self.assertRaisesRegex(
+                rollout.RolloutError,
+                "campaign OCI identity is already occupied",
+            ):
+                rollout.dispatch_ready(
+                    tap=tap,
+                    github=flip_github,
+                    expected_kandelo_sha=self.consumer_sha,
+                    state_path=flip_path,
+                    no_fetch=True,
+                    maximum=8,
+                    timeout_seconds=1,
+                    poll_seconds=0.001,
+                    allowed_formulae=frozenset(("bash",)),
+                    registry=flip_registry,
+                )
+            stalled = rollout.read_state(flip_path)
+
+        self.assertEqual(1, dispatched)
+        self.assertEqual(46, len(registry.blob_calls))
+        self.assertEqual(1, len(successful_dispatches))
+        self.assertEqual("bash", successful_dispatches[0][0])
+        self.assertNotIn("ncurses", (entry[0] for entry in successful_dispatches))
+        self.assertNotIn("libcxx", (entry[0] for entry in successful_dispatches))
+        self.assertEqual(
+            [
+                *(("blob", entry.formula) for entry in manifest.reuse),
+                ("absence", "bash"),
+                ("dispatch", "bash"),
+            ],
+            successful_events[-25:],
+        )
+        self.assertEqual(23, len(flip_registry.blob_calls))
+        self.assertEqual([], flip_github.dispatches)
+        assert stalled is not None
+        self.assertEqual(1, len(stalled["pending_dispatches"]))
+        self.assertEqual(
+            "planned", stalled["pending_dispatches"][0]["status"]
+        )
+        self.assertNotIn(
+            "request_started_at", stalled["pending_dispatches"][0]
+        )
 
     def test_product_first_campaign_rejects_reuse_sidecar_from_old_abi(self):
         base, reservation, selection = (
@@ -2572,111 +3124,87 @@ class RolloutControllerTests(unittest.TestCase):
                 formula,
             )
 
-    def test_workflow_pins_publisher_and_package_consumer_separately(self):
+    def test_workflow_pins_one_main_and_one_admitted_rootfs_generation(self):
         expected = self.consumer_sha
-        vfs_expression = (
-            "${{ github.event.client_payload.require_vfs_acceptance || false }}"
-        )
         source = self.snapshot.workflow_source
         snapshot = self.snapshot
         rollout.validate_workflow(FakeGitHub(), snapshot, expected)
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "publisher implementation is not frozen"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        rollout.PUBLISHER_WORKFLOW_SHA, "b" * 40
-                    ),
+        mutations = (
+            (
+                "publisher implementation is not frozen",
+                source.replace(rollout.PUBLISHER_WORKFLOW_SHA, "b" * 40),
+            ),
+            (
+                "tap-ref is not an allowed",
+                source.replace(
+                    "${{ github.event.client_payload.tap_sha }}",
+                    "main",
                 ),
-                expected,
-            )
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "tap-ref is not an allowed"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        "${{ github.event.client_payload.tap_sha }}",
-                        "main",
-                    ),
+            ),
+            (
+                "run-name does not expose",
+                source.replace(
+                    rollout.WORKFLOW_RUN_NAME_SOURCE,
+                    "Publish Kandelo bottles",
                 ),
-                expected,
-            )
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "run-name does not expose"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        rollout.WORKFLOW_RUN_NAME_SOURCE,
-                        "Publish Kandelo bottles",
-                    ),
+            ),
+            (
+                "package consumer is not frozen",
+                source.replace(
+                    f"kandelo-ref: {expected}", "kandelo-ref: main"
                 ),
-                expected,
-            )
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "package consumer is not frozen"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        f"kandelo-ref: {expected}", "kandelo-ref: main"
-                    ),
+            ),
+            (
+                "workflow force differs",
+                source.replace(
+                    "github.event.client_payload.force || false", "true"
                 ),
-                expected,
-            )
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "workflow force differs"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        "github.event.client_payload.force || false", "true"
-                    ),
+            ),
+            (
+                "package-generation-wasm32 differs",
+                source.replace(
+                    rollout.PREPUBLICATION_STAGING_TAG,
+                    "package-generation-rootfs-wasm32-abi-v42-sha256-"
+                    + "c" * 64,
                 ),
-                expected,
+            ),
+            (
+                "forbidden generation input prepublication-staging-tag",
+                source
+                + "\n      prepublication-staging-tag: pr-1079-staging\n",
+            ),
+        )
+        for source_reason, changed_source in mutations:
+            changed = dataclasses.replace(
+                snapshot,
+                workflow_source=changed_source,
             )
-        with self.assertRaisesRegex(
-            rollout.RolloutError, "prepublication-staging-kandelo-sha differs"
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        rollout.PREPUBLICATION_GENERATION_SHA,
-                        "b" * 40,
+            with (
+                self.subTest(source_reason=source_reason),
+                self.assertRaisesRegex(rollout.RolloutError, source_reason),
+            ):
+                rollout.validate_workflow_source(
+                    changed,
+                    expected,
+                    expected_publisher_sha=rollout.PUBLISHER_WORKFLOW_SHA,
+                    expected_package_generation_sha=(
+                        rollout.PREPUBLICATION_GENERATION_SHA
                     ),
-                ),
-                expected,
-            )
-        with self.assertRaisesRegex(
-            rollout.RolloutError,
-            "defer-vfs-acceptance-until-postpublication differs",
-        ):
-            rollout.validate_workflow(
-                FakeGitHub(),
-                dataclasses.replace(
-                    snapshot,
-                    workflow_source=source.replace(
-                        "defer-vfs-acceptance-until-postpublication: "
-                        f"{vfs_expression}",
-                        "defer-vfs-acceptance-until-postpublication: true",
+                    expected_package_generation_tag=(
+                        rollout.PREPUBLICATION_STAGING_TAG
                     ),
+                )
+            # WHY: source-shape diagnostics remain useful, but the production
+            # gate must also reject every byte-level caller mutation before it
+            # can become publication authority.
+            with (
+                self.subTest(approval_reason=source_reason),
+                self.assertRaisesRegex(
+                    rollout.RolloutError,
+                    "publication workflow hash .* is not approved",
                 ),
-                expected,
-            )
+            ):
+                rollout.validate_workflow(FakeGitHub(), changed, expected)
 
     def test_run_name_is_the_only_non_bottle_affecting_workflow_difference(self):
         current = self.snapshot.workflow_source
@@ -3048,19 +3576,28 @@ class RolloutControllerTests(unittest.TestCase):
             rollout.validate_state(state, self.snapshot, "a" * 40)
 
     def test_legacy_single_intent_ledger_upgrades_only_from_exact_workflow(self):
-        state = rollout.initial_state(self.snapshot, self.consumer_sha)
+        historical = dataclasses.replace(
+            self.snapshot,
+            workflow_source=self.precutover_workflow_source,
+        )
+        state = rollout.initial_state(
+            historical,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
         state.pop("pending_dispatches")
         state.pop("expected_publisher_sha")
         state.pop("workflow_rotations")
         state["workflow_sha256"] = rollout.LEGACY_SINGLE_INTENT_WORKFLOW_SHA256
 
         upgraded = rollout.upgrade_state(
-            state, self.snapshot, self.consumer_sha
+            state,
+            historical,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
         )
 
         self.assertEqual([], upgraded["pending_dispatches"])
         self.assertEqual(
-            hashlib.sha256(self.snapshot.workflow_source.encode()).hexdigest(),
+            hashlib.sha256(historical.workflow_source.encode()).hexdigest(),
             upgraded["workflow_sha256"],
         )
         corrupted = copy.deepcopy(state)
@@ -3069,7 +3606,9 @@ class RolloutControllerTests(unittest.TestCase):
             rollout.RolloutError, "single-intent or token-correlated"
         ):
             rollout.upgrade_state(
-                corrupted, self.snapshot, self.consumer_sha
+                corrupted,
+                historical,
+                rollout.LEGACY_ABI42_CONSUMER_SHA,
             )
 
     def test_multi_intent_ledger_rejects_duplicate_formulae_and_tokens(self):
@@ -3334,6 +3873,110 @@ class RolloutControllerTests(unittest.TestCase):
         ):
             rollout.AnonymousRegistry(opener=opener).manifest(
                 "dinit", "0.19.4-1"
+            )
+
+    def test_anonymous_registry_streams_exact_blob_without_leaking_bearer(self):
+        body = b"public-bottle-bytes"
+        digest = hashlib.sha256(body).hexdigest()
+        blob_url = (
+            f"{rollout.BOTTLE_ROOT}/bzip2/blobs/sha256:{digest}"
+        )
+        storage_url = (
+            "https://pkg-containers.githubusercontent.com/ghcrblobs09/blobs/"
+            f"sha256:{digest}?sig=short-lived"
+        )
+        requests = []
+
+        def opener(request, timeout):
+            self.assertEqual(30, timeout)
+            requests.append(request)
+            if len(requests) == 1:
+                return FakeHttpResponse(
+                    url=request.full_url,
+                    body=b'{"token":"anonymous-read-token"}',
+                )
+            if len(requests) == 2:
+                raise urllib.error.HTTPError(
+                    blob_url,
+                    307,
+                    "Temporary Redirect",
+                    {"Location": storage_url},
+                    None,
+                )
+            return FakeHttpResponse(
+                url=storage_url,
+                body=body,
+                headers={"Content-Length": str(len(body))},
+            )
+
+        rollout.AnonymousRegistry(opener=opener).verify_blob(
+            "bzip2", digest, len(body)
+        )
+
+        self.assertEqual(3, len(requests))
+        self.assertIsNone(requests[0].get_header("Authorization"))
+        self.assertEqual(
+            "Bearer anonymous-read-token",
+            requests[1].get_header("Authorization"),
+        )
+        self.assertEqual(blob_url, requests[1].full_url)
+        self.assertEqual(storage_url, requests[2].full_url)
+        self.assertIsNone(requests[2].get_header("Authorization"))
+
+    def test_anonymous_registry_rejects_blob_redirect_digest_and_size_drift(self):
+        body = b"public-bottle-bytes"
+        digest = hashlib.sha256(body).hexdigest()
+        blob_url = (
+            f"{rollout.BOTTLE_ROOT}/bzip2/blobs/sha256:{digest}"
+        )
+
+        def registry_for(*, host="pkg-containers.githubusercontent.com", payload=body):
+            calls = 0
+            storage_url = (
+                f"https://{host}/ghcrblobs09/blobs/sha256:{digest}"
+                "?sig=short-lived"
+            )
+
+            def opener(request, timeout):
+                nonlocal calls
+                del timeout
+                calls += 1
+                if calls == 1:
+                    return FakeHttpResponse(
+                        url=request.full_url,
+                        body=b'{"token":"anonymous-read-token"}',
+                    )
+                if calls == 2:
+                    raise urllib.error.HTTPError(
+                        blob_url,
+                        307,
+                        "Temporary Redirect",
+                        {"Location": storage_url},
+                        None,
+                    )
+                return FakeHttpResponse(
+                    url=storage_url,
+                    body=payload,
+                    headers={"Content-Length": str(len(payload))},
+                )
+
+            return rollout.AnonymousRegistry(opener=opener)
+
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "outside approved storage"
+        ):
+            registry_for(host="example.com").verify_blob(
+                "bzip2", digest, len(body)
+            )
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "size differs from authority"
+        ):
+            registry_for().verify_blob("bzip2", digest, len(body) + 1)
+        with self.assertRaisesRegex(
+            rollout.RolloutError, "digest differs from authority"
+        ):
+            registry_for(payload=b"changed-bottle-byte").verify_blob(
+                "bzip2", digest, len(b"changed-bottle-byte")
             )
 
     def test_recorded_active_run_cannot_disappear_during_status_transitions(self):
@@ -4069,8 +4712,17 @@ class RolloutControllerTests(unittest.TestCase):
             sha="b" * 40,
             workflow_source=self.transitional_workflow_source,
         )
-        current = dataclasses.replace(self.snapshot, sha="c" * 40)
-        state = self._failed_state(source, "make", run_id=123)
+        current = dataclasses.replace(
+            self.snapshot,
+            sha="c" * 40,
+            workflow_source=self.precutover_workflow_source,
+        )
+        state = self._failed_state(
+            source,
+            "make",
+            run_id=123,
+            consumer_sha=rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
         github = FakeGitHub()
         github.runs_by_id[123] = self._run(
             123,
@@ -4092,8 +4744,8 @@ class RolloutControllerTests(unittest.TestCase):
         github.logs_by_job[950] = self._plan_log(
             formula="make",
             tap_ref=adopted_source.sha,
-            publisher_sha=rollout.PUBLISHER_WORKFLOW_SHA,
-            consumer_sha=rollout.PUBLISHER_WORKFLOW_SHA,
+            publisher_sha=rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
+            consumer_sha=rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
         )
         registry = FakeRegistry(
             rollout.RegistryManifestEvidence(exists=False, digest=None)
@@ -4127,18 +4779,22 @@ class RolloutControllerTests(unittest.TestCase):
         )
         explicit = recovered["failed_attempts"][-1]["correlation_evidence"]
         self.assertEqual(
-            rollout.PUBLISHER_WORKFLOW_SHA,
+            rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
             explicit["logged_publisher_sha"],
         )
         self.assertEqual(
-            rollout.PUBLISHER_WORKFLOW_SHA,
+            rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
             explicit["logged_kandelo_ref"],
         )
         self.assertNotIn(
             explicit["source_workflow_sha256"],
             rollout.trusted_workflow_publishers(recovered),
         )
-        rollout.validate_state(recovered, current, self.consumer_sha)
+        rollout.validate_state(
+            recovered,
+            current,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
 
     def test_explicit_pre_matrix_adoption_rejects_log_formula_substitution(self):
         source = dataclasses.replace(
@@ -4321,8 +4977,8 @@ class RolloutControllerTests(unittest.TestCase):
             rollout.approved_workflow_authority(transitional)
         self.assertEqual(
             (
-                rollout.PUBLISHER_WORKFLOW_SHA,
-                rollout.PUBLISHER_WORKFLOW_SHA,
+                rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
+                rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
                 "exact",
             ),
             rollout.approved_workflow_authority(
@@ -4389,12 +5045,19 @@ class RolloutControllerTests(unittest.TestCase):
             sha="a" * 40,
         )
         current = self._snapshot_with_formula_source(
-            self.snapshot,
+            dataclasses.replace(
+                self.snapshot,
+                workflow_source=self.precutover_workflow_source,
+            ),
             "sqlite",
             rollout.source_with_rebuild(old_source, "sqlite", 2),
             sha="c" * 40,
         )
-        state = self._failed_state(source, "sqlite")
+        state = self._failed_state(
+            source,
+            "sqlite",
+            consumer_sha=rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
         state.pop("expected_publisher_sha")
         state.pop("workflow_rotations")
         github = FakeGitHub()
@@ -4422,19 +5085,29 @@ class RolloutControllerTests(unittest.TestCase):
             current_snapshot=current,
         )
 
-        self.assertEqual(self.consumer_sha, recovered["expected_kandelo_sha"])
         self.assertEqual(
-            rollout.PUBLISHER_WORKFLOW_SHA,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
+            recovered["expected_kandelo_sha"],
+        )
+        self.assertEqual(
+            rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
             recovered["expected_publisher_sha"],
         )
         self.assertEqual(1, len(recovered["workflow_rotations"]))
         rotation = recovered["workflow_rotations"][0]
-        self.assertEqual(self.consumer_sha, rotation["old_publisher_sha"])
         self.assertEqual(
-            rollout.PUBLISHER_WORKFLOW_SHA,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
+            rotation["old_publisher_sha"],
+        )
+        self.assertEqual(
+            rollout.LEGACY_PUBLISHER_WORKFLOW_SHA,
             rotation["new_publisher_sha"],
         )
-        rollout.validate_state(recovered, current, self.consumer_sha)
+        rollout.validate_state(
+            recovered,
+            current,
+            rollout.LEGACY_ABI42_CONSUMER_SHA,
+        )
 
     def test_failed_recovery_requires_a_new_rebuild_for_an_occupied_identity(self):
         old_source = rollout.source_with_rebuild(
@@ -6078,9 +6751,10 @@ class RolloutControllerTests(unittest.TestCase):
             self.consumer_sha,
         )
         options = (
-            ("--campaign-id", "shell-bottles-2026-07-25"),
+            ("--campaign-id", rollout.CAMPAIGN_MANIFEST_ID),
             ("--campaign-base-tap-sha", "a" * 40),
             ("--campaign-reservation-tap-sha", "b" * 40),
+            ("--campaign-manifest-tap-sha", "c" * 40),
             ("--expected-publisher-sha", rollout.PUBLISHER_WORKFLOW_SHA),
             (
                 "--expected-package-generation-sha",
@@ -6109,7 +6783,7 @@ class RolloutControllerTests(unittest.TestCase):
         )
         self.assertTrue(valid.initialize_campaign)
         self.assertEqual(
-            "shell-bottles-2026-07-25", valid.campaign_id
+            rollout.CAMPAIGN_MANIFEST_ID, valid.campaign_id
         )
         self.assertIsNone(valid.campaign_selection)
 
@@ -6122,43 +6796,20 @@ class RolloutControllerTests(unittest.TestCase):
             "--campaign-deferred-formulae",
             ",".join(selection.deferred),
         )
-        selected = rollout.parse_args(
-            (
-                *common,
-                "--state-file",
-                "/tmp/fresh-campaign.json",
-                "--initialize-campaign",
-                *campaign_args,
-                *selection_args,
-            )
-        )
-        self.assertEqual(selection, selected.campaign_selection)
-        for omitted in (
-            "--campaign-rebuild-formulae",
-            "--campaign-reuse-formulae",
-            "--campaign-deferred-formulae",
+        with (
+            redirect_stderr(io.StringIO()),
+            self.assertRaises(SystemExit),
         ):
-            retained = tuple(
-                value
-                for index in range(0, len(selection_args), 2)
-                if selection_args[index] != omitted
-                for value in selection_args[index : index + 2]
-            )
-            with (
-                self.subTest(missing=omitted),
-                redirect_stderr(io.StringIO()),
-                self.assertRaises(SystemExit),
-            ):
-                rollout.parse_args(
-                    (
-                        *common,
-                        "--state-file",
-                        "/tmp/fresh-campaign.json",
-                        "--initialize-campaign",
-                        *campaign_args,
-                        *retained,
-                    )
+            rollout.parse_args(
+                (
+                    *common,
+                    "--state-file",
+                    "/tmp/fresh-campaign.json",
+                    "--initialize-campaign",
+                    *campaign_args,
+                    *selection_args,
                 )
+            )
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             rollout.parse_args(
                 (

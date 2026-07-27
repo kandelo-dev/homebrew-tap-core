@@ -38,52 +38,73 @@ TAP_NAME = "kandelo-dev/tap-core"
 KANDELO_REPOSITORY = "Automattic/kandelo"
 WORKFLOW_ID = 315_324_894
 WORKFLOW_PATH = ".github/workflows/publish-bottles.yml"
-# WHY: this SHA selects trusted publisher code, not package identity. The
-# controller separately receives the Kandelo package-consumer SHA so hardened
-# workflow changes cannot silently force ABI 42 to consume a different cache.
-PUBLISHER_WORKFLOW_SHA = "3545bfd34509a52b68a4620c92e4aae24c60adb0"
-ABI42_CONSUMER_SHA = "d3805721b887a19382ef1c96b576fc27badc0951"
+LEGACY_PUBLISHER_WORKFLOW_SHA = "3545bfd34509a52b68a4620c92e4aae24c60adb0"
+LEGACY_ABI42_CONSUMER_SHA = "d3805721b887a19382ef1c96b576fc27badc0951"
+LEGACY_PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
+LEGACY_PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
+# The next campaign deliberately keeps its authority separate from the legacy
+# d380 controller. These values are replaced only after the exact Kandelo main
+# merge and its selected rootfs generation have both been admitted.
+CURRENT_MAIN_SHA = "5f448e68ec031108de42e965f5284944861b6ea2"
+CURRENT_ROOTFS_GENERATION_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-d66825c03af08133538018dca0bad5732d8eaf5add3dfd513b3c1bce9210256e"
+CURRENT_CALLER_SHA256 = "3c6028607ad3bdbba8a814e065d602d9c1cc45c64ccd6e8e859a336d58acfeac"
+# WHY: the current write caller executes the publisher and consumes packages
+# from the same exact main commit. The selected-input admission record, rather
+# than a distinct source commit, vouches for the preserved rootfs bytes.
+PUBLISHER_WORKFLOW_SHA = CURRENT_MAIN_SHA
+ABI42_CONSUMER_SHA = CURRENT_MAIN_SHA
+PREPUBLICATION_STAGING_TAG = CURRENT_ROOTFS_GENERATION_TAG
+PREPUBLICATION_GENERATION_SHA = CURRENT_MAIN_SHA
 # These hashes bind the complete protected caller, including permissions and
 # the absence of caller-provided secrets or extra executable jobs. The
 # transitional caller selected an incompatible consumer and is therefore
 # approved only as evidence for runs proven to have stopped before all writes.
 APPROVED_PUBLICATION_WORKFLOWS = {
     "3207ecd35a5cca77fc5bb0e26bee8ab9d354efcb7fef2c1d7aa8b65a8b2bade3": (
-        ABI42_CONSUMER_SHA,
-        ABI42_CONSUMER_SHA,
+        LEGACY_ABI42_CONSUMER_SHA,
+        LEGACY_ABI42_CONSUMER_SHA,
         "main",
     ),
     "0bf3328ac4d5c0f3497b071943d875e5d43ef4c37f81b941377d7cefdbde97d8": (
-        PUBLISHER_WORKFLOW_SHA,
-        ABI42_CONSUMER_SHA,
+        LEGACY_PUBLISHER_WORKFLOW_SHA,
+        LEGACY_ABI42_CONSUMER_SHA,
         "exact",
     ),
     "0e526ce02463ee83ec77952eb0cbdaf427541b0c8549fa9cd70e9e58f9fe4376": (
-        PUBLISHER_WORKFLOW_SHA,
-        ABI42_CONSUMER_SHA,
+        LEGACY_PUBLISHER_WORKFLOW_SHA,
+        LEGACY_ABI42_CONSUMER_SHA,
+        "exact",
+    ),
+    CURRENT_CALLER_SHA256: (
+        CURRENT_MAIN_SHA,
+        CURRENT_MAIN_SHA,
         "exact",
     ),
 }
 APPROVED_NO_WRITE_ONLY_WORKFLOWS = {
     "6e425bbaa04a1c0127db59a0cab8365eebfe5f67946b44de935b76b0ec745ada": (
-        PUBLISHER_WORKFLOW_SHA,
-        PUBLISHER_WORKFLOW_SHA,
+        LEGACY_PUBLISHER_WORKFLOW_SHA,
+        LEGACY_PUBLISHER_WORKFLOW_SHA,
         "exact",
     ),
 }
 EXPECTED_ABI = 42
 EXPECTED_RELEASE_TAG = "bottles-abi-v42"
-PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
-PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
 # A fresh campaign may not turn arbitrary command-line SHAs into publication
 # authority. Each complete caller hash must be reviewed with the exact reusable
 # publisher, package consumer, and sealed package generation it selects.
 APPROVED_CAMPAIGN_CONTRACTS = {
     "0e526ce02463ee83ec77952eb0cbdaf427541b0c8549fa9cd70e9e58f9fe4376": (
-        PUBLISHER_WORKFLOW_SHA,
-        ABI42_CONSUMER_SHA,
-        PREPUBLICATION_GENERATION_SHA,
-        PREPUBLICATION_STAGING_TAG,
+        LEGACY_PUBLISHER_WORKFLOW_SHA,
+        LEGACY_ABI42_CONSUMER_SHA,
+        LEGACY_PREPUBLICATION_GENERATION_SHA,
+        LEGACY_PREPUBLICATION_STAGING_TAG,
+    ),
+    CURRENT_CALLER_SHA256: (
+        CURRENT_MAIN_SHA,
+        CURRENT_MAIN_SHA,
+        CURRENT_MAIN_SHA,
+        CURRENT_ROOTFS_GENERATION_TAG,
     ),
 }
 MAX_ACTIVE_RUNS = 8
@@ -124,6 +145,17 @@ DISPATCH_RUN_CLOCK_SKEW = dt.timedelta(minutes=5)
 BOTTLE_ROOT = "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
 REGISTRY_TOKEN_ROOT = "https://ghcr.io/token"
 MAX_REGISTRY_RESPONSE_BYTES = 4 * 1024 * 1024
+REGISTRY_NAMESPACE = "kandelo-dev/homebrew-tap-core"
+CAMPAIGN_MANIFEST_PATH = (
+    "Kandelo/campaigns/mostly-lazy-shell-abi42-rootfs-wasm32.json"
+)
+CAMPAIGN_MANIFEST_ID = "mostly-lazy-shell-abi42-rootfs-wasm32"
+CAMPAIGN_BASE_TAP_SHA = "a0a3afe4ad63e1efd64c8c63d97edc5587a8d755"
+CAMPAIGN_MANIFEST_SHA256 = (
+    "c2d1b741a3b2c378c9b9287f4c0f775129e7433e3eed68020007f437b107678d"
+)
+CAMPAIGN_REUSE_COUNT = 23
+MAX_BOTTLE_BYTES = 1024 * 1024 * 1024
 MAX_JOB_LOG_BYTES = 4 * 1024 * 1024
 ACCEPTED_REGISTRY_MEDIA_TYPES = frozenset(
     (
@@ -306,6 +338,47 @@ class CampaignSelection:
 
 
 @dataclasses.dataclass(frozen=True)
+class CampaignReuse:
+    formula: str
+    version: str
+    formula_revision: int
+    bottle_rebuild: int
+    blob_sha256: str
+    blob_bytes: int
+    sidecar_path: str
+    sidecar_sha256: str
+    link_manifest_path: str
+    link_manifest_sha256: str
+
+
+@dataclasses.dataclass(frozen=True)
+class CampaignManifest:
+    campaign: str
+    rootfs_arch: str
+    base_tap_sha: str
+    reservation_tap_sha: str
+    rebuild_formula: str
+    rebuild_version: str
+    rebuild_formula_revision: int
+    old_bottle_rebuild: int
+    reserved_bottle_rebuild: int
+    reuse: tuple[CampaignReuse, ...]
+    deferred: tuple[str, ...]
+    sha256: str
+
+    @property
+    def selection(self) -> CampaignSelection:
+        reuse_names = {entry.formula for entry in self.reuse}
+        return CampaignSelection.create(
+            rebuild=(self.rebuild_formula,),
+            reuse=tuple(
+                formula for formula in FORMULA_ORDER if formula in reuse_names
+            ),
+            deferred=self.deferred,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
 class TapSnapshot:
     sha: str
     metadata: Mapping[str, Any]
@@ -429,6 +502,22 @@ class GitTap:
 
     def show(self, revision: str, path: str) -> str:
         result = self.git("show", f"{revision}:{path}", check=False)
+        if result.returncode != 0:
+            raise RolloutError(f"{path} is unavailable at tap commit {revision}")
+        return result.stdout
+
+    def show_bytes(self, revision: str, path: str) -> bytes:
+        # WHY: campaign authority binds the exact Git blob bytes. Text-mode
+        # subprocess decoding and newline conversion must not be allowed to
+        # turn a different sidecar, link manifest, or campaign manifest into
+        # equivalent parsed JSON.
+        result = subprocess.run(
+            ("git", "cat-file", "blob", f"{revision}:{path}"),
+            cwd=self.root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
         if result.returncode != 0:
             raise RolloutError(f"{path} is unavailable at tap commit {revision}")
         return result.stdout
@@ -629,11 +718,32 @@ class GitHub:
         )
 
 
+class _NoRegistryRedirects(urllib.request.HTTPRedirectHandler):
+    """Return every registry redirect to the verifier instead of following it."""
+
+    def redirect_request(
+        self,
+        request: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> None:
+        del request, fp, code, msg, headers, newurl
+        return None
+
+
 class AnonymousRegistry:
     """Read one public GHCR identity without reusing operator credentials."""
 
-    def __init__(self, opener: Any = urllib.request.urlopen) -> None:
-        self.opener = opener
+    def __init__(self, opener: Any | None = None) -> None:
+        # WHY: urllib's default handler follows redirects and can copy request
+        # headers. Bottle redirects are inspected and followed explicitly so
+        # the GHCR bearer can never escape to object storage.
+        self.opener = opener or urllib.request.build_opener(
+            _NoRegistryRedirects()
+        ).open
 
     @staticmethod
     def _read_bounded(response: Any, label: str) -> bytes:
@@ -663,24 +773,24 @@ class AnonymousRegistry:
         except (OSError, urllib.error.URLError) as error:
             raise RolloutError(f"cannot read {label}: {error}") from error
 
-    def manifest(
-        self, formula: str, reference: str
-    ) -> RegistryManifestEvidence:
+    def _anonymous_token(self, formula: str) -> str:
         if formula not in FORMULA_ORDER:
             raise RolloutError(f"cannot inspect an unknown Formula: {formula!r}")
-        if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9._-]{0,127}", reference):
-            raise RolloutError(f"cannot inspect an invalid OCI reference: {reference!r}")
-
-        scope = f"repository:kandelo-dev/homebrew-tap-core/{formula}:pull"
+        scope = f"repository:{REGISTRY_NAMESPACE}/{formula}:pull"
         token_url = (
             f"{REGISTRY_TOKEN_ROOT}?"
             + urllib.parse.urlencode({"service": "ghcr.io", "scope": scope})
         )
+        # WHY: never accept an operator token here. The campaign is proving
+        # that a guest can retrieve these public bottle bytes, so its only
+        # credential is a pull token obtained from GHCR without Authorization.
         token_request = urllib.request.Request(
             token_url,
             headers={"Accept": "application/json"},
             method="GET",
         )
+        if token_request.has_header("Authorization"):
+            raise RolloutError("anonymous GHCR token request is authenticated")
         try:
             with self._open(token_request, "anonymous GHCR token") as response:
                 if response.geturl() != token_url or response.getcode() != 200:
@@ -700,6 +810,17 @@ class AnonymousRegistry:
         token = token_payload.get("token") if isinstance(token_payload, dict) else None
         if not isinstance(token, str) or not token:
             raise RolloutError("anonymous GHCR token response lacks a token")
+        return token
+
+    def manifest(
+        self, formula: str, reference: str
+    ) -> RegistryManifestEvidence:
+        if formula not in FORMULA_ORDER:
+            raise RolloutError(f"cannot inspect an unknown Formula: {formula!r}")
+        if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9._-]{0,127}", reference):
+            raise RolloutError(f"cannot inspect an invalid OCI reference: {reference!r}")
+
+        token = self._anonymous_token(formula)
 
         manifest_url = (
             f"{BOTTLE_ROOT}/{urllib.parse.quote(formula, safe='')}/manifests/"
@@ -753,6 +874,141 @@ class AnonymousRegistry:
             )
         return RegistryManifestEvidence(exists=True, digest=computed_digest)
 
+    def verify_blob(
+        self,
+        formula: str,
+        digest: str,
+        expected_bytes: int,
+    ) -> None:
+        if formula not in FORMULA_ORDER:
+            raise RolloutError(f"cannot inspect an unknown Formula: {formula!r}")
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise RolloutError("public GHCR blob digest is invalid")
+        if (
+            isinstance(expected_bytes, bool)
+            or not isinstance(expected_bytes, int)
+            or expected_bytes < 1
+            or expected_bytes > MAX_BOTTLE_BYTES
+        ):
+            raise RolloutError("public GHCR blob size is invalid")
+
+        token = self._anonymous_token(formula)
+        # WHY: the endpoint is derived from the fixed public namespace and
+        # immutable digest. No stored URL, package ID, run ID, or redirect can
+        # select different bytes.
+        blob_url = (
+            f"{BOTTLE_ROOT}/{urllib.parse.quote(formula, safe='')}/blobs/"
+            f"sha256:{digest}"
+        )
+        request = urllib.request.Request(
+            blob_url,
+            headers={
+                "Accept": "application/octet-stream",
+                "Authorization": f"Bearer {token}",
+            },
+            method="GET",
+        )
+        try:
+            with self._open(request, f"public GHCR {formula} blob"):
+                raise RolloutError(
+                    f"public GHCR {formula} blob did not use its required redirect"
+                )
+        except urllib.error.HTTPError as error:
+            location = error.headers.get("Location")
+            code = error.code
+            response_url = error.geturl()
+            error.close()
+            if (
+                code != 307
+                or response_url != blob_url
+                or not isinstance(location, str)
+            ):
+                raise RolloutError(
+                    f"public GHCR {formula} blob returned HTTP {code}"
+                ) from error
+
+        redirect = urllib.parse.urlsplit(location)
+        if (
+            redirect.scheme != "https"
+            or redirect.hostname != "pkg-containers.githubusercontent.com"
+            or redirect.port not in (None, 443)
+            or redirect.username is not None
+            or redirect.password is not None
+            or redirect.fragment
+            or not re.fullmatch(
+                rf"/ghcrblobs[0-9]+/blobs/sha256:{digest}",
+                redirect.path,
+            )
+            or not redirect.query
+        ):
+            raise RolloutError(
+                f"public GHCR {formula} blob redirect is outside approved storage"
+            )
+
+        # WHY: Location is a short-lived signed object URL. Construct a new
+        # request rather than reusing the GHCR request, and deliberately omit
+        # Authorization so only the signed URL reaches GitHub object storage.
+        storage_request = urllib.request.Request(
+            location,
+            headers={"Accept": "application/octet-stream"},
+            method="GET",
+        )
+        if storage_request.has_header("Authorization"):
+            raise RolloutError("public GHCR storage request is authenticated")
+        try:
+            with self._open(
+                storage_request, f"public GHCR {formula} storage blob"
+            ) as response:
+                if response.geturl() != location or response.getcode() != 200:
+                    raise RolloutError(
+                        f"public GHCR {formula} storage blob redirected or failed"
+                    )
+                content_length = response.headers.get("Content-Length")
+                if content_length is not None:
+                    try:
+                        parsed_length = int(content_length)
+                    except ValueError as error:
+                        raise RolloutError(
+                            f"public GHCR {formula} blob has an invalid Content-Length"
+                        ) from error
+                    if parsed_length != expected_bytes:
+                        raise RolloutError(
+                            f"public GHCR {formula} blob size differs from authority"
+                        )
+                observed = 0
+                hasher = hashlib.sha256()
+                while True:
+                    try:
+                        chunk = response.read(
+                            min(1024 * 1024, expected_bytes - observed + 1)
+                        )
+                    except OSError as error:
+                        raise RolloutError(
+                            f"cannot read public GHCR {formula} blob: {error}"
+                        ) from error
+                    if not chunk:
+                        break
+                    observed += len(chunk)
+                    if observed > expected_bytes:
+                        raise RolloutError(
+                            f"public GHCR {formula} blob exceeds authority size"
+                        )
+                    hasher.update(chunk)
+        except urllib.error.HTTPError as error:
+            code = error.code
+            error.close()
+            raise RolloutError(
+                f"public GHCR {formula} storage blob returned HTTP {code}"
+            ) from error
+        if observed != expected_bytes:
+            raise RolloutError(
+                f"public GHCR {formula} blob size differs from authority"
+            )
+        if hasher.hexdigest() != digest:
+            raise RolloutError(
+                f"public GHCR {formula} blob digest differs from authority"
+            )
+
 
 def _json_object(text: str, label: str) -> Mapping[str, Any]:
     try:
@@ -762,6 +1018,337 @@ def _json_object(text: str, label: str) -> Mapping[str, Any]:
     if not isinstance(value, dict):
         raise RolloutError(f"{label} is not a JSON object")
     return value
+
+
+def _json_object_bytes(raw: bytes, label: str) -> dict[str, Any]:
+    def reject_duplicate_keys(
+        pairs: list[tuple[str, Any]],
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise RolloutError(f"{label} duplicates JSON key {key!r}")
+            result[key] = value
+        return result
+
+    try:
+        value = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RolloutError(f"{label} is not valid UTF-8 JSON") from error
+    if not isinstance(value, dict):
+        raise RolloutError(f"{label} is not a JSON object")
+    return value
+
+
+def _exact_sha256(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise RolloutError(f"{label} must be exactly 64 lowercase hex")
+    return value
+
+
+def _manifest_file_reference(
+    value: Any,
+    *,
+    label: str,
+    expected_path: str,
+) -> tuple[str, str]:
+    if not isinstance(value, dict) or set(value) != {"path", "sha256"}:
+        raise RolloutError(f"{label} has an unexpected shape")
+    path = value.get("path")
+    digest = _exact_sha256(value.get("sha256"), f"{label} SHA-256")
+    if path != expected_path:
+        raise RolloutError(f"{label} does not name its canonical T0 path")
+    return path, digest
+
+
+def load_campaign_manifest(
+    tap: GitTap,
+    manifest_authority_sha: str,
+    *,
+    expected_sha256: str | None = None,
+) -> CampaignManifest:
+    if not re.fullmatch(r"[0-9a-f]{40}", manifest_authority_sha):
+        raise RolloutError("campaign manifest authority is not an exact tap SHA")
+    raw = tap.show_bytes(manifest_authority_sha, CAMPAIGN_MANIFEST_PATH)
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != CAMPAIGN_MANIFEST_SHA256:
+        # WHY: an exact commit is necessary but insufficient if an operator
+        # can nominate an arbitrary new protected-main commit. This reviewed
+        # raw digest makes the one committed manifest—not a replacement with
+        # a different 23-entry selection—the production authority.
+        raise RolloutError(
+            "campaign manifest bytes are not the canonical production authority"
+        )
+    if expected_sha256 is not None and digest != _exact_sha256(
+        expected_sha256, "campaign manifest ledger SHA-256"
+    ):
+        raise RolloutError("campaign manifest bytes differ from the private ledger")
+    value = _json_object_bytes(raw, CAMPAIGN_MANIFEST_PATH)
+    # WHY: the ledger hashes raw bytes. Requiring the repository's canonical
+    # encoding makes review and byte-for-byte test fixtures unambiguous.
+    if raw != (json.dumps(value, indent=2) + "\n").encode():
+        raise RolloutError("campaign manifest is not canonical JSON")
+    expected_top_keys = {
+        "base_tap_sha",
+        "campaign",
+        "kandelo_abi",
+        "rebuild",
+        "registry_namespace",
+        "reservation_tap_sha",
+        "reuse",
+        "rootfs_arch",
+        "schema",
+    }
+    if set(value) != expected_top_keys:
+        raise RolloutError("campaign manifest has an unexpected shape")
+    if (
+        type(value.get("schema")) is not int
+        or value["schema"] != 1
+        or value.get("campaign") != CAMPAIGN_MANIFEST_ID
+        or type(value.get("kandelo_abi")) is not int
+        or value["kandelo_abi"] != EXPECTED_ABI
+        or value.get("rootfs_arch") != "wasm32"
+        or value.get("registry_namespace") != REGISTRY_NAMESPACE
+        or value.get("base_tap_sha") != CAMPAIGN_BASE_TAP_SHA
+        or not isinstance(value.get("reservation_tap_sha"), str)
+        or not re.fullmatch(r"[0-9a-f]{40}", value["reservation_tap_sha"])
+    ):
+        raise RolloutError("campaign manifest selects an unapproved campaign identity")
+
+    rebuild = value.get("rebuild")
+    expected_rebuild_keys = {
+        "formula",
+        "formula_revision",
+        "old_bottle_rebuild",
+        "reserved_bottle_rebuild",
+        "version",
+    }
+    if not isinstance(rebuild, dict) or set(rebuild) != expected_rebuild_keys:
+        raise RolloutError("campaign manifest rebuild identity has an unexpected shape")
+    if (
+        rebuild.get("formula") != "bash"
+        or not isinstance(rebuild.get("version"), str)
+        or not rebuild["version"]
+        or type(rebuild.get("formula_revision")) is not int
+        or rebuild["formula_revision"] < 0
+        or type(rebuild.get("old_bottle_rebuild")) is not int
+        or rebuild["old_bottle_rebuild"] < 0
+        or type(rebuild.get("reserved_bottle_rebuild")) is not int
+        or rebuild["reserved_bottle_rebuild"]
+        != rebuild["old_bottle_rebuild"] + 1
+    ):
+        raise RolloutError("campaign manifest Bash identity is invalid")
+
+    raw_reuse = value.get("reuse")
+    if not isinstance(raw_reuse, list) or len(raw_reuse) != CAMPAIGN_REUSE_COUNT:
+        raise RolloutError(
+            f"campaign manifest must contain exactly {CAMPAIGN_REUSE_COUNT} reuse entries"
+        )
+    reuse: list[CampaignReuse] = []
+    expected_entry_keys = {
+        "blob",
+        "bottle_rebuild",
+        "formula",
+        "formula_revision",
+        "link_manifest",
+        "sidecar",
+        "version",
+    }
+    for index, entry in enumerate(raw_reuse):
+        if not isinstance(entry, dict) or set(entry) != expected_entry_keys:
+            raise RolloutError(
+                f"campaign manifest reuse entry {index} has an unexpected shape"
+            )
+        formula = entry.get("formula")
+        version = entry.get("version")
+        formula_revision = entry.get("formula_revision")
+        bottle_rebuild = entry.get("bottle_rebuild")
+        blob = entry.get("blob")
+        if (
+            formula not in FORMULA_ORDER
+            or formula == "bash"
+            or not isinstance(version, str)
+            or not version
+            or type(formula_revision) is not int
+            or formula_revision < 0
+            or type(bottle_rebuild) is not int
+            or bottle_rebuild < 0
+            or not isinstance(blob, dict)
+            or set(blob) != {"bytes", "sha256"}
+            or type(blob.get("bytes")) is not int
+            or blob["bytes"] < 1
+            or blob["bytes"] > MAX_BOTTLE_BYTES
+        ):
+            raise RolloutError(
+                f"campaign manifest reuse entry {index} has an invalid identity"
+            )
+        blob_sha256 = _exact_sha256(
+            blob.get("sha256"),
+            f"campaign manifest {formula} blob SHA-256",
+        )
+        sidecar_path, sidecar_sha256 = _manifest_file_reference(
+            entry.get("sidecar"),
+            label=f"campaign manifest {formula} sidecar",
+            expected_path=f"Kandelo/formula/{formula}.json",
+        )
+        link_path, link_sha256 = _manifest_file_reference(
+            entry.get("link_manifest"),
+            label=f"campaign manifest {formula} link manifest",
+            expected_path=(
+                f"Kandelo/link/{formula}-{version}-"
+                f"rebuild{bottle_rebuild}-wasm32.json"
+            ),
+        )
+        reuse.append(
+            CampaignReuse(
+                formula=formula,
+                version=version,
+                formula_revision=formula_revision,
+                bottle_rebuild=bottle_rebuild,
+                blob_sha256=blob_sha256,
+                blob_bytes=blob["bytes"],
+                sidecar_path=sidecar_path,
+                sidecar_sha256=sidecar_sha256,
+                link_manifest_path=link_path,
+                link_manifest_sha256=link_sha256,
+            )
+        )
+
+    reuse_formulae = tuple(entry.formula for entry in reuse)
+    if len(reuse_formulae) != len(set(reuse_formulae)):
+        raise RolloutError("campaign manifest duplicates a reuse Formula")
+    wanted = set(reuse_formulae)
+    if reuse_formulae != tuple(sorted(wanted)):
+        raise RolloutError(
+            "campaign manifest reuse entries are not in canonical name order"
+        )
+    deferred = tuple(
+        formula
+        for formula in FORMULA_ORDER
+        if formula != "bash" and formula not in wanted
+    )
+    manifest = CampaignManifest(
+        campaign=value["campaign"],
+        rootfs_arch=value["rootfs_arch"],
+        base_tap_sha=value["base_tap_sha"],
+        reservation_tap_sha=value["reservation_tap_sha"],
+        rebuild_formula=rebuild["formula"],
+        rebuild_version=rebuild["version"],
+        rebuild_formula_revision=rebuild["formula_revision"],
+        old_bottle_rebuild=rebuild["old_bottle_rebuild"],
+        reserved_bottle_rebuild=rebuild["reserved_bottle_rebuild"],
+        reuse=tuple(reuse),
+        deferred=deferred,
+        sha256=digest,
+    )
+    # This also proves that the one rebuild, 23 reuse entries, and every
+    # derived deferred T0 Formula form an exact, non-overlapping catalog.
+    _ = manifest.selection
+    return manifest
+
+
+def validate_campaign_manifest_sources(
+    tap: GitTap,
+    manifest: CampaignManifest,
+    base: TapSnapshot,
+    reservation: TapSnapshot,
+) -> None:
+    if (
+        base.sha != manifest.base_tap_sha
+        or reservation.sha != manifest.reservation_tap_sha
+    ):
+        raise RolloutError("campaign manifest tap identities differ from loaded sources")
+    base_bash = base.identities.get(manifest.rebuild_formula)
+    reserved_bash = reservation.identities.get(manifest.rebuild_formula)
+    stable_bash = (
+        manifest.rebuild_version,
+        manifest.rebuild_formula_revision,
+    )
+    if (
+        base_bash is None
+        or reserved_bash is None
+        or (base_bash.pkg_version, base_bash.formula_revision) != stable_bash
+        or (reserved_bash.pkg_version, reserved_bash.formula_revision) != stable_bash
+        or base_bash.bottle_rebuild != manifest.old_bottle_rebuild
+        or reserved_bash.bottle_rebuild != manifest.reserved_bottle_rebuild
+    ):
+        raise RolloutError("campaign manifest Bash identity differs from T0 or Tpre")
+
+    for entry in manifest.reuse:
+        raw_sidecar = tap.show_bytes(manifest.base_tap_sha, entry.sidecar_path)
+        if hashlib.sha256(raw_sidecar).hexdigest() != entry.sidecar_sha256:
+            raise RolloutError(
+                f"campaign manifest {entry.formula} sidecar bytes differ at T0"
+            )
+        raw_link = tap.show_bytes(manifest.base_tap_sha, entry.link_manifest_path)
+        if hashlib.sha256(raw_link).hexdigest() != entry.link_manifest_sha256:
+            raise RolloutError(
+                f"campaign manifest {entry.formula} link bytes differ at T0"
+            )
+        sidecar = _json_object_bytes(raw_sidecar, entry.sidecar_path)
+        link = _json_object_bytes(raw_link, entry.link_manifest_path)
+        base_identity = base.identities.get(entry.formula)
+        sidecar_bottles = _bottles_by_arch(
+            sidecar, f"campaign manifest {entry.formula} sidecar"
+        )
+        bottle = sidecar_bottles.get("wasm32")
+        expected_url = (
+            f"{BOTTLE_ROOT}/{entry.formula}/blobs/sha256:{entry.blob_sha256}"
+        )
+        if (
+            base_identity is None
+            or base_identity.pkg_version != entry.version
+            or base_identity.formula_revision != entry.formula_revision
+            or base_identity.bottle_rebuild != entry.bottle_rebuild
+            or base_identity.bottle_sha256.get("wasm32") != entry.blob_sha256
+            or sidecar.get("schema") != 1
+            or sidecar.get("name") != entry.formula
+            or sidecar.get("version") != entry.version
+            or sidecar.get("formula_revision") != entry.formula_revision
+            or sidecar.get("bottle_rebuild") != entry.bottle_rebuild
+            or sidecar.get("kandelo_abi") != EXPECTED_ABI
+            or not isinstance(bottle, dict)
+            or bottle.get("arch") != "wasm32"
+            or bottle.get("bottle_tag") != "wasm32_kandelo"
+            or bottle.get("kandelo_abi") != EXPECTED_ABI
+            or bottle.get("status", "success") != "success"
+            or bottle.get("sha256") != entry.blob_sha256
+            or bottle.get("bytes") != entry.blob_bytes
+            or bottle.get("link_manifest") != entry.link_manifest_path
+            or bottle.get("url") != expected_url
+        ):
+            raise RolloutError(
+                f"campaign manifest {entry.formula} sidecar identity differs at T0"
+            )
+        link_bottle = link.get("bottle")
+        if (
+            link.get("schema") != 1
+            or link.get("package") != entry.formula
+            or link.get("version") != entry.version
+            or link.get("arch") != "wasm32"
+            or link.get("kandelo_abi") != EXPECTED_ABI
+            or not isinstance(link_bottle, dict)
+            or link_bottle.get("sha256") != entry.blob_sha256
+            or link_bottle.get("bytes") != entry.blob_bytes
+            or link_bottle.get("url") != expected_url
+        ):
+            raise RolloutError(
+                f"campaign manifest {entry.formula} link identity differs at T0"
+            )
+
+
+def verify_campaign_reuse_blobs(
+    registry: Any,
+    manifest: CampaignManifest,
+) -> None:
+    if not hasattr(registry, "verify_blob"):
+        raise RolloutError("campaign registry cannot verify exact public blob bytes")
+    for entry in manifest.reuse:
+        registry.verify_blob(
+            entry.formula,
+            entry.blob_sha256,
+            entry.blob_bytes,
+        )
 
 
 def _single_int(source: str, pattern: str, default: int, label: str) -> int:
@@ -1061,12 +1648,44 @@ def validate_workflow_source(
         "require-vfs-acceptance": (
             "${{ github.event.client_payload.require_vfs_acceptance || false }}"
         ),
-        "prepublication-staging-tag": expected_package_generation_tag,
-        "prepublication-staging-kandelo-sha": expected_package_generation_sha,
-        "defer-vfs-acceptance-until-postpublication": (
-            "${{ github.event.client_payload.require_vfs_acceptance || false }}"
-        ),
     }
+    if expected_package_generation_tag.startswith(
+        "package-generation-rootfs-wasm32-"
+    ):
+        # WHY: selected-input admission moves authority to the immutable
+        # generation tag and the exact current-main consumer. The legacy source
+        # SHA and VFS deferral inputs would reopen the retired staging bridge.
+        if expected_package_generation_sha != expected_kandelo_sha:
+            raise RolloutError(
+                "selected rootfs generation authority must equal the exact "
+                "Kandelo package consumer"
+            )
+        expected_scalars["package-generation-wasm32"] = (
+            expected_package_generation_tag
+        )
+        forbidden_generation_keys = (
+            "package-generation-wasm64",
+            "prepublication-staging-tag",
+            "prepublication-staging-kandelo-sha",
+            "defer-vfs-acceptance-until-postpublication",
+        )
+    else:
+        expected_scalars.update(
+            {
+                "prepublication-staging-tag": expected_package_generation_tag,
+                "prepublication-staging-kandelo-sha": (
+                    expected_package_generation_sha
+                ),
+                "defer-vfs-acceptance-until-postpublication": (
+                    "${{ github.event.client_payload."
+                    "require_vfs_acceptance || false }}"
+                ),
+            }
+        )
+        forbidden_generation_keys = (
+            "package-generation-wasm32",
+            "package-generation-wasm64",
+        )
     for key, expected in expected_scalars.items():
         values = re.findall(
             rf"^\s+{re.escape(key)}:\s*(.+?)\s*$",
@@ -1076,6 +1695,17 @@ def validate_workflow_source(
         if values != [expected]:
             raise RolloutError(
                 f"production workflow {key} differs from {expected!r}: {values}"
+            )
+    for key in forbidden_generation_keys:
+        values = re.findall(
+            rf"^\s+{re.escape(key)}:\s*(.+?)\s*$",
+            snapshot.workflow_source,
+            flags=re.MULTILINE,
+        )
+        if values:
+            raise RolloutError(
+                f"production workflow retains forbidden generation input {key}: "
+                f"{values}"
             )
 
     tap_refs = re.findall(
@@ -1136,9 +1766,22 @@ def approved_package_generation(
     workflow_hash: str,
 ) -> tuple[str, str]:
     campaign = APPROVED_CAMPAIGN_CONTRACTS.get(workflow_hash)
-    if campaign is None:
-        return PREPUBLICATION_GENERATION_SHA, PREPUBLICATION_STAGING_TAG
-    return campaign[2], campaign[3]
+    if campaign is not None:
+        return campaign[2], campaign[3]
+    # WHY: recovery ledgers bind the caller that actually ran. Historical
+    # callers selected the admitted pre-publication generation, even after the
+    # controller's current campaign constants advance to final main.
+    if (
+        workflow_hash in APPROVED_PUBLICATION_WORKFLOWS
+        or workflow_hash in APPROVED_NO_WRITE_ONLY_WORKFLOWS
+    ):
+        return (
+            LEGACY_PREPUBLICATION_GENERATION_SHA,
+            LEGACY_PREPUBLICATION_STAGING_TAG,
+        )
+    raise RolloutError(
+        f"publication workflow hash {workflow_hash} has no approved package generation"
+    )
 
 
 def approved_publication_workflow_hash(workflow_hash: str) -> bool:
@@ -1165,27 +1808,31 @@ def validate_workflow(
         )
     if workflow.get("state") != "active":
         raise RolloutError(f"production workflow {WORKFLOW_ID} is not active")
-    publisher_sha = (
-        campaign_contract.publisher_sha
-        if campaign_contract is not None
-        else PUBLISHER_WORKFLOW_SHA
-    )
-    generation_sha = (
-        campaign_contract.package_generation_sha
-        if campaign_contract is not None
-        else PREPUBLICATION_GENERATION_SHA
-    )
-    generation_tag = (
-        campaign_contract.package_generation_tag
-        if campaign_contract is not None
-        else PREPUBLICATION_STAGING_TAG
-    )
-    if (
-        campaign_contract is not None
-        and campaign_contract.consumer_sha != expected_kandelo_sha
-    ):
-        raise RolloutError(
-            "campaign workflow contract selects another package consumer"
+    if campaign_contract is not None:
+        publisher_sha = campaign_contract.publisher_sha
+        generation_sha = campaign_contract.package_generation_sha
+        generation_tag = campaign_contract.package_generation_tag
+        if campaign_contract.consumer_sha != expected_kandelo_sha:
+            raise RolloutError(
+                "campaign workflow contract selects another package consumer"
+            )
+    else:
+        # WHY: recovery may inspect a retired but explicitly approved caller.
+        # Derive every pin from that caller's exact hash; using today's globals
+        # would either strand old ledgers or let a caller mix generations.
+        publisher_sha, approved_consumer, source_selector = (
+            approved_workflow_authority(snapshot)
+        )
+        if (
+            approved_consumer != expected_kandelo_sha
+            or source_selector != "exact"
+        ):
+            raise RolloutError(
+                "active publication workflow authority differs from the "
+                "requested consumer or exact tap-source contract"
+            )
+        generation_sha, generation_tag = approved_package_generation(
+            workflow_sha256(snapshot)
         )
     validate_workflow_source(
         snapshot,
@@ -1201,16 +1848,6 @@ def validate_workflow(
                 "reviewed workflow"
             )
         return
-    authority = approved_workflow_authority(snapshot)
-    if authority != (
-        PUBLISHER_WORKFLOW_SHA,
-        expected_kandelo_sha,
-        "exact",
-    ):
-        raise RolloutError(
-            "active publication workflow authority differs from the requested "
-            "publisher, consumer, or exact tap-source contract"
-        )
 
 
 def publication_workflow_contract(source: str) -> str:
@@ -2247,7 +2884,7 @@ def read_state(path: pathlib.Path) -> dict[str, Any] | None:
         state = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise RolloutError(f"cannot read rollout state {path}") from error
-    if not isinstance(state, dict) or state.get("schema") not in (1, 2, 3):
+    if not isinstance(state, dict) or state.get("schema") not in (1, 2, 3, 4):
         raise RolloutError(f"rollout state {path} has an unsupported schema")
     return state
 
@@ -2422,7 +3059,7 @@ def campaign_contract_from_state(
                 "schema-1 rollout state contains schema-2 campaign fields"
             )
         return None
-    if state.get("schema") not in (2, 3):
+    if state.get("schema") not in (2, 3, 4):
         raise RolloutError("rollout state has an unsupported schema")
     campaign = state.get("campaign")
     if not isinstance(campaign, dict):
@@ -2463,7 +3100,7 @@ def campaign_selection_from_state(
         return None
     if schema == 2:
         return CampaignSelection.all_rebuild()
-    if schema != 3:
+    if schema not in (3, 4):
         raise RolloutError("rollout state has an unsupported schema")
     campaign = state.get("campaign")
     if not isinstance(campaign, dict):
@@ -2549,30 +3186,49 @@ def initial_campaign_state(
     absent_oci_references: Mapping[str, str],
     checked_at: str,
     selection: CampaignSelection | None = None,
+    manifest: CampaignManifest | None = None,
+    manifest_authority_sha: str | None = None,
+    reservation_snapshot: TapSnapshot | None = None,
 ) -> dict[str, Any]:
     if not isinstance(campaign_id, str) or not CAMPAIGN_ID_RE.fullmatch(
         campaign_id
     ):
         raise RolloutError("campaign ID is invalid")
     validate_campaign_contract(contract)
-    if snapshot.sha == base_snapshot.sha:
+    selected_reservation = reservation_snapshot or snapshot
+    if selected_reservation.sha == base_snapshot.sha:
         raise RolloutError(
             "campaign reservation commit must differ from its base commit"
         )
-    selected_campaign = selection or CampaignSelection.all_rebuild()
+    if manifest is not None:
+        if selection is not None:
+            raise RolloutError(
+                "operator Formula partitions cannot override a manifest-backed campaign"
+            )
+        if (
+            manifest_authority_sha != snapshot.sha
+            or selected_reservation.sha != manifest.reservation_tap_sha
+            or base_snapshot.sha != manifest.base_tap_sha
+        ):
+            raise RolloutError("campaign manifest authority differs from campaign sources")
+        selected_campaign = manifest.selection
+    else:
+        if manifest_authority_sha is not None or reservation_snapshot is not None:
+            raise RolloutError("campaign manifest inputs must be supplied together")
+        selected_campaign = selection or CampaignSelection.all_rebuild()
     state = initial_state(snapshot, contract.consumer_sha)
-    state["schema"] = 3 if selection is not None else 2
+    state["schema"] = 4 if manifest is not None else (3 if selection is not None else 2)
     state["expected_publisher_sha"] = contract.publisher_sha
     state["workflow_sha256"] = contract.workflow_sha256
     state["previous_catalog"] = last_green_catalog_state(base_snapshot)
     state["base_catalog"] = catalog_state(base_snapshot)
-    state["initial_catalog"] = catalog_state(snapshot)
+    state["initial_catalog"] = catalog_state(selected_reservation)
     state["previous_formula_support_tree"] = base_snapshot.formula_support_tree
     state["previous_formula_sidecar_tree"] = base_snapshot.formula_sidecar_tree
     state["campaign"] = {
         "id": campaign_id,
         "base_tap_sha": base_snapshot.sha,
-        "reservation_tap_sha": snapshot.sha,
+        "reservation_tap_sha": selected_reservation.sha,
         "initialized_at": _utc_now(),
         **contract.state_value(),
         "prior_kandelo_sha": base_snapshot.metadata.get("kandelo_commit"),
@@ -2585,13 +3241,21 @@ def initial_campaign_state(
         # identity. Reused and deferred Formulae remain explicit in schema 3,
         # but reserving them would turn validation into an accidental rebuild.
         "reservations": campaign_reservations(
-            snapshot, selected_campaign.rebuild
+            selected_reservation, selected_campaign.rebuild
         ),
         "absent_oci_references": dict(absent_oci_references),
         "absent_oci_checked_at": checked_at,
     }
-    if selection is not None:
+    if selection is not None or manifest is not None:
         state["campaign"].update(selected_campaign.state_value())
+    if manifest is not None:
+        state["campaign"].update(
+            {
+                "manifest_path": CAMPAIGN_MANIFEST_PATH,
+                "manifest_sha256": manifest.sha256,
+                "manifest_tap_sha": manifest_authority_sha,
+            }
+        )
     return state
 
 
@@ -2624,9 +3288,13 @@ def validate_campaign_state(
         "reservation_tap_sha",
         "reservations",
     }
-    if state.get("schema") == 3:
+    if state.get("schema") in (3, 4):
         expected_keys.update(
             ("rebuild_formulae", "reuse_formulae", "deferred_formulae")
+        )
+    if state.get("schema") == 4:
+        expected_keys.update(
+            ("manifest_path", "manifest_sha256", "manifest_tap_sha")
         )
     if set(campaign) != expected_keys:
         raise RolloutError("campaign rollout state has an unexpected shape")
@@ -2674,12 +3342,27 @@ def validate_campaign_state(
         or not campaign["absent_oci_checked_at"]
         or not isinstance(campaign.get("initialized_at"), str)
         or not campaign["initialized_at"]
-        or state.get("cutover_tap_sha") != campaign["reservation_tap_sha"]
+        or state.get("cutover_tap_sha")
+        != (
+            campaign.get("manifest_tap_sha")
+            if state.get("schema") == 4
+            else campaign["reservation_tap_sha"]
+        )
         or state.get("expected_publisher_sha") != contract.publisher_sha
         or state.get("workflow_sha256") != contract.workflow_sha256
     ):
         raise RolloutError(
             "campaign rollout state differs from its complete reservation contract"
+        )
+    if state.get("schema") == 4 and (
+        campaign.get("manifest_path") != CAMPAIGN_MANIFEST_PATH
+        or not isinstance(campaign.get("manifest_tap_sha"), str)
+        or not re.fullmatch(r"[0-9a-f]{40}", campaign["manifest_tap_sha"])
+        or not isinstance(campaign.get("manifest_sha256"), str)
+        or not re.fullmatch(r"[0-9a-f]{64}", campaign["manifest_sha256"])
+    ):
+        raise RolloutError(
+            "campaign rollout state has a malformed manifest authority"
         )
     parse_github_time(campaign["initialized_at"], "campaign initialized_at")
     parse_github_time(
@@ -2760,9 +3443,9 @@ def validate_campaign_main_descendant(
     tap: GitTap,
     state: Mapping[str, Any],
     snapshot: TapSnapshot,
-) -> None:
-    if state.get("schema") not in (2, 3):
-        return
+) -> CampaignManifest | None:
+    if state.get("schema") not in (2, 3, 4):
+        return None
     campaign = state.get("campaign")
     if not isinstance(campaign, dict):
         raise RolloutError("campaign rollout state has no campaign contract")
@@ -2792,6 +3475,54 @@ def validate_campaign_main_descendant(
             "campaign reservation commit differs from the private ledger"
         )
 
+    manifest_anchor_sha: str | None = None
+    manifest: CampaignManifest | None = None
+    if state.get("schema") == 4:
+        manifest_anchor_sha = campaign.get("manifest_tap_sha")
+        manifest_digest = campaign.get("manifest_sha256")
+        if (
+            not isinstance(manifest_anchor_sha, str)
+            or not isinstance(manifest_digest, str)
+        ):
+            raise RolloutError("campaign ledger lacks its manifest authority")
+        manifest = load_campaign_manifest(
+            tap,
+            manifest_anchor_sha,
+            expected_sha256=manifest_digest,
+        )
+        if (
+            manifest.base_tap_sha != base_sha
+            or manifest.reservation_tap_sha != reservation_sha
+            or manifest.selection != selection
+        ):
+            raise RolloutError(
+                "campaign manifest authority differs from the private ledger"
+            )
+        validate_campaign_manifest_sources(
+            tap,
+            manifest,
+            base,
+            reservation,
+        )
+        if (
+            not tap.is_ancestor(reservation_sha, manifest_anchor_sha)
+            or not tap.is_ancestor(manifest_anchor_sha, snapshot.sha)
+        ):
+            raise RolloutError(
+                "campaign manifest authority is not on protected main history"
+            )
+        manifest_snapshot = load_snapshot(tap, manifest_anchor_sha)
+        if (
+            catalog_state(manifest_snapshot) != state.get("catalog")
+            or manifest_snapshot.formula_support_tree
+            != state.get("formula_support_tree")
+            or manifest_snapshot.formula_sidecar_tree
+            != state.get("previous_formula_sidecar_tree")
+        ):
+            raise RolloutError(
+                "campaign manifest commit changes its reserved publication sources"
+            )
+
     # Failed-run recovery may legitimately reserve a later rebuild for one or
     # more occupied identities. Those reviewed replacement commits are part of
     # the ledger; all later movement must again be finalizer-only.
@@ -2800,12 +3531,14 @@ def validate_campaign_main_descendant(
         for entry in reversed(state.get("failed_attempts", []))
         if isinstance(entry, dict)
     ]
-    anchor_shas.append(reservation_sha)
+    anchor_shas.append(manifest_anchor_sha or reservation_sha)
     anchor: TapSnapshot | None = None
     for candidate_sha in anchor_shas:
         if (
             not isinstance(candidate_sha, str)
-            or not tap.is_ancestor(reservation_sha, candidate_sha)
+            or not tap.is_ancestor(
+                manifest_anchor_sha or reservation_sha, candidate_sha
+            )
             or not tap.is_ancestor(candidate_sha, snapshot.sha)
         ):
             continue
@@ -2828,6 +3561,51 @@ def validate_campaign_main_descendant(
             anchor.sha,
             snapshot.sha,
         )
+    return manifest
+
+
+def verify_manifest_backed_campaign(
+    tap: GitTap,
+    registry: Any,
+    state: Mapping[str, Any],
+) -> CampaignManifest | None:
+    if state.get("schema") != 4:
+        return None
+    campaign = state.get("campaign")
+    if not isinstance(campaign, dict):
+        raise RolloutError("manifest-backed campaign has no campaign contract")
+    manifest_tap_sha = campaign.get("manifest_tap_sha")
+    manifest_sha256 = campaign.get("manifest_sha256")
+    base_tap_sha = campaign.get("base_tap_sha")
+    reservation_tap_sha = campaign.get("reservation_tap_sha")
+    if any(
+        not isinstance(value, str)
+        for value in (
+            manifest_tap_sha,
+            manifest_sha256,
+            base_tap_sha,
+            reservation_tap_sha,
+        )
+    ):
+        raise RolloutError("manifest-backed campaign authority is malformed")
+    manifest = load_campaign_manifest(
+        tap,
+        manifest_tap_sha,
+        expected_sha256=manifest_sha256,
+    )
+    if (
+        manifest.base_tap_sha != base_tap_sha
+        or manifest.reservation_tap_sha != reservation_tap_sha
+        or manifest.selection != campaign_selection_from_state(state)
+    ):
+        raise RolloutError(
+            "manifest-backed campaign selection differs from the private ledger"
+        )
+    base = load_snapshot(tap, base_tap_sha)
+    reservation = load_snapshot(tap, reservation_tap_sha)
+    validate_campaign_manifest_sources(tap, manifest, base, reservation)
+    verify_campaign_reuse_blobs(registry, manifest)
+    return manifest
 
 
 def validate_campaign_recovery_transition(
@@ -3031,7 +3809,7 @@ def upgrade_state(
     upgraded = copy.deepcopy(state)
     if "pending_dispatches" not in upgraded:
         upgraded["pending_dispatches"] = []
-    if upgraded.get("schema") in (2, 3):
+    if upgraded.get("schema") in (2, 3, 4):
         # A fresh campaign starts with batching and an exact complete caller
         # authority. Rotating it implicitly would make the private ledger bless
         # code outside the initialization review.
@@ -3051,7 +3829,7 @@ def validate_state(
     snapshot: TapSnapshot,
     expected_kandelo_sha: str,
 ) -> None:
-    if state.get("schema") not in (1, 2, 3):
+    if state.get("schema") not in (1, 2, 3, 4):
         raise RolloutError("rollout state has an unsupported schema")
     campaign_contract = validate_campaign_state(
         state, snapshot, expected_kandelo_sha
@@ -3281,15 +4059,36 @@ def calculate_statuses(
     expected_kandelo_sha: str,
     inventory: RunInventory,
     history_blocks: Mapping[str, tuple[str, str]],
+    *,
+    campaign_manifest: CampaignManifest | None = None,
 ) -> tuple[FormulaStatus, ...]:
     active_formulae = frozenset(
         formula
         for values in inventory.formulae.values()
         for formula in values
     )
+    selection = (
+        campaign_manifest.selection
+        if campaign_manifest is not None
+        else None
+    )
+    reuse_formulae = (
+        frozenset(selection.reuse) if selection is not None else frozenset()
+    )
+    deferred_formulae = (
+        frozenset(selection.deferred) if selection is not None else frozenset()
+    )
     reasons: dict[str, tuple[str, ...]] = {}
     finalized: dict[str, bool] = {}
     for formula in FORMULA_ORDER:
+        if formula in reuse_formulae or formula in deferred_formulae:
+            # WHY: schema-4 reuse is an explicit frozen-authority disposition,
+            # not a claim that historical bottles were rebuilt by the new
+            # consumer. Deferred Formulae likewise own no identity in this
+            # campaign. Only rebuilds use ordinary new-consumer finalization.
+            reasons[formula] = ()
+            finalized[formula] = False
+            continue
         found = finalization_reasons(
             tap,
             snapshot,
@@ -3304,7 +4103,17 @@ def calculate_statuses(
     for formula in FORMULA_ORDER:
         deps = snapshot.dependencies[formula]
         arches = required_arches(formula)
-        if finalized[formula]:
+        if formula in reuse_formulae:
+            state, detail = (
+                "reused",
+                "historical bottle is bound by exact campaign authority",
+            )
+        elif formula in deferred_formulae:
+            state, detail = (
+                "deferred",
+                "Formula is outside this campaign's publication set",
+            )
+        elif finalized[formula]:
             state, detail = "finalized", "all required ABI 42 identities are on current main"
         elif formula in active_formulae:
             state, detail = "active", "a production publication run is active"
@@ -3315,6 +4124,24 @@ def calculate_statuses(
             for dep in sorted(deps):
                 for arch in arches:
                     dep_arch = dependency_arch(dep, arch)
+                    if dep in deferred_formulae:
+                        # WHY: a deferred dependency has neither a fresh
+                        # campaign build nor frozen reuse authority.
+                        missing.append(f"{dep}/{dep_arch}")
+                        continue
+                    if dep in reuse_formulae:
+                        # WHY: validate_campaign_main_descendant returned this
+                        # exact manifest only after checking current catalog,
+                        # frozen T0 sidecars/link manifests, ABI, architecture,
+                        # and protected-main lineage. Preserve built_from as
+                        # historical truth; the fresh anonymous blob proof
+                        # still gates dispatch immediately before any write.
+                        if (
+                            campaign_manifest is None
+                            or dep_arch != campaign_manifest.rootfs_arch
+                        ):
+                            missing.append(f"{dep}/{dep_arch}")
+                        continue
                     dep_reasons = finalization_reasons(
                         tap,
                         snapshot,
@@ -3329,7 +4156,11 @@ def calculate_statuses(
                 detail = "waiting for " + ", ".join(sorted(set(missing)))
             else:
                 state = "ready"
-                detail = "all same-tap dependencies are finalized"
+                detail = (
+                    "all same-tap dependencies satisfy campaign disposition"
+                    if campaign_manifest is not None
+                    else "all same-tap dependencies are finalized"
+                )
         statuses.append(
             FormulaStatus(
                 name=formula,
@@ -5359,6 +6190,7 @@ def initialize_campaign(
     contract: CampaignContract,
     no_fetch: bool,
     selection: CampaignSelection | None = None,
+    manifest_authority_sha: str | None = None,
 ) -> dict[str, Any]:
     # WHY: even a valid old ledger contains dispatch history that cannot be
     # inferred from Git or GHCR. Refuse before any network observation rather
@@ -5376,35 +6208,82 @@ def initialize_campaign(
         raise RolloutError("fresh campaign identity or tap SHA is invalid")
     validate_campaign_contract(contract)
 
+    manifest: CampaignManifest | None = None
+    if manifest_authority_sha is not None:
+        if selection is not None:
+            raise RolloutError(
+                "operator Formula partitions cannot override a manifest-backed campaign"
+            )
+        tap.ensure_commit(manifest_authority_sha)
+        manifest = load_campaign_manifest(tap, manifest_authority_sha)
+        if (
+            campaign_id != manifest.campaign
+            or base_tap_sha != manifest.base_tap_sha
+            or reservation_tap_sha != manifest.reservation_tap_sha
+        ):
+            raise RolloutError(
+                "campaign inputs differ from the exact manifest authority"
+            )
     tap.ensure_commit(base_tap_sha)
+    if manifest is not None:
+        tap.ensure_commit(reservation_tap_sha)
     observed_main = (
         tap.main_without_fetch() if no_fetch else tap.fetch_main()
     )
-    if observed_main != reservation_tap_sha:
+    expected_main = manifest_authority_sha or reservation_tap_sha
+    if observed_main != expected_main:
         raise RolloutError(
-            "protected tap main does not equal the requested reservation commit"
+            "protected tap main does not equal the requested campaign authority"
         )
     base = load_snapshot(tap, base_tap_sha)
     reservation = load_snapshot(tap, reservation_tap_sha)
+    authority = (
+        load_snapshot(tap, manifest_authority_sha)
+        if manifest_authority_sha is not None
+        else reservation
+    )
     validate_workflow(
         github,
-        reservation,
+        authority,
         contract.consumer_sha,
         campaign_contract=contract,
+    )
+    selected_campaign = (
+        manifest.selection
+        if manifest is not None
+        else (selection or CampaignSelection.all_rebuild())
     )
     validate_fresh_campaign_reservations(
         tap=tap,
         base=base,
         reservation=reservation,
-        selection=selection,
+        selection=selected_campaign,
     )
+    if manifest is not None:
+        assert manifest_authority_sha is not None
+        if (
+            not tap.is_ancestor(reservation_tap_sha, manifest_authority_sha)
+            or authority.metadata != reservation.metadata
+            or authority.formula_sources != reservation.formula_sources
+            or authority.formula_sidecars != reservation.formula_sidecars
+            or authority.formula_support_tree != reservation.formula_support_tree
+            or authority.formula_sidecar_tree != reservation.formula_sidecar_tree
+        ):
+            # WHY: Tmanifest may commit the controller, tests, docs, and the
+            # authority itself, but it cannot quietly change any package input
+            # after the separately reviewed Tpre reservation.
+            raise RolloutError(
+                "campaign manifest commit changes Tpre package publication sources"
+            )
+        validate_campaign_manifest_sources(tap, manifest, base, reservation)
 
     inventory = active_inventory(github)
     if inventory.count or inventory.unknown_run_ids:
         raise RolloutError(
             "cannot initialize a fresh campaign while publication runs are active"
         )
-    selected_campaign = selection or CampaignSelection.all_rebuild()
+    if manifest is not None:
+        verify_campaign_reuse_blobs(registry, manifest)
     absent = require_absent_campaign_references(
         registry, reservation, selected_campaign.rebuild
     )
@@ -5415,7 +6294,7 @@ def initialize_campaign(
     latest_main = (
         tap.main_without_fetch() if no_fetch else tap.fetch_main()
     )
-    if latest_main != reservation_tap_sha:
+    if latest_main != expected_main:
         raise RolloutError(
             "protected tap main moved during campaign initialization"
         )
@@ -5426,15 +6305,20 @@ def initialize_campaign(
         )
 
     state = initial_campaign_state(
-        reservation,
+        authority,
         campaign_id=campaign_id,
         base_snapshot=base,
         contract=contract,
         absent_oci_references=absent,
         checked_at=checked_at,
         selection=selection,
+        manifest=manifest,
+        manifest_authority_sha=manifest_authority_sha,
+        reservation_snapshot=reservation if manifest is not None else None,
     )
-    validate_state(state, reservation, contract.consumer_sha)
+    validate_state(state, authority, contract.consumer_sha)
+    if manifest is not None:
+        validate_campaign_main_descendant(tap, state, authority)
     write_new_state(state_path, state)
     return state
 
@@ -5492,7 +6376,9 @@ def dispatch_ready(
             campaign_contract=campaign_contract,
         )
         state = upgrade_state(state, snapshot, expected_kandelo_sha)
-        validate_campaign_main_descendant(tap, state, snapshot)
+        campaign_manifest = validate_campaign_main_descendant(
+            tap, state, snapshot
+        )
         if state.get("unresolved_dispatch") is not None:
             raise RolloutError(
                 f"{state_path} contains an unresolved dispatch; inspect it before continuing"
@@ -5564,7 +6450,12 @@ def dispatch_ready(
             }
             history_blocks = history_blocks_from_state(github, state, finalized)
             statuses = calculate_statuses(
-                tap, snapshot, expected_kandelo_sha, inventory, history_blocks
+                tap,
+                snapshot,
+                expected_kandelo_sha,
+                inventory,
+                history_blocks,
+                campaign_manifest=campaign_manifest,
             )
             selected_allowlist = allowed_formulae
             if campaign_rebuilds is not None:
@@ -5658,6 +6549,48 @@ def dispatch_ready(
                     snapshot,
                     unchecked,
                 )
+        if state.get("schema") == 4:
+            if registry is None:
+                registry = AnonymousRegistry()
+            # WHY: T0's sidecars and link manifests plus all 23 public blobs
+            # may have been verified hours before dispatch. Repeat the entire
+            # immutable proof immediately before this invocation's first
+            # external write, while still bound to the ledger's Tmanifest hash.
+            verify_manifest_backed_campaign(tap, registry, state)
+            latest_sha = tap.main_without_fetch() if no_fetch else tap.fetch_main()
+            if latest_sha != snapshot.sha:
+                raise RolloutError(
+                    "protected tap main moved during manifest pre-dispatch verification"
+                )
+            latest_inventory = reconcile_recorded_activity(
+                github, active_inventory(github), state
+            )
+            if (
+                latest_inventory.unknown_run_ids
+                or latest_inventory.count + len(planned) > MAX_ACTIVE_RUNS
+            ):
+                raise RolloutError(
+                    "publication capacity changed during manifest verification"
+                )
+            active_formulae = {
+                formula
+                for values in latest_inventory.formulae.values()
+                for formula in values
+            }
+            if any(intent.formula in active_formulae for intent in planned):
+                raise RolloutError(
+                    "a selected Formula started during manifest verification"
+                )
+            # WHY: hashing all reused bytes is intentionally expensive. A
+            # competing publisher can occupy Bash after the earlier planning
+            # check, so recheck the complete planned batch only after every
+            # long read and mutable coordination check, immediately before any
+            # intent is marked request-started.
+            require_absent_campaign_references(
+                registry,
+                snapshot,
+                tuple(intent.formula for intent in planned),
+            )
         submitted = 0
         for intent in planned:
             value = next(
@@ -5841,7 +6774,14 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--campaign-reservation-tap-sha",
-        help="exact protected-main commit containing all 63 fresh reservations",
+        help="exact reviewed Tpre commit containing selected fresh reservations",
+    )
+    parser.add_argument(
+        "--campaign-manifest-tap-sha",
+        help=(
+            "exact protected-main Tmanifest commit containing the canonical "
+            "campaign manifest"
+        ),
     )
     parser.add_argument(
         "--expected-publisher-sha",
@@ -5931,6 +6871,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         args.campaign_id,
         args.campaign_base_tap_sha,
         args.campaign_reservation_tap_sha,
+        args.campaign_manifest_tap_sha,
         args.expected_publisher_sha,
         args.expected_package_generation_sha,
         args.expected_package_generation_tag,
@@ -5946,6 +6887,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
             parser.error(
                 "--initialize-campaign requires --campaign-id, "
                 "--campaign-base-tap-sha, --campaign-reservation-tap-sha, "
+                "--campaign-manifest-tap-sha, "
                 "--expected-publisher-sha, --expected-package-generation-sha, "
                 "--expected-package-generation-tag, and "
                 "--expected-workflow-sha256"
@@ -5957,6 +6899,9 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
             )
             or not re.fullmatch(
                 r"[0-9a-f]{40}", args.campaign_reservation_tap_sha
+            )
+            or not re.fullmatch(
+                r"[0-9a-f]{40}", args.campaign_manifest_tap_sha
             )
             or not re.fullmatch(r"[0-9a-f]{40}", args.expected_publisher_sha)
             or not re.fullmatch(
@@ -5970,12 +6915,9 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
             )
         ):
             parser.error("--initialize-campaign contains an invalid identity")
-        if any(value is not None for value in selection_values) and any(
-            value is None for value in selection_values
-        ):
+        if any(value is not None for value in selection_values):
             parser.error(
-                "selected campaigns require all three rebuild, reuse, and "
-                "deferred Formula partitions"
+                "manifest-backed campaigns reject operator Formula partitions"
             )
     elif any(value is not None for value in campaign_values):
         parser.error("campaign contract flags require --initialize-campaign")
@@ -6084,8 +7026,10 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
                     contract=contract,
                     no_fetch=args.no_fetch,
                     selection=args.campaign_selection,
+                    manifest_authority_sha=args.campaign_manifest_tap_sha,
                 )
-            selection = args.campaign_selection or CampaignSelection.all_rebuild()
+            selection = campaign_selection_from_state(state)
+            assert selection is not None
             print(
                 f"initialized campaign {state['campaign']['id']} with "
                 f"{len(selection.rebuild)} rebuild, {len(selection.reuse)} reuse, "
@@ -6184,6 +7128,9 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
         )
         if state is not None:
             state = upgrade_state(state, snapshot, args.expected_kandelo_sha)
+            campaign_manifest = validate_campaign_main_descendant(
+                tap, state, snapshot
+            )
             if (
                 state.get("unresolved_dispatch") is not None
                 or state.get("pending_dispatches")
@@ -6191,6 +7138,8 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
                 raise RolloutError(
                     f"{args.state_file} contains unresolved dispatch intents"
                 )
+        else:
+            campaign_manifest = None
         inventory = active_inventory(github)
         if state is not None:
             inventory = reconcile_recorded_activity(github, inventory, state)
@@ -6206,7 +7155,12 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
         }
         history_blocks = history_blocks_from_state(github, state, finalized)
         statuses = calculate_statuses(
-            tap, snapshot, args.expected_kandelo_sha, inventory, history_blocks
+            tap,
+            snapshot,
+            args.expected_kandelo_sha,
+            inventory,
+            history_blocks,
+            campaign_manifest=campaign_manifest,
         )
         render_status(snapshot, inventory, statuses, as_json=args.json)
         return 0

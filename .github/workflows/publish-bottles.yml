@@ -11,14 +11,13 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@3545bfd34509a52b68a4620c92e4aae24c60adb0
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@5f448e68ec031108de42e965f5284944861b6ea2
     with:
       kandelo-repository: Automattic/kandelo
-      # WHY: the `uses` SHA selects the hardened publisher implementation,
-      # while this SHA selects the package generation consumed by that code.
-      # ABI 42's sealed archives exactly match d380's rootfs identity; later
-      # shell-package edits at 3545 intentionally have a different cache key.
-      kandelo-ref: d3805721b887a19382ef1c96b576fc27badc0951
+      # WHY: publication authority and package generation are admitted together
+      # on Kandelo main. Pinning both inputs prevents a later mutable ref from
+      # changing either the publisher implementation or its package closure.
+      kandelo-ref: 5f448e68ec031108de42e965f5284944861b6ea2
       tap-repository: kandelo-dev/homebrew-tap-core
       tap-name: kandelo-dev/tap-core
       # WHY: repository_dispatch loads this caller from main, but Formula
@@ -31,10 +30,7 @@ jobs:
       force: ${{ github.event.client_payload.force || false }}
       dry-run: false
       require-vfs-acceptance: ${{ github.event.client_payload.require_vfs_acceptance || false }}
-      # WHY: ABI 42's package archives were produced immediately before the
-      # publisher bridge. The bridge proves this sealed generation is an exact
-      # ancestor with the same rootfs closure instead of rebuilding from a
-      # mutable release index. Only Python defers its bottle-dependent VFS proof.
-      prepublication-staging-tag: pr-1079-staging
-      prepublication-staging-kandelo-sha: 437fde2524ea6ad9c44933f8abbf995a46841009
-      defer-vfs-acceptance-until-postpublication: ${{ github.event.client_payload.require_vfs_acceptance || false }}
+      # WHY: this content-addressed, main-admitted generation is the immutable
+      # package input for the bounded wasm32 rootfs lane. A preserved staging
+      # tag is promotion evidence, not publication authority.
+      package-generation-wasm32: package-generation-rootfs-wasm32-abi-v42-sha256-d66825c03af08133538018dca0bad5732d8eaf5add3dfd513b3c1bce9210256e

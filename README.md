@@ -217,34 +217,28 @@ ceiling because a called workflow cannot elevate caller authority. The reusable
 workflow narrows each scheduled job, and a dry run never schedules its bottle
 upload or tap-finalization jobs.
 
-Write publication accepts formulae, arches, and an optional release tag. During
-the ABI 42 bootstrap, the caller executes reviewed publisher implementation
-`3545bfd34509a52b68a4620c92e4aae24c60adb0`, while the package consumer remains
-fixed to matching rootfs generation
-`d3805721b887a19382ef1c96b576fc27badc0951`. Package inputs are separately fixed
-to generation
-`437fde2524ea6ad9c44933f8abbf995a46841009` on `pr-1079-staging`; the controller
-fixes the tap source to the exact reviewed commit that it validated and
-recorded. The publisher proves that the package generation is an ancestor of
-the package consumer, that both commits declare the same exact `rootfs`
-closure, and that every selected staging archive matches that sealed closure
-before a bottle build may use it. This explicit bridge breaks the
-package-before-bottle cycle without making any build input mutable.
-The protected caller itself may load from a later finalizer-only `main` commit
-than the reserved Formula source. The controller records that actual
-`repository_dispatch` source separately and accepts it only when the Formula
-catalog, support tree, and normalized caller contract remain frozen and every
-intervening path is generated finalizer output.
+Write publication accepts formulae, arches, and an optional release tag. The
+current caller pins its reusable publisher and package consumer to the same
+exact Kandelo `main` commit. It also pins one immutable
+`package-generation-rootfs-wasm32-abi-v42-sha256-...` tag admitted by that
+commit. The generation record proves that the selected rootfs build-input
+closure is identical to the preserved pre-merge closure and verifies every
+archive byte before use. The earlier staging tag remains promotion evidence;
+it is neither caller authority nor a mutable package source.
 
-Only the controller's Python dispatch requests VFS acceptance. The protected
-caller maps that one bit to both required acceptance and the temporary
-postpublication deferral; the controller leaves that bit false for the other
-62 Formulae. Python still completes its ordinary build, public upload,
-anonymous verification, index publication, and tap finalization; only its
-proof that depends on the newly published bottle waits for the
-postpublication shell stage. After the canonical ABI 42 tap and that shell
-proof are green, rotate the caller back to the landed Kandelo revision and
-remove these staging inputs in one reviewed change.
+This selected rootfs generation is a deliberately bounded bridge for the
+wasm32 Bash/M4 shell proof. It cannot select wasm64, another Formula, or the
+legacy dependency-bearing VFS acceptance graph. A write caller therefore
+cannot expand the preserved closure through event data. Dry runs remain the
+separate staging path: they may select reviewed branch or commit refs and do
+not inherit the production generation pin.
+
+The controller fixes Formula source to the exact reviewed tap commit that it
+validated and recorded. The protected caller itself may load from a later
+finalizer-only `main` commit than that reserved Formula source. The controller
+records the actual `repository_dispatch` source separately and accepts it only
+when the Formula catalog, support tree, and normalized caller contract remain
+frozen and every intervening path is generated finalizer output.
 
 Set `KANDELO_FORMULA` to the exact short name of one dependency-ready Formula,
 then submit the dispatch:
@@ -275,18 +269,30 @@ available slot.
 
 ### Fresh publication campaigns
 
-Every new package generation starts from two reviewed tap commits. `T0` is the
+This mostly-lazy-shell package generation starts from three reviewed tap
+commits. `T0` is the
 stable base with a package-owned last-green sidecar for every Formula; its
 aggregate metadata may still contain only the product subset completed by an
 earlier campaign. A Formula at `T0` may already be one or more rebuilds ahead
 of that sidecar when an earlier campaign reserved an identity without replacing
-the last-green bottle. `Tpre` is a strict descendant on protected `main`; it
+the last-green bottle. `Tpre` is a strict descendant; it
 retains `T0`'s aggregate metadata, package-owned sidecars, Formula support,
 recipes, dependencies, architectures, and last-green hashes. Its reviewed
-campaign plan partitions the complete catalog into `rebuild`, `reuse`, and
-`deferred`. `Tpre` changes only the rebuild partition's `rebuild` lines to the
-exact successors of their Formula identities at `T0`; reused and deferred
-Formulae remain byte-for-byte unchanged.
+reservation changes only Bash's `rebuild` line to the exact successor of its
+Formula identity at `T0`.
+
+`Tmanifest` is an exact protected-main descendant of `Tpre`. It commits
+`Kandelo/campaigns/mostly-lazy-shell-abi42-rootfs-wasm32.json`, the controller,
+tests, and operator documentation, but changes none of `Tpre`'s package
+publication sources. The typed manifest is the sole production selection
+authority: it identifies ABI 42 and rootfs wasm32, binds Bash's exact old and
+reserved identities, and binds exactly 23 reused bottles to their Formula
+identity, byte count, blob SHA-256, and raw `T0` sidecar and link-manifest
+paths and SHA-256 values. Every other `T0` Formula is derived as deferred; the
+manifest stores no human-maintained deferred list, run ID, package ID, bearer
+token, mutable download URL, or GitHub API object ID. The controller also pins
+the reviewed manifest's raw SHA-256, so naming a different exact protected-main
+commit cannot substitute another otherwise well-formed 23-entry selection.
 
 A compatible Kandelo kernel or host-runtime change does not by itself make a
 bottle payload stale. Keep the bottle's original `built_from` provenance and
@@ -300,7 +306,7 @@ Formula unless its package-owned sidecar and every required architecture
 already identify ABI 42; an older-ABI bottle belongs in `rebuild` or
 `deferred`, never `reuse`.
 
-The caller workflow at `Tpre` must be registered in
+The caller workflow at `Tmanifest` must be registered in
 `APPROVED_CAMPAIGN_CONTRACTS` with its complete SHA-256, reusable publisher
 SHA, Kandelo package-consumer SHA, and sealed package-generation SHA and tag.
 Command-line values select that reviewed authority; they cannot bless an
@@ -310,45 +316,45 @@ Create a new private ledger before dispatching anything:
 
 ```bash
 : "${KANDELO_ROLLOUT_STATE:?choose a new private state-file path}"
-: "${KANDELO_CAMPAIGN_ID:?set a stable campaign name}"
 : "${KANDELO_T0:?set the exact reviewed last-green base tap SHA}"
-: "${KANDELO_TPRE:?set the exact selected-reservation tap SHA}"
+: "${KANDELO_TPRE:?set the exact Bash-reservation tap SHA}"
+: "${KANDELO_TMANIFEST:?set the exact protected manifest-authority tap SHA}"
 : "${KANDELO_CONSUMER_SHA:?set the reviewed package-consumer SHA}"
 : "${KANDELO_PUBLISHER_SHA:?set the reviewed reusable publisher SHA}"
 : "${KANDELO_GENERATION_SHA:?set the reviewed package-generation SHA}"
 : "${KANDELO_GENERATION_TAG:?set the reviewed package-generation tag}"
 : "${KANDELO_CALLER_SHA256:?set the reviewed complete caller SHA-256}"
-: "${KANDELO_REBUILD_FORMULAE:?set the canonical reviewed rebuild list}"
-: "${KANDELO_REUSE_FORMULAE:?set the canonical reviewed reuse list}"
-: "${KANDELO_DEFERRED_FORMULAE:?set the canonical reviewed deferred list}"
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
   --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --initialize-campaign \
-  --campaign-id "$KANDELO_CAMPAIGN_ID" \
+  --campaign-id mostly-lazy-shell-abi42-rootfs-wasm32 \
   --campaign-base-tap-sha "$KANDELO_T0" \
   --campaign-reservation-tap-sha "$KANDELO_TPRE" \
+  --campaign-manifest-tap-sha "$KANDELO_TMANIFEST" \
   --expected-publisher-sha "$KANDELO_PUBLISHER_SHA" \
   --expected-package-generation-sha "$KANDELO_GENERATION_SHA" \
   --expected-package-generation-tag "$KANDELO_GENERATION_TAG" \
-  --expected-workflow-sha256 "$KANDELO_CALLER_SHA256" \
-  --campaign-rebuild-formulae "$KANDELO_REBUILD_FORMULAE" \
-  --campaign-reuse-formulae "$KANDELO_REUSE_FORMULAE" \
-  --campaign-deferred-formulae "$KANDELO_DEFERRED_FORMULAE"
+  --expected-workflow-sha256 "$KANDELO_CALLER_SHA256"
 ```
 
 Initialization sends no event. It rejects an existing state path, validates all
-63 last-green sidecars and retained checksum blocks, freezes the separate
-last-green, `T0`, and `Tpre` catalogs, and requires the three lists to be a
-disjoint, canonically ordered partition of all 63 Formulae. It proves every
-rebuild change is exactly `T0 rebuild + 1`, proves reused and deferred Formulae
-did not change, records only the selected rebuild architecture identities, and
-requires anonymous absence only of those new per-Formula OCI version-index
-references. It also requires an idle publication workflow and rechecks
-protected `main` immediately before one mode-0600, fsynced ledger write. It
-never imports or reinterprets an older ledger. Upload-child tags are
-content-derived and cannot be reserved before a build.
+63 last-green sidecars and retained checksum blocks, reads the manifest bytes
+from exact `Tmanifest` rather than the mutable worktree, and verifies its
+embedded exact `T0` and `Tpre`. It freezes the separate last-green, `T0`, and
+`Tpre` catalogs. It verifies every reused raw sidecar and link-manifest byte at
+exact `T0`, checks their decoded identities, derives each immutable GHCR blob
+endpoint from the fixed namespace, Formula, and digest, and anonymously streams
+and hashes all 23 complete blobs. Operator-provided partition lists are
+rejected.
+
+Initialization records only Bash's new architecture identity and requires
+anonymous absence only of its new OCI version-index reference. It also requires
+an idle publication workflow and rechecks protected `main` immediately before
+one mode-0600, fsynced ledger write. The ledger records both exact `Tmanifest`
+and the raw manifest SHA-256. It never imports or reinterprets an older ledger.
+Upload-child tags are content-derived and cannot be reserved before a build.
 
 Never reuse, overwrite, copy, or reconstruct an earlier campaign ledger.
 `--dispatch` requires an existing ledger and cannot initialize one implicitly.
@@ -356,10 +362,18 @@ The local ledger assumes this controller remains the sole production
 dispatcher; it cannot prevent another authorized operator from manually
 publishing between anonymous registry checks.
 
-For the first mostly-lazy shell proof, the intended partition rebuilds Bash,
-reuses the already compatible libcxx and ncurses bottles after validation, and
-defers the other 60 Formulae. A dispatch allowlist may further restrict a
-campaign's rebuild set:
+For the first mostly-lazy shell proof, the committed manifest rebuilds only
+Bash. It reuses these 23 public ABI-42 wasm32 bottles after raw-metadata,
+digest, and size
+validation: `bzip2`, `coreutils`, `curl`, `dash`, `diffutils`, `ed`,
+`findutils`, `gawk`, `git`, `grep`, `gzip`, `less`, `libcurl`, `libcxx`, `m4`,
+`ncurses`, `openssl`, `posix-utils-lite`, `ruby`, `sed`, `tar`, `vim`, and
+`zlib`. `libmagic` and `file-formula` remain deferred because their public
+bottles are still ABI 41; all other Formulae outside this first product closure
+are also deferred rather than rebuilt speculatively. Bzip2 already supplies
+the first-party public-bottle lifecycle proof, while the independent
+`brandonpayton/kandelo-canary` M4 bottle remains the live third-party-tap proof.
+A dispatch allowlist further confines this campaign's only rebuild:
 
 ```bash
 python3 scripts/abi42-rollout.py \
@@ -374,10 +388,17 @@ The allowlist is fail-closed: unknown, empty, or duplicate names are rejected.
 Every transitive dependency that also belongs to the rebuild partition must
 appear in the allowlist. Reused dependencies are not dispatchable; their
 validation must already be finalized on tap main before a dependent becomes
-ready. The controller anonymously rechecks every selected successor, then
-journals and submits a capacity-bounded batch drawn only from the rebuild
-partition. Reused and deferred Formulae can never consume a dispatch slot in
-that campaign.
+ready. Immediately before the first write dispatch in every controller
+invocation, the controller reloads and hashes the manifest from exact
+`Tmanifest`, revalidates every raw `T0` sidecar and link manifest, and
+anonymously streams and hashes all 23 complete reused blobs again. It then
+rechecks protected main, active capacity, active Formulae, and anonymous
+absence of every planned successor. That final absence check occurs
+immediately before the first planned intent becomes `request-started`; an
+identity occupied during the long blob proof leaves the whole batch planned
+and sends nothing. The controller then submits a capacity-bounded batch drawn
+only from the rebuild partition. Reused and deferred Formulae can never
+consume a dispatch slot in that campaign.
 
 The rollout controller first journals every Formula in the available
 capacity-bounded batch in its already initialized private ledger. Before each
@@ -400,7 +421,7 @@ match against the same ledger:
 : "${KANDELO_ROLLOUT_STATE:?set this to the existing ABI 42 rollout ledger}"
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
-  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --recover-dispatch
 ```
@@ -412,7 +433,8 @@ the whole result. They use their unguessable token and Formula to select exactly
 one `repository_dispatch` run without depending on job creation. The ledger
 keeps both the reserved tap commit and the run's actual source commit. The
 latter may be a finalizer-only descendant after an earlier parallel run advances
-`main`, but only when the frozen Formula catalog, Formula support tree, and
+`main`, but only when exact `Tmanifest` remains on its history and the frozen
+Formula catalog, Formula support tree, and
 normalized publication workflow remain equivalent. Recipe, support, workflow,
 controller, or unrelated path drift fails closed.
 
@@ -430,7 +452,7 @@ explicit run ID:
 : "${KANDELO_CANCELLED_RUN_ID:?set this to the sole cancelled publication run}"
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
-  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --abandon-dispatch-run "$KANDELO_CANCELLED_RUN_ID"
 ```
@@ -451,15 +473,15 @@ original private ledger after the first Formula is finalized: it freezes the
 reviewed base, initial reservation catalog, complete publication authority, and
 successful, failed, planned, request-started, submitted, unresolved, and safely
 abandoned dispatch history. Schema-1 ABI 42 ledgers retain their explicitly
-reviewed workflow-trust migration for recovery. Fresh schema-2 ledgers never
-inherit or reinterpret that older campaign state and never rotate their
-complete authority implicitly.
+reviewed workflow-trust migration for recovery. The manifest-backed shell
+campaign uses schema 4; it never inherits or reinterprets older campaign state
+and never rotates its complete authority implicitly.
 Read-only status may derive an implicit Formula version from that Formula's
 package-owned sidecar, but a write-capable
 controller cross-checks the result against the frozen ledger. A missing ledger
 always blocks dispatch; either restore that campaign's original file or create
 a genuinely new campaign from a reviewed last-green `T0` and mechanical
-reservation `Tpre`.
+reservation `Tpre` plus exact manifest authority `Tmanifest`.
 
 After a controller-recorded publication fails, do not immediately dispatch it
 again. First land the reviewed Formula or publisher correction on tap `main`,
@@ -469,7 +491,7 @@ then retire the exact failed run through the same private ledger:
 : "${KANDELO_FAILED_RUN_ID:?set this to the controller-recorded failed run ID}"
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
-  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --recover-failed-run "$KANDELO_FAILED_RUN_ID"
 ```
@@ -492,7 +514,7 @@ could be recorded, retain an exact pre-matrix no-write failure explicitly:
 ```bash
 python3 scripts/abi42-rollout.py \
   --tap-root "$PWD" \
-  --expected-kandelo-sha d3805721b887a19382ef1c96b576fc27badc0951 \
+  --expected-kandelo-sha "$KANDELO_CONSUMER_SHA" \
   --state-file "$KANDELO_ROLLOUT_STATE" \
   --recover-failed-run "$KANDELO_PREVIOUS_FAILED_RUN_ID" \
   --adopt-failed-run "make=$KANDELO_UNRECORDED_FAILED_RUN_ID"

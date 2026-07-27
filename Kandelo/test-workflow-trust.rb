@@ -30,13 +30,13 @@ REPOSITORY_CANARY_PERMISSIONS = {
 }.freeze
 CHECKOUT_ACTION = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
 RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
-# Production executes the publisher implementation from this reviewed
-# descendant. The package consumer stays separate because publisher-only or
-# later packaging edits may legitimately change package cache identities.
-CURRENT_KANDELO_WORKFLOW_SHA = "3545bfd34509a52b68a4620c92e4aae24c60adb0"
-CURRENT_KANDELO_CONSUMER_SHA = "d3805721b887a19382ef1c96b576fc27badc0951"
-PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009"
-PREPUBLICATION_STAGING_TAG = "pr-1079-staging"
+# Write publication executes and consumes packages from one reviewed Kandelo
+# main commit. Its rootfs package generation is admitted separately by a
+# content-addressed release tag, so preserved staging data can never become
+# caller authority. Dry runs retain independently selectable staging sources.
+CURRENT_KANDELO_WORKFLOW_SHA = "5f448e68ec031108de42e965f5284944861b6ea2"
+CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
+PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-d66825c03af08133538018dca0bad5732d8eaf5add3dfd513b3c1bce9210256e"
 
 def check(condition, message)
   raise message unless condition
@@ -103,7 +103,7 @@ def expect_rejection(label)
   check(rejected, "self-test accepted #{label}")
 end
 
-PUBLISH_INPUTS = {
+WRITE_PUBLISH_INPUTS = {
   "kandelo-repository" => "Automattic/kandelo",
   "kandelo-ref" => CURRENT_KANDELO_CONSUMER_SHA,
   "tap-repository" => "kandelo-dev/homebrew-tap-core",
@@ -115,18 +115,34 @@ PUBLISH_INPUTS = {
   "expected-cache-keys" => expression("github.event.client_payload.expected_cache_keys || ''"),
   "force" => expression("github.event.client_payload.force || false"),
   "dry-run" => false,
+  "package-generation-wasm32" => PACKAGE_GENERATION_WASM32_TAG,
 }.freeze
 
-VFS_PUBLISH_INPUTS = PUBLISH_INPUTS.merge({
+VFS_PUBLISH_INPUTS = WRITE_PUBLISH_INPUTS.merge({
   "require-vfs-acceptance" => expression(
     "github.event.client_payload.require_vfs_acceptance || false"
   ),
-  "prepublication-staging-tag" => PREPUBLICATION_STAGING_TAG,
-  "prepublication-staging-kandelo-sha" => PREPUBLICATION_GENERATION_SHA,
-  "defer-vfs-acceptance-until-postpublication" => expression(
-    "github.event.client_payload.require_vfs_acceptance || false"
-  ),
 }).freeze
+
+DRY_RUN_PUBLISH_INPUTS = {
+  "kandelo-repository" => expression(
+    "github.event.client_payload.kandelo_repository || 'Automattic/kandelo'"
+  ),
+  "kandelo-ref" => expression("github.event.client_payload.kandelo_ref || 'main'"),
+  "tap-repository" => expression(
+    "github.event.client_payload.tap_repository || 'kandelo-dev/homebrew-tap-core'"
+  ),
+  "tap-name" => expression(
+    "github.event.client_payload.tap_name || 'kandelo-dev/tap-core'"
+  ),
+  "tap-ref" => expression("github.event.client_payload.tap_ref || 'main'"),
+  "formulae" => expression("github.event.client_payload.formulae"),
+  "arches" => expression("github.event.client_payload.arches || 'wasm32'"),
+  "release-tag" => expression("github.event.client_payload.release_tag || ''"),
+  "expected-cache-keys" => expression("github.event.client_payload.expected_cache_keys || ''"),
+  "force" => expression("github.event.client_payload.force || false"),
+  "dry-run" => true,
+}.freeze
 
 PAT_PUBLISH_INPUTS = VFS_PUBLISH_INPUTS.merge({
   "github-packages-user" => expression("vars.HOMEBREW_GITHUB_PACKAGES_USER"),
@@ -159,20 +175,7 @@ CALLER_SPECS = {
     event: "dry-run-kandelo-bottles",
     job: "dry-run",
     reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@#{CURRENT_KANDELO_WORKFLOW_SHA}",
-    inputs: PUBLISH_INPUTS.merge({
-      "kandelo-repository" => expression(
-        "github.event.client_payload.kandelo_repository || 'Automattic/kandelo'"
-      ),
-      "kandelo-ref" => expression("github.event.client_payload.kandelo_ref || 'main'"),
-      "tap-repository" => expression(
-        "github.event.client_payload.tap_repository || 'kandelo-dev/homebrew-tap-core'"
-      ),
-      "tap-name" => expression(
-        "github.event.client_payload.tap_name || 'kandelo-dev/tap-core'"
-      ),
-      "tap-ref" => expression("github.event.client_payload.tap_ref || 'main'"),
-      "dry-run" => true,
-    }).freeze,
+    inputs: DRY_RUN_PUBLISH_INPUTS,
   },
   "maintenance" => {
     path: File.join(WORKFLOW_ROOT, "maintain-bottles.yml"),
@@ -182,6 +185,7 @@ CALLER_SPECS = {
     reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@#{CURRENT_KANDELO_WORKFLOW_SHA}",
     inputs: {
       "mode" => expression("github.event.client_payload.mode || 'rebuild'"),
+      "kandelo-ref" => CURRENT_KANDELO_CONSUMER_SHA,
       "tap-ref" => expression("github.event.client_payload.tap_sha"),
       "formulae" => expression("github.event.client_payload.formulae"),
       "arches" => expression("github.event.client_payload.arches || 'wasm32'"),
@@ -189,6 +193,7 @@ CALLER_SPECS = {
       "expected-cache-keys" => expression(
         "github.event.client_payload.expected_cache_keys || ''"
       ),
+      "package-generation-wasm32" => PACKAGE_GENERATION_WASM32_TAG,
       "force" => expression("github.event.client_payload.force || false"),
       "rollback-reason" => expression("github.event.client_payload.rollback_reason || ''"),
       "rollback-ref" => expression("github.event.client_payload.rollback_ref || ''"),
@@ -222,6 +227,9 @@ def caller_specs_for_sha(kandelo_sha)
   inputs = deep_copy(VFS_PUBLISH_INPUTS)
   inputs["kandelo-ref"] = kandelo_sha
   specs.fetch("publish")[:inputs] = inputs.freeze
+  maintenance_inputs = deep_copy(specs.fetch("maintenance").fetch(:inputs))
+  maintenance_inputs["kandelo-ref"] = kandelo_sha
+  specs.fetch("maintenance")[:inputs] = maintenance_inputs.freeze
   specs.fetch("publish").delete(:secrets)
   specs.freeze
 end
@@ -537,26 +545,35 @@ def self_test(callers, contract, base_contract)
       expression("github.event.client_payload.require_vfs_acceptance")
     check_caller_profile(mutated, test_profiles)
   end
-  expect_rejection("the current publisher without its sealed staging tag") do
+  expect_rejection("the current publisher without its admitted rootfs generation") do
     mutated = deep_copy(current_callers)
     mutated.dig("publish", "jobs", "publish", "with").delete(
-      "prepublication-staging-tag"
+      "package-generation-wasm32"
     )
     check_caller_profile(mutated, test_profiles)
   end
-  expect_rejection("a different prepublication package generation") do
+  expect_rejection("an event-selected write package generation") do
     mutated = deep_copy(current_callers)
-    mutated.dig("publish", "jobs", "publish", "with")[
-      "prepublication-staging-kandelo-sha"
-    ] = SELF_TEST_KANDELO_WORKFLOW_SHA
+    mutated.dig("publish", "jobs", "publish", "with")["package-generation-wasm32"] =
+      expression("github.event.client_payload.package_generation_wasm32")
     check_caller_profile(mutated, test_profiles)
   end
-  expect_rejection("an independently selectable VFS deferral") do
+  expect_rejection("a fixed Kandelo source on the staging dry-run caller") do
     mutated = deep_copy(current_callers)
-    mutated.dig("publish", "jobs", "publish", "with")[
-      "defer-vfs-acceptance-until-postpublication"
-    ] = expression(
-      "github.event.client_payload.defer_vfs_acceptance_until_postpublication || false"
+    mutated.dig("dry-run", "jobs", "dry-run", "with")["kandelo-ref"] =
+      CURRENT_KANDELO_CONSUMER_SHA
+    check_caller_profile(mutated, test_profiles)
+  end
+  expect_rejection("an admitted production generation on the staging dry-run caller") do
+    mutated = deep_copy(current_callers)
+    mutated.dig("dry-run", "jobs", "dry-run", "with")["package-generation-wasm32"] =
+      PACKAGE_GENERATION_WASM32_TAG
+    check_caller_profile(mutated, test_profiles)
+  end
+  expect_rejection("maintenance without its admitted rootfs generation") do
+    mutated = deep_copy(current_callers)
+    mutated.dig("maintenance", "jobs", "maintain", "with").delete(
+      "package-generation-wasm32"
     )
     check_caller_profile(mutated, test_profiles)
   end
@@ -745,10 +762,12 @@ begin
         "current Kandelo workflow pin is not an exact SHA")
   check(CURRENT_KANDELO_CONSUMER_SHA.match?(/\A[0-9a-f]{40}\z/),
         "current Kandelo package-consumer pin is not an exact SHA")
-  check(PREPUBLICATION_GENERATION_SHA.match?(/\A[0-9a-f]{40}\z/),
-        "prepublication package-generation pin is not an exact SHA")
-  check(PREPUBLICATION_STAGING_TAG.match?(/\Apr-[1-9][0-9]*-staging\z/),
-        "prepublication staging tag is not a PR staging tag")
+  check(CURRENT_KANDELO_CONSUMER_SHA == CURRENT_KANDELO_WORKFLOW_SHA,
+        "write publisher and package consumer must select the same Kandelo main SHA")
+  check(PACKAGE_GENERATION_WASM32_TAG.match?(
+          /\Apackage-generation-rootfs-wasm32-abi-v42-sha256-[0-9a-f]{64}\z/
+        ),
+        "rootfs package generation is not an exact ABI 42 content tag")
   {
     "repository canary" => REPOSITORY_CANARY_KANDELO_SHA,
     "retired PAT" => RETIRED_PAT_KANDELO_WORKFLOW_SHA,
@@ -761,8 +780,6 @@ begin
   end
   workflow_shas = [
     CURRENT_KANDELO_WORKFLOW_SHA,
-    CURRENT_KANDELO_CONSUMER_SHA,
-    PREPUBLICATION_GENERATION_SHA,
     REPOSITORY_CANARY_KANDELO_SHA,
     RETIRED_PAT_KANDELO_WORKFLOW_SHA,
     PREVIOUS_KANDELO_WORKFLOW_SHA,
