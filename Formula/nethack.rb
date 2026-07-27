@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Nethack < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/nethack".freeze
   GUEST_HACKDIR = "#{GUEST_OPT_PREFIX}/share/nethack".freeze
@@ -31,15 +31,16 @@ class Nethack < Formula
     kandelo_require_arch!("wasm32")
     ENV.deparallelize
 
-    # Transitional Tier-2 bridge: NetHack's registry recipe still owns the
-    # host code-generator phase and the target/data serialization patches.
-    # Its compiled data path is the stable guest opt prefix, not a staging keg
-    # path and not the registry image's historical /usr/share location.
+    # NetHack's closed tap recipe owns the host code-generator phase and the
+    # target/data serialization patches. Its compiled data path is the stable
+    # guest opt prefix, not a staging keg path.
 
-    out_dir = kandelo_build_package(script_env: {
-      "WASM_POSIX_DEP_NCURSES_DIR" => formula_opt_prefix("kandelo-dev/tap-core/ncurses"),
-      "NETHACK_HACKDIR"            => GUEST_HACKDIR,
-    })
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "e54d5755cbe583f17a81f65bf8144f8794d0aec1bd313029e3c2866212792935",
+      script_env: {
+        "NETHACK_HACKDIR" => GUEST_HACKDIR,
+      },
+    )
     kandelo_validate_wasm_artifact(out_dir/"nethack.wasm", fork: :required)
     kandelo_install_bin(out_dir, "nethack.wasm", "nethack")
     (share/"nethack").install Dir["#{out_dir}/runtime/share/nethack/*"]
