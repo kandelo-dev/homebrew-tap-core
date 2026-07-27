@@ -4,6 +4,12 @@ class Spidermonkey < Formula
   include KandeloFormulaSupport
 
   KANDELO_SOURCE_COMMIT = "88d26f4c627a363e01e567574916aff4e00828ee".freeze
+  NODE_COMPAT_VERSION = "22.0.0".freeze
+  NODE_COMPAT_COMPONENT_SHA256 = {
+    "adapter"   => "381433bd5b55e2269feb905e70474abfaeba06fb51f546ec8ea2b38fc3a5e60a",
+    "bootstrap" => "799e78a91f00b203a701dc353a47e038b82e9c37b9ae7b7c06bbbf9a87738788",
+    "suffix"    => "49fac5a3039bbad287ac815d533cf3abd4b4217920cbe2c93bb34a6e30003142",
+  }.freeze
   PATCH_RESOURCES = %w[
     patch-0001 patch-0002 patch-0003 patch-0004 patch-0005 patch-0006 patch-0007
     patch-0008 patch-0009 patch-0010 patch-0011 patch-0012 patch-0013 patch-0014
@@ -257,6 +263,25 @@ class Spidermonkey < Formula
       )
       bin.install optimized => "js"
       chmod 0755, bin/"js"
+
+      # WHY: the Node Formula is a zero-copy view of this same module. Record
+      # the exact engine and embedded compatibility inputs so composition can
+      # reject an older SpiderMonkey bottle paired with a newer Node wrapper.
+      node_compat_manifest = {
+        "schema"      => 1,
+        "engine"      => {
+          "path"   => "bin/js",
+          "sha256" => Digest::SHA256.file(bin/"js").hexdigest,
+        },
+        "node_compat" => {
+          "version"          => NODE_COMPAT_VERSION,
+          "source_commit"    => KANDELO_SOURCE_COMMIT,
+          "component_sha256" => NODE_COMPAT_COMPONENT_SHA256,
+        },
+      }
+      manifest = share/"kandelo/spidermonkey/node-compat.json"
+      manifest.dirname.mkpath
+      manifest.write("#{JSON.pretty_generate(node_compat_manifest)}\n")
     end
 
     license_file = buildpath/"LICENSE"
@@ -286,6 +311,16 @@ class Spidermonkey < Formula
     assert_path_exists share/"licenses/spidermonkey/LICENSE-MPL-2.0"
     assert_path_exists share/"licenses/spidermonkey/COPYING-GPL-2.0-or-later"
     assert_equal EXPECTED_IMPORTS, wasm_imports(bin/"js")
+    node_compat_manifest = JSON.parse((share/"kandelo/spidermonkey/node-compat.json").read)
+    assert_equal 1, node_compat_manifest.fetch("schema")
+    assert_equal "bin/js", node_compat_manifest.dig("engine", "path")
+    assert_equal Digest::SHA256.file(bin/"js").hexdigest,
+      node_compat_manifest.dig("engine", "sha256")
+    assert_equal NODE_COMPAT_VERSION, node_compat_manifest.dig("node_compat", "version")
+    assert_equal KANDELO_SOURCE_COMMIT,
+      node_compat_manifest.dig("node_compat", "source_commit")
+    assert_equal NODE_COMPAT_COMPONENT_SHA256,
+      node_compat_manifest.dig("node_compat", "component_sha256")
 
     behavior_source = <<~JAVASCRIPT
       print(1 + 1);
