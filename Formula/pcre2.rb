@@ -18,10 +18,7 @@ class Pcre2 < Formula
              "lib/libpcre2-posix.a"
 
   def install
-    # MariaDB is a declared wasm32/wasm64 Formula. PCRE2's configure contract
-    # is pointer-width neutral, so publish the same dependency surface for both
-    # targets instead of rebuilding a private PCRE2 copy inside MariaDB.
-    kandelo_require_arch!("wasm32", "wasm64")
+    kandelo_require_arch!("wasm32")
 
     kandelo_wasm_build do |root|
       stable_source = "/usr/src/pcre2-#{version}"

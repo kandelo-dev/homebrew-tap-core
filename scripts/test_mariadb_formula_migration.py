@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate MariaDB's closed, registry-free Formula ownership boundary."""
+"""Validate MariaDB's complete, sealed, registry-free Formula contract."""
 
 from __future__ import annotations
 
@@ -15,8 +15,20 @@ FORMULA = ROOT / "Formula" / "mariadb.rb"
 RECIPE_ROOT = ROOT / "Kandelo" / "recipes" / "mariadb"
 EXPECTED_DEPENDENCIES = [
     "kandelo-dev/tap-core/libcxx",
+    "kandelo-dev/tap-core/ncurses",
+    "kandelo-dev/tap-core/openssl",
     "kandelo-dev/tap-core/pcre2",
     "kandelo-dev/tap-core/zlib",
+]
+EXPECTED_RECIPE_FILES = [
+    "build.sh",
+    "wasm32-posix-toolchain.cmake",
+]
+NATIVE_ENV = [
+    "MARIADB_NATIVE_BISON_DIR",
+    "MARIADB_NATIVE_CMAKE_DIR",
+    "MARIADB_NATIVE_LLVM_DIR",
+    "MARIADB_NATIVE_MAKE_DIR",
 ]
 FORBIDDEN_AUTHORITY = (
     "KANDELO_REGISTRY_BRIDGE",
@@ -26,6 +38,8 @@ FORBIDDEN_AUTHORITY = (
     "install-local-binary",
     "WASM_POSIX_BINARY_CACHE_ROOT",
     "WASM_POSIX_XTASK_BIN",
+    "kandelo_host_tool",
+    "/nix/store",
 )
 
 
@@ -33,39 +47,137 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def require_all(source: str, needles: tuple[str, ...], owner: Path) -> None:
+    for needle in needles:
+        assert needle in source, f"{owner} is missing {needle!r}"
+
+
+def reject_all(source: str, needles: tuple[str, ...], owner: Path) -> None:
+    for needle in needles:
+        assert needle not in source, f"{owner} retains forbidden {needle!r}"
+
+
+def data_patch(formula_source: str) -> str:
+    marker = "\n__END__\n"
+    assert marker in formula_source, f"{FORMULA} has no embedded patch"
+    return formula_source.split(marker, 1)[1]
+
+
 def assert_formula_contract() -> None:
     source = FORMULA.read_text()
-    for forbidden in FORBIDDEN_AUTHORITY:
-        assert forbidden not in source, (
-            f"{FORMULA} retains forbidden authority: {forbidden}"
-        )
+    reject_all(source, FORBIDDEN_AUTHORITY, FORMULA)
+    require_all(
+        source,
+        (
+            "KANDELO_TAP_RECIPE = true",
+            'kandelo_require_arch!("wasm32")',
+            'depends_on "bison" => :build',
+            'depends_on "cmake" => :build',
+            'depends_on "llvm" => :build',
+            'depends_on "make" => :build',
+            'depends_on "kandelo-dev/tap-core/libcxx"',
+            'depends_on "kandelo-dev/tap-core/ncurses"',
+            'depends_on "kandelo-dev/tap-core/openssl"',
+            'depends_on "kandelo-dev/tap-core/pcre2"',
+            'depends_on "kandelo-dev/tap-core/zlib"',
+            "kandelo_build_tap_recipe",
+            '"MARIADB_NATIVE_BISON_DIR" => kandelo_formula("bison").prefix',
+            '"MARIADB_NATIVE_CMAKE_DIR" => kandelo_formula("cmake").prefix',
+            '"MARIADB_NATIVE_LLVM_DIR"  => kandelo_formula("llvm").prefix',
+            '"MARIADB_NATIVE_MAKE_DIR"  => kandelo_formula("make").prefix',
+            'mariadb_test = out_dir/"bin/mariadb-test.wasm"',
+            "[mariadbd, mariadb_test].each do |artifact|",
+            "forbidden_paths: target_dependencies",
+            'kandelo_install_bin(out_dir/"bin", "mariadbd.wasm", "mariadbd")',
+            'kandelo_install_bin(out_dir/"bin", "mariadb-test.wasm", "mariadb-test")',
+            'bin.install_symlink "mariadb-test" => "mysqltest"',
+        ),
+        FORMULA,
+    )
+    assert 'kandelo_require_arch!("wasm32", "wasm64")' not in source
+    assert "wasm64-posix-toolchain.cmake" not in source
+    assert "MARIADB_HOST_BUILD_DIR" not in source
+    assert "HOMEBREW_KANDELO_LLVM_BIN" not in source
+    assert "\n  private\n" not in source
 
-    for required in (
-        "KANDELO_TAP_RECIPE = true",
-        'depends_on "llvm" => :build',
-        'depends_on "kandelo-dev/tap-core/libcxx"',
-        'depends_on "kandelo-dev/tap-core/pcre2"',
-        'depends_on "kandelo-dev/tap-core/zlib"',
-        "kandelo_build_tap_recipe",
-        "kandelo_fork_instrument(mariadbd)",
-        "kandelo_fork_instrument(mysqltest)",
-        "kandelo_validate_wasm_artifact",
-        "kandelo_run_wasm",
-        "kandelo_run_browser_wasm",
-    ):
-        assert required in source, f"{FORMULA} is missing {required!r}"
+    # Installation validation covers both final programs, their dependency
+    # identities, portable paths, fork shape, and host import surface.
+    require_all(
+        source,
+        (
+            "wasm_imports_kernel_fork",
+            "run-wasm-fork-instrument.sh",
+            "wasm-strip -k name -k target_features -k wasm-posix-abi",
+            'contents.include?("OpenSSL #{openssl_version}")',
+            '"wolfSSL", "wolfcrypt", "/extra/wolfssl/"',
+            "forbidden_paths: target_dependencies",
+            "WebAssembly.Module.imports(module)",
+            "MariaDB has unexpected host imports",
+        ),
+        FORMULA,
+    )
 
-    # WHY: MariaDB's native generators must come from declared Homebrew build
-    # dependencies, not a caller-selected LLVM or CMake installation.
-    for forbidden in (
-        "HOMEBREW_KANDELO_LLVM_BIN",
-        'kandelo_host_tool("cmake")',
-    ):
-        assert forbidden not in source, (
-            f"{FORMULA} accepts caller-selected native tooling: {forbidden}"
-        )
-    for tool in ("clang", "clang++", "llvm-ar", "llvm-ranlib"):
-        assert tool in source, f"{FORMULA} does not bind native tool {tool}"
+    # The Formula test is a real database lifecycle, not a --version smoke
+    # test: bootstrap, TCP readiness, query/TLS output, shutdown, and exact
+    # child reaping must run under both first-class hosts.
+    require_all(
+        source,
+        (
+            "mysql_system_tables.sql",
+            "mysql_system_tables_data.sql",
+            'share/"mysql/charsets/Index.xml"',
+            "global_priv.MAI",
+            "wait_for_port(3306)",
+            "--protocol=tcp",
+            "CREATE TABLE messages",
+            "INSERT INTO messages",
+            "SHOW VARIABLES LIKE 'version_ssl_library'",
+            "mariadb-homebrew-ok",
+            "mariadb-lifecycle-ok",
+            "OpenSSL #{openssl_version}",
+            "expected_fork_descendants: 3",
+            "kandelo_run_browser_wasm",
+            '"KANDELO_RUNTIME" => "node"',
+            '"KANDELO_RUNTIME" => "browser"',
+            "mariadb-#{runtime}-service-ok",
+        ),
+        FORMULA,
+    )
+    assert source.count("assert_lifecycle.call(") == 2
+
+
+def assert_patch_contract(formula_source: str) -> None:
+    patch = data_patch(formula_source)
+    require_all(
+        patch,
+        (
+            "diff --git a/cmake/mariadb_connector_c.cmake",
+            'NOT CONC_WITH_SSL STREQUAL "OFF"',
+            "diff --git a/mysys/get_password.c",
+            "#include <ctype.h>",
+            "diff --git a/mysys/my_gethwaddr.c",
+            "diff --git a/mysys/my_largepage.c",
+            "defined(MAP_HUGETLB)",
+            "diff --git a/mysys/my_new.cc",
+            "PSI_NOT_INSTRUMENTED",
+            "diff --git a/client/mysqltest.cc",
+            "#define mysql_server_init(a,b,c) mysql_client_plugin_init()",
+            "#define mysql_server_end()       mysql_client_plugin_deinit()",
+        ),
+        FORMULA,
+    )
+    # All four nested/outer platform selections must avoid the Solaris ARP
+    # implementation on Wasm. Fixing only the first two is unsafe.
+    assert patch.count("+") > 0
+    assert patch.count("defined(__wasm__)") == 4
+    assert "maria_upgrade" not in patch
+    assert "return 0;" not in patch
+    assert not any(line == " " for line in patch.splitlines()), (
+        "embedded patch contains whitespace-only context and may require fuzz"
+    )
+    assert not any(line.rstrip() != line for line in patch.splitlines()), (
+        "embedded patch contains trailing whitespace"
+    )
 
 
 def assert_recipe_contract() -> None:
@@ -77,9 +189,7 @@ def assert_recipe_contract() -> None:
     assert manifest["entrypoint"] == "build.sh"
 
     records = manifest["files"]
-    assert [record["path"] for record in records] == sorted(
-        record["path"] for record in records
-    )
+    assert [record["path"] for record in records] == EXPECTED_RECIPE_FILES
     expected_files = {"recipe.json", *(record["path"] for record in records)}
     actual_files = {
         str(path.relative_to(RECIPE_ROOT))
@@ -98,51 +208,107 @@ def assert_recipe_contract() -> None:
         assert sha256(member) == record["sha256"]
 
     formula_source = FORMULA.read_text()
-    literal = re.search(
-        r'manifest_sha256: "([0-9a-f]{64})"',
-        formula_source,
-    )
+    literal = re.search(r'manifest_sha256: "([0-9a-f]{64})"', formula_source)
     assert literal is not None
     assert literal.group(1) == sha256(manifest_path)
 
-    entrypoint = (RECIPE_ROOT / manifest["entrypoint"]).read_text()
-    for forbidden in FORBIDDEN_AUTHORITY:
-        assert forbidden not in entrypoint, (
-            f"MariaDB recipe retains forbidden authority: {forbidden}"
-        )
-    for required in (
-        "WASM_POSIX_DEP_SOURCE_DIR",
-        "WASM_POSIX_DEP_WORK_DIR",
-        "WASM_POSIX_DEP_OUT_DIR",
-        "WASM_POSIX_DEP_TARGET_ARCH",
-        "WASM_POSIX_DEP_LIBCXX_DIR",
-        "WASM_POSIX_DEP_PCRE2_DIR",
-        "WASM_POSIX_DEP_ZLIB_DIR",
-        "MARIADB_HOST_BUILD_DIR",
-    ):
-        assert required in entrypoint, f"MariaDB recipe is missing {required}"
+    entrypoint_path = RECIPE_ROOT / manifest["entrypoint"]
+    entrypoint = entrypoint_path.read_text()
+    reject_all(entrypoint, FORBIDDEN_AUTHORITY, entrypoint_path)
+    reject_all(
+        entrypoint,
+        (
+            "MARIADB_HOST_BUILD_DIR",
+            "HOMEBREW_KANDELO_ROOT",
+            "LLVM_PREFIX",
+            "Curses found (stub)",
+            'CURSES_LIBRARY="${SYSROOT}/lib/libc.a"',
+        ),
+        entrypoint_path,
+    )
+    # TLS is disabled only for the native helper graph. The target graph below
+    # must bind the declared OpenSSL keg.
+    assert entrypoint.count('"-DWITH_SSL=OFF"') == 1
+    require_all(
+        entrypoint,
+        (
+            "WASM_POSIX_DEP_SOURCE_DIR",
+            "WASM_POSIX_DEP_WORK_DIR",
+            "WASM_POSIX_DEP_OUT_DIR",
+            "WASM_POSIX_DEP_RECIPE_DIR",
+            "WASM_POSIX_DEP_TARGET_ARCH",
+            "WASM_POSIX_DEP_LIBCXX_DIR",
+            "WASM_POSIX_DEP_NCURSES_DIR",
+            "WASM_POSIX_DEP_OPENSSL_DIR",
+            "WASM_POSIX_DEP_PCRE2_DIR",
+            "WASM_POSIX_DEP_ZLIB_DIR",
+            "WASM_POSIX_GLUE_DIR",
+            "WASM_POSIX_LLVM_DIR",
+            "WASM_POSIX_SYSROOT",
+            'HOST_BUILD_DIR="$WORK_DIR/host-build"',
+            "native_env()",
+            "-u CC",
+            "-u CXX",
+            "-u PKG_CONFIG_PATH",
+            "-u WASM_POSIX_LLVM_DIR",
+            "-u WASM_POSIX_SYSROOT",
+            "--target import_executables",
+            "host_helpers_ready",
+            "-DWITH_SSL=system",
+            "-DCONC_WITH_SSL=OPENSSL",
+            "-DOPENSSL_SSL_LIBRARY=\"$SYSROOT/lib/libssl.a\"",
+            "-DOPENSSL_CRYPTO_LIBRARY=\"$SYSROOT/lib/libcrypto.a\"",
+            "-DWITH_PCRE=system",
+            "-DPCRE_LIBRARY_DIRS=\"$SYSROOT/lib\"",
+            "-DWITH_ZLIB=system",
+            "-DZLIB_LIBRARY=\"$SYSROOT/lib/libz.a\"",
+            "-DCURSES_LIBRARY=\"$SYSROOT/lib/libtinfow.a\"",
+            "require_cache_value OPENSSL_SSL_LIBRARY",
+            "require_cache_value OPENSSL_CRYPTO_LIBRARY",
+            "validate_link_command",
+            "extra/wolfssl",
+            "extra/pcre2",
+            "mariadb-test.wasm",
+            "mysql_system_tables.sql",
+            "mysql_system_tables_data.sql",
+            "sql/share/charsets",
+            "english/errmsg.sys",
+            "mysql-test/main",
+        ),
+        entrypoint_path,
+    )
+    for key in NATIVE_ENV:
+        assert f': "${{{key}:?}}"' in entrypoint
 
-    # The declared PCRE2 and Zlib Formulae must remain real build inputs. A
-    # bundled fallback would make the dependency graph decorative.
-    for required in (
-        "-DWITH_PCRE=system",
-        "-DWITH_ZLIB=system",
-        "MariaDB did not select the declared Zlib Formula dependency",
-    ):
-        assert required in entrypoint
-    assert "pcre2-source" not in formula_source
-
-    for arch in ("wasm32", "wasm64"):
-        toolchain = RECIPE_ROOT / f"{arch}-posix-toolchain.cmake"
-        source = toolchain.read_text()
-        assert "CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY" in source
-        assert "WASM_POSIX_SYSROOT" in source
-        assert f"--target={arch}-unknown-unknown" in source
+    toolchain_path = RECIPE_ROOT / "wasm32-posix-toolchain.cmake"
+    toolchain = toolchain_path.read_text()
+    reject_all(toolchain, ("LLVM_PREFIX", "/nix/store", "Curses found (stub)"), toolchain_path)
+    require_all(
+        toolchain,
+        (
+            "CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY",
+            "WASM_POSIX_LLVM_DIR",
+            "WASM_POSIX_SYSROOT",
+            "--target=wasm32-unknown-unknown",
+            'set(WITH_SSL "system"',
+            'set(CONC_WITH_SSL "OPENSSL"',
+            "lib/libssl.a",
+            "lib/libcrypto.a",
+            "lib/libncursesw.a",
+            "lib/libtinfow.a",
+            "PCRE_LIBRARY_DIRS",
+            "HAVE_PCRE2_MATCH_8",
+        ),
+        toolchain_path,
+    )
+    assert not (RECIPE_ROOT / "wasm64-posix-toolchain.cmake").exists()
 
 
 def main() -> None:
     os.chdir(ROOT)
+    formula_source = FORMULA.read_text()
     assert_formula_contract()
+    assert_patch_contract(formula_source)
     assert_recipe_contract()
     print("MariaDB Formula migration contract: ok")
 

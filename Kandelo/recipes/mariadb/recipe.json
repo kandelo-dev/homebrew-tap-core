@@ -2,28 +2,24 @@
   "schema": 1,
   "dependencies": [
     "kandelo-dev/tap-core/libcxx",
+    "kandelo-dev/tap-core/ncurses",
+    "kandelo-dev/tap-core/openssl",
     "kandelo-dev/tap-core/pcre2",
     "kandelo-dev/tap-core/zlib"
   ],
   "entrypoint": "build.sh",
   "files": [
     {
-      "bytes": 14550,
+      "bytes": 21090,
       "mode": "0644",
       "path": "build.sh",
-      "sha256": "b34a3fc52c0ed3073233c07bf6261b7cae4a4c66127c6e9269e2578cf8fcbf8a"
+      "sha256": "b5c3c8f70069494c6715267676799335b1f6e2902498df2c7717466b07ff2955"
     },
     {
-      "bytes": 9964,
+      "bytes": 10079,
       "mode": "0644",
       "path": "wasm32-posix-toolchain.cmake",
-      "sha256": "82576e366e0544f80a55045bb9076c4495060dd39e1fa861f2536d7101f6287c"
-    },
-    {
-      "bytes": 8423,
-      "mode": "0644",
-      "path": "wasm64-posix-toolchain.cmake",
-      "sha256": "d6210fdc0d1f60b59b5b6cb90819b4f5415ae4e4c91e014f1de01bb307fadba3"
+      "sha256": "05045e06d00c59869d6f0235202e0ab35fad1afb654149ceab6eaf3f2f539ead"
     }
   ]
 }

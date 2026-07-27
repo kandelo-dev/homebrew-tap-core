@@ -14,37 +14,18 @@ set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR wasm32)
 set(CMAKE_CROSSCOMPILING TRUE)
 
-# --- Locate LLVM clang ---
-# Search order, highest priority first:
-#   1. $LLVM_BIN — exported by the Nix flake's shellHook (so this works
-#      identically on Linux CI and Mac dev shells).
-#   2. $LLVM_PREFIX/bin — sibling form of (1) the flake also exports.
-#   3. clang/llvm-* on PATH.
-set(_LLVM_SEARCH_PATHS)
-if(DEFINED ENV{LLVM_BIN})
-  list(APPEND _LLVM_SEARCH_PATHS "$ENV{LLVM_BIN}")
+# --- Bind the publisher's sealed target LLVM ---
+# WHY: declared native LLVM builds MariaDB's host generators, while this LLVM
+# owns Kandelo target code. Falling back through PATH could silently exchange
+# those roles or select an undeclared compiler.
+if(NOT DEFINED ENV{WASM_POSIX_LLVM_DIR})
+  message(FATAL_ERROR "WASM_POSIX_LLVM_DIR must select the sealed Kandelo target LLVM")
 endif()
-if(DEFINED ENV{LLVM_PREFIX})
-  list(APPEND _LLVM_SEARCH_PATHS "$ENV{LLVM_PREFIX}/bin")
-endif()
-
-if(_LLVM_SEARCH_PATHS)
-  find_program(LLVM_CLANG NAMES clang PATHS ${_LLVM_SEARCH_PATHS} NO_DEFAULT_PATH)
-  find_program(LLVM_AR     NAMES llvm-ar     PATHS ${_LLVM_SEARCH_PATHS} NO_DEFAULT_PATH)
-  find_program(LLVM_RANLIB NAMES llvm-ranlib PATHS ${_LLVM_SEARCH_PATHS} NO_DEFAULT_PATH)
-  find_program(LLVM_NM     NAMES llvm-nm     PATHS ${_LLVM_SEARCH_PATHS} NO_DEFAULT_PATH)
-endif()
-
-find_program(LLVM_CLANG NAMES clang)
-if(NOT LLVM_CLANG)
-  message(FATAL_ERROR
-    "LLVM clang not found. Searched: ${_LLVM_SEARCH_PATHS}. "
-    "Run through scripts/dev-shell.sh or set LLVM_BIN/LLVM_PREFIX."
-  )
-endif()
-find_program(LLVM_AR     NAMES llvm-ar)
-find_program(LLVM_RANLIB NAMES llvm-ranlib)
-find_program(LLVM_NM     NAMES llvm-nm)
+set(_LLVM_BIN "$ENV{WASM_POSIX_LLVM_DIR}")
+find_program(LLVM_CLANG NAMES clang PATHS "${_LLVM_BIN}" NO_DEFAULT_PATH REQUIRED)
+find_program(LLVM_AR NAMES llvm-ar PATHS "${_LLVM_BIN}" NO_DEFAULT_PATH REQUIRED)
+find_program(LLVM_RANLIB NAMES llvm-ranlib PATHS "${_LLVM_BIN}" NO_DEFAULT_PATH REQUIRED)
+find_program(LLVM_NM NAMES llvm-nm PATHS "${_LLVM_BIN}" NO_DEFAULT_PATH REQUIRED)
 
 # --- Sysroot ---
 # Allow override via WASM_POSIX_SYSROOT env or cmake var.
@@ -207,27 +188,34 @@ set(HAVE_SYS_PRCTL_H 0 CACHE INTERNAL "")
 set(HAVE_SYS_SYSCALL_H 0 CACHE INTERNAL "")
 set(HAVE_LINK_H 0 CACHE INTERNAL "")
 set(HAVE_MALLOC_H 0 CACHE INTERNAL "")
-set(HAVE_SETUPTERM 0 CACHE INTERNAL "")
-set(HAVE_VIDATTR 0 CACHE INTERNAL "")
 
-# --- Disable SSL/TLS for both server and client library ---
-# The server uses -DWITH_SSL=OFF, but libmariadb (connector/C) has its own
-# SSL handling. Prevent FindGnuTLS from being called by pre-setting results.
-set(WITH_SSL "OFF" CACHE STRING "Disable SSL" FORCE)
+# --- Bind TLS to the declared OpenSSL copied into the private sysroot ---
+set(WITH_SSL "system" CACHE STRING "Use declared OpenSSL" FORCE)
+set(CONC_WITH_SSL "OPENSSL" CACHE STRING "Use declared OpenSSL in connector/C" FORCE)
 set(GNUTLS_FOUND FALSE CACHE BOOL "" FORCE)
 set(GNUTLS_LIBRARY "GNUTLS_LIBRARY-NOTFOUND" CACHE FILEPATH "" FORCE)
 set(GNUTLS_INCLUDE_DIR "GNUTLS_INCLUDE_DIR-NOTFOUND" CACHE PATH "" FORCE)
-set(OPENSSL_FOUND FALSE CACHE BOOL "" FORCE)
+set(OPENSSL_FOUND TRUE CACHE BOOL "" FORCE)
+set(OPENSSL_ROOT_DIR "${WASM_POSIX_SYSROOT}" CACHE PATH "" FORCE)
+set(OPENSSL_USE_STATIC_LIBS TRUE CACHE BOOL "" FORCE)
+set(OPENSSL_INCLUDE_DIR "${WASM_POSIX_SYSROOT}/include" CACHE PATH "" FORCE)
+set(OPENSSL_SSL_LIBRARY "${WASM_POSIX_SYSROOT}/lib/libssl.a" CACHE FILEPATH "" FORCE)
+set(OPENSSL_CRYPTO_LIBRARY "${WASM_POSIX_SYSROOT}/lib/libcrypto.a" CACHE FILEPATH "" FORCE)
 
-# --- Curses/terminfo stubs ---
-# MariaDB's bundled editline requires curses. Our sysroot doesn't have it,
-# but MariaDB only uses it for the interactive mysql CLI (not mariadbd).
-# Satisfy the cmake check with stubs.
-set(CURSES_FOUND TRUE CACHE BOOL "Curses found (stub)" FORCE)
-set(CURSES_LIBRARY "${WASM_POSIX_SYSROOT}/lib/libc.a" CACHE FILEPATH "Curses library (stub)" FORCE)
+# --- Bind bundled editline to the declared ncurses dependency ---
+set(CURSES_FOUND TRUE CACHE BOOL "Declared ncurses found" FORCE)
+set(CURSES_LIBRARY "${WASM_POSIX_SYSROOT}/lib/libtinfow.a" CACHE FILEPATH "" FORCE)
+set(CURSES_LIBRARIES
+  "${WASM_POSIX_SYSROOT}/lib/libncursesw.a;${WASM_POSIX_SYSROOT}/lib/libtinfow.a"
+  CACHE STRING "" FORCE
+)
 set(CURSES_INCLUDE_PATH "${WASM_POSIX_SYSROOT}/include" CACHE PATH "Curses include path" FORCE)
-set(CURSES_HAVE_CURSES_H FALSE CACHE BOOL "" FORCE)
-set(CURSES_HAVE_NCURSES_H FALSE CACHE BOOL "" FORCE)
+set(CURSES_INCLUDE_DIRS "${WASM_POSIX_SYSROOT}/include" CACHE PATH "" FORCE)
+set(CURSES_HAVE_CURSES_H TRUE CACHE BOOL "" FORCE)
+set(CURSES_HAVE_NCURSES_H TRUE CACHE BOOL "" FORCE)
+set(HAVE_TPUTS_IN_CURSES TRUE CACHE BOOL "" FORCE)
+set(HAVE_SETUPTERM TRUE CACHE BOOL "" FORCE)
+set(HAVE_VIDATTR TRUE CACHE BOOL "" FORCE)
 
 # --- PCRE2 paths ---
 # Force PCRE2 include path to sysroot to avoid picking up host-native headers.
@@ -235,6 +223,8 @@ set(CURSES_HAVE_NCURSES_H FALSE CACHE BOOL "" FORCE)
 # static library try_compile, so pre-set it to avoid macro conflicts.
 set(PCRE2_INCLUDE_DIR "${WASM_POSIX_SYSROOT}/include" CACHE PATH "PCRE2 include dir" FORCE)
 set(PCRE_INCLUDE_DIRS "${WASM_POSIX_SYSROOT}/include" CACHE PATH "PCRE include dirs" FORCE)
+set(PCRE_LIBRARY_DIRS "${WASM_POSIX_SYSROOT}/lib" CACHE PATH "PCRE library dirs" FORCE)
+set(HAVE_PCRE2_MATCH_8 1 CACHE INTERNAL "" FORCE)
 set(NEEDS_PCRE2_DEBIAN_HACK FALSE CACHE BOOL "No PCRE2 debian hack needed" FORCE)
 
 # --- Disable DTrace ---
