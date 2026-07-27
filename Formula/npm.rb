@@ -3,6 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Npm < Formula
   include KandeloFormulaSupport
 
+  KANDELO_SOURCE_COMMIT = "88d26f4c627a363e01e567574916aff4e00828ee".freeze
   GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/npm".freeze
   GUEST_NODE = "/home/linuxbrew/.linuxbrew/opt/node/bin/node".freeze
   GUEST_NPM_ROOT = "#{GUEST_OPT_PREFIX}/libexec/npm".freeze
@@ -156,9 +157,14 @@ class Npm < Formula
   url "https://registry.npmjs.org/npm/-/npm-10.9.2.tgz"
   version "10.9.2"
   sha256 "5cd1e5ab971ea6333f910bc2d50700167c5ef4e66da279b2a3efc874c6b116e4"
-  license "Artistic-2.0"
+  license all_of: ["Artistic-2.0", "GPL-2.0-or-later"]
 
   depends_on "kandelo-dev/tap-core/node"
+
+  resource "kandelo-gpl-license" do
+    url "https://raw.githubusercontent.com/Automattic/kandelo/#{KANDELO_SOURCE_COMMIT}/COPYING"
+    sha256 "ead02ff1f91603ff84965fe76e86976a3587dc7faf45fb48affe02536b744b86"
+  end
 
   def install
     kandelo_require_arch!("wasm32")
@@ -197,7 +203,14 @@ class Npm < Formula
     }.each do |destination, source|
       source.children.each { |page| destination.install_symlink page }
     end
-    (share/"licenses/npm").install_symlink npm_root/"LICENSE"
+    # WHY: The complete npm tree keeps its Artistic license, while the
+    # Kandelo-authored runner and compatibility shims embedded above are GPL.
+    # Install both texts so the bottle's declared combined license is auditable.
+    license_root = share/"licenses/npm"
+    license_root.install_symlink npm_root/"LICENSE" => "LICENSE-Artistic-2.0"
+    resource("kandelo-gpl-license").stage do
+      license_root.install "COPYING" => "COPYING-GPL-2.0-or-later"
+    end
   end
 
   test do
@@ -217,7 +230,8 @@ class Npm < Formula
     assert_path_exists man1/"npm-install.1"
     assert_path_exists man5/"package-json.5"
     assert_path_exists man7/"package-spec.7"
-    assert_path_exists share/"licenses/npm/LICENSE"
+    assert_path_exists share/"licenses/npm/LICENSE-Artistic-2.0"
+    assert_path_exists share/"licenses/npm/COPYING-GPL-2.0-or-later"
 
     display = (npm_root/"lib/utils/display.js").read
     assert_includes display,
