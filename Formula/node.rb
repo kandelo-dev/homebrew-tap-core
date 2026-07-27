@@ -138,6 +138,7 @@ class Node < Formula
       const path = require("path");
       const util = require("util");
       const zlib = require("zlib");
+      const { execFileSync } = require("child_process");
       const { EventEmitter, once } = require("events");
       const helper = require("/opt/node-formula-test/helper");
       const pkg = require("/opt/node-formula-test/node_modules/pkg");
@@ -166,6 +167,10 @@ class Node < Formula
       assert.strictEqual(
         zlib.inflateSync(zlib.deflateSync(Buffer.from("kandelo-zlib"))).toString(),
         "kandelo-zlib",
+      );
+      assert.strictEqual(
+        execFileSync("/bin/sh", ["-c", "printf node-child-ok"], { encoding: "utf8" }),
+        "node-child-ok",
       );
 
       class ReplayEmitter extends EventEmitter {
@@ -211,7 +216,7 @@ class Node < Formula
     JAVASCRIPT
     assert_equal "node-surface-ok\n", kandelo_run_wasm(
       bin/"node", ["-e", surface_script],
-      argv0: "/usr/bin/node", guest_files: guest_files
+      argv0: "/usr/bin/node", guest_files: guest_files, expected_fork_descendants: 1
     )
     assert_equal "node-surface-ok\n" * 3, kandelo_run_browser_wasm(
       bin/"node", ["-e", surface_script],
