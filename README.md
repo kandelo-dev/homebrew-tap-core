@@ -476,6 +476,20 @@ abandoned dispatch history. Schema-1 ABI 42 ledgers retain their explicitly
 reviewed workflow-trust migration for recovery. The manifest-backed shell
 campaign uses schema 4; it never inherits or reinterprets older campaign state
 and never rotates its complete authority implicitly.
+
+If a schema-4 campaign fails before its selected rebuild is published and the
+repair advances the Kandelo consumer or package generation, preserve that
+campaign's private ledger and committed failure report as historical evidence.
+Do not recover, overwrite, or reuse the failed ledger. Land the corrected
+publisher, consumer, generation tag, and complete caller hash together on a new
+protected `Tmanifest`, then initialize a fresh mode-0600 ledger from that exact
+authority. The typed manifest remains byte-identical, including all 23 reused
+bottle identities and digests; only the caller authority changes.
+
+Token-based dispatch acknowledgement accepts only workflow attempt 1. A
+manual rerun retains the original run ID, title, token, and caller commit, but
+it does not represent a new request journaled by the campaign ledger.
+
 Read-only status may derive an implicit Formula version from that Formula's
 package-owned sidecar, but a write-capable
 controller cross-checks the result against the frozen ledger. A missing ledger

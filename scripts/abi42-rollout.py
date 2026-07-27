@@ -45,9 +45,15 @@ LEGACY_PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009
 # The next campaign deliberately keeps its authority separate from the legacy
 # d380 controller. These values are replaced only after the exact Kandelo main
 # merge and its selected rootfs generation have both been admitted.
-CURRENT_MAIN_SHA = "5f448e68ec031108de42e965f5284944861b6ea2"
-CURRENT_ROOTFS_GENERATION_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-d66825c03af08133538018dca0bad5732d8eaf5add3dfd513b3c1bce9210256e"
-CURRENT_CALLER_SHA256 = "3c6028607ad3bdbba8a814e065d602d9c1cc45c64ccd6e8e859a336d58acfeac"
+# WHY: retain the failed M3 caller as historical authority for its original
+# private ledger and committed failure report. A new dispatch still requires
+# protected tap main to equal the separately pinned current caller below.
+FAILED_M3_MAIN_SHA = "5f448e68ec031108de42e965f5284944861b6ea2"
+FAILED_M3_ROOTFS_GENERATION_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-d66825c03af08133538018dca0bad5732d8eaf5add3dfd513b3c1bce9210256e"
+FAILED_M3_CALLER_SHA256 = "3c6028607ad3bdbba8a814e065d602d9c1cc45c64ccd6e8e859a336d58acfeac"
+CURRENT_MAIN_SHA = "88d26f4c627a363e01e567574916aff4e00828ee"
+CURRENT_ROOTFS_GENERATION_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-adc14c9c0923787e260585b7ddc4517b5b9013f642212e039804f32bf892a5f9"
+CURRENT_CALLER_SHA256 = "1d36416c57ba168f0d4b310dfb98c1f1b9a9d17926cb491079e18eba299b1e19"
 # WHY: the current write caller executes the publisher and consumes packages
 # from the same exact main commit. The selected-input admission record, rather
 # than a distinct source commit, vouches for the preserved rootfs bytes.
@@ -75,6 +81,11 @@ APPROVED_PUBLICATION_WORKFLOWS = {
         LEGACY_ABI42_CONSUMER_SHA,
         "exact",
     ),
+    FAILED_M3_CALLER_SHA256: (
+        FAILED_M3_MAIN_SHA,
+        FAILED_M3_MAIN_SHA,
+        "exact",
+    ),
     CURRENT_CALLER_SHA256: (
         CURRENT_MAIN_SHA,
         CURRENT_MAIN_SHA,
@@ -99,6 +110,12 @@ APPROVED_CAMPAIGN_CONTRACTS = {
         LEGACY_ABI42_CONSUMER_SHA,
         LEGACY_PREPUBLICATION_GENERATION_SHA,
         LEGACY_PREPUBLICATION_STAGING_TAG,
+    ),
+    FAILED_M3_CALLER_SHA256: (
+        FAILED_M3_MAIN_SHA,
+        FAILED_M3_MAIN_SHA,
+        FAILED_M3_MAIN_SHA,
+        FAILED_M3_ROOTFS_GENERATION_TAG,
     ),
     CURRENT_CALLER_SHA256: (
         CURRENT_MAIN_SHA,
@@ -5932,6 +5949,14 @@ def matching_token_runs_in_runs(
             or run.get("display_title") != expected_title
         ):
             continue
+        if not is_first_run_attempt(run.get("run_attempt")):
+            # WHY: a manual workflow rerun keeps the original run ID, title,
+            # token, and caller SHA. Only attempt 1 represents the HTTP request
+            # journaled by this campaign; later attempts are not new intents.
+            raise RolloutError(
+                f"token-correlated run {run['id']} is a rerun; "
+                "only attempt 1 is eligible"
+            )
         caller_tap_sha = run.get("head_sha")
         if not isinstance(caller_tap_sha, str):
             raise RolloutError(
