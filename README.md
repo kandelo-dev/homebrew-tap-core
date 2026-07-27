@@ -91,7 +91,9 @@ Formula source currently present in this repository includes:
   input, audio, and save-path adaptations (the shareware IWAD remains an
   external, integrity-checked demo asset);
 - `tcl`, the threaded Tcl 9 interpreter, standard library, extension loader,
-  and development files; and
+  and development files;
+- `redis`, the Redis 7.2.5 threaded in-memory service and command-line client,
+  built directly from the checksum-pinned upstream source; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
 
 These seven exact-shell Formulae and Ruby intentionally use the transitional
