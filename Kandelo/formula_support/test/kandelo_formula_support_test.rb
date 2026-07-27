@@ -26,6 +26,11 @@ class KandeloFormulaSupportTest < Minitest::Test
   InstalledFormula = Struct.new(:rack, :pkg_version, keyword_init: true)
   StableSpec = Struct.new(:url, :checksum, keyword_init: true)
   StableChecksum = Struct.new(:hexdigest, keyword_init: true)
+  StagedResource = Struct.new(:url, :checksum, :source, keyword_init: true) do
+    def stage
+      Dir.chdir(source) { yield }
+    end
+  end
 
   NATIVE_REQUIREMENT_IDENTITIES = {
     KandeloFormulaSupport::BinaryenRequirement => ["binaryen", "wasm-opt"],
@@ -99,7 +104,7 @@ class KandeloFormulaSupportTest < Minitest::Test
                   :formula_version, :formula_binary_cache_root, :formula_checker_path,
                   :formula_resolver_repo_root, :homebrew_prefix_path, :nix_path, :prefix_path,
                   :root_path, :runtime_formulae, :shell_result, :stable_spec, :test_path,
-                  :tier2_runtime
+                  :tier2_runtime, :resources
     attr_reader :command, :expected_status, :pty_config, :pty_config_mode, :pty_config_path,
                 :recorded_launcher, :system_args, :system_calls, :system_environment
 
@@ -136,6 +141,10 @@ class KandeloFormulaSupportTest < Minitest::Test
         url: "https://example.test/test-formula-1.0.tar.gz",
         checksum: StableChecksum.new(hexdigest: "a" * 64),
       )
+    end
+
+    def resource(resource_name)
+      resources.fetch(resource_name)
     end
 
     def kandelo_tier2_runtime!
@@ -396,6 +405,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         "entrypoint"        => "build.sh",
         "file_count"        => 1,
         "manifest_sha256"   => "b" * 64,
+        "resources"         => [],
         "script_env_keys"   => ["HELLO_VALUE"],
         "source_sha256"     => "e" * 64,
         "source_url"        => "https://example.test/hello-1.0.tar.gz",
@@ -615,7 +625,9 @@ class KandeloFormulaSupportTest < Minitest::Test
     ENV.replace(original) if original
   end
 
-  def with_tap_recipe_build_fixture(script_env: nil, formula_name: "hello")
+  def with_tap_recipe_build_fixture(
+    script_env: nil, formula_name: "hello", resource_records: []
+  )
     original = ENV.to_hash
     Dir.mktmpdir("kandelo-tap-recipe-build") do |dir|
       base = Pathname(dir).realpath
@@ -674,6 +686,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         "entrypoint"        => manifest.fetch("entrypoint"),
         "file_count"        => records.length,
         "manifest_sha256"   => Digest::SHA256.file(manifest_path).hexdigest,
+        "resources"         => resource_records,
         "script_env_keys"   => script_env.keys.sort,
         "source_sha256"     => "a" * 64,
         "source_url"        => "https://example.test/hello-1.0.tar.gz",
@@ -753,6 +766,22 @@ class KandeloFormulaSupportTest < Minitest::Test
       harness.prefix_path = prefix_path
       harness.root_path = root.to_s
       harness.runtime_formulae = [dependency_formula]
+      harness.resources = resource_records.to_h do |resource_record|
+        resource_name = resource_record.fetch("name")
+        staged_source = base/"resource-sources"/resource_name
+        staged_source.mkpath
+        (staged_source/"input.txt").binwrite("verified #{resource_name} resource\n")
+        [
+          resource_name,
+          StagedResource.new(
+            url: resource_record.fetch("source_url"),
+            checksum: StableChecksum.new(
+              hexdigest: resource_record.fetch("source_sha256"),
+            ),
+            source: staged_source,
+          ),
+        ]
+      end
       harness.stable_spec = StableSpec.new(
         url: recipe.fetch("source_url"),
         checksum: StableChecksum.new(hexdigest: recipe.fetch("source_sha256")),
@@ -858,10 +887,15 @@ class KandeloFormulaSupportTest < Minitest::Test
     ENV.replace(original) if original
   end
 
-  def assert_tap_recipe_rejected_before_activation(fixture, script_env: fixture.fetch(:script_env))
+  def assert_tap_recipe_rejected_before_activation(
+    fixture,
+    resources: fixture.fetch(:recipe).fetch("resources").map { |record| record.fetch("name") },
+    script_env: fixture.fetch(:script_env)
+  )
     error = assert_raises(RuntimeError) do
       fixture.fetch(:harness).kandelo_build_tap_recipe(
         manifest_sha256: fixture.fetch(:recipe).fetch("manifest_sha256"),
+        resources:,
         script_env:,
       )
     end
@@ -872,9 +906,14 @@ class KandeloFormulaSupportTest < Minitest::Test
     error
   end
 
-  def run_tap_recipe(fixture, script_env: fixture.fetch(:script_env))
+  def run_tap_recipe(
+    fixture,
+    resources: fixture.fetch(:recipe).fetch("resources").map { |record| record.fetch("name") },
+    script_env: fixture.fetch(:script_env)
+  )
     fixture.fetch(:harness).kandelo_build_tap_recipe(
       manifest_sha256: fixture.fetch(:recipe).fetch("manifest_sha256"),
+      resources:,
       script_env:,
     )
   end
@@ -1035,8 +1074,8 @@ class KandeloFormulaSupportTest < Minitest::Test
       request = fixture.fetch(:runner_requests).fetch(0)
       assert_equal %w[
         arch dependencies entrypoint environment formula limits
-        manifest_sha256 native_roots output_root platform_root recipe_root schema source_root
-        sysroot version work_root
+        manifest_sha256 native_roots output_root platform_root recipe_root resources schema
+        source_root sysroot version work_root
       ], request.keys.sort
       assert_equal 1, request.fetch("schema")
       assert_empty request.fetch("native_roots")
@@ -1047,6 +1086,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         { "WASM_POSIX_DEP_ZLIB_DIR" => fixture.fetch(:dependency_keg).to_s },
         request.fetch("dependencies"),
       )
+      assert_empty request.fetch("resources")
       environment = request.fetch("environment")
       refute_equal fixture.fetch(:harness).system_environment, environment
       %w[
@@ -1100,6 +1140,57 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_equal "/ambient/fork-instrument", ENV.fetch("WASM_POSIX_FORK_INSTRUMENT")
       assert_equal "/ambient/local-root-spill", ENV.fetch("WASM_POSIX_LOCAL_ROOT_SPILL")
       assert_equal "/ambient/xtask", ENV.fetch("WASM_POSIX_XTASK_BIN")
+    end
+  end
+
+  def test_tap_recipe_helper_stages_attested_resources_at_fixed_guest_paths
+    resource_record = {
+      "name"          => "chocolate-doom",
+      "source_sha256" => "b" * 64,
+      "source_url"    => "https://example.test/chocolate-doom.tar.gz",
+    }
+    with_tap_recipe_build_fixture(resource_records: [resource_record]) do |fixture|
+      out_dir = run_tap_recipe(fixture)
+      request = fixture.fetch(:runner_requests).fetch(0)
+      staged = fixture.fetch(:build_path)/
+        "kandelo-package-resources/chocolate-doom"
+
+      assert_equal(
+        { "chocolate-doom" => staged.to_s },
+        request.fetch("resources"),
+      )
+      assert_equal(
+        "/kandelo/resources/chocolate-doom",
+        request.fetch("environment").fetch(
+          "WASM_POSIX_DEP_RESOURCE_CHOCOLATE_DOOM_DIR",
+        ),
+      )
+      assert_equal(
+        "verified chocolate-doom resource\n",
+        (staged/"input.txt").binread,
+      )
+      refute_path_exists(
+        fixture.fetch(:build_path)/
+          "kandelo-package-source/kandelo-package-resources",
+      )
+      assert_equal "tap recipe output\n", (out_dir/"bin/hello").binread
+    end
+  end
+
+  def test_tap_recipe_helper_rejects_resource_identity_drift_before_activation
+    resource_record = {
+      "name"          => "resource",
+      "source_sha256" => "b" * 64,
+      "source_url"    => "https://example.test/resource.tar.gz",
+    }
+    with_tap_recipe_build_fixture(resource_records: [resource_record]) do |fixture|
+      selected = fixture.fetch(:harness).resources.fetch("resource")
+      selected.source_sha256 = "c" * 64 if selected.respond_to?(:source_sha256=)
+      selected.checksum.hexdigest = "c" * 64
+
+      error = assert_tap_recipe_rejected_before_activation(fixture)
+
+      assert_includes error.message, "resource identity differs"
     end
   end
 
@@ -1575,6 +1666,35 @@ class KandeloFormulaSupportTest < Minitest::Test
         "kandelo-dev/tap-core/foo-bar",
         "kandelo-dev/tap-core/foo_bar",
       ]
+      resource_record = {
+        "name"          => "fixture-data",
+        "source_sha256" => "e" * 64,
+        "source_url"    => "https://example.test/fixture-data.tar.gz",
+      }
+      unknown_resource_key = Marshal.load(Marshal.dump(valid))
+      unknown_resource_key.fetch("tap_recipe")["resources"] = [
+        resource_record.merge("path" => "/caller/selected"),
+      ]
+      unsorted_resources = Marshal.load(Marshal.dump(valid))
+      unsorted_resources.fetch("tap_recipe")["resources"] = [
+        resource_record.merge("name" => "z-data"),
+        resource_record.merge("name" => "a-data"),
+      ]
+      colliding_resources = Marshal.load(Marshal.dump(valid))
+      colliding_resources.fetch("tap_recipe")["resources"] = [
+        resource_record.merge("name" => "fixture-data"),
+        resource_record.merge("name" => "fixture_data"),
+      ]
+      resource_env_override = Marshal.load(Marshal.dump(valid))
+      resource_env_override.fetch("tap_recipe")["resources"] = [resource_record]
+      resource_env_override.fetch("tap_recipe")["script_env_keys"] = [
+        "WASM_POSIX_DEP_RESOURCE_FIXTURE_DATA_DIR",
+      ]
+      dependency_resource_collision = Marshal.load(Marshal.dump(valid))
+      dependency_resource_collision.fetch("tap_recipe")["resources"] = [resource_record]
+      dependency_resource_collision.fetch("tap_recipe")["dependencies"] = [
+        "kandelo-dev/tap-core/resource-fixture-data",
+      ]
       both_paths = Marshal.load(Marshal.dump(valid))
       both_paths["tier2_bridge"] =
         tier2_loader_attestation(fixture).fetch("tier2_bridge")
@@ -1592,6 +1712,18 @@ class KandeloFormulaSupportTest < Minitest::Test
         ),
         "unsorted dependencies"  => unsorted_dependencies,
         "colliding dependencies" => colliding_dependencies,
+        "unknown resource key"   => unknown_resource_key,
+        "unsorted resources"     => unsorted_resources,
+        "colliding resources"    => colliding_resources,
+        "resource env override"  => resource_env_override,
+        "dependency resource collision" => dependency_resource_collision,
+        "oversized resource URL" => valid.merge(
+          "tap_recipe" => valid.fetch("tap_recipe").merge(
+            "resources" => [
+              resource_record.merge("source_url" => "https://example.test/#{"a" * 1005}"),
+            ],
+          ),
+        ),
         "both build paths"       => both_paths,
         "wrong recipe schema"    => valid.merge("schema" => 2),
       }
@@ -1606,6 +1738,37 @@ class KandeloFormulaSupportTest < Minitest::Test
         refute_path_exists marker, label
         path.chmod(0644)
       end
+    end
+  end
+
+  def test_support_load_accepts_bounded_resource_attestation_above_legacy_limit
+    with_tier2_loader_fixture do |fixture|
+      document = tier2_loader_attestation(fixture, bridge: false, recipe: true)
+      document.fetch("tap_recipe")["resources"] = 32.times.map do |index|
+        {
+          "name"          => format("resource-%02d", index),
+          "source_sha256" => "e" * 64,
+          "source_url"    => "https://example.test/#{index}/#{"a" * 600}",
+        }
+      end
+      contents = JSON.generate(document)
+      assert_operator contents.bytesize, :>, 16_384
+      assert_operator(
+        contents.bytesize,
+        :<=,
+        KandeloFormulaSupport::KANDELO_TIER2_ATTESTATION_MAX_BYTES,
+      )
+      write_tier2_loader_attestation(fixture, contents)
+      marker = fixture.fetch(:base)/"large-resource-attestation-evaluated"
+
+      _stdout, stderr, status = run_tier2_support_load(
+        fixture,
+        "File.binwrite(#{marker.to_s.inspect}, \"evaluated\\n\")",
+        simulated_owner_uid: 0,
+      )
+
+      assert status.success?, stderr
+      assert_path_exists marker
     end
   end
 
@@ -2232,6 +2395,10 @@ class KandeloFormulaSupportTest < Minitest::Test
         "support hash"        => JSON.generate(valid.merge("support_sha256" => "f" * 64)),
         "support runtime hash" => JSON.generate(valid.merge("support_runtime_sha256" => "f" * 64)),
         "trailing JSON value" => "#{valid_json} true",
+        "oversized document"  => valid_json.ljust(
+          KandeloFormulaSupport::KANDELO_TIER2_ATTESTATION_MAX_BYTES + 1,
+          " ",
+        ),
       }
       mutations.each do |label, contents|
         marker = fixture.fetch(:base)/"#{label.tr(" ", "-")}-evaluated"

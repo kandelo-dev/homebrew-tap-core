@@ -32,7 +32,7 @@ module KandeloFormulaSupport
   KANDELO_CORE_TAP_FORMULA_PREFIX = "kandelo-dev/tap-core/"
   KANDELO_PORTABLE_BINARY_CACHE_BASENAME = ".ci-test-binary-cache"
   KANDELO_TIER2_ATTESTATION_BASENAME = ".kandelo-publisher-tier2-attestation.json"
-  KANDELO_TIER2_ATTESTATION_MAX_BYTES = 16_384
+  KANDELO_TIER2_ATTESTATION_MAX_BYTES = 65_536
   KANDELO_TIER2_SOURCE_MAX_BYTES = 1_048_576
   KANDELO_SUPPORT_RUNTIME_MAX_FILES = 128
   KANDELO_SUPPORT_RUNTIME_FILE_MAX_BYTES = 1_048_576
@@ -45,6 +45,7 @@ module KandeloFormulaSupport
   KANDELO_TAP_RECIPE_MAX_FILES = 512
   KANDELO_TAP_RECIPE_FILE_MAX_BYTES = 16_777_216
   KANDELO_TAP_RECIPE_MAX_BYTES = 67_108_864
+  KANDELO_TAP_RECIPE_MAX_RESOURCES = 32
   KANDELO_TAP_RECIPE_OUTPUT_MAX_ENTRIES = 262_144
   KANDELO_TAP_RECIPE_OUTPUT_FILE_MAX_BYTES = 1_073_741_824
   KANDELO_TAP_RECIPE_OUTPUT_MAX_BYTES = 2_147_483_648
@@ -86,7 +87,7 @@ module KandeloFormulaSupport
     script_sha256 source_mode source_sha256 source_url version
   ].freeze
   KANDELO_TAP_RECIPE_KEYS = %w[
-    dependencies entrypoint file_count manifest_sha256 script_env_keys
+    dependencies entrypoint file_count manifest_sha256 resources script_env_keys
     source_sha256 source_url total_bytes version
   ].freeze
   KANDELO_TIER2_TRUSTED_ENV_KEYS = %w[
@@ -568,6 +569,7 @@ module KandeloFormulaSupport
     end
     unless recipe.nil?
       dependencies = recipe["dependencies"]
+      resources = recipe["resources"]
       script_env_keys = recipe["script_env_keys"]
       dependency_env_keys = if dependencies.is_a?(Array) &&
                                dependencies.all? { |dependency| dependency.is_a?(String) }
@@ -577,6 +579,18 @@ module KandeloFormulaSupport
         dependencies.map do |dependency|
           short_name = dependency.rpartition("/").last
           "WASM_POSIX_DEP_#{short_name.upcase.gsub(/[^A-Z0-9]/, "_")}_DIR"
+        end
+      else
+        []
+      end
+      resource_env_keys = if resources.is_a?(Array) &&
+                             resources.all? { |resource| resource.is_a?(Hash) }
+        resources.filter_map do |resource|
+          resource_name = resource["name"]
+          next unless resource_name.is_a?(String)
+
+          "WASM_POSIX_DEP_RESOURCE_" \
+            "#{resource_name.upcase.gsub(/[^A-Z0-9]/, "_")}_DIR"
         end
       else
         []
@@ -604,6 +618,22 @@ module KandeloFormulaSupport
                          dependency.match?(/\A[a-z0-9._-]+\/[a-z0-9._-]+\/[a-z0-9][a-z0-9._-]{0,254}\z/)
                      end &&
                      dependency_env_keys.length == dependency_env_keys.uniq.length &&
+                     resources.is_a?(Array) &&
+                     resources.length <= KANDELO_TAP_RECIPE_MAX_RESOURCES &&
+                     resources.all? { |resource| resource.is_a?(Hash) } &&
+                     resources == resources.sort_by { |resource| resource["name"].to_s } &&
+                     resources.all? do |resource|
+                       resource.keys.sort == %w[name source_sha256 source_url] &&
+                         resource["name"].is_a?(String) &&
+                         resource["name"].match?(/\A[a-z0-9][a-z0-9._+-]{0,127}\z/) &&
+                         valid_sha256.call(resource["source_sha256"]) &&
+                         resource["source_url"].is_a?(String) &&
+                         resource["source_url"].bytesize.between?(9, 1024) &&
+                         resource["source_url"].start_with?("https://")
+                     end &&
+                     resource_env_keys.length == resources.length &&
+                     resource_env_keys.length == resource_env_keys.uniq.length &&
+                     (dependency_env_keys & resource_env_keys).empty? &&
                      script_env_keys.is_a?(Array) &&
                      script_env_keys == script_env_keys.sort.uniq &&
                      script_env_keys.length <= KANDELO_TIER2_SCRIPT_ENV_MAX_KEYS &&
@@ -612,6 +642,7 @@ module KandeloFormulaSupport
                        key.is_a?(String) && key.match?(/\A[A-Z][A-Z0-9_]{0,254}\z/)
                      end &&
                      (dependency_env_keys & script_env_keys).empty? &&
+                     (resource_env_keys & script_env_keys).empty? &&
                      valid_sha256.call(attested_support_sha256)
       raise "Tier-2 attestation has invalid tap recipe values" unless valid_recipe
     end
@@ -1481,6 +1512,59 @@ module KandeloFormulaSupport
     "WASM_POSIX_DEP_#{short_name.upcase.gsub(/[^A-Z0-9]/, "_")}_DIR"
   end
 
+  def kandelo_tap_recipe_resource_env_key(resource_name)
+    "WASM_POSIX_DEP_RESOURCE_" \
+      "#{resource_name.upcase.gsub(/[^A-Z0-9]/, "_")}_DIR"
+  end
+
+  def kandelo_stage_tap_recipe_resources!(recipe)
+    records = recipe.fetch("resources")
+    resource_root = buildpath/"kandelo-package-resources"
+    if resource_root.exist? || resource_root.symlink?
+      odie "Kandelo Formula resource root was already staged: #{resource_root}"
+    end
+    return [{}, {}] if records.empty?
+
+    resource_root.mkdir
+    host_roots = {}
+    guest_environment = {}
+    records.each do |record|
+      resource_name = record.fetch("name")
+      selected = resource(resource_name)
+      unless selected.url.to_s == record.fetch("source_url") &&
+             selected.checksum.hexdigest == record.fetch("source_sha256")
+        odie "Kandelo tap recipe resource identity differs from the publisher attestation: " \
+             "#{resource_name}"
+      end
+
+      destination = resource_root/resource_name
+      # WHY: the privileged runner accepts only this helper-owned directory
+      # layout. Staging the checksum-verified resource here lets it snapshot
+      # the bytes and mount them read-only at a deterministic guest path
+      # without trusting a Formula-provided absolute pathname.
+      selected.stage do
+        entries = Pathname.pwd.children
+        odie "Kandelo tap recipe resource is empty: #{resource_name}" if entries.empty?
+        destination.mkdir
+        entries.each { |entry| FileUtils.cp_r(entry, destination/entry.basename) }
+      end
+      begin
+        stat = destination.lstat
+        resolved = destination.realpath
+      rescue SystemCallError => e
+        odie "Kandelo tap recipe resource is unavailable: #{resource_name}: #{e.message}"
+      end
+      unless stat.directory? && !stat.symlink? && resolved == destination
+        odie "Kandelo tap recipe resource must use its canonical staging directory: " \
+             "#{resource_name}"
+      end
+      host_roots[resource_name] = destination.to_s
+      guest_environment[kandelo_tap_recipe_resource_env_key(resource_name)] =
+        "/kandelo/resources/#{resource_name}"
+    end
+    [host_roots.sort.to_h.freeze, guest_environment.sort.to_h.freeze]
+  end
+
   def kandelo_tap_recipe_relative_path!(value, label)
     unless value.is_a?(String) && value.bytesize.between?(1, 1024) &&
            value.ascii_only? && !value.start_with?("/") && !value.end_with?("/") &&
@@ -1703,6 +1787,9 @@ module KandeloFormulaSupport
     odie "Kandelo tap recipe script_env must be a Hash" unless script_env.instance_of?(Hash)
 
     package_prefix = "#{name.to_s.upcase.gsub(/[^A-Z0-9]/, "_")}_"
+    resource_keys = recipe.fetch("resources").map do |resource_record|
+      kandelo_tap_recipe_resource_env_key(resource_record.fetch("name"))
+    end
     values = {}
     script_env.each do |key, value|
       unless key.is_a?(String) && key.match?(/\A[A-Z][A-Z0-9_]{0,254}\z/)
@@ -1717,7 +1804,7 @@ module KandeloFormulaSupport
         WASM_POSIX_DEP_SOURCE_URL WASM_POSIX_DEP_TARGET_ARCH
         WASM_POSIX_DEP_VERSION WASM_POSIX_DEP_WORK_DIR
         WASM_POSIX_INSTALL_LOCAL_MIRROR
-      ].include?(key)
+      ].include?(key) || resource_keys.include?(key)
         odie "Kandelo tap recipe script_env overrides a helper-owned key: #{key.inspect}"
       end
       unless value.is_a?(String) || value.is_a?(Pathname)
@@ -2132,7 +2219,7 @@ module KandeloFormulaSupport
   # poured target dependencies. Registry resolver authority is deliberately
   # withheld; a fixed publisher runner executes the recipe as a distinct uid,
   # kills its complete cgroup, and returns only a root-owned sealed output.
-  def kandelo_build_tap_recipe(manifest_sha256:, script_env: {})
+  def kandelo_build_tap_recipe(manifest_sha256:, resources: [], script_env: {})
     saved = ENV.to_hash
     request_path = nil
     response_path = nil
@@ -2141,6 +2228,12 @@ module KandeloFormulaSupport
     unless manifest_sha256.is_a?(String) &&
            manifest_sha256 == recipe.fetch("manifest_sha256")
       odie "Kandelo tap recipe manifest differs from the publisher attestation"
+    end
+    expected_resources = recipe.fetch("resources").map { |record| record.fetch("name") }
+    unless resources.instance_of?(Array) &&
+           resources.all? { |resource_name| resource_name.instance_of?(String) } &&
+           resources == expected_resources
+      odie "Kandelo tap recipe resource selection differs from the publisher attestation"
     end
 
     formula_name = name.to_s
@@ -2174,6 +2267,8 @@ module KandeloFormulaSupport
     unless arch == attestation.fetch("arch")
       odie "Kandelo tap recipe architecture differs from the publisher attestation"
     end
+    resource_roots, resource_env =
+      kandelo_stage_tap_recipe_resources!(recipe)
     source_dir = kandelo_stage_verified_formula_source
     work_dir = buildpath/"kandelo-package-work"
     out_dir = buildpath/"kandelo-package-out"
@@ -2225,7 +2320,7 @@ module KandeloFormulaSupport
       "WASM_POSIX_DEP_VERSION"          => recipe.fetch("version"),
       "WASM_POSIX_DEP_WORK_DIR"         => work_dir,
       "WASM_POSIX_INSTALL_LOCAL_MIRROR" => "0",
-    }.merge(dependency_env)
+    }.merge(dependency_env).merge(resource_env)
     helper_env.each { |key, value| ENV[key] = value.to_s }
     %w[
       HOMEBREW_KANDELO_XTASK_BIN WASM_POSIX_BINARY_CACHE_ROOT
@@ -2270,6 +2365,7 @@ module KandeloFormulaSupport
       "output_root"     => out_dir.to_s,
       "platform_root"   => root.to_s,
       "recipe_root"     => recipe_root.to_s,
+      "resources"       => resource_roots,
       "schema"          => 1,
       "source_root"     => source_dir.to_s,
       "sysroot"         => ENV.fetch("WASM_POSIX_SYSROOT"),
