@@ -16,7 +16,7 @@ class Redis < Formula
   skip_clean "bin/redis-server"
   skip_clean "bin/redis-cli"
 
-  # Redis declares its module API function-pointer globals before selecting
+  # WHY: Redis declares its module API function-pointer globals before selecting
   # the non-TLS branch. LLVM 21's Wasm backend crashes while emitting that
   # unused global set even when tls.c is compiled at -O0. Keep only those
   # declarations behind Redis' existing TLS feature condition; the normal
@@ -27,6 +27,9 @@ class Redis < Formula
     kandelo_require_arch!("wasm32")
 
     kandelo_wasm_build do |root|
+      # WHY: build directories are ephemeral, but debug strings become bottle
+      # bytes. Mapping them to stable guest-source names makes identical inputs
+      # reproducible without exposing a publisher or developer filesystem.
       stable_source = "/usr/src/redis-#{version}"
       prefix_maps = {
         buildpath => stable_source,
@@ -47,7 +50,7 @@ class Redis < Formula
         *prefix_maps,
       ].join(" ")
 
-      # Redis' Makefiles inspect the build host even when CC is a cross
+      # WHY: Redis' Makefiles inspect the build host even when CC is a cross
       # compiler. Select the Linux-compatible target link set so pthread,
       # realtime, and dl APIs come from Kandelo rather than the macOS host.
       inreplace "src/Makefile" do |s|
@@ -85,7 +88,7 @@ class Redis < Formula
         end
       end
 
-      # The top-level Redis prerequisite recipe ignores a failed dependency
+      # WHY: the top-level Redis prerequisite recipe ignores a failed dependency
       # sub-make. Build the exact dependency set as a checked step so a missing
       # archive cannot survive as unresolved imports in the linked Wasm.
       system "make", "-C", "deps", "-j#{ENV.make_jobs}",
@@ -113,7 +116,7 @@ class Redis < Formula
       kandelo_validate_wasm_artifact(server, fork: :required)
       kandelo_validate_wasm_artifact(cli, fork: :forbidden)
 
-      # Redis uses Kandelo's dynamic-loader bridge, and the instrumented server
+      # WHY: Redis uses Kandelo's dynamic-loader bridge, and the instrumented server
       # imports the continuation frame protocol validated above. Reject every
       # other env import so a suppressed dependency-build failure stays loud.
       system "bash", "-c", <<~SH
