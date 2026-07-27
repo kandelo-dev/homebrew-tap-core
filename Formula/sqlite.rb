@@ -168,8 +168,6 @@ class Sqlite < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    # WHY: GHCR publishes this ABI 42 bottle as rebuild 1; rebuild 2 was
-    # recorded in the Formula but was never published at the matching tag.
     rebuild 1
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "fb3d5e0b98e3c5b9cc9ac401078448ab6a9f56725d3690ec6c9f369bba41e934"
     sha256 cellar: :any_skip_relocation, wasm64_kandelo: "e5b06a7fee3e85b98095ce06144aba3ed5b7cbced77af1420115507d6a878f44"
