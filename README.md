@@ -608,13 +608,16 @@ passes no package PAT and the publisher performs no visibility mutation. A
 write publication cannot finalize Formula or sidecar state until the exact
 uploaded digest is anonymously readable and its SHA-256 and byte count match.
 
-The mostly-lazy main shell uses a separate, release-only caller:
+The mostly-lazy main shell uses a separate bottle-layer release caller:
 `.github/workflows/publish-main-shell-mirror.yml`. Its reviewed bytes pin the
 exact Kandelo shell, bottle catalog, and independent canary revisions; dispatch
-data cannot replace them. See
+data cannot replace them. The immutable tap release contains only the bottle
+mirror. The shell image and Homebrew bootstrap remain digest-locked
+Automattic/kandelo package artifacts and are not assets of that release. See
 [`Kandelo/main-shell-mirror-publication.md`](Kandelo/main-shell-mirror-publication.md)
-for the fail-closed finalization, merge, publication, and Node/Chromium proof
-sequence.
+for the fail-closed finalization, merge, publication, full closed Node/Chromium
+lifecycle proof, full public Node lifecycle proof, and public Chromium
+shell/bottle/`brew`-activation proof.
 
 The repository-rooted GHCR canary is completed historical evidence. Its
 data-only caller remains pinned to one reviewed Kandelo commit and must not be

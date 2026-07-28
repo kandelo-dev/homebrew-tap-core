@@ -1,8 +1,11 @@
-# Main-shell public mirror publication
+# Main-shell bottle-layer mirror publication
 
-This runbook activates the tap-owned public mirror only after the exact
-bottle-backed shell has passed its closed Node.js and Chromium proof in
-Automattic/kandelo.
+This runbook activates the tap-owned public bottle-layer mirror only after the
+exact bottle-backed shell has passed its closed Node.js and Chromium proof in
+Automattic/kandelo. The immutable tap release contains only the bottle-layer
+mirror. The shell image and Homebrew bootstrap remain digest-locked
+Automattic/kandelo package artifacts; this publication neither copies them into
+the tap release nor makes their source release immutable.
 
 The caller binds four distinct identities:
 
@@ -40,7 +43,8 @@ Kandelo PR #1116 and the complete Formula catalog are merged.
    live public `main`.
 5. Start from a clean branch at the tap's latest live `main`. No bottle
    publication or other tap mutation may run concurrently.
-6. Keep GitHub Release immutability enabled for this repository.
+6. Keep GitHub Release immutability enabled for this repository so the
+   published bottle-layer mirror cannot be changed after creation.
 
 Read the live identities; do not predict merge SHAs:
 
@@ -97,9 +101,9 @@ gh workflow run homebrew-main-shell-ci.yml \
 Wait for both runs to succeed. The first creates the canonical revision-22
 shell archive from exact live `Mpre`; the mirror publisher later resolves that
 public archive and must not consume synthetic merge provenance. The second is
-the live closed first- and third-party lifecycle proof. It explicitly requires
-the tap's live `main` to equal `TF`, so it cannot be postponed until after the
-caller merge creates `TA`.
+the live closed first- and third-party lifecycle proof in both Node.js and
+Chromium. It explicitly requires the tap's live `main` to equal `TF`, so it
+cannot be postponed until after the caller merge creates `TA`.
 
 From the clean tap branch, require the reviewed catalog to precede the
 candidate:
@@ -254,18 +258,24 @@ single reusable workflow must complete all three phases:
 
 1. prepare a bounded same-run handoff from public package and bottle sources,
    without publication credentials;
-2. publish and anonymously re-read the immutable mirror with the tap's scoped
-   `GITHUB_TOKEN`; and
-3. resolve the public generation again and prove the shell plus first- and
-   third-party installation in both Node.js and Chromium.
+2. publish and anonymously re-read the immutable bottle-layer mirror with the
+   tap's scoped `GITHUB_TOKEN`; and
+3. resolve the public generation again, prove the full first- and third-party
+   lifecycle in Node.js, and prove the public shell, bottle transport, and
+   reviewed `brew` activation boundary in Chromium.
 
-The publication receipt must report a successful public anonymous readback,
-an immutable release, and `target_commitish == TA`. Do not describe the public
-cutover as complete until the `public-proof` job is green.
+The public Chromium phase does not repeat the complete guest-install lifecycle.
+That lifecycle is proved with closed transport in Chromium and with public
+transport in Node.js.
+
+The publication receipt must report a successful public anonymous readback of
+the bottle-layer assets, an immutable bottle-layer release, and
+`target_commitish == TA`. Do not describe the public cutover as complete until
+the `public-proof` job is green.
 
 If `Mpre`, `TA`, or `C` moves during the run, the workflow fails closed. If an
 identical bottle collection was already published by an earlier `TA`, do not
 redispatch this publisher: it intentionally refuses to relabel that release as
-one created by a newer authority. Retain the proven immutable mirror for the
-product cutover, or add a separately reviewed consume-only proof path if a new
-authority must re-prove it without writing.
+one created by a newer authority. Retain the proven immutable bottle-layer
+mirror for the product cutover, or add a separately reviewed consume-only proof
+path if a new authority must re-prove it without writing.
