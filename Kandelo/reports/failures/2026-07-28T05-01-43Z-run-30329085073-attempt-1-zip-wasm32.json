@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "formula": "zip",
+  "arch": "wasm32",
+  "release_tag": "bottles-abi-v42",
+  "status": "failed",
+  "attempted_at": "2026-07-28T05:01:43Z",
+  "attempted_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30329085073",
+  "kandelo_commit": "c647adda31d0918de944135543fb94039135cef1",
+  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "error": "publish-handoff=success; validate-payload=failure; publish=skipped",
+  "error_detail": "homebrew-publish-handoff-paths.sh: flattened handoff is only valid for one planned publication\n"
+}
