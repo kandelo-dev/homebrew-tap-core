@@ -51,6 +51,7 @@ jobs:
                 {path: ".github/workflows/dry-run-bottles.yml", mode: "100644", type: "blob"},
                 {path: ".github/workflows/maintain-bottles.yml", mode: "100644", type: "blob"},
                 {path: ".github/workflows/publish-bottles.yml", mode: "100644", type: "blob"},
+                {path: ".github/workflows/publish-main-shell-mirror.yml", mode: "100644", type: "blob"},
                 {path: ".github/workflows/repository-namespace-canary.yml", mode: "100644", type: "blob"}
               ] and
             ([.tree[] |
@@ -72,6 +73,7 @@ jobs:
             .github/workflows/dry-run-bottles.yml
             .github/workflows/maintain-bottles.yml
             .github/workflows/publish-bottles.yml
+            .github/workflows/publish-main-shell-mirror.yml
             .github/workflows/repository-namespace-canary.yml
             Kandelo/test-workflow-trust.rb
             Kandelo/test-workflow-trust.sh

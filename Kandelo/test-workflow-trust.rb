@@ -16,6 +16,7 @@ EXPECTED_WORKFLOW_FILES = %w[
   dry-run-bottles.yml
   maintain-bottles.yml
   publish-bottles.yml
+  publish-main-shell-mirror.yml
   repository-namespace-canary.yml
 ].freeze
 CALLER_PERMISSIONS = {
@@ -28,6 +29,10 @@ REPOSITORY_CANARY_PERMISSIONS = {
   "contents" => "read",
   "packages" => "write",
 }.freeze
+MAIN_SHELL_MIRROR_PERMISSIONS = {
+  "actions" => "read",
+  "contents" => "write",
+}.freeze
 CHECKOUT_ACTION = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
 RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # Write publication executes and consumes packages from one reviewed Kandelo
@@ -36,6 +41,15 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # caller authority. Dry runs retain independently selectable staging sources.
 CURRENT_KANDELO_WORKFLOW_SHA = "c647adda31d0918de944135543fb94039135cef1"
 CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
+FINAL_KANDELO_MPRE_PLACEHOLDER = "__FINAL_KANDELO_MPRE_SHA__"
+FINAL_TAP_CATALOG_PLACEHOLDER = "__FINAL_TAP_CATALOG_SHA__"
+FINAL_CANARY_PLACEHOLDER = "__FINAL_CANARY_SHA__"
+# These three values remain inert placeholders until #1116 is merged and the
+# final Formula catalog has landed. The caller cannot resolve a reusable
+# workflow or pass the reusable workflow's exact-SHA admission in this state.
+MAIN_SHELL_MIRROR_KANDELO_SHA = "__FINAL_KANDELO_MPRE_SHA__"
+MAIN_SHELL_MIRROR_TAP_CATALOG_SHA = "__FINAL_TAP_CATALOG_SHA__"
+MAIN_SHELL_MIRROR_CANARY_SHA = "__FINAL_CANARY_SHA__"
 PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-e7e56ceac71c2f78d8f8078021a71ab9502c76e72a2e96ba8046334139be1f2f"
 
 def check(condition, message)
@@ -203,6 +217,19 @@ CALLER_SPECS = {
       "deletion-reason" => expression("github.event.client_payload.deletion_reason || ''"),
     }.freeze,
   },
+  "main-shell-mirror" => {
+    path: File.join(WORKFLOW_ROOT, "publish-main-shell-mirror.yml"),
+    name: "Publish Homebrew main-shell mirror",
+    event: "publish-homebrew-main-shell-mirror",
+    job: "publish",
+    permissions: MAIN_SHELL_MIRROR_PERMISSIONS,
+    reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-main-shell-mirror-publish.yml@#{MAIN_SHELL_MIRROR_KANDELO_SHA}",
+    inputs: {
+      "kandelo-ref" => MAIN_SHELL_MIRROR_KANDELO_SHA,
+      "tap-catalog-ref" => MAIN_SHELL_MIRROR_TAP_CATALOG_SHA,
+      "canary-ref" => MAIN_SHELL_MIRROR_CANARY_SHA,
+    }.freeze,
+  },
   "repository-canary" => {
     path: File.join(WORKFLOW_ROOT, "repository-namespace-canary.yml"),
     name: "Test repository-rooted GHCR package",
@@ -272,6 +299,7 @@ BASE_MATERIALIZE_RUN = <<~'BASH'
         {path: ".github/workflows/dry-run-bottles.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/maintain-bottles.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/publish-bottles.yml", mode: "100644", type: "blob"},
+        {path: ".github/workflows/publish-main-shell-mirror.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/repository-namespace-canary.yml", mode: "100644", type: "blob"}
       ] and
     ([.tree[] |
@@ -293,6 +321,7 @@ BASE_MATERIALIZE_RUN = <<~'BASH'
     .github/workflows/dry-run-bottles.yml
     .github/workflows/maintain-bottles.yml
     .github/workflows/publish-bottles.yml
+    .github/workflows/publish-main-shell-mirror.yml
     .github/workflows/repository-namespace-canary.yml
     Kandelo/test-workflow-trust.rb
     Kandelo/test-workflow-trust.sh
@@ -664,6 +693,74 @@ def self_test(callers, contract, base_contract)
       "repository-canary workflow"
     )
   end
+  expect_rejection("a mismatched main-shell mirror Kandelo input") do
+    mutated = deep_copy(current_callers.fetch("main-shell-mirror"))
+    mutated.dig("jobs", "publish", "with")["kandelo-ref"] =
+      SELF_TEST_KANDELO_WORKFLOW_SHA
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("main-shell-mirror"),
+      "main-shell-mirror workflow"
+    )
+  end
+  expect_rejection("an event-selected main-shell mirror catalog") do
+    mutated = deep_copy(current_callers.fetch("main-shell-mirror"))
+    mutated.dig("jobs", "publish", "with")["tap-catalog-ref"] =
+      expression("github.event.client_payload.tap_sha")
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("main-shell-mirror"),
+      "main-shell-mirror workflow"
+    )
+  end
+  expect_rejection("a mutable main-shell mirror publisher") do
+    mutated = deep_copy(current_callers.fetch("main-shell-mirror"))
+    mutated.dig("jobs", "publish")["uses"] =
+      "Automattic/kandelo/.github/workflows/reusable-homebrew-main-shell-mirror-publish.yml@main"
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("main-shell-mirror"),
+      "main-shell-mirror workflow"
+    )
+  end
+  expect_rejection("a package permission on the main-shell mirror caller") do
+    mutated = deep_copy(current_callers.fetch("main-shell-mirror"))
+    mutated.dig("jobs", "publish", "permissions")["packages"] = "write"
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("main-shell-mirror"),
+      "main-shell-mirror workflow"
+    )
+  end
+  expect_rejection("a secret on the main-shell mirror caller") do
+    mutated = deep_copy(current_callers.fetch("main-shell-mirror"))
+    mutated.dig("jobs", "publish")["secrets"] = "inherit"
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("main-shell-mirror"),
+      "main-shell-mirror workflow"
+    )
+  end
+  expect_rejection("caller-local main-shell mirror steps") do
+    mutated = deep_copy(current_callers.fetch("main-shell-mirror"))
+    mutated.dig("jobs", "publish")["steps"] = [{ "run" => "true" }]
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("main-shell-mirror"),
+      "main-shell-mirror workflow"
+    )
+  end
+  expect_rejection("a manual main-shell mirror event") do
+    mutated = deep_copy(current_callers.fetch("main-shell-mirror"))
+    events = workflow_events(mutated)
+    events.delete("repository_dispatch")
+    events["workflow_dispatch"] = {}
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("main-shell-mirror"),
+      "main-shell-mirror workflow"
+    )
+  end
   expect_rejection("an extra privileged job") do
     mutated = deep_copy(current_callers.fetch("publish"))
     mutated.fetch("jobs")["backdoor"] = {
@@ -768,6 +865,14 @@ begin
           /\Apackage-generation-rootfs-wasm32-abi-v42-sha256-[0-9a-f]{64}\z/
         ),
         "rootfs package generation is not an exact ABI 42 content tag")
+  {
+    "main-shell mirror Kandelo Mpre" => MAIN_SHELL_MIRROR_KANDELO_SHA,
+    "main-shell mirror tap catalog TF" => MAIN_SHELL_MIRROR_TAP_CATALOG_SHA,
+    "main-shell mirror canary C" => MAIN_SHELL_MIRROR_CANARY_SHA,
+  }.each do |label, sha|
+    check(sha.match?(/\A[0-9a-f]{40}\z/),
+          "#{label} is not finalized to an exact SHA")
+  end
   {
     "repository canary" => REPOSITORY_CANARY_KANDELO_SHA,
     "retired PAT" => RETIRED_PAT_KANDELO_WORKFLOW_SHA,
