@@ -1,36 +1,37 @@
 {
-  "bottle_rebuild": 0,
+  "bottle_rebuild": 1,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-20T07:50:14Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29724871469",
+      "built_at": "2026-07-28T04:01:11Z",
+      "built_by": "https://github.com/Kandelo-dev/homebrew-tap-core/actions/runs/30323151878",
       "built_from": {
-        "formula_sha256": "9f9d3f79b06eadf6ea0c9bc8843d36a1c42eda9444977b75922eaf7d51ab1513",
-        "kandelo_commit": "2c98a8704275d8afc51f04b47d93501b2a4f9373",
+        "formula_sha256": "7f66fdd5821cf2f1409bfacb8b82157c2b5e5bbebc76bbf81fcbf99d3c425ab0",
+        "kandelo_commit": "c647adda31d0918de944135543fb94039135cef1",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "c675dd22ccd4a602059aa1aec00eb1e09076c7fa",
+        "tap_commit": "dceb2978d29cbb4ac84e784470c3b23a4d8e773f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 487549,
-      "cache_key_sha": "4333ceb2dbb77ea96b652ec17ef8894e06c2f3d20f298b8a09d62d099259c4ef",
+      "bytes": 487563,
+      "cache_key_sha": "359bd177f0c40f6c08eb7fd4281554dcb9029dce24266f49847538df884bac98",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/make-4.4.1-rebuild0-wasm32.json",
+      "kandelo_abi": 42,
+      "link_manifest": "Kandelo/link/make-4.4.1-rebuild1-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "4333ceb2dbb77ea96b652ec17ef8894e06c2f3d20f298b8a09d62d099259c4ef",
+      "sha256": "359bd177f0c40f6c08eb7fd4281554dcb9029dce24266f49847538df884bac98",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/make/blobs/sha256:4333ceb2dbb77ea96b652ec17ef8894e06c2f3d20f298b8a09d62d099259c4ef"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/make/blobs/sha256:359bd177f0c40f6c08eb7fd4281554dcb9029dce24266f49847538df884bac98"
     }
   ],
   "dependencies": [
     {
+      "full_name": "kandelo-dev/tap-core/dash",
       "name": "dash",
       "version": "0.5.12"
     }
@@ -38,11 +39,11 @@
   "formula_path": "Formula/make.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/make",
-  "kandelo_abi": 41,
+  "kandelo_abi": 42,
   "name": "make",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "01f9bea83ad53efff2c6fbdc92396d50d1aeabb1",
+  "tap_commit": "dceb2978d29cbb4ac84e784470c3b23a4d8e773f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "4.4.1"

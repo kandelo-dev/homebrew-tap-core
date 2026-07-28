@@ -1,32 +1,32 @@
 {
-  "bottle_rebuild": 3,
+  "bottle_rebuild": 4,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-20T17:35:24Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29762946547",
+      "built_at": "2026-07-28T04:07:41Z",
+      "built_by": "https://github.com/Kandelo-dev/homebrew-tap-core/actions/runs/30323151878",
       "built_from": {
         "formula_sha256": "97d619db39570f2f7e3b9d1b1d908daac26bce3d6f9b1f0804a27360735d8498",
-        "kandelo_commit": "f3aad8f124750525365e7019db5abf05ddf14c10",
+        "kandelo_commit": "c647adda31d0918de944135543fb94039135cef1",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "f9bb6d0e1b70e326e339afcded8403703f28462b",
+        "tap_commit": "dceb2978d29cbb4ac84e784470c3b23a4d8e773f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 522108,
-      "cache_key_sha": "a436b8a2d03dae2558c78985a90e49ae3343cdf9581d62b3f73c96da5aa22673",
+      "bytes": 544009,
+      "cache_key_sha": "171800f66407de356375b653e0f998bfe978dab5ab67b52754c370b03fce198f",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/nano-8.0-rebuild3-wasm32.json",
+      "kandelo_abi": 42,
+      "link_manifest": "Kandelo/link/nano-8.0-rebuild4-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "a436b8a2d03dae2558c78985a90e49ae3343cdf9581d62b3f73c96da5aa22673",
+      "sha256": "171800f66407de356375b653e0f998bfe978dab5ab67b52754c370b03fce198f",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nano/blobs/sha256:a436b8a2d03dae2558c78985a90e49ae3343cdf9581d62b3f73c96da5aa22673"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nano/blobs/sha256:171800f66407de356375b653e0f998bfe978dab5ab67b52754c370b03fce198f"
     }
   ],
   "dependencies": [
@@ -39,11 +39,11 @@
   "formula_path": "Formula/nano.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/nano",
-  "kandelo_abi": 41,
+  "kandelo_abi": 42,
   "name": "nano",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "01f9bea83ad53efff2c6fbdc92396d50d1aeabb1",
+  "tap_commit": "dceb2978d29cbb4ac84e784470c3b23a4d8e773f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "8.0"

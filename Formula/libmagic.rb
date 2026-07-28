@@ -207,7 +207,7 @@ class Libmagic < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 2
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e"
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "7a52163f0c4bfec6b9a0fa6b47adecf5c69a7f286f7a304ccb0938562f1f6507"
   end
 
 end
