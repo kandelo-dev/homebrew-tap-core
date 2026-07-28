@@ -10,7 +10,7 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@88d26f4c627a363e01e567574916aff4e00828ee
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@c647adda31d0918de944135543fb94039135cef1
     with:
       kandelo-repository: ${{ github.event.client_payload.kandelo_repository || 'Automattic/kandelo' }}
       kandelo-ref: ${{ github.event.client_payload.kandelo_ref || 'main' }}
