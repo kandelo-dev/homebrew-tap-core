@@ -13,12 +13,12 @@ jobs:
     # tap publication authority from this protected caller's live-main SHA.
     # Keeping all three product identities literal prevents event data from
     # selecting code, bottle metadata, or a third-party tap revision.
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-main-shell-mirror-publish.yml@__FINAL_KANDELO_MPRE_SHA__
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-main-shell-mirror-publish.yml@74ac76285872e9be0ce476fe3c145d4b117ba13a
     with:
-      kandelo-ref: __FINAL_KANDELO_MPRE_SHA__
+      kandelo-ref: 74ac76285872e9be0ce476fe3c145d4b117ba13a
       # WHY: TF owns the reviewed bottle bytes. The later caller commit owns
       # only the release write and proves that TF is its ancestor.
-      tap-catalog-ref: __FINAL_TAP_CATALOG_SHA__
+      tap-catalog-ref: 6ad0e3dbc60e5572c4288c86919238f71c1bc110
       # WHY: third-party installation must use an immutable revision from a
       # genuinely independent public tap.
-      canary-ref: __FINAL_CANARY_SHA__
+      canary-ref: d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc

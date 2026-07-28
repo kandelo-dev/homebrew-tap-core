@@ -44,12 +44,12 @@ CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
 FINAL_KANDELO_MPRE_PLACEHOLDER = "__FINAL_KANDELO_MPRE_SHA__"
 FINAL_TAP_CATALOG_PLACEHOLDER = "__FINAL_TAP_CATALOG_SHA__"
 FINAL_CANARY_PLACEHOLDER = "__FINAL_CANARY_SHA__"
-# These three values remain inert placeholders until #1116 is merged and the
-# final Formula catalog has landed. The caller cannot resolve a reusable
-# workflow or pass the reusable workflow's exact-SHA admission in this state.
-MAIN_SHELL_MIRROR_KANDELO_SHA = "__FINAL_KANDELO_MPRE_SHA__"
-MAIN_SHELL_MIRROR_TAP_CATALOG_SHA = "__FINAL_TAP_CATALOG_SHA__"
-MAIN_SHELL_MIRROR_CANARY_SHA = "__FINAL_CANARY_SHA__"
+# These values pin the exact Kandelo cutover, reviewed bottle catalog, and
+# independent canary revisions. The caller and its trust check must advance
+# together so event data cannot select any of those publication authorities.
+MAIN_SHELL_MIRROR_KANDELO_SHA = "74ac76285872e9be0ce476fe3c145d4b117ba13a"
+MAIN_SHELL_MIRROR_TAP_CATALOG_SHA = "6ad0e3dbc60e5572c4288c86919238f71c1bc110"
+MAIN_SHELL_MIRROR_CANARY_SHA = "d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc"
 PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-e7e56ceac71c2f78d8f8078021a71ab9502c76e72a2e96ba8046334139be1f2f"
 
 def check(condition, message)
