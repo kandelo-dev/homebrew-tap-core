@@ -1,32 +1,32 @@
 {
-  "bottle_rebuild": 0,
+  "bottle_rebuild": 1,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-21T09:28:04Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/29816775036",
+      "built_at": "2026-07-28T04:13:02Z",
+      "built_by": "https://github.com/Kandelo-dev/homebrew-tap-core/actions/runs/30323151878",
       "built_from": {
-        "formula_sha256": "706684f9e4dcd494f352e9d4eca7fa380272754c9a6c0cef3c29e88a40955471",
-        "kandelo_commit": "ac1c16ee3e5b3a248f5ab7e55db8172060c1b0d6",
+        "formula_sha256": "f18ca6600253a4203c744b5e41a468bf10d2fd262aebbaa02d09e0c8480f6f74",
+        "kandelo_commit": "c647adda31d0918de944135543fb94039135cef1",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "b3366a25dd5979fb1d4911f88575b4ef472c180d",
+        "tap_commit": "dceb2978d29cbb4ac84e784470c3b23a4d8e773f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 1982626,
-      "cache_key_sha": "fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051",
+      "bytes": 2119757,
+      "cache_key_sha": "fae9423a95dfc99b4c0de67f0be8c2b9bde81533bab1a7f79e9508a1257ca7ee",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 41,
-      "link_manifest": "Kandelo/link/nethack-3.6.7-rebuild0-wasm32.json",
+      "kandelo_abi": 42,
+      "link_manifest": "Kandelo/link/nethack-3.6.7-rebuild1-wasm32.json",
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051",
+      "sha256": "fae9423a95dfc99b4c0de67f0be8c2b9bde81533bab1a7f79e9508a1257ca7ee",
       "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nethack/blobs/sha256:fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051"
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nethack/blobs/sha256:fae9423a95dfc99b4c0de67f0be8c2b9bde81533bab1a7f79e9508a1257ca7ee"
     }
   ],
   "dependencies": [
@@ -39,11 +39,11 @@
   "formula_path": "Formula/nethack.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/nethack",
-  "kandelo_abi": 41,
+  "kandelo_abi": 42,
   "name": "nethack",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "01f9bea83ad53efff2c6fbdc92396d50d1aeabb1",
+  "tap_commit": "dceb2978d29cbb4ac84e784470c3b23a4d8e773f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "3.6.7"

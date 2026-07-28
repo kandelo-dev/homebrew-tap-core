@@ -198,7 +198,7 @@ class Wget < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "43143be102f3f198c92248a9cee25c89b4bc531ad13217663011334522c69c26"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "1631f7d4a43ab205497bcc555ab01bb8a3e0a1eb51f401a3abdd90ed4371a4c4"
   end
 
 end

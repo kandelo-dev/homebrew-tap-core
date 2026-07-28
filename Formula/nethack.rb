@@ -18,7 +18,7 @@ class Nethack < Formula
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
     rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051"
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "fae9423a95dfc99b4c0de67f0be8c2b9bde81533bab1a7f79e9508a1257ca7ee"
   end
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
