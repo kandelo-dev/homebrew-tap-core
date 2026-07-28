@@ -24,7 +24,7 @@
   "metadata": {
     "formula_json": {
       "path": "Kandelo/formula/perl.json",
-      "sha256": "c80f761ac26fff2d4a148c99aeeb68b1504f29ea40425c0951d91c177cbaf6d4"
+      "sha256": "0afb270244fe79227c7877a5235b3db4a56ae4348270246f7e8dec868ec8d745"
     },
     "link_manifest_json": {
       "path": "Kandelo/link/perl-5.40.3-rebuild1-wasm32.json",
@@ -32,11 +32,11 @@
     },
     "metadata_json": {
       "path": "Kandelo/metadata.json",
-      "sha256": "b17ea8286ea101fb13e5c4485de03d7b40f28cb25b19c845c668fed1febd2d0b"
+      "sha256": "34f1cb2454ff6d9c134195302a5c5fcac85b9502f2522d3e584bf55d539c9a7d"
     },
     "provenance_json": {
       "path": "Kandelo/reports/perl-5.40.3-rebuild1-wasm32.provenance.json",
-      "sha256": "f60bd72986a7738ecf42a1469954f527881efd02d735f387bef745395dea5138"
+      "sha256": "7849961b6d71554a9b49d114e836963f5886b85edde31b771cd5dfb8a0931ae6"
     }
   },
   "repositories": {

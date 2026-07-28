@@ -37,7 +37,7 @@
   "name": "posix-utils-lite",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "dceb2978d29cbb4ac84e784470c3b23a4d8e773f",
+  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "0.1.0"
