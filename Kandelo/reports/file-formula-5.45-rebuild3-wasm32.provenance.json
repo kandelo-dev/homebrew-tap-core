@@ -1,0 +1,120 @@
+{
+  "bottle": {
+    "bottle_tag": "wasm32_kandelo",
+    "bytes": 334753,
+    "cache_key_sha": "b4d928459d42d8d1b1c0f7d19c806f55f314fbd9219f2a55b41f2c04b13fef6a",
+    "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+    "prefix": "/home/linuxbrew/.linuxbrew",
+    "sha256": "b4d928459d42d8d1b1c0f7d19c806f55f314fbd9219f2a55b41f2c04b13fef6a",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/file-formula/blobs/sha256:b4d928459d42d8d1b1c0f7d19c806f55f314fbd9219f2a55b41f2c04b13fef6a"
+  },
+  "build": {
+    "brew_version": "Homebrew source commit 34c40c18ffa2029b611b61c73273e32c003d0842",
+    "dev_shell": "scripts/dev-shell.sh",
+    "github_run": "https://github.com/Kandelo-dev/homebrew-tap-core/actions/runs/30329085073",
+    "job": "local",
+    "runner_os": "Linux",
+    "sdk_fingerprint": "a7ef0c406359039ee25d54e4f8baee3afdc857cdbcac5df9a065ef875b3a3b48",
+    "sysroot_fingerprint": "909ba2b77222de5bef3b06bc0c42595c0f0aa1446150fbf988a3f7cb3d649565"
+  },
+  "formula": {
+    "path": "Formula/file-formula.rb",
+    "sha256": "cf6f804f12e3a4b051d72d5956893c6fc90231a41a8336b3beb96fdc9a41d1e9"
+  },
+  "metadata": {
+    "formula_json": {
+      "path": "Kandelo/formula/file-formula.json",
+      "sha256": "ca3a2a6993f476f138ab50d72a573ccaf8e196097a167cf4ec41725194488921"
+    },
+    "link_manifest_json": {
+      "path": "Kandelo/link/file-formula-5.45-rebuild3-wasm32.json",
+      "sha256": "8ca80370ef91d594ba99da76f98dee5d5a732294789b3f77a9932f94dcb18767"
+    },
+    "metadata_json": {
+      "path": "Kandelo/metadata.json",
+      "sha256": "34f1cb2454ff6d9c134195302a5c5fcac85b9502f2522d3e584bf55d539c9a7d"
+    },
+    "provenance_json": {
+      "path": "Kandelo/reports/file-formula-5.45-rebuild3-wasm32.provenance.json",
+      "sha256": "71aa678a1d8f2e84f2eb9cad5fa3a2482f96b6fb442093acc927750b3249ee1e"
+    }
+  },
+  "repositories": {
+    "kandelo_commit": "c647adda31d0918de944135543fb94039135cef1",
+    "kandelo_repository": "Automattic/kandelo",
+    "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+    "tap_repository": "kandelo-dev/homebrew-tap-core"
+  },
+  "schema": 1,
+  "subject": {
+    "arch": "wasm32",
+    "bottle_rebuild": 3,
+    "kandelo_abi": 42,
+    "package": "file-formula",
+    "version": "5.45"
+  },
+  "validation": {
+    "outcome_lists": [
+      {
+        "failed": [],
+        "name": "schema",
+        "passed": [
+          "Kandelo/metadata.json",
+          "Kandelo/formula/file-formula.json",
+          "Kandelo/link/file-formula-5.45-rebuild3-wasm32.json",
+          "Kandelo/reports/file-formula-5.45-rebuild3-wasm32.provenance.json"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "homebrew_audit",
+        "passed": [],
+        "skip_reason": "kd-8ho.5 validates the first bottle build and sidecars; tap audit can run in the real tap publication gate.",
+        "skipped": [
+          "brew audit was not part of kd-8ho.5 local verification"
+        ],
+        "status": "skipped"
+      },
+      {
+        "failed": [],
+        "name": "bottle_build",
+        "passed": [
+          "brew install --build-bottle",
+          "brew test",
+          "brew bottle --json --keep-old",
+          "scripts/homebrew-merge-bottle-json.sh statically composed canonical bottle metadata"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "node_smoke",
+        "passed": [
+          "Homebrew force-poured file-formula from anonymous-public-readback",
+          "brew test emitted Kandelo Node receipt via kandelo_run_wasm",
+          "exact bottle sha256: b4d928459d42d8d1b1c0f7d19c806f55f314fbd9219f2a55b41f2c04b13fef6a"
+        ],
+        "skipped": [],
+        "status": "success"
+      },
+      {
+        "failed": [],
+        "name": "browser_smoke",
+        "passed": [
+          "built /work/wave-b/runs/file-formula-narrow5/runner-temp/homebrew-browser-vfs-focused/homebrew-file-formula.vfs.zst",
+          "wrote report /work/wave-b/runs/file-formula-narrow5/runner-temp/homebrew-browser-vfs-focused/homebrew-file-formula.vfs-report.json",
+          "Playwright chromium launched http://127.0.0.1:5401/__kandelo-acceptance/homebrew-file-formula.vfs.zst",
+          "terminal command passed: /home/linuxbrew/.linuxbrew/bin/file --version",
+          "generated /work/wave-b/runs/file-formula-narrow5/runner-temp/homebrew-browser-gallery-focused/gallery.json",
+          "generated /work/wave-b/runs/file-formula-narrow5/runner-temp/homebrew-browser-gallery-focused/index.toml",
+          "scripts/validate-software-gallery.mjs accepted generated gallery assets"
+        ],
+        "skipped": [],
+        "status": "success"
+      }
+    ]
+  }
+}
