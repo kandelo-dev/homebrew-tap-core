@@ -100,8 +100,11 @@ Formula source currently present in this repository includes:
 - `tcl`, the threaded Tcl 9 interpreter, standard library, extension loader,
   and development files;
 - `redis`, the Redis 7.2.5 threaded in-memory service and command-line client,
-  built directly from the checksum-pinned upstream source; and
-- `modeset`, the DRM/KMS fluid simulation used by the browser demo.
+  built directly from the checksum-pinned upstream source;
+- `modeset`, the DRM/KMS fluid simulation used by the browser demo; and
+- `wordpress`, the pristine WordPress application tree, kept separate from
+  database state, web-server configuration, deployment-added plugins and their
+  activation, and browser VFS policy.
 
 These seven exact-shell Formulae and Ruby intentionally use the transitional
 `kandelo_build_package` bridge for their first bottle proof. Their Formulae pin
