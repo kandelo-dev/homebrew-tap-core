@@ -56,6 +56,7 @@ def assert_formula_contract() -> None:
         source,
         (
             "KANDELO_TAP_RECIPE = true",
+            'KANDELO_BOTTLE_TEST_CONTRACT = "support-data".freeze',
             'url "https://github.com/Homebrew/brew/archive/'
             '4ead8619231cb15cbe15e8e8188081e347d6f7cd.tar.gz"',
             'version "6.0.3-4-g4ead861"',
@@ -79,6 +80,12 @@ def assert_formula_contract() -> None:
     # This Formula packages support data rather than a Wasm executable. Its
     # local test therefore owns the complete installed byte contract; the
     # Kandelo guest lifecycle owns execution of these bytes with real Ruby.
+    assert (
+        source.count(
+            'KANDELO_BOTTLE_TEST_CONTRACT = "support-data".freeze'
+        )
+        == 1
+    )
     require_all(
         source,
         (
