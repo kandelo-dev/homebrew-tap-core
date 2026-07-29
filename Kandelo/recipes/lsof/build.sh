@@ -5,7 +5,6 @@
 
 set -euo pipefail
 
-REPO_ROOT="${HOMEBREW_KANDELO_ROOT:?}"
 SOURCE_ROOT="${WASM_POSIX_DEP_SOURCE_DIR:?}"
 SRC="$SOURCE_ROOT/examples/lsof.c"
 OUT_BIN="${WASM_POSIX_DEP_OUT_DIR:?}/lsof.wasm"
@@ -27,7 +26,9 @@ fi
 # Match scripts/build-programs.sh CC + flags so the resulting wasm is
 # binary-compatible with everything else in the release.
 SYSROOT="${WASM_POSIX_SYSROOT:?}"
-GLUE_DIR="$REPO_ROOT/libc/glue"
+# WHY: closed recipes receive the specific sealed compiler-glue projection,
+# not authority over the publisher's complete Kandelo checkout.
+GLUE_DIR="${WASM_POSIX_GLUE_DIR:?}"
 
 find_llvm_bin() {
     if [ -n "${LLVM_BIN:-}" ] && [ -x "$LLVM_BIN/clang" ]; then

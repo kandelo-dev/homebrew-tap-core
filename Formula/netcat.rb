@@ -25,7 +25,7 @@ class Netcat < Formula
     # The closed tap recipe owns the reviewed network compatibility patches
     # and exact cross-configure assertions.
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "dcb564efa9895ed1a6c6f189c1c3e45298023b4109b612a0268bd08f19c94b36",
+      manifest_sha256: "d95b926402a44d7a73644b03fde4fc9a1f9319868232b1d7b83aea41cd8c115a",
       script_env: {},
     )
     kandelo_validate_wasm_artifact(out_dir/"nc.wasm", fork: :forbidden)
