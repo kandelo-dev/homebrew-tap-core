@@ -633,6 +633,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       local_root_spill = tool_dir/"wasm-local-root-spill"
       build_path = base/"formula-build"
       prefix_path = base/"formula-prefix"
+      runner_output = base/"recipe-service-output"
       [
         recipe_root/"patches", support_path.dirname, formula_path.dirname,
         protected_root, sealed_root, sysroot, tool_dir, build_path,
@@ -785,16 +786,36 @@ class KandeloFormulaSupportTest < Minitest::Test
         request = JSON.parse(request_bytes)
         runner_requests << request
         out_dir = Pathname(request.fetch("output_root"))
-        (out_dir/"bin").mkpath
-        (out_dir/"bin/hello").binwrite("tap recipe output\n")
-        (out_dir/"bin/hello-current").make_symlink("hello")
+        # Model the real runner's mount namespace: the recipe writes to its
+        # private output view, while the Formula-owned host path stays empty.
+        (runner_output/"bin").mkpath
+        (runner_output/"lib").mkpath
+        (runner_output/"libexec/tools").mkpath
+        (runner_output/"share/hello").mkpath
+        (runner_output/"bin/hello").binwrite("tap recipe output\n")
+        (runner_output/"bin/hello").chmod(0755)
+        (runner_output/"bin/readme.txt").binwrite("non-executable bin data\n")
+        (runner_output/"libexec/tools/helper").binwrite("nested helper\n")
+        (runner_output/"libexec/tools/helper").chmod(0755)
+        (runner_output/"lib/libhello.a").binwrite("archive payload\n")
+        (runner_output/"share/hello/data.txt").binwrite("nested data\n")
+        (runner_output/"share/hello/run-helper").binwrite(
+          "executable shared helper\n",
+        )
+        (runner_output/"share/hello/run-helper").chmod(0755)
+        (runner_output/"bin/hello-current").make_symlink(
+          "../libexec/tools/helper",
+        )
         system_hooks.each(&:call)
-        kandelo_validate_tap_recipe_output!(out_dir)
+        unless out_dir.directory? && out_dir.children.empty?
+          raise "runner changed the Formula-owned host output root"
+        end
+        kandelo_validate_tap_recipe_output!(runner_output)
 
         request_sha256 = Digest::SHA256.hexdigest(request_bytes)
         sealed_out = sealed_root/"output-#{request_sha256.slice(0, 16)}"
         sealed_out.mkdir
-        FileUtils.cp_r(out_dir.children, sealed_out)
+        FileUtils.cp_r(runner_output.children, sealed_out)
         sealed_directories = []
         sealed_out.find do |entry|
           stat = entry.lstat
@@ -842,6 +863,7 @@ class KandeloFormulaSupportTest < Minitest::Test
           root:,
           runner_requests:,
           runner_return_hooks:,
+          runner_output:,
           sealed_root:,
           script_env:,
           support_path:,
@@ -879,6 +901,20 @@ class KandeloFormulaSupportTest < Minitest::Test
       manifest_sha256: fixture.fetch(:recipe).fetch("manifest_sha256"),
       script_env:,
     )
+  end
+
+  def tap_recipe_tree_snapshot(root)
+    root.find.map do |entry|
+      stat = entry.lstat
+      relative = entry.relative_path_from(root).to_s
+      payload =
+        if stat.file? && !stat.symlink?
+          entry.binread
+        elsif stat.symlink?
+          entry.readlink.to_s
+        end
+      [relative, stat.ftype, stat.mode & 07777, stat.uid, stat.gid, payload]
+    end.sort_by(&:first)
   end
 
   def assert_tier2_rejected_before_activation(fixture, script_env: fixture.fetch(:script_env))
@@ -1049,7 +1085,17 @@ class KandeloFormulaSupportTest < Minitest::Test
 
       out_dir = run_tap_recipe(fixture)
 
-      assert_equal fixture.fetch(:sealed_root), out_dir.parent
+      assert_equal(
+        fixture.fetch(:build_path)/"kandelo-package-out",
+        out_dir.parent,
+      )
+      assert_match(
+        /\A\.kandelo-materializing-/,
+        out_dir.basename.to_s,
+      )
+      output_root = out_dir.parent
+      assert_equal 0700, output_root.lstat.mode & 07777
+      assert_equal Process.uid, output_root.lstat.uid
       assert_equal [:sdk, :sysroot], fixture.fetch(:activation_calls)
       assert_equal fixture.fetch(:recipe_runner).to_s,
                    fixture.fetch(:harness).system_args.fetch(0)
@@ -1115,7 +1161,44 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_equal "int main(void) { return 0; }\n",
                    (fixture.fetch(:build_path)/"kandelo-package-source/upstream.c").binread
       assert_equal "tap recipe output\n", (out_dir/"bin/hello").binread
-      assert_equal Pathname("hello"), (out_dir/"bin/hello-current").readlink
+      assert_equal(
+        Pathname("../libexec/tools/helper"),
+        (out_dir/"bin/hello-current").readlink,
+      )
+      assert_equal "nested helper\n", (out_dir/"libexec/tools/helper").binread
+      assert_equal "archive payload\n", (out_dir/"lib/libhello.a").binread
+      assert_equal "nested data\n", (out_dir/"share/hello/data.txt").binread
+      assert_equal "executable shared helper\n",
+                   (out_dir/"share/hello/run-helper").binread
+      assert_equal "non-executable bin data\n",
+                   (out_dir/"bin/readme.txt").binread
+      expected_file_modes = {
+        "bin/hello"                 => 0755,
+        "bin/readme.txt"            => 0644,
+        "lib/libhello.a"            => 0644,
+        "libexec/tools/helper"      => 0755,
+        "share/hello/data.txt"      => 0644,
+        "share/hello/run-helper"    => 0755,
+      }
+      observed_files = []
+      out_dir.find do |entry|
+        stat = entry.lstat
+        assert_equal Process.uid, stat.uid, entry.to_s
+        next if stat.symlink?
+
+        if stat.directory?
+          assert_equal 0755, stat.mode & 07777, entry.to_s
+        else
+          relative = entry.relative_path_from(out_dir).to_s
+          observed_files << relative
+          assert_equal(
+            expected_file_modes.fetch(relative),
+            stat.mode & 07777,
+            entry.to_s,
+          )
+        end
+      end
+      assert_equal expected_file_modes.keys.sort, observed_files.sort
       refute_path_exists fixture.fetch(:prefix_path)
 
       # Formula evaluation must not permanently rewrite the caller's process
@@ -1146,6 +1229,166 @@ class KandeloFormulaSupportTest < Minitest::Test
       refute_path_exists request_path
       refute_path_exists response_path
     end
+  end
+
+  def test_tap_recipe_materialization_survives_real_homebrew_install_moves
+    with_tap_recipe_build_fixture do |fixture|
+      sealed_before = nil
+      fixture.fetch(:runner_return_hooks) << lambda do |sealed, _response|
+        sealed_before = tap_recipe_tree_snapshot(sealed)
+      end
+      out_dir = run_tap_recipe(fixture)
+      sealed_output = fixture.fetch(:sealed_root).children.fetch(0)
+      assert_equal sealed_before, tap_recipe_tree_snapshot(sealed_output)
+      installed = fixture.fetch(:build_path).parent/"installed-prefix"
+      installed.mkpath
+
+      # Exercise pinned Homebrew's real Pathname#install implementation. It
+      # moves these Formula-owned nodes; the runner evidence must remain
+      # byte-for-byte and mode-for-mode unchanged.
+      installed.install(out_dir.children)
+
+      assert_empty out_dir.children
+      assert_equal sealed_before, tap_recipe_tree_snapshot(sealed_output)
+      assert_equal "tap recipe output\n", (installed/"bin/hello").binread
+      assert_equal "nested helper\n",
+                   (installed/"libexec/tools/helper").binread
+      assert_equal "archive payload\n", (installed/"lib/libhello.a").binread
+      assert_equal "nested data\n",
+                   (installed/"share/hello/data.txt").binread
+      assert_equal 0644, (installed/"bin/readme.txt").lstat.mode & 07777
+      assert_equal 0755,
+                   (installed/"share/hello/run-helper").lstat.mode & 07777
+      assert_equal(
+        Pathname("../libexec/tools/helper"),
+        (installed/"bin/hello-current").readlink,
+      )
+    end
+  end
+
+  def test_tap_recipe_rejects_output_root_replacement_mode_and_contents
+    mutations = {
+      "replacement" => lambda do |root|
+        root.rmdir
+        root.mkdir(0700)
+      end,
+      "symlink replacement" => lambda do |root|
+        alternate = root.parent/"alternate-output-root"
+        alternate.mkdir(0700)
+        root.rmdir
+        root.make_symlink(alternate)
+      end,
+      "mode drift" => ->(root) { root.chmod(0755) },
+      "foreign contents" => ->(root) { (root/"foreign").binwrite("foreign\n") },
+    }
+    mutations.each do |label, mutate|
+      with_tap_recipe_build_fixture do |fixture|
+        root = fixture.fetch(:build_path)/"kandelo-package-out"
+        fixture.fetch(:runner_return_hooks) << lambda do |_sealed, _response|
+          mutate.call(root)
+        end
+
+        error = assert_raises(RuntimeError, label) { run_tap_recipe(fixture) }
+
+        assert_match(/output root|unexpected entries/i, error.message, label)
+        if label == "foreign contents"
+          assert_equal "foreign\n", (root/"foreign").binread
+        end
+      end
+    end
+  end
+
+  def test_tap_recipe_copy_failure_leaves_private_nodes_for_outer_cleanup
+    with_tap_recipe_build_fixture do |fixture|
+      harness = fixture.fetch(:harness)
+      harness.define_singleton_method(
+        :kandelo_tap_recipe_copy_stream,
+      ) do |_source, destination|
+        destination.write("partial bytes")
+        raise "injected materialization copy failure"
+      end
+
+      error = assert_raises(RuntimeError) { run_tap_recipe(fixture) }
+
+      assert_equal "injected materialization copy failure", error.message
+      output_root = fixture.fetch(:build_path)/"kandelo-package-out"
+      staging = output_root.children.fetch(0)
+      assert_match(/\A\.kandelo-materializing-/, staging.basename.to_s)
+      assert_equal 0700, staging.lstat.mode & 07777
+      assert_equal "partial bytes",
+                   (staging/"share/hello/data.txt").binread
+    end
+
+    with_tap_recipe_build_fixture do |fixture|
+      harness = fixture.fetch(:harness)
+      original = harness.method(:kandelo_tap_recipe_copy_file!)
+      harness.define_singleton_method(
+        :kandelo_tap_recipe_copy_file!,
+      ) do |source, destination, source_stat|
+        original.call(source, destination, source_stat)
+        next unless source.basename.to_s == "data.txt"
+
+        (destination.dirname/"foreign").binwrite("must survive failure\n")
+        raise "injected copy failure with foreign entry"
+      end
+
+      error = assert_raises(RuntimeError) { run_tap_recipe(fixture) }
+
+      assert_equal "injected copy failure with foreign entry", error.message
+      output_root = fixture.fetch(:build_path)/"kandelo-package-out"
+      staging = output_root.children.fetch(0)
+      assert_match(/\A\.kandelo-materializing-/, staging.basename.to_s)
+      foreign = staging/"share/hello/foreign"
+      assert_equal "must survive failure\n", foreign.binread
+      assert_equal "nested data\n",
+                   (staging/"share/hello/data.txt").binread
+    end
+
+    with_tap_recipe_build_fixture do |fixture|
+      harness = fixture.fetch(:harness)
+      original = harness.method(:kandelo_tap_recipe_original_output_root!)
+      private_checks = 0
+      harness.define_singleton_method(
+        :kandelo_tap_recipe_original_output_root!,
+      ) do |out_dir, build_root, handle, identity, entries:|
+        result = original.call(
+          out_dir, build_root, handle, identity, entries:
+        )
+        if entries.one? &&
+           entries.fetch(0).start_with?(".kandelo-materializing-")
+          private_checks += 1
+        end
+        if private_checks == 2
+          raise "injected final pre-return verification failure"
+        end
+        result
+      end
+
+      error = assert_raises(RuntimeError) { run_tap_recipe(fixture) }
+
+      assert_equal(
+        "injected final pre-return verification failure",
+        error.message,
+      )
+      output_root =
+        fixture.fetch(:build_path)/"kandelo-package-out"
+      refute_path_exists output_root/"contents"
+      published = output_root.children.fetch(0)
+      assert_match(/\A\.kandelo-materializing-/,
+                   published.basename.to_s)
+      assert_equal "nested data\n",
+                   (published/"share/hello/data.txt").binread
+    end
+
+    materializer = Pathname(__dir__).join(
+      "..", "kandelo_formula_support.rb"
+    ).binread.match(
+      /  def kandelo_materialize_tap_recipe_output!.*?^  end$/m,
+    )[0]
+    refute_match(
+      /(?:File\.rename|File\.unlink|Dir\.rmdir|FileUtils\.)/,
+      materializer,
+    )
   end
 
   def test_tap_recipe_helper_rejects_mutated_or_unlisted_inputs_before_execution
@@ -1324,13 +1567,13 @@ class KandeloFormulaSupportTest < Minitest::Test
   def test_tap_recipe_helper_rejects_output_that_escapes_or_aliases_staging
     mutations = {
       "escaping symlink" => lambda do |fixture|
-        link = fixture.fetch(:build_path)/"kandelo-package-out/bin/hello-current"
+        link = fixture.fetch(:runner_output)/"bin/hello-current"
         link.delete
         link.make_symlink("../../outside")
       end,
       "hard-linked file" => lambda do |fixture|
-        file = fixture.fetch(:build_path)/"kandelo-package-out/bin/hello"
-        alias_path = fixture.fetch(:build_path)/"kandelo-package-out/bin/hello-alias"
+        file = fixture.fetch(:runner_output)/"bin/hello"
+        alias_path = fixture.fetch(:runner_output)/"bin/hello-alias"
         File.link(file, alias_path)
       end,
       "direct prefix output" => lambda do |fixture|
@@ -1352,30 +1595,30 @@ class KandeloFormulaSupportTest < Minitest::Test
   def test_tap_recipe_helper_rejects_unsafe_or_oversized_output
     mutations = {
       "world-writable file" => lambda do |fixture|
-        (fixture.fetch(:build_path)/"kandelo-package-out/bin/hello").chmod(0666)
+        (fixture.fetch(:runner_output)/"bin/hello").chmod(0666)
       end,
       "set-id file" => lambda do |fixture|
-        (fixture.fetch(:build_path)/"kandelo-package-out/bin/hello").chmod(04644)
+        (fixture.fetch(:runner_output)/"bin/hello").chmod(04644)
       end,
       "world-writable directory" => lambda do |fixture|
-        (fixture.fetch(:build_path)/"kandelo-package-out/bin").chmod(0777)
+        (fixture.fetch(:runner_output)/"bin").chmod(0777)
       end,
       "control character in path" => lambda do |fixture|
-        (fixture.fetch(:build_path)/"kandelo-package-out/bad\nname").binwrite("bad path\n")
+        (fixture.fetch(:runner_output)/"bad\nname").binwrite("bad path\n")
       end,
       "control character in symlink target" => lambda do |fixture|
-        link = fixture.fetch(:build_path)/"kandelo-package-out/bin/hello-current"
+        link = fixture.fetch(:runner_output)/"bin/hello-current"
         link.delete
         link.make_symlink("hello\n")
       end,
       "oversized file" => lambda do |fixture|
-        path = fixture.fetch(:build_path)/"kandelo-package-out/bin/oversized"
+        path = fixture.fetch(:runner_output)/"bin/oversized"
         File.open(path, "wb") do |file|
           file.truncate(KandeloFormulaSupport::KANDELO_TAP_RECIPE_OUTPUT_FILE_MAX_BYTES + 1)
         end
       end,
       "oversized tree" => lambda do |fixture|
-        out = fixture.fetch(:build_path)/"kandelo-package-out"
+        out = fixture.fetch(:runner_output)
         %w[first second].each do |basename|
           File.open(out/basename, "wb") do |file|
             file.truncate(KandeloFormulaSupport::KANDELO_TAP_RECIPE_OUTPUT_FILE_MAX_BYTES)

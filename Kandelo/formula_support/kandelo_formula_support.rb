@@ -7,6 +7,7 @@ require "json"
 require "pathname"
 require "shellwords"
 require "tempfile"
+require "tmpdir"
 
 if defined?(KandeloFormulaSupport)
   unless KandeloFormulaSupport::KANDELO_FORMULA_SUPPORT_API_VERSION == 1 &&
@@ -1765,8 +1766,11 @@ module KandeloFormulaSupport
     max_bytes: KANDELO_TAP_RECIPE_OUTPUT_MAX_BYTES,
     max_path_bytes: KANDELO_TAP_RECIPE_OUTPUT_PATH_MAX_BYTES,
     expected_uid: nil,
-    sealed: false
+    sealed: false,
+    materialized: false
   )
+    odie "tap recipe output cannot be sealed and materialized" if sealed && materialized
+
     begin
       root_stat = out_dir.lstat
       root = out_dir.realpath
@@ -1774,8 +1778,22 @@ module KandeloFormulaSupport
       odie "tap recipe output root is unavailable at #{out_dir}: #{e.message}"
     end
     expanded_root = out_dir.expand_path.cleanpath
-    directory_modes = sealed ? [0555] : KANDELO_TAP_RECIPE_OUTPUT_DIRECTORY_MODES
-    file_modes = sealed ? [0444, 0555] : KANDELO_TAP_RECIPE_OUTPUT_FILE_MODES
+    directory_modes =
+      if sealed
+        [0555]
+      elsif materialized
+        [0755]
+      else
+        KANDELO_TAP_RECIPE_OUTPUT_DIRECTORY_MODES
+      end
+    file_modes =
+      if sealed
+        [0444, 0555]
+      elsif materialized
+        [0644, 0755]
+      else
+        KANDELO_TAP_RECIPE_OUTPUT_FILE_MODES
+      end
     unless out_dir.absolute? && out_dir == expanded_root && root == out_dir &&
            root_stat.directory? && !root_stat.symlink? &&
            directory_modes.include?(root_stat.mode & 07777) &&
@@ -1786,6 +1804,7 @@ module KandeloFormulaSupport
     entries = 0
     total_bytes = 0
     records = [["d", "", root_stat.mode & 07777, root_stat.uid]]
+    content_records = [["d", ""]]
     pending = [root]
     until pending.empty?
       directory = pending.pop
@@ -1822,6 +1841,7 @@ module KandeloFormulaSupport
             odie "tap recipe output directory escapes its staging root: #{entry}"
           end
           records << ["d", relative, stat.mode & 07777, stat.uid]
+          content_records << ["d", relative]
           pending << entry
         elsif stat.file? && !stat.symlink?
           odie "tap recipe output file must have one link: #{entry}" unless stat.nlink == 1
@@ -1876,6 +1896,10 @@ module KandeloFormulaSupport
           records << [
             "f", relative, stat.mode & 07777, stat.uid, stat.size, digest.hexdigest,
           ]
+          content_records << [
+            "f", relative, (stat.mode & 0111).positive?, stat.size,
+            digest.hexdigest,
+          ]
         elsif stat.symlink?
           if !expected_uid.nil? && stat.uid != expected_uid
             odie "tap recipe output symlink has an unsafe owner: #{entry}"
@@ -1911,13 +1935,18 @@ module KandeloFormulaSupport
             odie "tap recipe output symlink changed while it was read: #{entry}"
           end
           records << ["l", relative, stat.uid, target_string]
+          content_records << ["l", relative, target_string]
         else
           odie "tap recipe output contains an unsupported filesystem node: #{entry}"
         end
       end
     end
     records.sort_by! { |record| record.fetch(1) }
+    content_records.sort_by! { |record| record.fetch(1) }
     {
+      "content_manifest_sha256" => Digest::SHA256.hexdigest(
+        JSON.generate(content_records),
+      ),
       "entry_count"            => entries,
       "output_manifest_sha256" => Digest::SHA256.hexdigest(JSON.generate(records)),
       "total_bytes"            => total_bytes,
@@ -2142,7 +2171,253 @@ module KandeloFormulaSupport
              evidence.fetch("output_manifest_sha256")
       odie "tap recipe sealed output differs from the runner response"
     end
-    resolved
+    [resolved, evidence]
+  end
+
+  def kandelo_tap_recipe_full_node_identity(stat)
+    [
+      stat.dev, stat.ino, stat.ftype, stat.mode, stat.uid, stat.gid,
+      stat.nlink, stat.size, stat.mtime, stat.ctime,
+    ]
+  end
+
+  def kandelo_tap_recipe_stable_node_identity(stat)
+    [
+      stat.dev, stat.ino, stat.ftype, stat.mode & 07777, stat.uid, stat.gid,
+    ]
+  end
+
+  def kandelo_tap_recipe_original_output_root!(
+    out_dir, build_root, handle, expected_identity, entries:
+  )
+    begin
+      before = out_dir.lstat
+      resolved = out_dir.realpath
+      opened = handle.stat
+    rescue SystemCallError => e
+      odie "tap recipe Formula-owned output root is unavailable: #{e.message}"
+    end
+    identity = kandelo_tap_recipe_stable_node_identity(before)
+    unless out_dir.absolute? && out_dir.expand_path.cleanpath == out_dir &&
+           out_dir.parent == build_root && resolved == out_dir &&
+           before.directory? && !before.symlink? &&
+           (before.mode & 07777) == 0700 && before.uid == Process.uid &&
+           kandelo_tap_recipe_stable_node_identity(opened) == identity &&
+           identity == expected_identity
+      odie "tap recipe Formula-owned output root was replaced or changed"
+    end
+    begin
+      actual_entries = out_dir.children.map { |entry| entry.basename.to_s }.sort
+      after = out_dir.lstat
+    rescue SystemCallError => e
+      odie "tap recipe Formula-owned output root cannot be inspected: #{e.message}"
+    end
+    unless actual_entries == entries.sort &&
+           kandelo_tap_recipe_stable_node_identity(after) == identity
+      odie "tap recipe Formula-owned output root contains unexpected entries"
+    end
+    identity
+  end
+
+  def kandelo_tap_recipe_copy_directory!(destination)
+    Dir.mkdir(destination, 0700)
+    created_identity =
+      kandelo_tap_recipe_stable_node_identity(destination.lstat)
+    File.open(destination, File::RDONLY | File::NOFOLLOW) do |directory|
+      unless directory.stat.directory? &&
+             kandelo_tap_recipe_stable_node_identity(directory.stat) ==
+               created_identity
+        odie "tap recipe materialization directory changed while it was opened"
+      end
+      directory.chmod(0755)
+      created_identity =
+        kandelo_tap_recipe_stable_node_identity(directory.stat)
+    end
+    unless kandelo_tap_recipe_stable_node_identity(destination.lstat) ==
+           created_identity
+      odie "tap recipe materialization directory changed after creation"
+    end
+  rescue SystemCallError => e
+    odie "tap recipe materialization directory could not be created: #{e.message}"
+  end
+
+  def kandelo_tap_recipe_copy_stream(input, output)
+    IO.copy_stream(input, output)
+  end
+
+  def kandelo_tap_recipe_copy_file!(
+    source, destination, source_stat
+  )
+    expected_source = kandelo_tap_recipe_full_node_identity(source_stat)
+    source_flags = File::RDONLY | File::NOFOLLOW
+    destination_flags =
+      File::WRONLY | File::CREAT | File::EXCL | File::NOFOLLOW
+    File.open(source, source_flags) do |input|
+      unless kandelo_tap_recipe_full_node_identity(input.stat) == expected_source
+        odie "tap recipe sealed file changed before materialization"
+      end
+      File.open(destination, destination_flags, 0600) do |output|
+        created_identity =
+          kandelo_tap_recipe_stable_node_identity(destination.lstat)
+        unless kandelo_tap_recipe_stable_node_identity(output.stat) ==
+               created_identity
+          odie "tap recipe materialization file changed while it was opened"
+        end
+        kandelo_tap_recipe_copy_stream(input, output)
+        output.flush
+        output.chmod((source_stat.mode & 0111).positive? ? 0755 : 0644)
+        created_identity =
+          kandelo_tap_recipe_stable_node_identity(output.stat)
+        unless kandelo_tap_recipe_stable_node_identity(destination.lstat) ==
+               created_identity
+          odie "tap recipe materialization file changed during creation"
+        end
+      end
+      after = source.lstat
+      unless kandelo_tap_recipe_full_node_identity(input.stat) == expected_source &&
+             kandelo_tap_recipe_full_node_identity(after) == expected_source
+        odie "tap recipe sealed file changed during materialization"
+      end
+    end
+  rescue SystemCallError => e
+    odie "tap recipe sealed file could not be materialized: #{e.message}"
+  end
+
+  def kandelo_tap_recipe_copy_symlink!(
+    source, destination, source_root, source_stat
+  )
+    expected_source = kandelo_tap_recipe_full_node_identity(source_stat)
+    target = source.readlink
+    resolved_target = (source.dirname/target).cleanpath
+    unless !target.absolute? &&
+           (resolved_target == source_root ||
+            resolved_target.to_s.start_with?("#{source_root}/"))
+      odie "tap recipe sealed symlink escapes its output root"
+    end
+    unless kandelo_tap_recipe_full_node_identity(source.lstat) == expected_source
+      odie "tap recipe sealed symlink changed before materialization"
+    end
+    File.symlink(target, destination)
+    created = destination.lstat
+    unless created.symlink? && created.uid == Process.uid &&
+           destination.readlink == target
+      odie "tap recipe materialization symlink changed during creation"
+    end
+    unless kandelo_tap_recipe_full_node_identity(source.lstat) == expected_source
+      odie "tap recipe sealed symlink changed during materialization"
+    end
+  rescue SystemCallError => e
+    odie "tap recipe sealed symlink could not be materialized: #{e.message}"
+  end
+
+  def kandelo_copy_tap_recipe_tree!(
+    sealed_output, materializing, runner_uid
+  )
+    pending = [[sealed_output, materializing]]
+    until pending.empty?
+      source_directory, destination_directory = pending.pop
+      source_directory.children.sort_by(&:to_s).each do |source|
+        stat = source.lstat
+        destination = destination_directory/source.basename
+        if stat.directory? && !stat.symlink?
+          unless stat.uid == runner_uid && (stat.mode & 07777) == 0555 &&
+                 source.realpath == source
+            odie "tap recipe sealed directory changed before materialization"
+          end
+          kandelo_tap_recipe_copy_directory!(destination)
+          pending << [source, destination]
+        elsif stat.file? && !stat.symlink?
+          unless stat.uid == runner_uid && [0444, 0555].include?(stat.mode & 07777) &&
+                 stat.nlink == 1
+            odie "tap recipe sealed file changed before materialization"
+          end
+          kandelo_tap_recipe_copy_file!(
+            source, destination, stat
+          )
+        elsif stat.symlink?
+          unless stat.uid == runner_uid
+            odie "tap recipe sealed symlink changed before materialization"
+          end
+          kandelo_tap_recipe_copy_symlink!(
+            source, destination, sealed_output, stat
+          )
+        else
+          odie "tap recipe sealed output contains an unsupported node"
+        end
+      end
+    end
+  end
+
+  def kandelo_materialize_tap_recipe_output!(
+    sealed_output, sealed_evidence, out_dir, build_root, out_handle,
+    out_identity, runner_uid
+  )
+    kandelo_tap_recipe_original_output_root!(
+      out_dir, build_root, out_handle, out_identity, entries: []
+    )
+    materializing = Pathname(
+      Dir.mktmpdir(".kandelo-materializing-", out_dir.to_s),
+    ).realpath
+    root_identity =
+      kandelo_tap_recipe_stable_node_identity(materializing.lstat)
+    unless materializing.parent == out_dir &&
+           (materializing.lstat.mode & 07777) == 0700 &&
+           materializing.lstat.uid == Process.uid
+      odie "tap recipe private materialization root is unsafe"
+    end
+
+    # WHY: the privileged runner's tree is immutable evidence, not a
+    # Homebrew staging tree. Copy it once into Formula ownership so normal
+    # Pathname#install moves work for binaries, archives, and nested runtime
+    # data without chmod, unlink, or move operations against sealed evidence.
+    kandelo_copy_tap_recipe_tree!(
+      sealed_output, materializing, runner_uid
+    )
+    File.open(materializing, File::RDONLY | File::NOFOLLOW) do |directory|
+      unless kandelo_tap_recipe_stable_node_identity(directory.stat) ==
+             root_identity
+        odie "tap recipe private materialization root changed before publication"
+      end
+      directory.chmod(0755)
+      root_identity =
+        kandelo_tap_recipe_stable_node_identity(directory.stat)
+    end
+    unless kandelo_tap_recipe_stable_node_identity(materializing.lstat) ==
+           root_identity
+      odie "tap recipe private materialization root changed after copying"
+    end
+
+    materialized_evidence = kandelo_validate_tap_recipe_output!(
+      materializing, expected_uid: Process.uid, materialized: true
+    )
+    sealed_after = kandelo_validate_tap_recipe_output!(
+      sealed_output, expected_uid: runner_uid, sealed: true
+    )
+    unless sealed_after == sealed_evidence &&
+           %w[
+             content_manifest_sha256 entry_count total_bytes
+           ].all? do |key|
+             materialized_evidence.fetch(key) == sealed_evidence.fetch(key)
+           end
+      odie "tap recipe materialization differs from sealed evidence"
+    end
+
+    private_name = materializing.basename.to_s
+    kandelo_tap_recipe_original_output_root!(
+      out_dir, build_root, out_handle, out_identity, entries: [private_name]
+    )
+    unless kandelo_tap_recipe_stable_node_identity(materializing.lstat) ==
+           root_identity
+      odie "tap recipe materialization changed before return"
+    end
+    # WHY: returning is the publication boundary. No fixed destination rename
+    # is needed, so a foreign empty directory can never be replaced between a
+    # path check and publication. The exact mode-0700 parent remains open and
+    # the distinct recipe uid's cgroup has already been collected.
+    kandelo_tap_recipe_original_output_root!(
+      out_dir, build_root, out_handle, out_identity, entries: [private_name]
+    )
+    materializing
   end
 
   # Run one tap-owned recipe closure against Homebrew's verified source and
@@ -2153,6 +2428,7 @@ module KandeloFormulaSupport
     saved = ENV.to_hash
     request_path = nil
     response_path = nil
+    out_handle = nil
     runtime, recipe = kandelo_tap_recipe_runtime!
     attestation = runtime.fetch("attestation")
     unless manifest_sha256.is_a?(String) &&
@@ -2194,8 +2470,18 @@ module KandeloFormulaSupport
     source_dir = kandelo_stage_verified_formula_source
     work_dir = buildpath/"kandelo-package-work"
     out_dir = buildpath/"kandelo-package-out"
+    build_root = buildpath.realpath
     work_dir.mkdir
-    out_dir.mkdir
+    # WHY: this exact Formula-owned inode is the publication boundary. The
+    # runner sees a private mount at the same guest path; the host directory
+    # must remain empty until sealed evidence has been accepted.
+    Dir.mkdir(out_dir, 0700)
+    out_handle = File.open(out_dir, File::RDONLY | File::NOFOLLOW)
+    out_identity =
+      kandelo_tap_recipe_stable_node_identity(out_handle.stat)
+    kandelo_tap_recipe_original_output_root!(
+      out_dir, build_root, out_handle, out_identity, entries: []
+    )
 
     prefix_existed = prefix.exist?
     if prefix_existed
@@ -2318,8 +2604,12 @@ module KandeloFormulaSupport
       odie "tap recipe created the Formula staging prefix directly"
     end
     response = kandelo_read_tap_recipe_runner_response!(response_path, runner_uid)
-    kandelo_accept_tap_recipe_runner_response!(
+    sealed_output, sealed_evidence = kandelo_accept_tap_recipe_runner_response!(
       response, request_sha256, sealed_root, runner_uid
+    )
+    kandelo_materialize_tap_recipe_output!(
+      sealed_output, sealed_evidence, out_dir, build_root, out_handle,
+      out_identity, runner_uid
     )
   ensure
     [request_path, response_path].compact.each do |transient|
@@ -2327,6 +2617,7 @@ module KandeloFormulaSupport
     rescue SystemCallError
       nil
     end
+    out_handle&.close
     ENV.replace(saved) if saved
   end
 
