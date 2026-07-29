@@ -8,7 +8,9 @@ NETCAT_VERSION="${WASM_POSIX_DEP_VERSION:?}"
 SOURCE_URL="${WASM_POSIX_DEP_SOURCE_URL:?}"
 SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
 TARGET_ARCH="${WASM_POSIX_DEP_TARGET_ARCH:?}"
-SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
+SRC_DIR="$WORK_DIR/netcat-source"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
 SYSROOT="${WASM_POSIX_SYSROOT:?}"
 
@@ -43,6 +45,13 @@ export WASM_POSIX_SYSROOT="$SYSROOT"
 # SDK; a closed recipe must not depend on the broader Kandelo checkout path.
 : "${WASM_POSIX_GLUE_DIR:?}"
 
+mkdir "$SRC_DIR"
+cp -a "$SOURCE_INPUT/." "$SRC_DIR/"
+# WHY: upstream config helpers, patches, configure, and make all write in
+# tree. Keep the authenticated source sealed and grant writes only to this
+# private copy. -P prevents chmod from following source-tree symlinks.
+find -P "$SRC_DIR" -type d -exec chmod u+rwx {} +
+find -P "$SRC_DIR" -type f -exec chmod u+rw {} +
 cd "$SRC_DIR"
 
 # GNU Netcat 0.7.1 predates Wasm and musl target tuples. Use the canonical
@@ -67,10 +76,10 @@ PATCH_SET=(
 echo "==> Verifying Kandelo netcat portability patches..."
 for patch_name in "${PATCH_SET[@]}"; do
     patch_file="$SCRIPT_DIR/patches/$patch_name"
-    if patch --reverse --dry-run -p1 < "$patch_file" >/dev/null 2>&1; then
+    if gpatch --reverse --dry-run -p1 < "$patch_file" >/dev/null 2>&1; then
         echo "    $patch_name already applied"
-    elif patch --forward --dry-run -p1 < "$patch_file" >/dev/null 2>&1; then
-        patch -p1 < "$patch_file"
+    elif gpatch --forward --dry-run -p1 < "$patch_file" >/dev/null 2>&1; then
+        gpatch -p1 < "$patch_file"
     else
         echo "ERROR: $patch_name does not apply and is not already present" >&2
         exit 1

@@ -46,6 +46,13 @@ and fork instrumenter, but the publisher makes the package registry, resolver,
 local-binary mirror, transported registry cache, and
 `scripts/install-local-binary.sh` inaccessible.
 
+The projected source tree is an authenticated, read-only input. Prefer
+out-of-tree builds. When an upstream configure, generator, patch, or makefile
+must write in tree, copy the complete source below
+`WASM_POSIX_DEP_WORK_DIR`, make only that private copy owner-writable, and keep
+the input and build paths in distinct variables. Recursive permission changes
+must not follow source-tree symlinks into another projected input.
+
 Closed recipes do not execute as the Formula build user. Formula support sends
 one bounded, canonical request through the publisher's fixed root-owned client
 to a one-request root supervisor. The supervisor starts a network-disabled

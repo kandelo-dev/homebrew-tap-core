@@ -12,20 +12,28 @@ class Bc < Formula
   sha256 "62adfca89b0a1c0164c2cdca59ca210c1d44c3ffc46daf9931cf4942664cb02a"
   license "GPL-3.0-or-later"
 
-  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 3
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b2657996570d89554214182ba1c78c23fb1129a939839fc5481b4e33b8d3f968"
+  end
+
   depends_on "bison" => :build
+
   depends_on "flex" => :build
+
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "m4" => :build
   depends_on "python@3.13" => :build
-  depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/bc"
 
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "643bd3d7034a8f2dfc7a9596055a3ba723f7df31de52341a19ccef7137d6ee61",
-      script_env: {
+      manifest_sha256: "77ac02fa3c1215e7b309509d742ca2d0817af51d1079d53fda58b2ec93b092f2",
+      script_env:      {
         "BC_PYTHON" => formula_opt_libexec("python@3.13")/"bin/python3",
       },
     )
@@ -36,11 +44,4 @@ class Bc < Formula
   test do
     assert_equal "3.50\n", kandelo_run_wasm(bin/"bc", [], stdin: "scale=2; 7/2\n")
   end
-
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 3
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b2657996570d89554214182ba1c78c23fb1129a939839fc5481b4e33b8d3f968"
-  end
-
 end

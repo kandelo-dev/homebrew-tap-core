@@ -13,9 +13,10 @@ set -euo pipefail
 
 SCRIPT_DIR="${WASM_POSIX_DEP_RECIPE_DIR:?}"
 WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
-SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
 HOST_BUILD_DIR="$WORK_DIR/bc-host-build"
+TARGET_BUILD_DIR="$WORK_DIR/bc-target-build"
 LIBMATH_HEADER="$WORK_DIR/libmath.h"
 SYSROOT="${WASM_POSIX_SYSROOT:?}"
 BC_VERSION="${WASM_POSIX_DEP_VERSION:?}"
@@ -67,12 +68,26 @@ export PATH="$BC_PYTHON_DIR:$PATH"
 
 export WASM_POSIX_SYSROOT="$SYSROOT"
 
+copy_private_source() {
+    local destination="$1"
+    [ ! -e "$destination" ] || {
+        echo "ERROR: private bc source already exists: $destination" >&2
+        exit 1
+    }
+    mkdir "$destination"
+    cp -a "$SOURCE_INPUT/." "$destination/"
+    # WHY: the authenticated source is deliberately sealed 0444/0555.
+    # Configure and make are in-tree writers, so only this recipe-owned copy
+    # becomes writable. -P keeps chmod from following source-tree symlinks.
+    find -P "$destination" -type d -exec chmod u+rwx {} +
+    find -P "$destination" -type f -exec chmod u+rw {} +
+}
+
 # --- Step 1: Host-native build to generate libmath.h ---
 if [ ! -f "$LIBMATH_HEADER" ]; then
     echo "==> Building host-native bc to generate libmath.h..."
     if [ ! -d "$HOST_BUILD_DIR" ]; then
-        mkdir -p "$HOST_BUILD_DIR"
-        cp -a "$SRC_DIR/." "$HOST_BUILD_DIR/"
+        copy_private_source "$HOST_BUILD_DIR"
     fi
     cd "$HOST_BUILD_DIR"
     if [ ! -f Makefile ]; then
@@ -89,7 +104,8 @@ if [ ! -f "$LIBMATH_HEADER" ]; then
 fi
 
 # --- Step 2: Cross-compile for wasm32 ---
-cd "$SRC_DIR"
+copy_private_source "$TARGET_BUILD_DIR"
+cd "$TARGET_BUILD_DIR"
 
 # --- Configure ---
 if [ ! -f Makefile ]; then
@@ -118,7 +134,7 @@ if [ ! -f Makefile ]; then
 fi
 
 # Place libmath.h from host build.
-cp "$LIBMATH_HEADER" "$SRC_DIR/bc/libmath.h"
+cp "$LIBMATH_HEADER" "$TARGET_BUILD_DIR/bc/libmath.h"
 
 # Patch the Makefile to skip fbc/libmath.h regeneration.
 # The Makefile rule rebuilds libmath.h via fbc (a host-native binary) from
@@ -126,7 +142,7 @@ cp "$LIBMATH_HEADER" "$SRC_DIR/bc/libmath.h"
 # we replace the rule with a no-op that uses our pre-generated libmath.h.
 sed -i.bak '/^libmath\.h:/,/rm -f \.\/fbc/c\
 libmath.h: libmath.b\
-	@echo "Using pre-generated libmath.h (cross-compilation)"' "$SRC_DIR/bc/Makefile"
+	@echo "Using pre-generated libmath.h (cross-compilation)"' "$TARGET_BUILD_DIR/bc/Makefile"
 
 # --- Build ---
 echo "==> Building bc..."
@@ -134,8 +150,8 @@ make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)" 2>&1 | tail -30
 
 echo "==> Collecting binary..."
 
-if [ -f "$SRC_DIR/bc/bc" ]; then
-    cp "$SRC_DIR/bc/bc" "$OUT_DIR/bc.wasm"
+if [ -f "$TARGET_BUILD_DIR/bc/bc" ]; then
+    cp "$TARGET_BUILD_DIR/bc/bc" "$OUT_DIR/bc.wasm"
     echo "==> Built bc"
     ls -lh "$OUT_DIR/bc.wasm"
 else
