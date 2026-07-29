@@ -132,6 +132,8 @@ class Msmtpd < Formula
       #include <errno.h>
       #include <fcntl.h>
       #include <netinet/in.h>
+      #include <poll.h>
+      #include <stdint.h>
       #include <stdio.h>
       #include <stdlib.h>
       #include <string.h>
@@ -159,10 +161,50 @@ class Msmtpd < Formula
         return 0;
       }
 
+      static int64_t monotonic_milliseconds(void) {
+        struct timespec now;
+        if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return -1;
+        return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+      }
+
+      static int wait_for_socket(int fd, short events, int64_t deadline) {
+        /*
+         * WHY: A broken daemon lifecycle can leave a connection open without
+         * sending its next SMTP reply. Bound each operation so the Formula
+         * reports the exact failed session instead of hiding the fault behind
+         * the outer three-minute host-runner timeout.
+         */
+        struct pollfd ready = { .fd = fd, .events = events, .revents = 0 };
+        for (;;) {
+          int64_t now = monotonic_milliseconds();
+          if (now < 0) return -1;
+          if (now >= deadline) {
+            errno = ETIMEDOUT;
+            return -1;
+          }
+          int status = poll(&ready, 1, (int)(deadline - now));
+          if (status < 0 && errno == EINTR) continue;
+          if (status == 0) {
+            errno = ETIMEDOUT;
+            return -1;
+          }
+          if (status < 0) return -1;
+          if ((ready.revents & events) == 0) {
+            errno = EIO;
+            return -1;
+          }
+          return 0;
+        }
+      }
+
       static int send_all(int fd, const char *bytes) {
+        int64_t deadline = monotonic_milliseconds();
+        if (deadline < 0) return -1;
+        deadline += 5000;
         size_t length = strlen(bytes);
         const char *cursor = bytes;
         while (length > 0) {
+          if (wait_for_socket(fd, POLLOUT, deadline) != 0) return -1;
           ssize_t count = send(fd, cursor, length, 0);
           if (count < 0 && errno == EINTR) continue;
           if (count <= 0) return -1;
@@ -173,16 +215,22 @@ class Msmtpd < Formula
       }
 
       static int expect_line(int fd, const char *expected) {
+        int64_t deadline = monotonic_milliseconds();
+        if (deadline < 0) return -1;
+        deadline += 5000;
         char line[256];
         size_t used = 0;
         while (used + 1 < sizeof(line)) {
+          if (wait_for_socket(fd, POLLIN, deadline) != 0) return -1;
           ssize_t count = recv(fd, line + used, 1, 0);
           if (count < 0 && errno == EINTR) continue;
           if (count <= 0) return -1;
           if (line[used++] == '\n') break;
         }
         line[used] = '\0';
-        return strcmp(line, expected) == 0 ? 0 : -1;
+        if (strcmp(line, expected) == 0) return 0;
+        errno = EPROTO;
+        return -1;
       }
 
       static int connect_smtp(int port) {
@@ -235,6 +283,27 @@ class Msmtpd < Formula
         return 0;
       }
 
+      static const char *session_failure_stage(int status) {
+        switch (status) {
+        case 20: return "connect";
+        case 21: return "greeting";
+        case 22: return "send-ehlo";
+        case 23: return "ehlo-reply";
+        case 24: return "send-mail-from";
+        case 25: return "mail-from-reply";
+        case 26: return "send-rcpt-to";
+        case 27: return "rcpt-to-reply";
+        case 28: return "send-data";
+        case 29: return "data-reply";
+        case 30: return "send-message";
+        case 31: return "message-reply";
+        case 32: return "send-quit";
+        case 33: return "quit-reply";
+        case 34: return "close";
+        default: return "unknown";
+        }
+      }
+
       static int client_main(int argc, char **argv) {
         if (argc != 3) return 40;
         int port = atoi(argv[2]);
@@ -247,7 +316,17 @@ class Msmtpd < Formula
          */
         for (int session = 0; session < 17; session++) {
           int status = run_session(port, session == 0);
-          if (status != 0) return status;
+          if (status != 0) {
+            fprintf(
+              stderr,
+              "msmtpd-test: session=%d stage=%s status=%d errno=%d\n",
+              session + 1,
+              session_failure_stage(status),
+              status,
+              errno
+            );
+            return status;
+          }
         }
         puts("msmtpd-client-ok sessions=17");
         return 0;
