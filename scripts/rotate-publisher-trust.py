@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Rotate the protected Homebrew callers to one exact Kandelo generation.
 
-The helper is deliberately scoped to the post-#1121 transition prepared in
-this worktree. By default it validates and previews the complete transition.
-It writes only when --apply is supplied.
+The predecessor and successor authorities are explicit operator inputs so the
+same fail-closed helper can rotate a reviewed protected-main tuple without
+predicting a future Kandelo merge or package generation. By default it
+validates and previews the complete transition. It writes only when --apply is
+supplied.
 """
 
 from __future__ import annotations
@@ -18,23 +20,6 @@ import sys
 import tempfile
 from collections.abc import Mapping
 
-
-LIVE_KANDELO_SHA = "88d26f4c627a363e01e567574916aff4e00828ee"
-B90_KANDELO_SHA = "b90eff73960207b59b7db55c7fb4ed46a4d075c0"
-PREDECESSOR_KANDELO_SHAS = frozenset((LIVE_KANDELO_SHA, B90_KANDELO_SHA))
-OLD_GENERATION_TAG = (
-    "package-generation-rootfs-wasm32-abi-v42-sha256-"
-    "adc14c9c0923787e260585b7ddc4517b5b9013f642212e039804f32bf892a5f9"
-)
-# The prepared worktree stopped before recomputing the caller hash, so its
-# controller can contain either the last live caller hash or the mechanically
-# derived b90 placeholder hash. No other predecessor is accepted.
-OLD_CALLER_SHA256 = frozenset(
-    (
-        "1d36416c57ba168f0d4b310dfb98c1f1b9a9d17926cb491079e18eba299b1e19",
-        "afdbfec7272726c4d987fef41eb129fd8dd1dbefabd6ffaa00de699353dc87ae",
-    )
-)
 
 SHA = re.compile(r"[0-9a-f]{40}")
 GENERATION_TAG = re.compile(
@@ -124,6 +109,32 @@ def replace_scalar(
     )
 
 
+def validate_kandelo_sha(value: str, label: str) -> None:
+    if SHA.fullmatch(value) is None:
+        raise RotationError(
+            f"{label} must be exactly 40 lowercase hex characters"
+        )
+    if value.isdigit():
+        # WHY: the callers use unquoted SHA scalars. An all-numeric value would
+        # be decoded as a YAML integer and would not name the reviewed reusable
+        # workflow/string input contract.
+        raise RotationError(f"{label} must contain at least one hex letter")
+
+
+def validate_generation_tag(value: str, label: str) -> None:
+    if GENERATION_TAG.fullmatch(value) is None:
+        raise RotationError(
+            f"{label} must be an exact ABI 42 rootfs-wasm32 content tag"
+        )
+
+
+def validate_caller_sha256(value: str, label: str) -> None:
+    if CALLER_SHA256.fullmatch(value) is None:
+        raise RotationError(
+            f"{label} must be exactly 64 lowercase hex characters"
+        )
+
+
 def read_rotation_files(root: pathlib.Path) -> dict[pathlib.Path, bytes]:
     contents: dict[pathlib.Path, bytes] = {}
     for relative in ROTATION_PATHS:
@@ -134,7 +145,9 @@ def read_rotation_files(root: pathlib.Path) -> dict[pathlib.Path, bytes]:
             contents[relative] = path.read_bytes()
             contents[relative].decode("utf-8")
         except (OSError, UnicodeDecodeError) as error:
-            raise RotationError(f"cannot read UTF-8 rotation input {relative}") from error
+            raise RotationError(
+                f"cannot read UTF-8 rotation input {relative}"
+            ) from error
     return contents
 
 
@@ -142,15 +155,17 @@ def rotate_workflow(
     source: str,
     *,
     uses_pattern: re.Pattern[str],
+    allowed_kandelo_shas: frozenset[str],
     new_sha: str,
     exact_ref: bool,
+    allowed_generation_tags: frozenset[str] | None,
     new_generation: str | None,
     label: str,
 ) -> str:
     source = replace_scalar(
         source,
         uses_pattern,
-        allowed=PREDECESSOR_KANDELO_SHAS | frozenset((new_sha,)),
+        allowed=allowed_kandelo_shas,
         replacement=new_sha,
         label=f"{label} reusable workflow SHA",
     )
@@ -158,7 +173,7 @@ def rotate_workflow(
         source = replace_scalar(
             source,
             EXACT_KANDELO_REF,
-            allowed=PREDECESSOR_KANDELO_SHAS | frozenset((new_sha,)),
+            allowed=allowed_kandelo_shas,
             replacement=new_sha,
             label=f"{label} kandelo-ref",
         )
@@ -184,10 +199,12 @@ def rotate_workflow(
         if generation_matches or "package-generation-" in source:
             raise RotationError("dry-run caller must not select a package generation")
     else:
+        if allowed_generation_tags is None:
+            raise AssertionError("write caller has no generation authority")
         source = replace_scalar(
             source,
             PACKAGE_GENERATION,
-            allowed=frozenset((OLD_GENERATION_TAG, new_generation)),
+            allowed=allowed_generation_tags,
             replacement=new_generation,
             label=f"{label} package generation",
         )
@@ -197,24 +214,36 @@ def rotate_workflow(
 def build_rotation(
     root: pathlib.Path,
     *,
+    predecessor_kandelo_sha: str,
+    predecessor_generation_tag: str,
+    predecessor_caller_sha256: str,
     kandelo_sha: str,
     generation_tag: str,
 ) -> Rotation:
-    if SHA.fullmatch(kandelo_sha) is None:
-        raise RotationError("Kandelo SHA must be exactly 40 lowercase hex characters")
-    if kandelo_sha.isdigit():
-        # WHY: the existing callers use unquoted SHA scalars. An all-numeric
-        # value would be decoded as a YAML integer and would not name the
-        # reviewed reusable workflow/string input contract.
-        raise RotationError("Kandelo SHA must contain at least one hex letter")
-    if kandelo_sha in PREDECESSOR_KANDELO_SHAS:
-        raise RotationError("Kandelo SHA still names a predecessor authority")
-    if GENERATION_TAG.fullmatch(generation_tag) is None:
+    validate_kandelo_sha(
+        predecessor_kandelo_sha, "predecessor Kandelo SHA"
+    )
+    validate_generation_tag(
+        predecessor_generation_tag, "predecessor generation tag"
+    )
+    validate_caller_sha256(
+        predecessor_caller_sha256, "predecessor caller SHA-256"
+    )
+    validate_kandelo_sha(kandelo_sha, "successor Kandelo SHA")
+    validate_generation_tag(generation_tag, "successor generation tag")
+    if kandelo_sha == predecessor_kandelo_sha:
+        raise RotationError("successor Kandelo SHA still names the predecessor")
+    if generation_tag == predecessor_generation_tag:
         raise RotationError(
-            "generation tag must be an exact ABI 42 rootfs-wasm32 content tag"
+            "successor generation tag still names the predecessor"
         )
-    if generation_tag == OLD_GENERATION_TAG:
-        raise RotationError("generation tag still names the obsolete b90 generation")
+
+    allowed_kandelo_shas = frozenset(
+        (predecessor_kandelo_sha, kandelo_sha)
+    )
+    allowed_generation_tags = frozenset(
+        (predecessor_generation_tag, generation_tag)
+    )
 
     original = read_rotation_files(root)
     rendered: dict[pathlib.Path, bytes] = dict(original)
@@ -222,24 +251,30 @@ def build_rotation(
     dry_run = rotate_workflow(
         original[DRY_RUN_PATH].decode(),
         uses_pattern=DRY_RUN_USES,
+        allowed_kandelo_shas=allowed_kandelo_shas,
         new_sha=kandelo_sha,
         exact_ref=False,
+        allowed_generation_tags=None,
         new_generation=None,
         label="dry-run",
     )
     maintenance = rotate_workflow(
         original[MAINTENANCE_PATH].decode(),
         uses_pattern=MAINTENANCE_USES,
+        allowed_kandelo_shas=allowed_kandelo_shas,
         new_sha=kandelo_sha,
         exact_ref=True,
+        allowed_generation_tags=allowed_generation_tags,
         new_generation=generation_tag,
         label="maintenance",
     )
     publish = rotate_workflow(
         original[PUBLISH_PATH].decode(),
         uses_pattern=PUBLISH_USES,
+        allowed_kandelo_shas=allowed_kandelo_shas,
         new_sha=kandelo_sha,
         exact_ref=True,
+        allowed_generation_tags=allowed_generation_tags,
         new_generation=generation_tag,
         label="publish",
     )
@@ -251,55 +286,66 @@ def build_rotation(
     trust = replace_scalar(
         trust,
         TRUST_KANDELO_SHA,
-        allowed=PREDECESSOR_KANDELO_SHAS | frozenset((kandelo_sha,)),
+        allowed=allowed_kandelo_shas,
         replacement=kandelo_sha,
         label="trust-test Kandelo SHA",
     )
     trust = replace_scalar(
         trust,
         TRUST_GENERATION,
-        allowed=frozenset((OLD_GENERATION_TAG, generation_tag)),
+        allowed=allowed_generation_tags,
         replacement=generation_tag,
         label="trust-test package generation",
     )
     rendered[TRUST_PATH] = trust.encode()
 
     caller_sha256 = hashlib.sha256(rendered[PUBLISH_PATH]).hexdigest()
+    original_caller_sha256 = hashlib.sha256(original[PUBLISH_PATH]).hexdigest()
+    if original_caller_sha256 not in (
+        predecessor_caller_sha256,
+        caller_sha256,
+    ):
+        # WHY: the controller approves the hash of the complete credentialed
+        # caller, not only the scalars this helper knows how to replace. Refuse
+        # to bless extra jobs, permissions, secrets, or other unreviewed bytes.
+        raise RotationError(
+            "production caller bytes have SHA-256 "
+            f"{original_caller_sha256}, expected predecessor "
+            f"{predecessor_caller_sha256} or rendered successor "
+            f"{caller_sha256}"
+        )
+    if caller_sha256 == predecessor_caller_sha256:
+        raise RotationError(
+            "rendered production caller still names the predecessor digest"
+        )
+
     controller = original[CONTROLLER_PATH].decode()
     controller = replace_scalar(
         controller,
         CONTROLLER_MAIN_SHA,
-        allowed=PREDECESSOR_KANDELO_SHAS | frozenset((kandelo_sha,)),
+        allowed=allowed_kandelo_shas,
         replacement=kandelo_sha,
         label="rollout-controller Kandelo SHA",
     )
     controller = replace_scalar(
         controller,
         CONTROLLER_GENERATION,
-        allowed=frozenset((OLD_GENERATION_TAG, generation_tag)),
+        allowed=allowed_generation_tags,
         replacement=generation_tag,
         label="rollout-controller package generation",
     )
     controller = replace_scalar(
         controller,
         CONTROLLER_CALLER_SHA,
-        allowed=OLD_CALLER_SHA256 | frozenset((caller_sha256,)),
+        allowed=frozenset((predecessor_caller_sha256, caller_sha256)),
         replacement=caller_sha256,
         label="rollout-controller caller SHA-256",
     )
     rendered[CONTROLLER_PATH] = controller.encode()
 
-    # WHY: this transition is one authority tuple. Leaving even one old token
-    # would create a mixed publisher/consumer/generation contract.
-    for relative, data in rendered.items():
-        source = data.decode()
-        if (
-            any(sha in source for sha in PREDECESSOR_KANDELO_SHAS)
-            or OLD_GENERATION_TAG in source
-        ):
-            raise RotationError(
-                f"{relative} still contains predecessor publisher authority"
-            )
+    # WHY: every live slot above is matched uniquely and rewritten as one
+    # tuple. Do not globally reject predecessor tokens: the controller may
+    # retain a separately named historical authority for ledger recovery.
     if not CALLER_SHA256.fullmatch(caller_sha256):
         raise AssertionError("unreachable invalid SHA-256")
 
@@ -351,8 +397,31 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=pathlib.Path(__file__).resolve().parent.parent,
         help="tap checkout root (default: repository containing this script)",
     )
-    parser.add_argument("--kandelo-sha", required=True)
-    parser.add_argument("--generation-tag", required=True)
+    parser.add_argument(
+        "--predecessor-kandelo-sha",
+        required=True,
+        help="exact Kandelo SHA selected by the protected callers now",
+    )
+    parser.add_argument(
+        "--predecessor-generation-tag",
+        required=True,
+        help="exact rootfs generation selected by the write callers now",
+    )
+    parser.add_argument(
+        "--predecessor-caller-sha256",
+        required=True,
+        help="SHA-256 of the current raw production caller bytes",
+    )
+    parser.add_argument(
+        "--kandelo-sha",
+        required=True,
+        help="exact successor Kandelo main SHA",
+    )
+    parser.add_argument(
+        "--generation-tag",
+        required=True,
+        help="exact successor rootfs generation tag",
+    )
     parser.add_argument(
         "--apply",
         action="store_true",
@@ -367,6 +436,9 @@ def main(argv: list[str]) -> int:
         root = args.root.resolve(strict=True)
         rotation = build_rotation(
             root,
+            predecessor_kandelo_sha=args.predecessor_kandelo_sha,
+            predecessor_generation_tag=args.predecessor_generation_tag,
+            predecessor_caller_sha256=args.predecessor_caller_sha256,
             kandelo_sha=args.kandelo_sha,
             generation_tag=args.generation_tag,
         )
@@ -380,7 +452,10 @@ def main(argv: list[str]) -> int:
             print(f"  {relative}")
         print(f"  caller-sha256={rotation.caller_sha256}")
         if not args.apply:
-            print("preview only; rerun with --apply after reviewing M, G, and hash")
+            print(
+                "preview only; rerun with --apply after reviewing "
+                "P_M/P_G/P_C -> M/G/C"
+            )
         return 0
     except (OSError, RotationError) as error:
         print(f"rotate-publisher-trust: {error}", file=sys.stderr)

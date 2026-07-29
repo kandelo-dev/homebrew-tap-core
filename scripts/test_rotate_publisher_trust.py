@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
+import io
 import pathlib
 import shutil
 import sys
@@ -25,6 +27,16 @@ NEW_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-" + "3" * 64
 
 
 class PublisherTrustRotationTests(unittest.TestCase):
+    def scalar_value(
+        self,
+        relative: pathlib.Path,
+        pattern,
+    ) -> str:
+        source = (self.root / relative).read_text()
+        matches = tuple(pattern.finditer(source))
+        self.assertEqual(1, len(matches), relative)
+        return matches[0].group("value").removesuffix('"')
+
     def force_scalar(
         self,
         relative: pathlib.Path,
@@ -44,33 +56,6 @@ class PublisherTrustRotationTests(unittest.TestCase):
             + source[match.end("value") :]
         )
 
-    def force_kandelo_slots(self, predecessor: str) -> None:
-        self.force_scalar(
-            rotation.DRY_RUN_PATH,
-            rotation.DRY_RUN_USES,
-            predecessor,
-        )
-        for relative, uses in (
-            (rotation.MAINTENANCE_PATH, rotation.MAINTENANCE_USES),
-            (rotation.PUBLISH_PATH, rotation.PUBLISH_USES),
-        ):
-            self.force_scalar(relative, uses, predecessor)
-            self.force_scalar(
-                relative,
-                rotation.EXACT_KANDELO_REF,
-                predecessor,
-            )
-        self.force_scalar(
-            rotation.TRUST_PATH,
-            rotation.TRUST_KANDELO_SHA,
-            predecessor,
-        )
-        self.force_scalar(
-            rotation.CONTROLLER_PATH,
-            rotation.CONTROLLER_MAIN_SHA,
-            predecessor,
-        )
-
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = pathlib.Path(self.temporary.name)
@@ -79,40 +64,80 @@ class PublisherTrustRotationTests(unittest.TestCase):
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / relative, destination)
 
-        # Keep these tests stable after the real M/G rotation lands by
-        # reconstructing the exact protected-main predecessor in the fixture.
-        self.force_kandelo_slots(rotation.LIVE_KANDELO_SHA)
-        for relative in (rotation.MAINTENANCE_PATH, rotation.PUBLISH_PATH):
-            self.force_scalar(
-                relative,
-                rotation.PACKAGE_GENERATION,
-                rotation.OLD_GENERATION_TAG,
-            )
-        self.force_scalar(
+        self.predecessor_sha = self.scalar_value(
+            rotation.TRUST_PATH,
+            rotation.TRUST_KANDELO_SHA,
+        )
+        self.predecessor_generation = self.scalar_value(
             rotation.TRUST_PATH,
             rotation.TRUST_GENERATION,
-            rotation.OLD_GENERATION_TAG,
         )
-        self.force_scalar(
-            rotation.CONTROLLER_PATH,
-            rotation.CONTROLLER_GENERATION,
-            rotation.OLD_GENERATION_TAG,
-        )
-        self.force_scalar(
-            rotation.CONTROLLER_PATH,
-            rotation.CONTROLLER_CALLER_SHA,
-            sorted(rotation.OLD_CALLER_SHA256)[0],
+        self.predecessor_caller = hashlib.sha256(
+            (self.root / rotation.PUBLISH_PATH).read_bytes()
+        ).hexdigest()
+
+        # WHY: derive the test predecessor from checked-in protected-main
+        # inputs, but independently require the controller to name those exact
+        # raw caller bytes. A stale controller must not become test authority.
+        self.assertEqual(
+            self.predecessor_caller,
+            self.scalar_value(
+                rotation.CONTROLLER_PATH,
+                rotation.CONTROLLER_CALLER_SHA,
+            ),
         )
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def build(self):
-        return rotation.build_rotation(
-            self.root,
-            kandelo_sha=NEW_SHA,
-            generation_tag=NEW_TAG,
-        )
+    def build(self, **overrides):
+        arguments = {
+            "predecessor_kandelo_sha": self.predecessor_sha,
+            "predecessor_generation_tag": self.predecessor_generation,
+            "predecessor_caller_sha256": self.predecessor_caller,
+            "kandelo_sha": NEW_SHA,
+            "generation_tag": NEW_TAG,
+        }
+        arguments.update(overrides)
+        return rotation.build_rotation(self.root, **arguments)
+
+    def cli_arguments(self) -> list[str]:
+        return [
+            "--root",
+            str(self.root),
+            "--predecessor-kandelo-sha",
+            self.predecessor_sha,
+            "--predecessor-generation-tag",
+            self.predecessor_generation,
+            "--predecessor-caller-sha256",
+            self.predecessor_caller,
+            "--kandelo-sha",
+            NEW_SHA,
+            "--generation-tag",
+            NEW_TAG,
+        ]
+
+    def unknown_kandelo_sha(self) -> str:
+        for digit in "456789":
+            candidate = digit * 39 + "a"
+            if candidate not in (self.predecessor_sha, NEW_SHA):
+                return candidate
+        raise AssertionError("test SHA candidates unexpectedly exhausted")
+
+    def unknown_generation_tag(self) -> str:
+        prefix = "package-generation-rootfs-wasm32-abi-v42-sha256-"
+        for digit in "456789":
+            candidate = prefix + digit * 64
+            if candidate not in (self.predecessor_generation, NEW_TAG):
+                return candidate
+        raise AssertionError("test generation candidates unexpectedly exhausted")
+
+    def unknown_caller_sha256(self) -> str:
+        for digit in "456789":
+            candidate = digit * 64
+            if candidate != self.predecessor_caller:
+                return candidate
+        raise AssertionError("test caller candidates unexpectedly exhausted")
 
     def test_live_predecessor_preview_does_not_write_and_apply_is_idempotent(
         self,
@@ -136,39 +161,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
         self.assertEqual((), after.changed)
         self.assertEqual(preview.caller_sha256, after.caller_sha256)
 
-    def test_b90_predecessor_converges_without_live_worktree_dirt(self) -> None:
-        self.force_kandelo_slots(rotation.B90_KANDELO_SHA)
-        candidate = self.build()
-        self.assertEqual(set(rotation.ROTATION_PATHS), set(candidate.changed))
-        rotation.apply_rotation(self.root, candidate)
-        self.assertEqual((), self.build().changed)
-
-    def test_mixed_live_and_b90_predecessors_converge(self) -> None:
-        self.force_scalar(
-            rotation.DRY_RUN_PATH,
-            rotation.DRY_RUN_USES,
-            rotation.B90_KANDELO_SHA,
-        )
-        self.force_scalar(
-            rotation.MAINTENANCE_PATH,
-            rotation.MAINTENANCE_USES,
-            rotation.B90_KANDELO_SHA,
-        )
-        self.force_scalar(
-            rotation.CONTROLLER_PATH,
-            rotation.CONTROLLER_MAIN_SHA,
-            rotation.B90_KANDELO_SHA,
-        )
-
-        candidate = self.build()
-        rotation.apply_rotation(self.root, candidate)
-        self.assertEqual((), self.build().changed)
-
     def test_complete_tuple_and_raw_caller_hash_are_derived_together(self) -> None:
         candidate = self.build()
-        rotation.apply_rotation(self.root, candidate)
 
-        dry_run = (self.root / rotation.DRY_RUN_PATH).read_text()
+        dry_run = candidate.contents[rotation.DRY_RUN_PATH].decode()
         self.assertIn(f"publish.yml@{NEW_SHA}", dry_run)
         self.assertNotIn("package-generation-", dry_run)
         self.assertIn(
@@ -177,15 +173,22 @@ class PublisherTrustRotationTests(unittest.TestCase):
         )
 
         for relative in (rotation.MAINTENANCE_PATH, rotation.PUBLISH_PATH):
-            source = (self.root / relative).read_text()
+            source = candidate.contents[relative].decode()
             self.assertIn(f"@{NEW_SHA}", source)
             self.assertIn(f"kandelo-ref: {NEW_SHA}", source)
             self.assertIn(f"package-generation-wasm32: {NEW_TAG}", source)
 
-        publish = (self.root / rotation.PUBLISH_PATH).read_bytes()
+        trust = candidate.contents[rotation.TRUST_PATH].decode()
+        self.assertIn(f'CURRENT_KANDELO_WORKFLOW_SHA = "{NEW_SHA}"', trust)
+        self.assertIn(
+            f'PACKAGE_GENERATION_WASM32_TAG = "{NEW_TAG}"',
+            trust,
+        )
+
+        publish = candidate.contents[rotation.PUBLISH_PATH]
         caller_hash = hashlib.sha256(publish).hexdigest()
         self.assertEqual(candidate.caller_sha256, caller_hash)
-        controller = (self.root / rotation.CONTROLLER_PATH).read_text()
+        controller = candidate.contents[rotation.CONTROLLER_PATH].decode()
         self.assertIn(f'CURRENT_MAIN_SHA = "{NEW_SHA}"', controller)
         self.assertIn(
             f'CURRENT_ROOTFS_GENERATION_TAG = "{NEW_TAG}"',
@@ -196,13 +199,52 @@ class PublisherTrustRotationTests(unittest.TestCase):
             controller,
         )
 
-    def test_partial_prior_application_converges(self) -> None:
-        candidate = self.build()
-        (self.root / rotation.DRY_RUN_PATH).write_bytes(
-            candidate.contents[rotation.DRY_RUN_PATH]
+        for relative in (
+            rotation.DRY_RUN_PATH,
+            rotation.MAINTENANCE_PATH,
+            rotation.PUBLISH_PATH,
+            rotation.TRUST_PATH,
+        ):
+            source = candidate.contents[relative].decode()
+            self.assertNotIn(self.predecessor_sha, source)
+            self.assertNotIn(self.predecessor_generation, source)
+            self.assertNotIn(self.predecessor_caller, source)
+
+    def test_separately_named_historical_controller_authority_is_preserved(
+        self,
+    ) -> None:
+        path = self.root / rotation.CONTROLLER_PATH
+        source = path.read_text()
+        marker = f'CURRENT_MAIN_SHA = "{self.predecessor_sha}"'
+        self.assertEqual(1, source.count(marker))
+        historical = (
+            f'HISTORICAL_TEST_MAIN_SHA = "{self.predecessor_sha}"\n'
+            "HISTORICAL_TEST_ROOTFS_GENERATION_TAG = "
+            f'"{self.predecessor_generation}"\n'
+            "HISTORICAL_TEST_CALLER_SHA256 = "
+            f'"{self.predecessor_caller}"\n'
         )
+        path.write_text(source.replace(marker, historical + marker))
+
+        controller = self.build().contents[rotation.CONTROLLER_PATH].decode()
+        self.assertIn(historical, controller)
+        self.assertIn(f'CURRENT_MAIN_SHA = "{NEW_SHA}"', controller)
+
+    def test_partial_prior_application_converges_across_files(self) -> None:
+        candidate = self.build()
+        for relative in (
+            rotation.DRY_RUN_PATH,
+            rotation.MAINTENANCE_PATH,
+            rotation.TRUST_PATH,
+        ):
+            (self.root / relative).write_bytes(candidate.contents[relative])
+
         resumed = self.build()
         self.assertNotIn(rotation.DRY_RUN_PATH, resumed.changed)
+        self.assertNotIn(rotation.MAINTENANCE_PATH, resumed.changed)
+        self.assertNotIn(rotation.TRUST_PATH, resumed.changed)
+        self.assertIn(rotation.PUBLISH_PATH, resumed.changed)
+        self.assertIn(rotation.CONTROLLER_PATH, resumed.changed)
         rotation.apply_rotation(self.root, resumed)
         self.assertEqual((), self.build().changed)
 
@@ -232,10 +274,11 @@ class PublisherTrustRotationTests(unittest.TestCase):
         rotation.apply_rotation(self.root, resumed)
         self.assertEqual((), self.build().changed)
 
-    def test_unexpected_authority_blocks_every_write(self) -> None:
-        path = self.root / rotation.MAINTENANCE_PATH
-        path.write_text(
-            path.read_text().replace(rotation.LIVE_KANDELO_SHA, "4" * 40)
+    def test_unknown_predecessor_slot_blocks_every_write(self) -> None:
+        self.force_scalar(
+            rotation.MAINTENANCE_PATH,
+            rotation.MAINTENANCE_USES,
+            self.unknown_kandelo_sha(),
         )
         before = {
             relative: (self.root / relative).read_bytes()
@@ -254,11 +297,67 @@ class PublisherTrustRotationTests(unittest.TestCase):
             },
         )
 
+    def test_unknown_generation_slot_is_rejected(self) -> None:
+        self.force_scalar(
+            rotation.MAINTENANCE_PATH,
+            rotation.PACKAGE_GENERATION,
+            self.unknown_generation_tag(),
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "maintenance package generation has unexpected value",
+        ):
+            self.build()
+
+    def test_wrong_predecessor_caller_digest_is_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "production caller bytes have SHA-256",
+        ):
+            self.build(
+                predecessor_caller_sha256=self.unknown_caller_sha256()
+            )
+
+    def test_unreviewed_production_caller_bytes_are_rejected(self) -> None:
+        path = self.root / rotation.PUBLISH_PATH
+        path.write_text(path.read_text() + "\n# unreviewed caller bytes\n")
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "production caller bytes have SHA-256",
+        ):
+            self.build()
+
+    def test_mixed_production_caller_tuple_is_rejected(self) -> None:
+        self.force_scalar(
+            rotation.PUBLISH_PATH,
+            rotation.PUBLISH_USES,
+            NEW_SHA,
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "production caller bytes have SHA-256",
+        ):
+            self.build()
+
+    def test_unknown_controller_caller_digest_is_rejected(self) -> None:
+        self.force_scalar(
+            rotation.CONTROLLER_PATH,
+            rotation.CONTROLLER_CALLER_SHA,
+            self.unknown_caller_sha256(),
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "rollout-controller caller SHA-256 has unexpected value",
+        ):
+            self.build()
+
     def test_dry_run_generation_pin_is_rejected(self) -> None:
         path = self.root / rotation.DRY_RUN_PATH
         path.write_text(
             path.read_text()
-            + f"\n      package-generation-wasm32: {rotation.OLD_GENERATION_TAG}\n"
+            + "\n      package-generation-wasm32: "
+            + self.predecessor_generation
+            + "\n"
         )
         with self.assertRaisesRegex(
             rotation.RotationError,
@@ -280,25 +379,128 @@ class PublisherTrustRotationTests(unittest.TestCase):
         ):
             self.build()
 
-    def test_invalid_or_obsolete_arguments_are_rejected(self) -> None:
+    def test_invalid_or_unchanged_arguments_are_rejected(self) -> None:
         invalid = (
-            ("main", NEW_TAG, "40 lowercase hex"),
-            ("2" * 40, NEW_TAG, "at least one hex letter"),
-            (rotation.LIVE_KANDELO_SHA, NEW_TAG, "predecessor authority"),
-            (rotation.B90_KANDELO_SHA, NEW_TAG, "predecessor authority"),
-            (NEW_SHA, "generation", "exact ABI 42"),
-            (NEW_SHA, rotation.OLD_GENERATION_TAG, "obsolete b90 generation"),
+            (
+                {"predecessor_kandelo_sha": "main"},
+                "predecessor Kandelo SHA must be exactly 40 lowercase hex",
+            ),
+            (
+                {"predecessor_kandelo_sha": "2" * 40},
+                "predecessor Kandelo SHA must contain at least one hex letter",
+            ),
+            (
+                {"predecessor_generation_tag": "generation"},
+                "predecessor generation tag must be an exact ABI 42",
+            ),
+            (
+                {"predecessor_caller_sha256": "digest"},
+                "predecessor caller SHA-256 must be exactly 64 lowercase hex",
+            ),
+            (
+                {"kandelo_sha": "main"},
+                "successor Kandelo SHA must be exactly 40 lowercase hex",
+            ),
+            (
+                {"kandelo_sha": "2" * 40},
+                "successor Kandelo SHA must contain at least one hex letter",
+            ),
+            (
+                {"kandelo_sha": self.predecessor_sha},
+                "successor Kandelo SHA still names the predecessor",
+            ),
+            (
+                {"generation_tag": "generation"},
+                "successor generation tag must be an exact ABI 42",
+            ),
+            (
+                {"generation_tag": self.predecessor_generation},
+                "successor generation tag still names the predecessor",
+            ),
         )
-        for kandelo_sha, generation_tag, message in invalid:
-            with self.subTest(
-                kandelo_sha=kandelo_sha,
-                generation_tag=generation_tag,
-            ), self.assertRaisesRegex(rotation.RotationError, message):
-                rotation.build_rotation(
-                    self.root,
-                    kandelo_sha=kandelo_sha,
-                    generation_tag=generation_tag,
-                )
+        for overrides, message in invalid:
+            with self.subTest(overrides=overrides), self.assertRaisesRegex(
+                rotation.RotationError, message
+            ):
+                self.build(**overrides)
+
+    def test_rotation_input_symlink_is_rejected(self) -> None:
+        target = self.root / rotation.DRY_RUN_PATH
+        replacement = target.with_name("dry-run-target.yml")
+        target.rename(replacement)
+        target.symlink_to(replacement.name)
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "rotation input is not a regular file",
+        ):
+            self.build()
+
+    def test_cli_requires_and_preserves_the_complete_input_tuple(self) -> None:
+        arguments = rotation.parse_args(self.cli_arguments())
+        self.assertEqual(self.root, arguments.root)
+        self.assertEqual(
+            self.predecessor_sha, arguments.predecessor_kandelo_sha
+        )
+        self.assertEqual(
+            self.predecessor_generation,
+            arguments.predecessor_generation_tag,
+        )
+        self.assertEqual(
+            self.predecessor_caller,
+            arguments.predecessor_caller_sha256,
+        )
+        self.assertEqual(NEW_SHA, arguments.kandelo_sha)
+        self.assertEqual(NEW_TAG, arguments.generation_tag)
+        self.assertFalse(arguments.apply)
+
+        for option in (
+            "--predecessor-kandelo-sha",
+            "--predecessor-generation-tag",
+            "--predecessor-caller-sha256",
+        ):
+            incomplete = self.cli_arguments()
+            index = incomplete.index(option)
+            del incomplete[index : index + 2]
+            with (
+                self.subTest(missing=option),
+                contextlib.redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit) as raised,
+            ):
+                rotation.parse_args(incomplete)
+            self.assertEqual(2, raised.exception.code)
+
+    def test_main_preview_is_read_only_and_apply_uses_explicit_tuple(self) -> None:
+        before = {
+            relative: (self.root / relative).read_bytes()
+            for relative in rotation.ROTATION_PATHS
+        }
+        preview_output = io.StringIO()
+        with contextlib.redirect_stdout(preview_output):
+            self.assertEqual(0, rotation.main(self.cli_arguments()))
+        self.assertIn("would update 5 file(s)", preview_output.getvalue())
+        self.assertIn("caller-sha256=", preview_output.getvalue())
+        self.assertEqual(
+            before,
+            {
+                relative: (self.root / relative).read_bytes()
+                for relative in rotation.ROTATION_PATHS
+            },
+        )
+
+        apply_output = io.StringIO()
+        with contextlib.redirect_stdout(apply_output):
+            self.assertEqual(
+                0,
+                rotation.main(self.cli_arguments() + ["--apply"]),
+            )
+        self.assertIn("updated 5 file(s)", apply_output.getvalue())
+        self.assertEqual((), self.build().changed)
+
+    def test_helper_does_not_embed_the_checked_in_authority(self) -> None:
+        source = SCRIPT.read_text()
+        self.assertNotIn(self.predecessor_sha, source)
+        self.assertNotIn(self.predecessor_generation, source)
+        self.assertNotIn(self.predecessor_caller, source)
 
 
 if __name__ == "__main__":
