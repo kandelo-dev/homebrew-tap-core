@@ -2393,13 +2393,13 @@ module KandeloFormulaSupport
     # only the closed request, runs the recipe in its own cgroup, kills every
     # descendant, and seals a fresh copy before reporting success.
     kandelo_verify_tap_recipe_tree!(runtime, recipe)
-    unless system(
+    # WHY: Formula#system raises on failure and returns nil on success.
+    # Treating it like Kernel.system rejects every successful recipe.
+    system(
       runner.to_s,
       "--request", request_path.to_s,
       "--response", response_path.to_s,
     )
-      odie "tap recipe runner failed"
-    end
     kandelo_verify_tap_recipe_tree!(runtime, recipe)
 
     [source_dir, work_dir].each do |directory|

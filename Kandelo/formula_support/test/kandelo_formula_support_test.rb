@@ -879,7 +879,9 @@ class KandeloFormulaSupportTest < Minitest::Test
         }))
         response_path.chmod(0444)
         runner_return_hooks.each { |hook| hook.call(sealed_out, response_path) }
-        true
+        # Match Homebrew's Formula#system contract: it raises on failure and
+        # returns nil after a successful command.
+        nil
       end
 
       # Match the launcher boundary exactly: every overlay directory is 0555,
@@ -1177,6 +1179,27 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_equal "/ambient/fork-instrument", ENV.fetch("WASM_POSIX_FORK_INSTRUMENT")
       assert_equal "/ambient/local-root-spill", ENV.fetch("WASM_POSIX_LOCAL_ROOT_SPILL")
       assert_equal "/ambient/xtask", ENV.fetch("WASM_POSIX_XTASK_BIN")
+    end
+  end
+
+  def test_tap_recipe_helper_propagates_runner_failure_and_cleans_protocol_files
+    with_tap_recipe_build_fixture do |fixture|
+      message =
+        "homebrew-tap-recipe-runner: recipe diagnostics: compiler failed"
+      request_path =
+        fixture.fetch(:build_path)/".kandelo-tap-recipe-request.json"
+      response_path =
+        fixture.fetch(:build_path)/".kandelo-tap-recipe-response.json"
+      fixture.fetch(:system_hooks) << lambda do
+        response_path.binwrite("incomplete runner response")
+        raise message
+      end
+
+      error = assert_raises(RuntimeError) { run_tap_recipe(fixture) }
+
+      assert_equal message, error.message
+      refute_path_exists request_path
+      refute_path_exists response_path
     end
   end
 
