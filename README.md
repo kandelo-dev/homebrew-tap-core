@@ -120,7 +120,7 @@ itself is a Wasm executable. The separate Node and Chromium guest lifecycle
 must still execute it with real Ruby before in-guest Homebrew is accepted.
 
 NetHack compiles and tests its data lookup against
-`/home/linuxbrew/.linuxbrew/opt/nethack/share/nethack`, so a composed image must
+`/opt/kandelo/homebrew/opt/nethack/share/nethack`, so a composed image must
 link both its executable and installed share tree at the poured guest opt path.
 Decomposing their registry scripts into idiomatic Formula build steps remains
 explicit follow-up work rather than a hidden change to the proof's scope.

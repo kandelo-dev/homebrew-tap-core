@@ -4125,9 +4125,9 @@ class KandeloFormulaSupportTest < Minitest::Test
     harness.kandelo_run_wasm(
       "program.wasm",
       ["input.tex"],
-      argv0:                     "/home/linuxbrew/.linuxbrew/opt/texlive/bin/pdflatex",
+      argv0:                     "/opt/kandelo/homebrew/opt/texlive/bin/pdflatex",
       exec_programs:             {
-        "/home/linuxbrew/.linuxbrew/opt/texlive/bin/pdflatex" => "/formula/pdflatex",
+        "/opt/kandelo/homebrew/opt/texlive/bin/pdflatex" => "/formula/pdflatex",
       },
       writable_host_directories: { "/work" => "/formula/test-output" },
     )
@@ -4135,7 +4135,7 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes harness.command, "run-network-wasm.ts"
     assert_includes harness.command, "KANDELO_FORMULA_ARGV0="
     assert_includes harness.command, "KANDELO_FORMULA_WRITABLE_HOST_DIRS_JSON="
-    assert_includes harness.command, "/home/linuxbrew/.linuxbrew/opt/texlive/bin/pdflatex"
+    assert_includes harness.command, "/opt/kandelo/homebrew/opt/texlive/bin/pdflatex"
     assert_includes harness.command, "/work"
     assert_includes harness.command, "/formula/test-output"
   end
@@ -4386,15 +4386,15 @@ class KandeloFormulaSupportTest < Minitest::Test
       harness.test_path.mkpath
       output = harness.kandelo_run_pty_wasm(
         "program.wasm", ["note.txt"],
-        argv0:                      "/home/linuxbrew/.linuxbrew/opt/program/bin/program",
+        argv0:                      "/opt/kandelo/homebrew/opt/program/bin/program",
         env:                        { "KERNEL_CWD" => "/tmp/formula test" },
         inputs:                     ["\u001c", "beta", "\r"],
         input_ready_text:           "editor ready",
         rerun_inputs:               ["\u0018"],
         exec_programs:              { "/opt/program/bin/helper" => "/formula/helper" },
         guest_files:                { "/etc/program.conf" => "/formula/program.conf" },
-        guest_directories:          ["/home/linuxbrew/.linuxbrew/var/program/save"],
-        writable_guest_directories: ["/home/linuxbrew/.linuxbrew/var/program"],
+        guest_directories:          ["/opt/kandelo/homebrew/var/program/save"],
+        writable_guest_directories: ["/opt/kandelo/homebrew/var/program"],
         writable_host_directories:  { "/work" => "/formula/test output" },
         expected_fork_descendants:  2,
         timeout_ms:                 120_000,
@@ -4410,14 +4410,14 @@ class KandeloFormulaSupportTest < Minitest::Test
       config = harness.pty_config
       assert_equal 0600, harness.pty_config_mode
       refute_path_exists harness.pty_config_path
-      assert_equal "/home/linuxbrew/.linuxbrew/opt/program/bin/program", config.fetch("argv0")
+      assert_equal "/opt/kandelo/homebrew/opt/program/bin/program", config.fetch("argv0")
       assert_equal ["\u001c", "beta", "\r"], config.fetch("inputs")
       assert_equal "editor ready", config.fetch("inputReadyText")
       assert_equal ["\u0018"], config.fetch("rerunInputs")
       assert_equal({ "/opt/program/bin/helper" => "/formula/helper" }, config.fetch("execPrograms"))
       assert_equal({ "/etc/program.conf" => "/formula/program.conf" }, config.fetch("guestFiles"))
       assert_equal(
-        ["/home/linuxbrew/.linuxbrew/var/program"],
+        ["/opt/kandelo/homebrew/var/program"],
         config.fetch("writableGuestDirectories"),
       )
       assert_equal({ "/work" => "/formula/test output" }, config.fetch("writableHostDirectories"))
