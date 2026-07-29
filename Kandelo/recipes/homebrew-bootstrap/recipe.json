@@ -9,7 +9,7 @@
       "bytes": 1070,
       "mode": "0644",
       "path": "PATCH-LICENSE.md",
-      "sha256": "22eef64e04c8d9dc0dbff51ce5e79622914789391b85aa908316cb62dd19094c"
+      "sha256": "d2650ac56b8d0c9a03d92baa44e5ad7388cc7d087fa2549270ca9511f0b5101c"
     },
     {
       "bytes": 7589,
@@ -24,16 +24,16 @@
       "sha256": "bb549dfac4e9249ab55388d6eea1d1c56d65e56ba22300fe2d2d4fcaee94b097"
     },
     {
-      "bytes": 5895,
+      "bytes": 5851,
       "mode": "0644",
       "path": "patches/0001-add-kandelo-wasm-bottle-tags.patch",
-      "sha256": "9c52238d811616c210cd1ecdd23b0192a3e0333219a70b34d8ea6d77dbcfbf74"
+      "sha256": "faf62befeb70033ea450e88eb1b21427e221030a7f6b6ce932ad2c7c728ac2bc"
     },
     {
-      "bytes": 1881,
+      "bytes": 1882,
       "mode": "0644",
       "path": "source-lock.json",
-      "sha256": "7266bc7abf8efe4c5d57296aca7c1617b7db1754e7531f7ae4f17d4a3f3b6f4f"
+      "sha256": "f4c5af73497c6e6fb34aeeb6fe78314485c3628a056380d02f001d54524d70a5"
     },
     {
       "bytes": 12729,

@@ -33,6 +33,8 @@ FORBIDDEN_AUTHORITY = (
     "scripts/dev-shell.sh",
     "/nix/store",
 )
+KANDELO_GUEST_PREFIX = b"/opt/kandelo/homebrew"
+RETIRED_GUEST_PREFIX = b"/home/linuxbrew/.linuxbrew"
 
 
 def sha256(path: Path) -> str:
@@ -49,6 +51,13 @@ def reject_all(source: str, needles: tuple[str, ...], owner: Path) -> None:
         assert needle not in source, f"{owner} retains forbidden {needle!r}"
 
 
+def reject_retired_guest_prefix(source: bytes, owner: Path) -> None:
+    assert RETIRED_GUEST_PREFIX not in source, (
+        f"{owner} retains retired guest prefix "
+        f"{RETIRED_GUEST_PREFIX.decode()!r}"
+    )
+
+
 def assert_formula_contract() -> None:
     source = FORMULA.read_text()
     reject_all(source, FORBIDDEN_AUTHORITY, FORMULA)
@@ -58,9 +67,9 @@ def assert_formula_contract() -> None:
             "KANDELO_TAP_RECIPE = true",
             'KANDELO_BOTTLE_TEST_CONTRACT = "support-data".freeze',
             'url "https://github.com/Homebrew/brew/archive/'
-            '4ead8619231cb15cbe15e8e8188081e347d6f7cd.tar.gz"',
-            'version "6.0.3-4-g4ead861"',
-            'sha256 "4b9fdfb4872bd2fbff001c69f91ec7b2c2b7a956459132b6c3adba878f551155"',
+            'cf5bc21c6b127e168ef7cfa982ba7db62874690e.tar.gz"',
+            'version "6.0.12-153-gcf5bc21"',
+            'sha256 "18d3c5384b1a90e0dca3c044b31d8a2b61b500bc5b880a14b1e52a590088de40"',
             'license all_of: ["BSD-2-Clause", "GPL-2.0-or-later"]',
             'depends_on "git" => :build',
             'depends_on "ruby" => :build',
@@ -89,14 +98,15 @@ def assert_formula_contract() -> None:
     require_all(
         source,
         (
-            "68095c118c8bb99245124fe8558f9211bf6d22e2331852ed27541bd34b725eb9",
-            "assert_equal 5_026_784, archive.size",
+            "26ac98e328573244d3e7c0c149f30114ef5d9c8882200f5a22e56f97d2541482",
+            "assert_equal 5_251_369, archive.size",
             "HOMEBREW_NO_AUTO_UPDATE=1",
             "HOMEBREW_NO_INSTALL_FROM_API=1",
             "HOMEBREW_KANDELO_BOTTLE_TAG=wasm32_kandelo",
             'system formula_opt_bin("unzip")/"unzip", "-q", archive',
             'assert_predicate extracted/"bin/brew", :executable?',
             'assert_path_exists extracted/"LICENSE.txt"',
+            "/opt/kandelo/homebrew",
             "Retain its `homebrew-` prefix",
         ),
         FORMULA,
@@ -120,6 +130,29 @@ def assert_recipe_contract() -> None:
         if path.is_file()
     }
     assert actual_files == expected_files
+
+    # WHY: this recipe is the source of the guest Homebrew tree. Checking every
+    # sealed input prevents a future patch refresh from silently restoring the
+    # host-only Linux default as Kandelo's product-visible package layout.
+    for relative in sorted(expected_files):
+        reject_retired_guest_prefix(
+            (RECIPE_ROOT / relative).read_bytes(),
+            RECIPE_ROOT / relative,
+        )
+    patch = RECIPE_ROOT / "patches/0001-add-kandelo-wasm-bottle-tags.patch"
+    assert KANDELO_GUEST_PREFIX in patch.read_bytes()
+
+    # Exercise the rejecting branch so this contract cannot become a no-op
+    # while the checked-in recipe happens to remain clean.
+    try:
+        reject_retired_guest_prefix(
+            b"prefix=/home/linuxbrew/.linuxbrew",
+            Path("<adversarial-recipe>"),
+        )
+    except AssertionError as error:
+        assert "retired guest prefix" in str(error)
+    else:
+        raise AssertionError("retired guest prefix guard accepted its fixture")
 
     for record in records:
         assert list(record) == ["bytes", "mode", "path", "sha256"]
@@ -204,11 +237,11 @@ def assert_source_lock_contract() -> None:
     assert lock["kind"] == "kandelo-homebrew-bootstrap-tap-recipe-lock"
     assert lock["package"] == {
         "name": "homebrew-bootstrap",
-        "version": "6.0.3-4-g4ead861",
+        "version": "6.0.12-153-gcf5bc21",
         "arch": "wasm32",
     }
-    assert lock["source"]["revision"] == "4ead8619231cb15cbe15e8e8188081e347d6f7cd"
-    assert lock["source"]["tree_git_oid"] == "6b79e77f57960a9e03fdc4934fd065cfacd9cb0c"
+    assert lock["source"]["revision"] == "cf5bc21c6b127e168ef7cfa982ba7db62874690e"
+    assert lock["source"]["tree_git_oid"] == "df4aa7ac462564d14c713e0a6e07e33cbd0a4f8a"
     assert lock["patch"]["sha256"] == sha256(
         RECIPE_ROOT / "patches" / "0001-add-kandelo-wasm-bottle-tags.patch"
     )
@@ -217,13 +250,13 @@ def assert_source_lock_contract() -> None:
         RECIPE_ROOT / "PATCH-LICENSE.md"
     )
     assert lock["prepared"]["patched_tree_git_oid"] == (
-        "55de49b411de0ca122ec9eb8f0fc8b0a7a32dca6"
+        "ae657d9bdebaa2218527f3e3a6b8b51e6907d365"
     )
     assert lock["prepared"]["archive_format"] == "kandelo-deterministic-zip-v1"
     assert lock["outputs"]["archive"] == {
         "path": "homebrew-bootstrap.zip",
-        "sha256": "68095c118c8bb99245124fe8558f9211bf6d22e2331852ed27541bd34b725eb9",
-        "bytes": 5_026_784,
+        "sha256": "26ac98e328573244d3e7c0c149f30114ef5d9c8882200f5a22e56f97d2541482",
+        "bytes": 5_251_369,
     }
     assert lock["outputs"]["environment"] == {
         "path": "homebrew-brew.env",
