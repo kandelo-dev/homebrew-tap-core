@@ -114,7 +114,10 @@ tree and permitted environment without receiving Kandelo's registry resolver,
 package cache, or local-binary installer. The recipe independently
 reconstructs the upstream Git tree from Homebrew's verified archive before
 applying the reviewed Kandelo platform patch, then packages the patched tree
-and guest policy as one Formula bottle.
+and guest policy as one Formula bottle. Its static `support-data` bottle-test
+contract proves the installed archive bytes without claiming that the archive
+itself is a Wasm executable. The separate Node and Chromium guest lifecycle
+must still execute it with real Ruby before in-guest Homebrew is accepted.
 
 NetHack compiles and tests its data lookup against
 `/home/linuxbrew/.linuxbrew/opt/nethack/share/nethack`, so a composed image must
