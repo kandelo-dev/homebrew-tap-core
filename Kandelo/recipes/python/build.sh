@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="${HOMEBREW_KANDELO_ROOT:?}"
 RECIPE_DIR="${WASM_POSIX_DEP_RECIPE_DIR:?}"
 SOURCE_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"
 WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
 SYSROOT_SOURCE="${WASM_POSIX_SYSROOT:?}"
+FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"
 PYTHON_VERSION="${WASM_POSIX_DEP_VERSION:?}"
 SOURCE_URL="${WASM_POSIX_DEP_SOURCE_URL:?}"
 SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
@@ -36,7 +36,8 @@ if [ ! -f "$ZLIB_PREFIX/lib/libz.a" ] || [ ! -f "$ZLIB_PREFIX/include/zlib.h" ];
     exit 1
 fi
 for tool in clang llvm-ar llvm-nm llvm-ranlib gmake python3.13 wasm32posix-cc \
-    wasm32posix-ar wasm-opt; do
+    wasm32posix-c++ wasm32posix-ar wasm32posix-ranlib wasm32posix-nm \
+    wasm32posix-strip wasm32posix-pkg-config wasm-opt; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "ERROR: required Python build tool is unavailable: $tool" >&2
         exit 1
@@ -115,10 +116,6 @@ PREFIX_MAPS="$PREFIX_MAPS -fmacro-prefix-map=$SOURCE_DIR=$STABLE_SOURCE"
 PREFIX_MAPS="$PREFIX_MAPS -ffile-prefix-map=$WORK_DIR=/usr/src/kandelo-build/cpython"
 PREFIX_MAPS="$PREFIX_MAPS -fdebug-prefix-map=$WORK_DIR=/usr/src/kandelo-build/cpython"
 PREFIX_MAPS="$PREFIX_MAPS -fmacro-prefix-map=$WORK_DIR=/usr/src/kandelo-build/cpython"
-PREFIX_MAPS="$PREFIX_MAPS -ffile-prefix-map=$REPO_ROOT=/usr/src/kandelo"
-PREFIX_MAPS="$PREFIX_MAPS -fdebug-prefix-map=$REPO_ROOT=/usr/src/kandelo"
-PREFIX_MAPS="$PREFIX_MAPS -fmacro-prefix-map=$REPO_ROOT=/usr/src/kandelo"
-
 echo "==> Configuring CPython $PYTHON_VERSION for wasm32-posix"
 mkdir -p "$CROSS_BUILD_DIR"
 (
@@ -191,7 +188,9 @@ OPTIMIZED_PYTHON="$WORK_DIR/python.optimized.wasm"
 FINAL_PYTHON="$WORK_DIR/python.wasm"
 wasm-opt -O2 "$RAW_PYTHON" -o "$OPTIMIZED_PYTHON"
 # Fork instrumentation must remain the final Wasm transform.
-"$REPO_ROOT/scripts/run-wasm-fork-instrument.sh" \
+# WHY: use the sealed runner-owned tool directly. The closed recipe must not
+# regain broad Kandelo checkout authority merely to reach a wrapper script.
+"$FORK_INSTRUMENT" \
     "$OPTIMIZED_PYTHON" -o "$FINAL_PYTHON"
 chmod 0755 "$FINAL_PYTHON"
 

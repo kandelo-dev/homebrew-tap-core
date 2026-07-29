@@ -17,6 +17,7 @@ EXPECTED_RECIPE_FILES = [
     "config.site-wasm32-posix",
 ]
 FORBIDDEN_AUTHORITY = (
+    "HOMEBREW_KANDELO_ROOT",
     "KANDELO_REGISTRY_BRIDGE",
     "kandelo_build_package",
     "packages/registry",
@@ -24,6 +25,7 @@ FORBIDDEN_AUTHORITY = (
     "install-local-binary",
     "WASM_POSIX_BINARY_CACHE_ROOT",
     "WASM_POSIX_XTASK_BIN",
+    "run-wasm-fork-instrument",
     "/nix/store",
 )
 
@@ -132,9 +134,9 @@ def assert_recipe_contract() -> None:
     require_all(
         entrypoint,
         (
-            'REPO_ROOT="${HOMEBREW_KANDELO_ROOT:?}"',
             'SOURCE_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"',
             'SYSROOT_SOURCE="${WASM_POSIX_SYSROOT:?}"',
+            'FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"',
             'ZLIB_PREFIX="${WASM_POSIX_DEP_ZLIB_DIR:?}"',
             'GUEST_PREFIX="${WASM_POSIX_DEP_GUEST_PREFIX:?}"',
             '[ "$TARGET_ARCH" != "wasm32" ]',
@@ -147,7 +149,7 @@ def assert_recipe_contract() -> None:
             'CONFIG_SITE="$RECIPE_DIR/config.site-wasm32-posix"',
             "--with-build-python=\"$HOST_PYTHON\"",
             "CONFIGURE_LDFLAGS_NODIST=",
-            '"$REPO_ROOT/scripts/run-wasm-fork-instrument.sh"',
+            '"$FORK_INSTRUMENT"',
             'cp "$FINAL_PYTHON" "$OUT_DIR/python.wasm"',
             'cp "$RUNTIME_ZIP" "$OUT_DIR/python-runtime.zip"',
         ),
@@ -162,7 +164,6 @@ def assert_recipe_contract() -> None:
         (
             "-ffile-prefix-map=$SOURCE_DIR=$STABLE_SOURCE",
             "-ffile-prefix-map=$WORK_DIR=/usr/src/kandelo-build/cpython",
-            "-ffile-prefix-map=$REPO_ROOT=/usr/src/kandelo",
             'timestamp = (2023, 11, 14, 22, 13, 20)',
             'sorted((item for item in root.rglob("*") if item.is_file())',
             "compression=zipfile.ZIP_STORED",
