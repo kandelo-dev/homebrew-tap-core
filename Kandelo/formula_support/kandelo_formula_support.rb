@@ -1637,8 +1637,17 @@ module KandeloFormulaSupport
     tap_root = Pathname(runtime.fetch("trusted_env").fetch("HOMEBREW_KANDELO_PRIMARY_TAP_ROOT"))
     begin
       tap_root = tap_root.realpath
+      tap_root_stat = tap_root.lstat
     rescue SystemCallError => e
       odie "selected primary tap root is unavailable: #{e.message}"
+    end
+    # WHY: the closed publisher seals the complete Homebrew overlay before it
+    # starts any Formula process. Requiring that physical view here prevents a
+    # writable checkout-shaped tree from satisfying the content-only recipe
+    # manifest after the launcher has established its immutable boundary.
+    unless tap_root_stat.directory? && !tap_root_stat.symlink? &&
+           (tap_root_stat.mode & 0777) == 0555
+      odie "selected primary tap root must be one sealed mode-0555 real directory"
     end
     recipe_root = tap_root/"Kandelo"/"recipes"/name.to_s
     current = tap_root
@@ -1651,8 +1660,9 @@ module KandeloFormulaSupport
         odie "Formula recipe directory is unavailable at #{candidate}: #{e.message}"
       end
       unless stat.directory? && !stat.symlink? && resolved == candidate &&
-             candidate.parent == current && (stat.mode & 0777) == 0755
-        odie "Formula recipe directory must be one canonical real child of #{current}: #{candidate}"
+             candidate.parent == current && (stat.mode & 0777) == 0555
+        odie "Formula recipe directory must be one canonical sealed mode-0555 " \
+             "real child of #{current}: #{candidate}"
       end
       current = candidate
     end
@@ -1663,7 +1673,7 @@ module KandeloFormulaSupport
     manifest_path = recipe_root/"recipe.json"
     manifest_bytes = kandelo_tap_recipe_read_file(
       manifest_path, KANDELO_TAP_RECIPE_MANIFEST_MAX_BYTES, "Formula recipe manifest",
-      expected_mode: 0644
+      expected_mode: 0444
     )
     unless Digest::SHA256.hexdigest(manifest_bytes) == recipe.fetch("manifest_sha256")
       odie "Formula recipe manifest differs from the publisher attestation"
@@ -1750,8 +1760,8 @@ module KandeloFormulaSupport
         end
         odie "Formula recipe tree must not contain symlinks: #{entry}" if stat.symlink?
         if stat.directory?
-          unless (stat.mode & 0777) == 0755
-            odie "Formula recipe directory must have mode 0755: #{entry}"
+          unless (stat.mode & 0777) == 0555
+            odie "Formula recipe directory must have sealed mode 0555: #{entry}"
           end
           actual_directories[relative_string] = true
           visit.call(entry, relative)
@@ -1769,10 +1779,14 @@ module KandeloFormulaSupport
       odie "Formula recipe tree differs from its closed manifest"
     end
     expected_files.each do |relative, record|
+      # The manifest retains the semantic Git mode, while the closed launcher
+      # removes every write bit from its physical projection. Preserve the
+      # executable/data distinction without accepting an unsealed source mode.
+      sealed_mode = record.fetch("mode") == "0755" ? 0555 : 0444
       bytes = kandelo_tap_recipe_read_file(
         actual_files.fetch(relative), KANDELO_TAP_RECIPE_FILE_MAX_BYTES,
         "Formula recipe file", allow_empty: true,
-        expected_mode: Integer(record.fetch("mode"), 8)
+        expected_mode: sealed_mode
       )
       unless bytes.bytesize == record.fetch("bytes") &&
              Digest::SHA256.hexdigest(bytes) == record.fetch("sha256")

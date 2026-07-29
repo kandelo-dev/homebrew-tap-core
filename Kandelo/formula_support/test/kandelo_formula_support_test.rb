@@ -625,6 +625,37 @@ class KandeloFormulaSupportTest < Minitest::Test
     ENV.replace(original) if original
   end
 
+  def set_tap_recipe_fixture_seal!(tap_root, sealed:)
+    directories = []
+    tap_root.find do |entry|
+      stat = entry.lstat
+      next if stat.symlink?
+
+      if stat.directory?
+        directories << entry
+      elsif stat.file?
+        executable = (stat.mode & 0111).positive?
+        entry.chmod(
+          if sealed
+            executable ? 0555 : 0444
+          else
+            executable ? 0755 : 0644
+          end,
+        )
+      end
+    end
+    directory_mode = sealed ? 0555 : 0755
+    directories.reverse_each { |directory| directory.chmod(directory_mode) }
+  end
+
+  def mutate_sealed_tap_recipe_fixture!(fixture)
+    tap_root = fixture.fetch(:tap_root)
+    set_tap_recipe_fixture_seal!(tap_root, sealed: false)
+    yield
+  ensure
+    set_tap_recipe_fixture_seal!(tap_root, sealed: true) if tap_root&.exist?
+  end
+
   def with_tap_recipe_build_fixture(
     script_env: nil, formula_name: "hello", resource_records: []
   )
@@ -660,13 +691,14 @@ class KandeloFormulaSupportTest < Minitest::Test
       entrypoint = recipe_root/"build.sh"
       patch = recipe_root/"patches/config.patch"
       entrypoint.binwrite("#!/usr/bin/env bash\nset -euo pipefail\n")
+      entrypoint.chmod(0755)
       patch.binwrite("--- a/configure\n+++ b/configure\n")
       records = [entrypoint, patch].map do |path|
         relative = path.relative_path_from(recipe_root).to_s
         contents = path.binread
         {
           "bytes"  => contents.bytesize,
-          "mode"   => "0644",
+          "mode"   => (path.stat.mode & 0111).positive? ? "0755" : "0644",
           "path"   => relative,
           "sha256" => Digest::SHA256.hexdigest(contents),
         }
@@ -850,6 +882,10 @@ class KandeloFormulaSupportTest < Minitest::Test
         true
       end
 
+      # Match the launcher boundary exactly: every overlay directory is 0555,
+      # executable files are 0555, and data files are 0444 before Formula code
+      # receives the protected primary-tap path.
+      set_tap_recipe_fixture_seal!(tap_root, sealed: true)
       begin
         yield({
           activation_calls:,
@@ -876,6 +912,7 @@ class KandeloFormulaSupportTest < Minitest::Test
           tap_root:,
         })
       ensure
+        set_tap_recipe_fixture_seal!(tap_root, sealed: false) if tap_root.exist?
         if sealed_root.exist?
           sealed_root.find do |entry|
             entry.chmod(0755) unless entry.symlink?
@@ -1143,6 +1180,55 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
+  def test_tap_recipe_helper_accepts_only_the_exact_launcher_sealed_input_modes
+    with_tap_recipe_build_fixture do |fixture|
+      runtime, recipe = fixture.fetch(:harness).kandelo_tap_recipe_runtime!
+      recipe_root, entrypoint =
+        fixture.fetch(:harness).kandelo_verify_tap_recipe_tree!(runtime, recipe)
+
+      assert_equal fixture.fetch(:recipe_root), recipe_root
+      assert_equal fixture.fetch(:entrypoint), entrypoint
+      [
+        fixture.fetch(:tap_root),
+        fixture.fetch(:tap_root)/"Kandelo",
+        fixture.fetch(:tap_root)/"Kandelo/recipes",
+        fixture.fetch(:recipe_root),
+        fixture.fetch(:recipe_root)/"patches",
+      ].each do |directory|
+        assert_equal 0555, directory.lstat.mode & 0777, directory.to_s
+      end
+      assert_equal 0444, fixture.fetch(:manifest_path).lstat.mode & 0777
+      assert_equal 0555, fixture.fetch(:entrypoint).lstat.mode & 0777
+      assert_equal 0444, fixture.fetch(:patch).lstat.mode & 0777
+    end
+
+    mode_mutations = {
+      "tap root is writable"          => [:tap_root, nil, 0755],
+      "Kandelo directory is writable" => [:tap_root, "Kandelo", 0755],
+      "recipes directory is writable" => [:tap_root, "Kandelo/recipes", 0755],
+      "recipe directory is writable"  => [:recipe_root, nil, 0755],
+      "nested directory is writable"  => [:recipe_root, "patches", 0755],
+      "directory is over-restricted"  => [:recipe_root, "patches", 0500],
+      "manifest is writable"          => [:manifest_path, nil, 0644],
+      "manifest is over-restricted"   => [:manifest_path, nil, 0400],
+      "entrypoint retains source mode" => [:entrypoint, nil, 0755],
+      "entrypoint loses executable meaning" => [:entrypoint, nil, 0444],
+      "data input retains source mode" => [:patch, nil, 0644],
+      "data input gains executable meaning" => [:patch, nil, 0555],
+    }
+    mode_mutations.each do |label, (fixture_key, relative, mode)|
+      with_tap_recipe_build_fixture do |fixture|
+        path = fixture.fetch(fixture_key)
+        path = path/relative unless relative.nil?
+        path.chmod(mode)
+
+        error = assert_tap_recipe_rejected_before_activation(fixture)
+
+        assert_match(/mode|sealed/i, error.message, label)
+      end
+    end
+  end
+
   def test_tap_recipe_helper_stages_attested_resources_at_fixed_guest_paths
     resource_record = {
       "name"          => "chocolate-doom",
@@ -1226,7 +1312,7 @@ class KandeloFormulaSupportTest < Minitest::Test
     }
     mutations.each do |label, mutate|
       with_tap_recipe_build_fixture do |fixture|
-        mutate.call(fixture)
+        mutate_sealed_tap_recipe_fixture!(fixture) { mutate.call(fixture) }
         error = assert_tap_recipe_rejected_before_activation(fixture)
         assert_match(/manifest|recipe|link|unavailable|closure|tree|file/i, error.message, label)
       end
@@ -1235,11 +1321,13 @@ class KandeloFormulaSupportTest < Minitest::Test
 
   def test_tap_recipe_helper_rejects_traversal_even_in_an_attested_manifest
     with_tap_recipe_build_fixture do |fixture|
-      manifest = JSON.parse(fixture.fetch(:manifest_path).binread)
-      manifest.fetch("files").first["path"] = "../build.sh"
-      fixture.fetch(:manifest_path).binwrite(JSON.generate(manifest))
-      fixture.fetch(:recipe)["manifest_sha256"] =
-        Digest::SHA256.file(fixture.fetch(:manifest_path)).hexdigest
+      mutate_sealed_tap_recipe_fixture!(fixture) do
+        manifest = JSON.parse(fixture.fetch(:manifest_path).binread)
+        manifest.fetch("files").first["path"] = "../build.sh"
+        fixture.fetch(:manifest_path).binwrite(JSON.generate(manifest))
+        fixture.fetch(:recipe)["manifest_sha256"] =
+          Digest::SHA256.file(fixture.fetch(:manifest_path)).hexdigest
+      end
 
       error = assert_tap_recipe_rejected_before_activation(fixture)
 
@@ -1253,12 +1341,14 @@ class KandeloFormulaSupportTest < Minitest::Test
         "kandelo-dev/tap-core/foo-bar",
         "kandelo-dev/tap-core/foo_bar",
       ]
-      manifest = JSON.parse(fixture.fetch(:manifest_path).binread)
-      manifest["dependencies"] = dependencies
-      fixture.fetch(:manifest_path).binwrite("#{JSON.pretty_generate(manifest)}\n")
-      fixture.fetch(:recipe)["dependencies"] = dependencies
-      fixture.fetch(:recipe)["manifest_sha256"] =
-        Digest::SHA256.file(fixture.fetch(:manifest_path)).hexdigest
+      mutate_sealed_tap_recipe_fixture!(fixture) do
+        manifest = JSON.parse(fixture.fetch(:manifest_path).binread)
+        manifest["dependencies"] = dependencies
+        fixture.fetch(:manifest_path).binwrite("#{JSON.pretty_generate(manifest)}\n")
+        fixture.fetch(:recipe)["dependencies"] = dependencies
+        fixture.fetch(:recipe)["manifest_sha256"] =
+          Digest::SHA256.file(fixture.fetch(:manifest_path)).hexdigest
+      end
 
       error = assert_tap_recipe_rejected_before_activation(fixture)
 
@@ -1279,7 +1369,9 @@ class KandeloFormulaSupportTest < Minitest::Test
   def test_tap_recipe_helper_revalidates_inputs_after_the_script_returns
     with_tap_recipe_build_fixture do |fixture|
       fixture.fetch(:system_hooks) << lambda do
-        fixture.fetch(:patch).binwrite("changed by recipe\n")
+        mutate_sealed_tap_recipe_fixture!(fixture) do
+          fixture.fetch(:patch).binwrite("changed by recipe\n")
+        end
       end
 
       error = assert_raises(RuntimeError) { run_tap_recipe(fixture) }
