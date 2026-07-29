@@ -56,7 +56,6 @@ def assert_formula_contract() -> None:
             'sha256 "40f868bcbdeb8149a3149580bb9bfd407b3321cd48f0be631af955ac92c0e041"',
             'kandelo_require_arch!("wasm32")',
             "kandelo_build_tap_recipe",
-            'depends_on "llvm" => :build',
             'depends_on "make" => :build',
             'depends_on "python@3.13" => :build',
             'depends_on "unzip" => :build',
@@ -72,6 +71,7 @@ def assert_formula_contract() -> None:
         FORMULA,
     )
     assert 'kandelo_require_arch!("wasm32", "wasm64")' not in source
+    assert 'depends_on "llvm"' not in source
 
     # The test must exercise the installed interpreter and standard library,
     # including the declared zlib keg, through both first-class hosts.
@@ -137,14 +137,16 @@ def assert_recipe_contract() -> None:
             'SOURCE_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"',
             'SYSROOT_SOURCE="${WASM_POSIX_SYSROOT:?}"',
             'FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"',
+            'LLVM_BIN="${WASM_POSIX_LLVM_DIR:?}"',
             'ZLIB_PREFIX="${WASM_POSIX_DEP_ZLIB_DIR:?}"',
             'GUEST_PREFIX="${WASM_POSIX_DEP_GUEST_PREFIX:?}"',
             '[ "$TARGET_ARCH" != "wasm32" ]',
             '[ "$PYTHON_VERSION" != "3.13.3" ]',
             'SOURCE_SHA256" != "40f868bcbdeb8149a3149580bb9bfd407b3321cd48f0be631af955ac92c0e041"',
-            'CC=clang',
-            'AR=llvm-ar',
-            'RANLIB=llvm-ranlib',
+            'CC="$LLVM_BIN/clang"',
+            'AR="$LLVM_BIN/llvm-ar"',
+            'NM="$LLVM_BIN/llvm-nm"',
+            'RANLIB="$LLVM_BIN/llvm-ranlib"',
             'python3.13 - "$SOURCE_DIR/Lib"',
             'CONFIG_SITE="$RECIPE_DIR/config.site-wasm32-posix"',
             "--with-build-python=\"$HOST_PYTHON\"",

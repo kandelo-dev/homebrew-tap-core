@@ -7,6 +7,7 @@ WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
 SYSROOT_SOURCE="${WASM_POSIX_SYSROOT:?}"
 FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"
+LLVM_BIN="${WASM_POSIX_LLVM_DIR:?}"
 PYTHON_VERSION="${WASM_POSIX_DEP_VERSION:?}"
 SOURCE_URL="${WASM_POSIX_DEP_SOURCE_URL:?}"
 SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
@@ -35,9 +36,15 @@ if [ ! -f "$ZLIB_PREFIX/lib/libz.a" ] || [ ! -f "$ZLIB_PREFIX/include/zlib.h" ];
     echo "ERROR: Python requires the selected zlib keg" >&2
     exit 1
 fi
-for tool in clang llvm-ar llvm-nm llvm-ranlib gmake python3.13 wasm32posix-cc \
-    wasm32posix-c++ wasm32posix-ar wasm32posix-ranlib wasm32posix-nm \
-    wasm32posix-strip wasm32posix-pkg-config wasm-opt; do
+for tool in clang llvm-ar llvm-nm llvm-ranlib; do
+    [ -x "$LLVM_BIN/$tool" ] || {
+        echo "ERROR: sealed LLVM tool is unavailable: $LLVM_BIN/$tool" >&2
+        exit 1
+    }
+done
+for tool in gmake python3.13 wasm32posix-cc wasm32posix-c++ wasm32posix-ar \
+    wasm32posix-ranlib wasm32posix-nm wasm32posix-strip \
+    wasm32posix-pkg-config wasm-opt; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "ERROR: required Python build tool is unavailable: $tool" >&2
         exit 1
@@ -78,11 +85,14 @@ fi
 mkdir -p "$HOST_BUILD_DIR"
 (
     cd "$HOST_BUILD_DIR"
+    # WHY: use the publisher's attested LLVM projection. A Homebrew LLVM keg
+    # carries a link to mutable prefix configuration and must not widen the
+    # closed recipe merely to build CPython's native generators.
     CONFIG_SITE=/dev/null \
-    CC=clang \
-    AR=llvm-ar \
-    NM=llvm-nm \
-    RANLIB=llvm-ranlib \
+    CC="$LLVM_BIN/clang" \
+    AR="$LLVM_BIN/llvm-ar" \
+    NM="$LLVM_BIN/llvm-nm" \
+    RANLIB="$LLVM_BIN/llvm-ranlib" \
     py_cv_module__ctypes=n/a \
     py_cv_module__ctypes_test=n/a \
     py_cv_module__bz2=n/a \

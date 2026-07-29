@@ -25,7 +25,6 @@ class Python < Formula
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
-  depends_on "llvm" => :build
   depends_on "make" => :build
   depends_on "python@3.13" => :build
   depends_on "unzip" => :build
@@ -37,7 +36,7 @@ class Python < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "85112a310652c22722f5b01fae10c442e51c10ed9a932ca170bb7e94a1d7355b",
+      manifest_sha256: "7f6bc0a56f4577ae11e82b07e83a04a0b07883a9892f45c5903a0ea97acf78c8",
       script_env:      {
         "WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX,
       },
