@@ -123,7 +123,6 @@ echo "==> Configuring CPython $PYTHON_VERSION for wasm32-posix"
 mkdir -p "$CROSS_BUILD_DIR"
 (
     cd "$CROSS_BUILD_DIR"
-    WASM_POSIX_SDK_CONFIG_SITE="$REPO_ROOT/sdk/config.site" \
     CONFIG_SITE="$RECIPE_DIR/config.site-wasm32-posix" \
     PKG_CONFIG_PATH="$ZLIB_PREFIX/lib/pkgconfig" \
     CC=wasm32posix-cc \

@@ -128,6 +128,7 @@ def assert_recipe_contract() -> None:
     entrypoint_path = RECIPE_ROOT / manifest["entrypoint"]
     entrypoint = entrypoint_path.read_text()
     reject_all(entrypoint, FORBIDDEN_AUTHORITY, entrypoint_path)
+    assert "WASM_POSIX_SDK_CONFIG_SITE=" not in entrypoint
     require_all(
         entrypoint,
         (

@@ -3,8 +3,9 @@
 #
 # Function/header/type availability belongs to sdk/config.site. This file owns
 # only CPython probes that cannot be answered by a target link or run during a
-# cross build. The build script supplies WASM_POSIX_SDK_CONFIG_SITE explicitly
-# so a sealed Formula cannot inherit an ambient host CONFIG_SITE.
+# cross build. The privileged Kandelo runner derives
+# WASM_POSIX_SDK_CONFIG_SITE from the sealed platform projection, so Formula
+# code cannot redirect this shared source of target facts.
 
 : "${WASM_POSIX_SDK_CONFIG_SITE:?WASM_POSIX_SDK_CONFIG_SITE must name sdk/config.site}"
 # shellcheck source=/dev/null

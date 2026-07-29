@@ -6,16 +6,16 @@
   "entrypoint": "build.sh",
   "files": [
     {
-      "bytes": 10086,
+      "bytes": 10024,
       "mode": "0755",
       "path": "build.sh",
-      "sha256": "0fa5137c8f158aba2f1bb0820f4fbe761996b28de238997d35192c3fa1dfe977"
+      "sha256": "f0c5f90844a73a06bfb6321032d7e638fb5ffcf6145262d02ce72b977b9be684"
     },
     {
-      "bytes": 2153,
+      "bytes": 2197,
       "mode": "0644",
       "path": "config.site-wasm32-posix",
-      "sha256": "e32b2bbd6eced139ea372cb2bdfda2bfb60059801fc0f01484315cb738386ee6"
+      "sha256": "7b0af8a6fd257aff9e1e589e630f00b645f867a0f23cb76e57e6b50a8c226a7f"
     }
   ]
 }
