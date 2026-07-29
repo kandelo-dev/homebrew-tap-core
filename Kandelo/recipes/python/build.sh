@@ -80,6 +80,17 @@ fi
 # instead of treating Kandelo's unwrapped target LLVM as a native compiler.
 HOST_PYTHON="$(command -v python3.13)"
 HOST_PYTHON="$(/usr/bin/realpath -- "$HOST_PYTHON")"
+# WHY: the runner projects conventional loader and host-tool paths from `/usr`
+# into every recipe. Read-only mode alone would therefore let an undeclared
+# ambient Python satisfy this build. Require the canonical executable to remain
+# inside the declared Homebrew keg whose complete native closure was sealed.
+case "$HOST_PYTHON" in
+    */Cellar/python@3.13/*/bin/python3.13) ;;
+    *)
+        echo "ERROR: CPython build Python left its declared Homebrew keg" >&2
+        exit 1
+        ;;
+esac
 if [ ! -f "$HOST_PYTHON" ] || [ ! -x "$HOST_PYTHON" ] ||
    [ -w "$HOST_PYTHON" ]; then
     echo "ERROR: CPython build Python is not one sealed executable" >&2

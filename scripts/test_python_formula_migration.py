@@ -145,6 +145,8 @@ def assert_recipe_contract() -> None:
             'chmod u+w "$PRIVATE_SYSROOT/lib"',
             'HOST_PYTHON="$(command -v python3.13)"',
             'HOST_PYTHON="$(/usr/bin/realpath -- "$HOST_PYTHON")"',
+            "*/Cellar/python@3.13/*/bin/python3.13)",
+            "CPython build Python left its declared Homebrew keg",
             'HOST_PYTHON_MOUNT_OPTIONS="$(',
             'if [ "$HOST_PYTHON_VERSION" != "$PYTHON_MAJOR_MINOR" ]',
             '"$HOST_PYTHON" - "$SOURCE_DIR/Lib"',
