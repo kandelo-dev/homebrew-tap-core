@@ -43,8 +43,9 @@ class Wordpress < Formula
     kandelo_require_arch!("wasm32")
 
     # WHY: this Formula owns only immutable upstream application files.
-    # Database state, wp-config.php, plugins, the web server, and service
-    # supervision are deployment policy and belong in the consuming VFS.
+    # Database state, wp-config.php, deployment-added plugins and their
+    # activation, the web server, and service supervision are deployment
+    # policy and belong in the consuming VFS.
     source_entries = buildpath.children
     actual_entries = source_entries.map { |path| path.basename.to_s }.sort
     odie "WordPress source root changed" if actual_entries != EXPECTED_ROOT_ENTRIES.sort
@@ -60,8 +61,8 @@ class Wordpress < Formula
       "#{relative}\0#{path.size}\0#{Digest::SHA256.file(path).hexdigest}\n"
     end.join
 
-    # The digest binds every installed path and byte, rather than letting a
-    # small smoke fixture hide an incomplete application-data bottle.
+    # The digest binds every installed regular-file path and byte, rather than
+    # letting a small smoke fixture hide an incomplete application-data bottle.
     assert_equal EXPECTED_FILE_COUNT, files.length
     assert_equal EXPECTED_LOGICAL_BYTES, files.sum(&:size)
     assert_equal EXPECTED_TREE_SHA256, Digest::SHA256.hexdigest(manifest)

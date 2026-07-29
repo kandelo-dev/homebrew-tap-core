@@ -60,8 +60,9 @@ def main() -> None:
     dependencies = re.findall(r'^\s*depends_on "([^"]+)"', source, re.MULTILINE)
     assert dependencies == ["kandelo-dev/tap-core/php"], dependencies
 
-    # A package bottle must contain pristine core, not generated per-machine
-    # state or either database choice used by Kandelo's current demos.
+    # A package bottle must contain the pristine upstream application tree, not
+    # generated per-machine state or either database choice used by Kandelo's
+    # current demos.
     require_all(
         source,
         (
