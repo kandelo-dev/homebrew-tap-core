@@ -1,9 +1,10 @@
 require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/erlang_wasm32_smoke").to_s
 
 class Erlang < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   ERTS_VERSION = "16.1.2".freeze
   GUEST_PREFIX = "/home/linuxbrew/.linuxbrew".freeze
@@ -18,11 +19,20 @@ class Erlang < Formula
   license "Apache-2.0"
   revision 1
 
-  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 2
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2"
+  end
+
   depends_on "erlang@28" => :build
+
   depends_on "gnu-tar" => :build
-  depends_on "python@3.13" => :build
+
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
+  depends_on "make" => :build
+  depends_on "python@3.13" => :build
   depends_on "zstd" => :build
   depends_on "kandelo-dev/tap-core/dash" => :test
 
@@ -32,17 +42,10 @@ class Erlang < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-
-    # OTP's package bridge runs native bootstrap Erlang and Python, and GNU tar
-    # invokes zstd when it seals the deterministic runtime closure. Put only
-    # those declared native tools on PATH; target Wasm dependencies remain
-    # excluded by the shared Formula support.
-    kandelo_prepend_path! formula_opt_bin("erlang@28")
-    kandelo_prepend_path! formula_opt_libexec("python@3.13")/"bin"
-    kandelo_prepend_path! formula_opt_bin("gnu-tar")
-    kandelo_prepend_path! formula_opt_bin("zstd")
-
-    out_dir = kandelo_build_package(script_env: {})
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "7b544080a69ee401e78e0af654607178226946508ea8a31ec6c105db982e5447",
+      script_env:      {},
+    )
     kandelo_validate_wasm_artifact(out_dir/"erlang.wasm", fork: :required)
     libexec.install out_dir/"erlang.wasm"
 
@@ -57,9 +60,19 @@ class Erlang < Formula
     [beam, erlexec, child_setup, runtime_stage/"bin/start.boot"].each do |required|
       odie "Erlang runtime archive is incomplete: #{required}" unless required.file?
     end
-    kandelo_validate_wasm_artifact(beam, fork: :required)
-    kandelo_validate_wasm_artifact(erlexec, fork: :auto)
-    kandelo_validate_wasm_artifact(child_setup, fork: :auto)
+    runtime_wasm = runtime_stage.glob("**/*").select do |candidate|
+      candidate.file? && File.open(candidate, "rb") { |file| file.read(4) == "\0asm".b }
+    end
+    odie "Erlang BEAM emulator is not a Wasm runtime member" unless runtime_wasm.include?(beam)
+    # WHY: the recipe may stage more ERTS helpers as OTP evolves. Validate the
+    # complete executable Wasm surface here, where the authoritative Kandelo
+    # ABI checkout is available, instead of silently trusting a three-file list.
+    runtime_wasm.each do |runtime_member|
+      kandelo_validate_wasm_artifact(
+        runtime_member,
+        fork: (runtime_member == beam) ? :required : :auto,
+      )
+    end
 
     otp_root = lib/"erlang"
     otp_root.mkpath
@@ -170,15 +183,23 @@ class Erlang < Formula
     assert_equal child_setup, runtime_programs["#{GUEST_ERTS_BIN}/erl_child_setup"]
     assert_equal erlexec, runtime_programs["#{GUEST_ERTS_BIN}/erlexec"]
     refute_includes (bin/"erl").read, "@@HOMEBREW_PREFIX@@"
+    compiler_ebins = otp_root.glob("lib/compiler-*/ebin")
+    assert_equal 1, compiler_ebins.length
+    guest_compiler_ebin =
+      "#{GUEST_OTP_ROOT}/#{compiler_ebins.first.relative_path_from(otp_root)}"
 
     env = {
       "HOME" => "/tmp",
       "PATH" => "#{GUEST_PREFIX}/bin:/usr/bin:/bin",
     }
-    base_args = [
-      "+S", "1:1", "+A", "0", "+SDio", "1", "+SDcpu", "1:1",
-      "-mode", "embedded", "-noshell", "-noinput"
-    ]
+    scheduler_args = ["+S", "1:1", "+A", "0", "+SDio", "1", "+SDcpu", "1:1"]
+    base_args = [*scheduler_args, "-mode", "embedded", "-noshell", "-noinput"]
+    # WHY: embedded mode forbids demand-loading modules that are not in the
+    # boot file, even after adding compiler/ebin. The semantic matrix uses the
+    # normal interactive code loader so compile:forms and compile:file prove
+    # the installed compiler closure rather than failing at an artificial mode
+    # boundary; -noshell/-noinput still keep the boot noninteractive.
+    matrix_args = [*scheduler_args, "-mode", "interactive", "-noshell", "-noinput"]
     dash = formula_opt_bin("kandelo-dev/tap-core/dash")/"dash"
     guest_keg_prefix = "#{GUEST_PREFIX}/Cellar/erlang/#{pkg_version}"
     [
@@ -192,9 +213,14 @@ class Erlang < Formula
       case_files, case_programs = runtime_maps.call(guest_otp_root)
       case_programs[guest_wrapper] = bin/"erl"
       case_files["/usr/lib/erlang/DECOY"] = otp_root/"releases/28/OTP_VERSION" if label == "usr-bin-alias"
-      eval_arg = "io:format(\"erlang-#{label}-ok:~p~n\", [lists:sum([1,2,3])]), halt()."
-      node_command = Shellwords.join(["exec", command, *base_args, "-eval", eval_arg])
-      assert_equal "erlang-#{label}-ok:6\n", kandelo_run_wasm(
+      eval_arg = if label == "global"
+        KandeloErlangWasm32Smoke.program(compiler_ebin: guest_compiler_ebin)
+      else
+        "io:format(\"erlang-#{label}-ok:~p~n\", [lists:sum([1,2,3])]), halt()."
+      end
+      runtime_args = (label == "global") ? matrix_args : base_args
+      node_command = Shellwords.join(["exec", command, *runtime_args, "-eval", eval_arg])
+      node_output = kandelo_run_wasm(
         dash,
         ["-c", node_command],
         argv0:                     "/bin/sh",
@@ -203,15 +229,20 @@ class Erlang < Formula
         expected_fork_descendants: 1,
         guest_files:               case_files,
       )
+      if label == "global"
+        assert KandeloErlangWasm32Smoke.validate_output!(node_output)
+      else
+        assert_equal "erlang-#{label}-ok:6\n", node_output
+      end
     end
 
     runtime_programs["#{GUEST_PREFIX}/bin/erl"] = bin/"erl"
     browser_args = [
-      *base_args,
-      "-eval", 'io:format("erlang-browser-ok:~p~n", [[3,2,1]]), halt().'
+      *matrix_args,
+      "-eval", KandeloErlangWasm32Smoke.program(compiler_ebin: guest_compiler_ebin)
     ]
     browser_command = Shellwords.join(["exec", "erl", *browser_args])
-    assert_equal "erlang-browser-ok:[3,2,1]\n", kandelo_run_browser_wasm(
+    browser_output = kandelo_run_browser_wasm(
       dash,
       ["-c", browser_command],
       argv0:              "sh",
@@ -221,12 +252,6 @@ class Erlang < Formula
       guest_files:        runtime_files,
       timeout_ms:         180_000,
     )
+    assert KandeloErlangWasm32Smoke.validate_output!(browser_output)
   end
-
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2"
-  end
-
 end
