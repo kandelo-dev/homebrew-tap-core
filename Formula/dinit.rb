@@ -99,6 +99,20 @@ class Dinit < Formula
       system "make", "-j#{ENV.make_jobs}", "-C", "doc/manpages",
         "dinit.8", "dinitctl.8", "dinitcheck.8", "dinit-service.5"
 
+      # WHY: reject unresolved build inputs before fork instrumentation. The
+      # instrumenter adds imports from Kandelo's generated fork contract; a
+      # Formula-local list of those names would duplicate the ABI and drift.
+      PROGRAMS.each do |program|
+        artifact = buildpath/"src"/program
+        imports = Utils.safe_popen_read("wasm-objdump", "-x", artifact)
+                       .scan(/<- env[.]([^\s]+)/).flatten
+        unexpected = imports - %w[__channel_base memory setjmp longjmp]
+        next if unexpected.empty?
+
+        odie "#{program} contains unresolved non-ABI env imports: " \
+             "#{unexpected.join(", ")}"
+      end
+
       # Only the supervisor launches services with fork()+exec(). The client
       # and static checker stay fork-free and must not carry continuation
       # state that they can never use.
@@ -106,16 +120,14 @@ class Dinit < Formula
       PROGRAMS.each do |program|
         artifact = buildpath/"src"/program
         fork_policy = (program == "dinit") ? :required : :forbidden
+        # WHY: the shared validator reads Kandelo's generated fork contract.
+        # A Formula-local import allowlist can drift from that ABI contract and
+        # reject a correctly instrumented artifact.
         kandelo_validate_wasm_artifact(
           artifact,
           fork:            fork_policy,
           forbidden_paths: [libcxx.to_s],
         )
-
-        imports = Utils.safe_popen_read("wasm-objdump", "-x", artifact)
-                       .scan(/<- env[.]([^\s]+)/).flatten
-        unexpected = imports - %w[__channel_base memory setjmp longjmp]
-        odie "#{program} contains unresolved non-ABI env imports: #{unexpected.join(", ")}" if unexpected.any?
       end
     end
 
