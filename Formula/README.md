@@ -101,8 +101,11 @@ the resulting Formula SHA-256 invalidates reuse for that Formula only.
 
 Formula tests must execute produced Wasm through Kandelo. A support-data
 Formula with no Wasm program, such as `homebrew-bootstrap`, must instead verify
-its complete installed archive contract in `test do`; the guest lifecycle gate
-remains responsible for proving the support data with real Kandelo processes.
+its complete installed archive contract in `test do` and declare exactly
+`KANDELO_BOTTLE_TEST_CONTRACT = "support-data".freeze`. That declaration
+prevents the bottle test from claiming Node or browser compatibility. The
+separate Node and Chromium guest lifecycle remains responsible for proving
+that real Ruby can execute the support data inside Kandelo.
 Formula `version` plus `revision` defines the Homebrew package version; a bottle
 `rebuild` distinguishes a new bottle for that same package version. A retry may
 keep that identity only when its package source, Formula and support closure,

@@ -4,6 +4,10 @@ class HomebrewBootstrap < Formula
   include KandeloFormulaSupport
 
   KANDELO_TAP_RECIPE = true
+  # WHY: this bottle contains the Homebrew Ruby tree, not a Wasm executable.
+  # Its Formula test proves the installed bytes; the separate Node and browser
+  # guest lifecycle proves that real Ruby can execute those bytes in Kandelo.
+  KANDELO_BOTTLE_TEST_CONTRACT = "support-data".freeze
 
   BOOTSTRAP_ARCHIVE = "homebrew-bootstrap.zip".freeze
   ENVIRONMENT_POLICY = "homebrew-brew.env".freeze
