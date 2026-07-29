@@ -19,6 +19,7 @@ unless defined?(Requirement)
 end
 
 require_relative "../kandelo_formula_support"
+require_relative "../erlang_wasm32_smoke"
 
 # Regression coverage for Formula runtime execution evidence.
 class KandeloFormulaSupportTest < Minitest::Test
@@ -3170,6 +3171,7 @@ class KandeloFormulaSupportTest < Minitest::Test
     # use each exact successor instead of attempting to replace existing bytes.
     {
       "bc"               => 3,
+      "erlang"           => 2,
       "fbdoom"           => 3,
       "lsof"             => 3,
       "modeset"          => 3,
@@ -4276,13 +4278,20 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
     assert_includes formula, "expected_fork_descendants: 1"
     assert_includes formula, "kandelo_run_browser_wasm("
-    assert_includes formula, "erlang-browser-ok"
+    assert_includes formula, "KandeloErlangWasm32Smoke.program"
+    assert_includes formula, "KandeloErlangWasm32Smoke.validate_output!"
+    assert_includes formula, "runtime_stage.glob(\"**/*\")"
 
     assert_equal 1, manifest.fetch("schema")
     assert_empty manifest.fetch("dependencies")
     assert_equal "build.sh", manifest.fetch("entrypoint")
     assert_equal(
-      ["build.sh", "config.site-wasm32-posix", "patches/patch-global-h.py"],
+      [
+        "build.sh",
+        "config.site-wasm32-posix",
+        "patches/patch-erts-o1.py",
+        "patches/patch-global-h.py",
+      ],
       manifest.fetch("files").map { |entry| entry.fetch("path") },
     )
     manifest.fetch("files").each do |entry|
@@ -4297,11 +4306,125 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes recipe, 'SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"'
     assert_includes recipe, 'HOST_OTP_REL="$(erl -boot start_clean'
     assert_includes recipe, "prepare_runtime_wasm"
+    assert_includes recipe, '"${WASM_POSIX_FORK_INSTRUMENT:?}"'
+    assert_includes recipe, 'patches/patch-erts-o1.py'
     assert_includes recipe, "erlang-otp.tar.zst"
     refute_match(/\b(?:curl|wget)\b/, recipe)
     refute_includes recipe, "build-deps resolve"
     refute_includes recipe, "install-local-binary"
     refute_includes recipe, "packages/registry"
+  end
+
+  def test_erlang_o1_patcher_installs_all_five_rules_atomically_and_is_idempotent
+    tap_root = Pathname(__dir__).join("../../..").cleanpath
+    patcher = tap_root/"Kandelo/recipes/erlang/patches/patch-erts-o1.py"
+
+    Dir.mktmpdir("erlang-o1-patcher") do |dir|
+      makefile = Pathname(dir)/"Makefile"
+      makefile.binwrite(
+        "generated header\n" \
+        "$(OBJDIR)/beam_emu.o: beam/emu/beam_emu.c\n" \
+        "\t$(V_CC) $(CFLAGS) -c $< -o $@\n",
+      )
+      makefile.chmod(0640)
+
+      _stdout, stderr, status = Open3.capture3("python3", patcher.to_s, makefile.to_s)
+      assert status.success?, stderr
+      installed = makefile.binread
+      %w[erl_unicode erl_bif_chksum erl_db_util erl_db_hash erl_db].each do |object_name|
+        assert_equal 1, installed.scan("$(OBJDIR)/#{object_name}.o:").length
+      end
+      assert_equal 1, installed.scan("BEGIN Kandelo wasm32 LLVM -O1").length
+      assert_equal 1, installed.scan("END Kandelo wasm32 LLVM -O1").length
+      assert_equal 0640, makefile.stat.mode & 0777
+
+      _stdout, stderr, status = Open3.capture3("python3", patcher.to_s, makefile.to_s)
+      assert status.success?, stderr
+      assert_equal installed, makefile.binread
+    end
+  end
+
+  def test_erlang_o1_patcher_rejects_partial_and_ambiguous_inputs_without_writing
+    tap_root = Pathname(__dir__).join("../../..").cleanpath
+    patcher = tap_root/"Kandelo/recipes/erlang/patches/patch-erts-o1.py"
+    fixtures = {
+      "partial marker" => <<~'MAKE',
+        # BEGIN Kandelo wasm32 LLVM -O1 translation-unit workarounds
+        $(OBJDIR)/erl_unicode.o: beam/erl_unicode.c
+        $(OBJDIR)/beam_emu.o: beam/emu/beam_emu.c
+      MAKE
+      "preexisting target" => <<~'MAKE',
+        $(OBJDIR)/erl_bif_chksum.o: beam/erl_bif_chksum.c
+        $(OBJDIR)/beam_emu.o: beam/emu/beam_emu.c
+      MAKE
+      "duplicate anchor" => <<~'MAKE',
+        $(OBJDIR)/beam_emu.o: beam/emu/beam_emu.c
+        $(OBJDIR)/beam_emu.o: beam/emu/beam_emu.c
+      MAKE
+    }
+
+    fixtures.each do |label, source|
+      Dir.mktmpdir("erlang-o1-negative") do |dir|
+        makefile = Pathname(dir)/"Makefile"
+        makefile.binwrite(source)
+        _stdout, _stderr, status = Open3.capture3("python3", patcher.to_s, makefile.to_s)
+        refute status.success?, label
+        assert_equal source, makefile.binread, label
+      end
+    end
+  end
+
+  def test_erlang_wasm32_smoke_program_covers_the_reviewed_semantic_surface
+    compiler_ebin = "/home/linuxbrew/.linuxbrew/opt/erlang/lib/erlang/lib/compiler-9.0.3/ebin"
+    program = KandeloErlangWasm32Smoke.program(compiler_ebin: compiler_ebin)
+
+    assert_equal 11, KandeloErlangWasm32Smoke::CASES.length
+    assert_includes program, %Q(code:add_pathz("#{compiler_ebin}"))
+    %w[
+      term_to_binary_roundtrip unicode_deep chksum_iolist ets_match
+      term_compare_sort phash2_deep copy_large_term format_p_deep
+      iolist_to_binary_deep compile_module compile_file
+    ].each do |case_name|
+      assert_equal 1, program.scan(%Q{Run("#{case_name}",}).length
+    end
+    %w[
+      erlang:md5( erlang:md5_update( erlang:crc32( erlang:adler32(
+      compile:forms( compile:file( file:write_file(
+    ].each { |surface| assert_includes program, surface }
+    assert_includes program, "matrix_done ~w"
+    assert_raises(ArgumentError) do
+      KandeloErlangWasm32Smoke.program(compiler_ebin: "/compiler/../unsealed")
+    end
+  end
+
+  def test_erlang_wasm32_smoke_parser_requires_every_unique_case_and_one_sentinel
+    cases = KandeloErlangWasm32Smoke::CASES
+    valid_lines = cases.map { |smoke_case| "ok #{smoke_case.fetch(:name)}" }
+    valid = (["runner noise"] + valid_lines + ["matrix_done #{cases.length}"]).join("\n") << "\n"
+    assert KandeloErlangWasm32Smoke.validate_output!(valid)
+
+    invalid_outputs = {
+      "failure" => valid.sub(
+        "ok chksum_iolist",
+        "FAIL chksum_iolist expected=oracle got=corruption",
+      ),
+      "missing case" => valid.sub("ok ets_match\n", ""),
+      "duplicate case" => valid.sub("ok ets_match\n", "ok ets_match\nok ets_match\n"),
+      "unexpected case" => valid.sub("matrix_done", "ok unreviewed_case\nmatrix_done"),
+      "missing sentinel" => valid.sub(/matrix_done .+\n/, ""),
+      "duplicate sentinel" => valid + "matrix_done #{cases.length}\n",
+      "wrong sentinel" => valid.sub("matrix_done #{cases.length}", "matrix_done 0"),
+      "malformed protocol" => valid.sub("ok ets_match", "ok ets match"),
+    }
+    invalid_outputs.each do |label, output|
+      error = assert_raises(KandeloErlangWasm32Smoke::SmokeFailure, label) do
+        KandeloErlangWasm32Smoke.validate_output!(output)
+      end
+      refute_empty error.message
+    end
+    assert_raises(ArgumentError) do
+      KandeloErlangWasm32Smoke.validate_output!("matrix_done 0\n", cases: [])
+    end
   end
 
   private
