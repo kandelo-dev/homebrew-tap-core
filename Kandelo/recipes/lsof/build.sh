@@ -23,75 +23,24 @@ if [ ! -f "$SRC" ] || [ -L "$SRC" ]; then
     exit 1
 fi
 
-# Match scripts/build-programs.sh CC + flags so the resulting wasm is
-# binary-compatible with everything else in the release.
 SYSROOT="${WASM_POSIX_SYSROOT:?}"
-# WHY: closed recipes receive the specific sealed compiler-glue projection,
-# not authority over the publisher's complete Kandelo checkout.
-GLUE_DIR="${WASM_POSIX_GLUE_DIR:?}"
-
-find_llvm_bin() {
-    if [ -n "${LLVM_BIN:-}" ] && [ -x "$LLVM_BIN/clang" ]; then
-        echo "$LLVM_BIN"
-        return
-    fi
-    if [ -n "${LLVM_PREFIX:-}" ] && [ -x "$LLVM_PREFIX/bin/clang" ]; then
-        echo "$LLVM_PREFIX/bin"
-        return
-    fi
-    if command -v clang >/dev/null 2>&1; then
-        dirname "$(command -v clang)"
-        return
-    fi
-    echo "Error: LLVM/clang not found. Run scripts/dev-shell.sh or set LLVM_BIN/LLVM_PREFIX." >&2
-    exit 1
-}
-
-LLVM_BIN="$(find_llvm_bin)"
-CC="$LLVM_BIN/clang"
 WASM_OPT="$(command -v wasm-opt)"
+
+if ! command -v wasm32posix-cc >/dev/null 2>&1; then
+    echo "ERROR: wasm32posix-cc is unavailable in the sealed SDK." >&2
+    exit 1
+fi
 
 if [ ! -f "$SYSROOT/lib/libc.a" ]; then
     echo "ERROR: sysroot not found at $SYSROOT. Run scripts/build-musl.sh first." >&2
     exit 1
 fi
 
-CFLAGS=(
-    --target=wasm32-unknown-unknown
-    --sysroot="$SYSROOT"
-    -nostdlib
-    -O2
-    -matomics -mbulk-memory
-    -fno-trapping-math
-    -mllvm -wasm-enable-sjlj
-    -mllvm -wasm-use-legacy-eh=false
-)
-
-LINK_FLAGS=(
-    "$GLUE_DIR/channel_syscall.c"
-    "$GLUE_DIR/compiler_rt.c"
-    "$SYSROOT/lib/crt1.o"
-    "$SYSROOT/lib/libc.a"
-    -Wl,--entry=_start
-    -Wl,--export=_start
-    -Wl,--import-memory
-    -Wl,--shared-memory
-    -Wl,--max-memory=1073741824
-    -Wl,--allow-undefined
-    -Wl,--table-base=3
-    -Wl,--export-table
-    -Wl,--growable-table
-    -Wl,--export=__wasm_init_tls
-    -Wl,--export=__tls_base
-    -Wl,--export=__tls_size
-    -Wl,--export=__tls_align
-    -Wl,--export=__stack_pointer
-    -Wl,--export=__wasm_thread_init
-    -Wl,--export=__abi_version
-)
-
 echo "==> Building lsof.wasm from $SRC"
-"$CC" "${CFLAGS[@]}" "$SRC" "${LINK_FLAGS[@]}" -o "$OUT_BIN"
+# WHY: the SDK wrapper owns Kandelo's target, sysroot, compiler glue,
+# linker selection, ABI exports, and shared-memory contract. Copying those
+# flags here let this one Formula drift from every other SDK consumer.
+wasm32posix-cc -O2 "$SRC" -o "$OUT_BIN"
 
 "$WASM_OPT" -O2 "$OUT_BIN" -o "$OUT_BIN"
 
