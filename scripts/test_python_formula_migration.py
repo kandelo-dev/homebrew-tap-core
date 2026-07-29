@@ -147,6 +147,7 @@ def assert_recipe_contract() -> None:
             'AR="$LLVM_BIN/llvm-ar"',
             'NM="$LLVM_BIN/llvm-nm"',
             'RANLIB="$LLVM_BIN/llvm-ranlib"',
+            'chmod u+w "$PRIVATE_SYSROOT/lib"',
             'python3.13 - "$SOURCE_DIR/Lib"',
             'CONFIG_SITE="$RECIPE_DIR/config.site-wasm32-posix"',
             "--with-build-python=\"$HOST_PYTHON\"",

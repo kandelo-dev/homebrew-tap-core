@@ -64,6 +64,10 @@ BUILD_JOBS="${WASM_POSIX_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || 
 # of mutating platform input shared by sibling Formula builds.
 mkdir -p "$PRIVATE_SYSROOT"
 cp -a "$SYSROOT_SOURCE/." "$PRIVATE_SYSROOT/"
+# WHY: cp -a preserves the sealed sysroot's read-only directory modes. Open
+# only the recipe-owned copy's library directory before adding CPython's three
+# emulation archives; the publisher-owned source remains untouched.
+chmod u+w "$PRIVATE_SYSROOT/lib"
 export WASM_POSIX_SYSROOT="$PRIVATE_SYSROOT"
 for library in \
     libwasi-emulated-signal.a \
