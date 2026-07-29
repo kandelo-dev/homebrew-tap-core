@@ -12,6 +12,12 @@ class Modeset < Formula
   sha256 "07e7a7ebff8003114f6b4bef1ccdc2e9b15ecfbd5e6ccc3bf8563107b8151fde"
   license "GPL-2.0-or-later"
 
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 3
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "16bdc897ade4aebe335235dd140b3c65033967170c8a50e48e8c1a061645ce72"
+  end
+
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
 
@@ -24,7 +30,7 @@ class Modeset < Formula
     # libdrm/GBM/EGL/GLES stubs.
     out_dir = kandelo_build_tap_recipe(
       manifest_sha256: "b5c22ded9a261f7e8670b1b5c1013effc94dc45c5f5731045af22d2dc03eb81e",
-      script_env: {},
+      script_env:      {},
     )
     kandelo_validate_wasm_artifact(out_dir/"modeset.wasm")
     kandelo_install_bin(out_dir, "modeset.wasm", "modeset")
@@ -34,11 +40,4 @@ class Modeset < Formula
     kandelo_run_kms_wasm(bin/"modeset", min_page_flips: 2)
     kandelo_run_kms_browser_wasm(bin/"modeset", min_page_flips: 2)
   end
-
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 3
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "16bdc897ade4aebe335235dd140b3c65033967170c8a50e48e8c1a061645ce72"
-  end
-
 end
