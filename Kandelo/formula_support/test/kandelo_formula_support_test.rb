@@ -999,6 +999,28 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
+  def test_verified_formula_source_excludes_homebrew_stage_home
+    Dir.mktmpdir("kandelo-formula-stage-home") do |dir|
+      build_path = Pathname(dir)/"build"
+      stage_home = build_path/".brew_home"
+      stage_home.mkpath
+      (stage_home/".bazelrc").write("startup --output_user_root=/tmp/bazel\n")
+      (stage_home/".gitignore").write("*\n")
+      (build_path/"upstream.c").write("int main(void) { return 0; }\n")
+      harness = Harness.new
+      harness.build_path = build_path
+
+      source_dir = harness.kandelo_stage_verified_formula_source
+
+      assert_equal "int main(void) { return 0; }\n",
+                   (source_dir/"upstream.c").read
+      refute_path_exists source_dir/".brew_home"
+      assert_equal "startup --output_user_root=/tmp/bazel\n",
+                   (stage_home/".bazelrc").read
+      assert_equal "*\n", (stage_home/".gitignore").read
+    end
+  end
+
   def test_verified_formula_source_rejects_an_empty_buildpath
     Dir.mktmpdir("kandelo-empty-formula-source") do |dir|
       harness = Harness.new

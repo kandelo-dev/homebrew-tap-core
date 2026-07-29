@@ -1436,6 +1436,7 @@ module KandeloFormulaSupport
   def kandelo_stage_verified_formula_source
     source_dir = buildpath/"kandelo-package-source"
     resource_dir = buildpath/"kandelo-package-resources"
+    homebrew_stage_home = buildpath/".brew_home"
     reserved = [
       source_dir,
       buildpath/"kandelo-package-out",
@@ -1458,7 +1459,23 @@ module KandeloFormulaSupport
       end
     end
 
-    source_entries = buildpath.children.reject { |entry| entry == resource_dir }
+    if homebrew_stage_home.exist? || homebrew_stage_home.symlink?
+      begin
+        home_stat = homebrew_stage_home.lstat
+      rescue SystemCallError => e
+        odie "Homebrew Formula stage home is unavailable: #{e.message}"
+      end
+      unless home_stat.directory? && !home_stat.symlink? &&
+             homebrew_stage_home.realpath == homebrew_stage_home
+        odie "Homebrew Formula stage home must be a canonical real directory"
+      end
+    end
+
+    # WHY: Formula#stage creates .brew_home after verifying the source archive
+    # and writes build-tool configuration there. It is Homebrew runtime state,
+    # not upstream source, so keep it outside the immutable source projection.
+    excluded = [resource_dir, homebrew_stage_home]
+    source_entries = buildpath.children.reject { |entry| excluded.include?(entry) }
     odie "Homebrew did not stage Formula source under #{buildpath}" if source_entries.empty?
 
     source_dir.mkdir
