@@ -3184,6 +3184,23 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
+  def test_closed_recipes_do_not_request_the_complete_kandelo_checkout
+    # WHY: the privileged runner projects specific sealed tools, sources,
+    # sysroot, and glue paths. A recipe that reaches back through the broad
+    # checkout root silently defeats that closed input contract.
+    recipe_root =
+      Pathname(File.expand_path("../../../Kandelo/recipes", __dir__))
+    offenders = recipe_root.glob("**/*").filter_map do |path|
+      next unless path.file?
+      next unless path.extname == ".sh"
+      next unless path.binread.match?(/\b(?:HOMEBREW_KANDELO_ROOT|REPO_ROOT)\b/)
+
+      path.relative_path_from(recipe_root).to_s
+    end
+
+    assert_empty offenders
+  end
+
   def test_sdk_activation_cannot_reintroduce_the_global_homebrew_path
     harness = Harness.new
     harness.homebrew_prefix_path = Pathname("/prefix")

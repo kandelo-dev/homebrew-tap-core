@@ -4,7 +4,6 @@ set -euo pipefail
 # Build GNU Netcat 0.7.1 for wasm32-posix-kernel.
 
 SCRIPT_DIR="${WASM_POSIX_DEP_RECIPE_DIR:?}"
-REPO_ROOT="${HOMEBREW_KANDELO_ROOT:?}"
 NETCAT_VERSION="${WASM_POSIX_DEP_VERSION:?}"
 SOURCE_URL="${WASM_POSIX_DEP_SOURCE_URL:?}"
 SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
@@ -40,7 +39,9 @@ if [ ! -f "$SYSROOT/lib/libc.a" ]; then
 fi
 
 export WASM_POSIX_SYSROOT="$SYSROOT"
-export WASM_POSIX_GLUE_DIR="$REPO_ROOT/libc/glue"
+# WHY: the publisher projects only the sealed glue directory required by the
+# SDK; a closed recipe must not depend on the broader Kandelo checkout path.
+: "${WASM_POSIX_GLUE_DIR:?}"
 
 cd "$SRC_DIR"
 

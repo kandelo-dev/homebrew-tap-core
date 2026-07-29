@@ -21,7 +21,6 @@ set -euo pipefail
 #   WASM_POSIX_DEP_OUT_DIR/nethack.wasm
 #   WASM_POSIX_DEP_OUT_DIR/runtime/share/nethack/nhdat
 
-REPO_ROOT="${HOMEBREW_KANDELO_ROOT:?}"
 WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
 SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
@@ -468,7 +467,9 @@ echo "==> Staging outputs..."
 mkdir -p "$BIN_DIR"
 # NetHack calls fork through its game/process paths. Instrument the final link
 # as the last Wasm transformation so saved continuation offsets remain valid.
-"$REPO_ROOT/scripts/run-wasm-fork-instrument.sh" \
+# WHY: the closed recipe receives this one sealed executable, not the
+# publisher's complete Kandelo checkout or its wrapper scripts.
+"${WASM_POSIX_FORK_INSTRUMENT:?}" \
     "$SRC_DIR/src/nethack" -o "$BIN_DIR/nethack.wasm"
 cp "$BIN_DIR/nethack.wasm" "$OUT_DIR/nethack.wasm"
 

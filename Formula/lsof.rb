@@ -23,7 +23,7 @@ class Lsof < Formula
     # This intentionally packages Kandelo's procfs-aware implementation, not
     # native lsof with Linux-only probes.
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "15a33601a365839874566eb7c71c45a2644bf72ee5a513dc7ae70c6491d0fff1",
+      manifest_sha256: "2faaed71e0df5e7795b33af1dce488e22264d1c248af5e2d784cd33ba990b1ad",
       script_env: {},
     )
     kandelo_validate_wasm_artifact(out_dir/"lsof.wasm")
