@@ -7,7 +7,6 @@ WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
 SYSROOT_SOURCE="${WASM_POSIX_SYSROOT:?}"
 FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"
-LLVM_BIN="${WASM_POSIX_LLVM_DIR:?}"
 PYTHON_VERSION="${WASM_POSIX_DEP_VERSION:?}"
 SOURCE_URL="${WASM_POSIX_DEP_SOURCE_URL:?}"
 SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
@@ -36,12 +35,6 @@ if [ ! -f "$ZLIB_PREFIX/lib/libz.a" ] || [ ! -f "$ZLIB_PREFIX/include/zlib.h" ];
     echo "ERROR: Python requires the selected zlib keg" >&2
     exit 1
 fi
-for tool in clang llvm-ar llvm-nm llvm-ranlib; do
-    [ -x "$LLVM_BIN/$tool" ] || {
-        echo "ERROR: sealed LLVM tool is unavailable: $LLVM_BIN/$tool" >&2
-        exit 1
-    }
-done
 for tool in gmake python3.13 wasm32posix-cc wasm32posix-c++ wasm32posix-ar \
     wasm32posix-ranlib wasm32posix-nm wasm32posix-strip \
     wasm32posix-pkg-config wasm-opt; do
@@ -52,7 +45,6 @@ for tool in gmake python3.13 wasm32posix-cc wasm32posix-c++ wasm32posix-ar \
 done
 
 PYTHON_MAJOR_MINOR="${PYTHON_VERSION%.*}"
-HOST_BUILD_DIR="$WORK_DIR/cpython-host-build"
 CROSS_BUILD_DIR="$WORK_DIR/cpython-cross-build"
 RUNTIME_STAGE="$WORK_DIR/python-runtime-stage"
 PRIVATE_SYSROOT="$WORK_DIR/cpython-sysroot"
@@ -83,82 +75,35 @@ if [ -z "$BUILD_TRIPLET" ]; then
     exit 1
 fi
 
-# CPython's cross build executes generators from the same exact source. Keep
-# this native phase caller-owned and disable every optional extension that
-# would otherwise learn undeclared host libraries from configure.
-mkdir -p "$HOST_BUILD_DIR"
-(
-    cd "$HOST_BUILD_DIR"
-    # WHY: CPython's cross build runs source-matched native generators. Prove
-    # the closed runner can execute its own compiler output before configure
-    # turns that host-execution boundary into an ambiguous cross-build error.
-    cat >kandelo-native-exec-probe.c <<'EOF'
-int main(void) {
-    return 0;
-}
-EOF
-    "$LLVM_BIN/clang" kandelo-native-exec-probe.c \
-        -o kandelo-native-exec-probe
-    printf 'native configure environment: CC=%q CFLAGS=%q CPPFLAGS=%q LDFLAGS=%q LIBS=%q\n' \
-        "$LLVM_BIN/clang" "${CFLAGS-}" "${CPPFLAGS-}" "${LDFLAGS-}" "${LIBS-}"
-    /usr/bin/findmnt --noheadings --output TARGET,VFS-OPTIONS,FS-OPTIONS \
-        --target "$HOST_BUILD_DIR"
-    if command -v file >/dev/null 2>&1; then
-        file kandelo-native-exec-probe
-    fi
-    printf 'native executable magic: '
-    /usr/bin/od -An -N4 -tx1 kandelo-native-exec-probe
-    if [ -x "$LLVM_BIN/llvm-readelf" ]; then
-        "$LLVM_BIN/llvm-readelf" --program-headers \
-            kandelo-native-exec-probe
-    fi
-    set +e
-    ./kandelo-native-exec-probe
-    status=$?
-    set -e
-    if [ "$status" -ne 0 ]; then
-        echo "ERROR: closed recipe cannot execute native compiler output (status $status)" >&2
-        exit "$status"
-    fi
-
-    # WHY: use the publisher's attested LLVM projection. A Homebrew LLVM keg
-    # carries a link to mutable prefix configuration and must not widen the
-    # closed recipe merely to build CPython's native generators.
-    if ! CONFIG_SITE=/dev/null \
-        CC="$LLVM_BIN/clang" \
-        AR="$LLVM_BIN/llvm-ar" \
-        NM="$LLVM_BIN/llvm-nm" \
-        RANLIB="$LLVM_BIN/llvm-ranlib" \
-        py_cv_module__ctypes=n/a \
-        py_cv_module__ctypes_test=n/a \
-        py_cv_module__bz2=n/a \
-        py_cv_module__dbm=n/a \
-        py_cv_module_readline=n/a \
-        py_cv_module_zlib=n/a \
-        "$SOURCE_DIR/configure" \
-            --prefix="$HOST_BUILD_DIR/install" \
-            --without-ensurepip \
-            --disable-test-modules; then
-        echo "ERROR: native CPython configure failed; bounded config.log tail follows" >&2
-        tail -n 160 config.log >&2
-        exit 77
-    fi
-    # Only the interpreter and its generators are inputs to the cross build.
-    # Avoid linking unrelated host extension libraries. CPython deliberately
-    # names this target python.exe on case-insensitive build filesystems so it
-    # cannot collide with its generated Python/ object directory.
-    if [ "$(awk -F= '/^BUILDEXE=/ { gsub(/[[:space:]]/, "", $2); print $2 }' Makefile)" = ".exe" ]; then
-        gmake -j"$BUILD_JOBS" python.exe
-    else
-        gmake -j"$BUILD_JOBS" python
-    fi
-)
-if [ -x "$HOST_BUILD_DIR/python.exe" ]; then
-    HOST_PYTHON="$HOST_BUILD_DIR/python.exe"
-else
-    HOST_PYTHON="$HOST_BUILD_DIR/python"
+# WHY: CPython explicitly supports any native build Python with the same
+# major/minor version. Use the declared, sealed Homebrew build dependency
+# instead of treating Kandelo's unwrapped target LLVM as a native compiler.
+HOST_PYTHON="$(command -v python3.13)"
+HOST_PYTHON="$(/usr/bin/realpath -- "$HOST_PYTHON")"
+if [ ! -f "$HOST_PYTHON" ] || [ ! -x "$HOST_PYTHON" ] ||
+   [ -w "$HOST_PYTHON" ]; then
+    echo "ERROR: CPython build Python is not one sealed executable" >&2
+    exit 1
 fi
-"$HOST_PYTHON" --version
+HOST_PYTHON_MOUNT_OPTIONS="$(
+    /usr/bin/findmnt --noheadings --output VFS-OPTIONS \
+        --target "$HOST_PYTHON"
+)"
+case ",${HOST_PYTHON_MOUNT_OPTIONS// /}," in
+    *,ro,*) ;;
+    *)
+        echo "ERROR: CPython build Python is not on a read-only projection" >&2
+        exit 1
+        ;;
+esac
+HOST_PYTHON_VERSION="$(
+    "$HOST_PYTHON" -c \
+        'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'
+)"
+if [ "$HOST_PYTHON_VERSION" != "$PYTHON_MAJOR_MINOR" ]; then
+    echo "ERROR: CPython build Python must be $PYTHON_MAJOR_MINOR" >&2
+    exit 1
+fi
 
 PREFIX_MAPS="-ffile-prefix-map=$SOURCE_DIR=$STABLE_SOURCE"
 PREFIX_MAPS="$PREFIX_MAPS -fdebug-prefix-map=$SOURCE_DIR=$STABLE_SOURCE"
@@ -246,10 +191,8 @@ chmod 0755 "$FINAL_PYTHON"
 
 mkdir -p "$RUNTIME_STAGE/lib/python${PYTHON_MAJOR_MINOR}" \
     "$RUNTIME_STAGE/share/licenses/cpython"
-# The exact source-built interpreter is intentionally minimal and exists only
-# for CPython's generators. Use the declared native Python dependency for
-# archive assembly so host extension discovery cannot affect generator bytes.
-python3.13 - "$SOURCE_DIR/Lib" "$RUNTIME_STAGE/lib/python${PYTHON_MAJOR_MINOR}" <<'PY'
+# Reuse the same declared build Python for deterministic archive assembly.
+"$HOST_PYTHON" - "$SOURCE_DIR/Lib" "$RUNTIME_STAGE/lib/python${PYTHON_MAJOR_MINOR}" <<'PY'
 from pathlib import Path
 import shutil
 import sys
@@ -271,7 +214,7 @@ PY
 cp "$SOURCE_DIR/LICENSE" "$RUNTIME_STAGE/share/licenses/cpython/LICENSE"
 
 RUNTIME_ZIP="$WORK_DIR/python-runtime.zip"
-python3.13 - "$RUNTIME_STAGE" "$RUNTIME_ZIP" <<'PY'
+"$HOST_PYTHON" - "$RUNTIME_STAGE" "$RUNTIME_ZIP" <<'PY'
 from pathlib import Path
 import stat
 import sys
