@@ -32,8 +32,9 @@ module KandeloFormulaSupport
   KANDELO_FORMULA_SUPPORT_API_VERSION = 1
   KANDELO_CORE_TAP_FORMULA_PREFIX = "kandelo-dev/tap-core/"
   # WHY: target Formulae must record Kandelo's guest namespace, never the
-  # native Linuxbrew prefix used only for trusted CI host tools. Keeping the
-  # target prefix here gives every Formula one reviewable path authority.
+  # native Homebrew-on-Linux prefix used only for trusted CI host tools.
+  # Keeping the target prefix here gives every Formula one reviewable path
+  # authority.
   KANDELO_GUEST_HOMEBREW_PREFIX = "/opt/kandelo/homebrew".freeze
   KANDELO_GUEST_HOMEBREW_CELLAR =
     "#{KANDELO_GUEST_HOMEBREW_PREFIX}/Cellar".freeze

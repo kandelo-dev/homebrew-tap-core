@@ -3270,7 +3270,7 @@ class KandeloFormulaSupportTest < Minitest::Test
     Dir.mktmpdir("kandelo-formula-support") do |dir|
       harness = artifact_validation_harness(dir)
       wasm = harness.buildpath/"program.wasm"
-      wasm.binwrite("/home/linuxbrew/.linuxbrew/opt/formula")
+      wasm.binwrite("/opt/kandelo/homebrew/opt/formula")
 
       assert_equal wasm, harness.kandelo_validate_wasm_artifact(wasm)
     end
