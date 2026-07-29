@@ -3,8 +3,10 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Less < Formula
   include KandeloFormulaSupport
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/less".freeze
-  GUEST_NCURSES_PREFIX = "/home/linuxbrew/.linuxbrew/opt/ncurses".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+  GUEST_OPT_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/less".freeze
+  GUEST_NCURSES_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/ncurses".freeze
 
   desc "Terminal pager with more-compatible mode for Kandelo"
   homepage "https://www.greenwoodsoftware.com/less/"

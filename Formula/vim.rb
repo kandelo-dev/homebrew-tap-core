@@ -22,7 +22,8 @@ class Vim < Formula
   def install
     kandelo_require_arch!("wasm32")
     ncurses = formula_opt_prefix("kandelo-dev/tap-core/ncurses")
-    guest_brew_prefix = "/home/linuxbrew/.linuxbrew"
+    guest_brew_prefix =
+      KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
     guest_opt_prefix = "#{guest_brew_prefix}/opt/vim"
     guest_ncurses = "#{guest_brew_prefix}/opt/ncurses"
 
@@ -175,9 +176,10 @@ class Vim < Formula
   end
 
   test do
-    guest_brew_prefix = "/home/linuxbrew/.linuxbrew"
-    guest_opt_prefix = "/home/linuxbrew/.linuxbrew/opt/vim"
-    guest_ncurses = "/home/linuxbrew/.linuxbrew/opt/ncurses"
+    guest_brew_prefix =
+      KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+    guest_opt_prefix = "#{guest_brew_prefix}/opt/vim"
+    guest_ncurses = "#{guest_brew_prefix}/opt/ncurses"
     stable_source = "/usr/src/vim-#{version}"
     runtime = pkgshare/"vim92"
     assert_path_exists runtime/"syntax/c.vim"
@@ -188,7 +190,8 @@ class Vim < Formula
     assert_includes vim_bytes, guest_ncurses
     assert_includes vim_bytes, stable_source
     host_path_pattern = %r{/(?:private/tmp/|private/var/|Users/|home/runner/(?:_work|work)/|nix/store/)}
-    guest_cellar_pattern = %r{/home/linuxbrew/\.linuxbrew/Cellar/(?:vim|ncurses)/}
+    guest_cellar_pattern =
+      %r{#{Regexp.escape(guest_brew_prefix)}/Cellar/(?:vim|ncurses)/}
     [vim_bytes, File.binread(bin/"xxd")].each do |artifact|
       refute_match host_path_pattern, artifact
       refute_match guest_cellar_pattern, artifact

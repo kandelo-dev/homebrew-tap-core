@@ -4,7 +4,8 @@ require "digest"
 class Icu < Formula
   include KandeloFormulaSupport
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/icu".freeze
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/icu".freeze
   GUEST_DATA_DIR = "#{GUEST_OPT_PREFIX}/share/icu/74.2".freeze
   ICU_DATA_SHA256 = "dc778b9ffe18ed319ad3fb70754f80e51cf7b6dbfff38fc0c0a5f27bb5463dad".freeze
   ICU_DATA_BYTES = 30_782_896

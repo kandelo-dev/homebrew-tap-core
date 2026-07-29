@@ -32,7 +32,8 @@ class Ncurses < Formula
     kandelo_require_arch!("wasm32")
     root = Pathname(kandelo_require_root!)
     libcxx = formula_opt_prefix("kandelo-dev/tap-core/libcxx")
-    guest_opt_prefix = "/home/linuxbrew/.linuxbrew/opt/ncurses"
+    guest_opt_prefix =
+      "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/ncurses"
 
     host_build = buildpath/"host-build"
     host_tic = host_build/"progs/tic"
@@ -232,7 +233,8 @@ class Ncurses < Formula
   end
 
   test do
-    guest_opt_prefix = "/home/linuxbrew/.linuxbrew/opt/ncurses"
+    guest_opt_prefix =
+      "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/ncurses"
     assert_path_exists lib/"libncursesw.a"
     assert_path_exists lib/"libncursesw_g.a"
     assert_path_exists lib/"libncurses++w.a"

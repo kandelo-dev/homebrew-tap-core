@@ -15,7 +15,7 @@ class Gawk < Formula
   def install
     kandelo_require_arch!("wasm32")
 
-    guest_prefix = "/home/linuxbrew/.linuxbrew"
+    guest_prefix = KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
     instrumented = buildpath/"gawk.instrumented"
     kandelo_wasm_build do |root|
       system kandelo_configure, *kandelo_std_configure_args,

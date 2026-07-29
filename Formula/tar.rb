@@ -3,7 +3,8 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Tar < Formula
   include KandeloFormulaSupport
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/tar".freeze
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/tar".freeze
 
   desc "GNU archiving utility for Kandelo"
   homepage "https://www.gnu.org/software/tar/"

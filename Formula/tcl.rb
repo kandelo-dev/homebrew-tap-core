@@ -3,7 +3,9 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Tcl < Formula
   include KandeloFormulaSupport
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/tcl".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+  GUEST_OPT_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/tcl".freeze
   GUEST_RUNTIME = "#{GUEST_OPT_PREFIX}/lib/tcl9.0".freeze
   GUEST_MODULES = "#{GUEST_OPT_PREFIX}/lib/tcl9".freeze
   GUEST_TCLSH = "#{GUEST_OPT_PREFIX}/bin/tclsh9.0".freeze
@@ -176,13 +178,13 @@ class Tcl < Formula
         config = staged_prefix/"lib/tclConfig.sh"
         inreplace config do |s|
           portable_cflags = "-O2 -gline-tables-only -fdebug-compilation-dir=#{stable_source} " \
-                            "-I/home/linuxbrew/.linuxbrew/opt/zlib/include"
+                            "-I#{GUEST_HOMEBREW_PREFIX}/opt/zlib/include"
           replacements = {
             /^TCL_CC=.*$/                  => "TCL_CC='wasm32posix-cc'",
             /^TCL_EXTRA_CFLAGS=.*$/        => "TCL_EXTRA_CFLAGS='#{portable_cflags}'",
             /^TCL_SHLIB_LD=.*$/            => "TCL_SHLIB_LD='wasm32posix-cc -shared'",
             /^TCL_STLIB_LD=.*$/            => "TCL_STLIB_LD='wasm32posix-ar cr'",
-            /^TCL_LD_FLAGS=.*$/            => "TCL_LD_FLAGS='-L/home/linuxbrew/.linuxbrew/opt/zlib/lib'",
+            /^TCL_LD_FLAGS=.*$/            => "TCL_LD_FLAGS='-L#{GUEST_HOMEBREW_PREFIX}/opt/zlib/lib'",
             /^TCL_RANLIB=.*$/              => "TCL_RANLIB='wasm32posix-ranlib'",
             /^TCL_BUILD_LIB_SPEC=.*$/      => "TCL_BUILD_LIB_SPEC='-L#{installed_lib} -ltcl9.0'",
             /^TCL_SRC_DIR=.*$/             => "TCL_SRC_DIR=''",

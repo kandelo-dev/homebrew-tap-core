@@ -3,7 +3,8 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Git < Formula
   include KandeloFormulaSupport
 
-  GUEST_HOMEBREW_PREFIX = "/home/linuxbrew/.linuxbrew".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
   GUEST_OPT_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/git".freeze
   GUEST_GIT_BIN = "#{GUEST_OPT_PREFIX}/bin".freeze
   GUEST_GIT_EXEC_PATH = "#{GUEST_OPT_PREFIX}/libexec/git-core".freeze

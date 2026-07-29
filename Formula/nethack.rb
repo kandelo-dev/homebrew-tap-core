@@ -5,7 +5,8 @@ class Nethack < Formula
 
   KANDELO_REGISTRY_BRIDGE = true
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/nethack".freeze
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/nethack".freeze
   GUEST_HACKDIR = "#{GUEST_OPT_PREFIX}/share/nethack".freeze
 
   desc "Classic dungeon exploration game for Kandelo"

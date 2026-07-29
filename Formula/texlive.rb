@@ -3,7 +3,8 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Texlive < Formula
   include KandeloFormulaSupport
 
-  GUEST_PREFIX = "/home/linuxbrew/.linuxbrew/opt/texlive".freeze
+  GUEST_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/texlive".freeze
   GUEST_TEXMF = "#{GUEST_PREFIX}/share/texmf-dist".freeze
   TEXLIVE_SNAPSHOT = "20250308".freeze
   RUNTIME_COLLECTIONS = {

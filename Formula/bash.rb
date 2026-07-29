@@ -17,7 +17,8 @@ class Bash < Formula
 
   skip_clean "bin/bash"
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/bash".freeze
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/bash".freeze
 
   CLEANUP_WRAPPERS = {
     "pop_stream"                => "pop_stream_w",

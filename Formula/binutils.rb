@@ -18,7 +18,8 @@ class Binutils < Formula
              "bin/nm", "bin/objcopy", "bin/objdump", "bin/ranlib",
              "bin/readelf", "bin/size", "bin/strings", "bin/strip"
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/binutils".freeze
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/binutils".freeze
   PROGRAMS = {
     "addr2line" => "addr2line",
     "ar"        => "ar",

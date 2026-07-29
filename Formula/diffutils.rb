@@ -3,9 +3,11 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Diffutils < Formula
   include KandeloFormulaSupport
 
-  GUEST_COREUTILS_PR = "/home/linuxbrew/.linuxbrew/opt/coreutils/bin/pr".freeze
-  GUEST_DIFFUTILS_BIN = "/home/linuxbrew/.linuxbrew/opt/diffutils/bin".freeze
-  GUEST_ED = "/home/linuxbrew/.linuxbrew/opt/ed/bin/ed".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+  GUEST_COREUTILS_PR = "#{GUEST_HOMEBREW_PREFIX}/opt/coreutils/bin/pr".freeze
+  GUEST_DIFFUTILS_BIN = "#{GUEST_HOMEBREW_PREFIX}/opt/diffutils/bin".freeze
+  GUEST_ED = "#{GUEST_HOMEBREW_PREFIX}/opt/ed/bin/ed".freeze
 
   desc "GNU file comparison utilities for Kandelo"
   homepage "https://www.gnu.org/software/diffutils/"

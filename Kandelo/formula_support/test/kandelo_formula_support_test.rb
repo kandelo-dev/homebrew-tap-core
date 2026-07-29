@@ -38,6 +38,38 @@ class KandeloFormulaSupportTest < Minitest::Test
     KandeloFormulaSupport::WabtRequirement     => ["wabt", "wasm-validate"],
   }.freeze
 
+  def test_guest_homebrew_paths_use_kandelo_identity
+    assert_equal(
+      "/opt/kandelo/homebrew",
+      KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX,
+    )
+    assert_equal(
+      "/opt/kandelo/homebrew/Cellar",
+      KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_CELLAR,
+    )
+  end
+
+  def test_formula_sources_use_the_shared_guest_homebrew_prefix
+    formula_dir = Pathname(__dir__).join("../../..", "Formula").cleanpath
+
+    formula_dir.glob("*.rb").sort.each do |path|
+      # Bottle Cellar values are generated publication metadata. Formula build
+      # and test code must use the shared source-level authority instead of
+      # growing another literal that can drift during a future path migration.
+      recipe_source = path.binread.split(/^  bottle do\s*$/, 2).first
+      refute_includes(
+        recipe_source,
+        "/home/linuxbrew/.linuxbrew",
+        "#{path.basename} retains the retired guest prefix",
+      )
+      refute_includes(
+        recipe_source,
+        KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX,
+        "#{path.basename} hardcodes the canonical guest prefix",
+      )
+    end
+  end
+
   def test_native_requirements_have_the_closed_publisher_identity
     support = Pathname(__dir__).join("..", "kandelo_formula_support.rb").binread
     NATIVE_REQUIREMENT_IDENTITIES.each do |requirement, (formula, sentinel)|

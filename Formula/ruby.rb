@@ -6,7 +6,9 @@ class Ruby < Formula
   KANDELO_REGISTRY_BRIDGE = true
 
   RUBY_API_VERSION = "4.0.0".freeze
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/ruby".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+  GUEST_OPT_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/ruby".freeze
   GUEST_RUNTIME = "#{GUEST_OPT_PREFIX}/lib/ruby/#{RUBY_API_VERSION}".freeze
 
   desc "Interpreter for the Ruby scripting language on Kandelo (with psych/YAML)"
@@ -87,7 +89,7 @@ class Ruby < Formula
       install_prefix = RbConfig::CONFIG['prefix']
       allowed_install_prefixes = [
         '#{GUEST_OPT_PREFIX}',
-        '/home/linuxbrew/.linuxbrew/Cellar/ruby/#{pkg_version}',
+        '#{GUEST_HOMEBREW_PREFIX}/Cellar/ruby/#{pkg_version}',
       ]
       unless allowed_install_prefixes.include?(install_prefix)
         raise "unexpected install prefix: %s" % install_prefix
