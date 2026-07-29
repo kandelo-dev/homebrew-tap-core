@@ -89,24 +89,60 @@ fi
 mkdir -p "$HOST_BUILD_DIR"
 (
     cd "$HOST_BUILD_DIR"
+    # WHY: CPython's cross build runs source-matched native generators. Prove
+    # the closed runner can execute its own compiler output before configure
+    # turns that host-execution boundary into an ambiguous cross-build error.
+    cat >kandelo-native-exec-probe.c <<'EOF'
+int main(void) {
+    return 0;
+}
+EOF
+    "$LLVM_BIN/clang" kandelo-native-exec-probe.c \
+        -o kandelo-native-exec-probe
+    printf 'native configure environment: CC=%q CFLAGS=%q CPPFLAGS=%q LDFLAGS=%q LIBS=%q\n' \
+        "$LLVM_BIN/clang" "${CFLAGS-}" "${CPPFLAGS-}" "${LDFLAGS-}" "${LIBS-}"
+    /usr/bin/findmnt --noheadings --output TARGET,VFS-OPTIONS,FS-OPTIONS \
+        --target "$HOST_BUILD_DIR"
+    if command -v file >/dev/null 2>&1; then
+        file kandelo-native-exec-probe
+    fi
+    printf 'native executable magic: '
+    /usr/bin/od -An -N4 -tx1 kandelo-native-exec-probe
+    if [ -x "$LLVM_BIN/llvm-readelf" ]; then
+        "$LLVM_BIN/llvm-readelf" --program-headers \
+            kandelo-native-exec-probe
+    fi
+    set +e
+    ./kandelo-native-exec-probe
+    status=$?
+    set -e
+    if [ "$status" -ne 0 ]; then
+        echo "ERROR: closed recipe cannot execute native compiler output (status $status)" >&2
+        exit "$status"
+    fi
+
     # WHY: use the publisher's attested LLVM projection. A Homebrew LLVM keg
     # carries a link to mutable prefix configuration and must not widen the
     # closed recipe merely to build CPython's native generators.
-    CONFIG_SITE=/dev/null \
-    CC="$LLVM_BIN/clang" \
-    AR="$LLVM_BIN/llvm-ar" \
-    NM="$LLVM_BIN/llvm-nm" \
-    RANLIB="$LLVM_BIN/llvm-ranlib" \
-    py_cv_module__ctypes=n/a \
-    py_cv_module__ctypes_test=n/a \
-    py_cv_module__bz2=n/a \
-    py_cv_module__dbm=n/a \
-    py_cv_module_readline=n/a \
-    py_cv_module_zlib=n/a \
-    "$SOURCE_DIR/configure" \
-        --prefix="$HOST_BUILD_DIR/install" \
-        --without-ensurepip \
-        --disable-test-modules
+    if ! CONFIG_SITE=/dev/null \
+        CC="$LLVM_BIN/clang" \
+        AR="$LLVM_BIN/llvm-ar" \
+        NM="$LLVM_BIN/llvm-nm" \
+        RANLIB="$LLVM_BIN/llvm-ranlib" \
+        py_cv_module__ctypes=n/a \
+        py_cv_module__ctypes_test=n/a \
+        py_cv_module__bz2=n/a \
+        py_cv_module__dbm=n/a \
+        py_cv_module_readline=n/a \
+        py_cv_module_zlib=n/a \
+        "$SOURCE_DIR/configure" \
+            --prefix="$HOST_BUILD_DIR/install" \
+            --without-ensurepip \
+            --disable-test-modules; then
+        echo "ERROR: native CPython configure failed; bounded config.log tail follows" >&2
+        tail -n 160 config.log >&2
+        exit 77
+    fi
     # Only the interpreter and its generators are inputs to the cross build.
     # Avoid linking unrelated host extension libraries. CPython deliberately
     # names this target python.exe on case-insensitive build filesystems so it
