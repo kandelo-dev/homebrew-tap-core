@@ -32,7 +32,7 @@ class Bc < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "77ac02fa3c1215e7b309509d742ca2d0817af51d1079d53fda58b2ec93b092f2",
+      manifest_sha256: "afcac0643d28cec864245fe15bd2cb912f5ad551ef9f8e5d3f36105221a1a539",
       script_env:      {
         "BC_PYTHON" => formula_opt_libexec("python@3.13")/"bin/python3",
       },
