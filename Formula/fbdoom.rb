@@ -14,8 +14,15 @@ class Fbdoom < Formula
   sha256 "77f57cee68fed438dffdba96f6070b8975c16652a63ddf4fb967994e5585a38a"
   license "GPL-2.0-or-later"
 
-  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 3
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba"
+  end
+
   depends_on "gpatch" => :build
+
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/fbdoom"
@@ -35,7 +42,7 @@ class Fbdoom < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "ca42552694867b177c089696ec6df67e67eefe1d275087fdb27c10c99dd4df98",
+      manifest_sha256: "df9a19a7379cfe1694534a8f703a4df5e737b2d71fb34d36dcbb5966b6884d19",
       resources:       ["chocolate-doom"],
       script_env:      {},
     )
@@ -61,11 +68,4 @@ class Fbdoom < Formula
       guest_files: guest_files, min_writes: 1, min_nonblank_pixels: 1_000
     )
   end
-
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 3
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba"
-  end
-
 end

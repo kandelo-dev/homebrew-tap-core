@@ -12,9 +12,15 @@ class Netcat < Formula
   sha256 "30719c9a4ffbcf15676b8f528233ccc54ee6cba96cb4590975f5fd60c68a066f"
   license "GPL-2.0-or-later"
 
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 3
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "04ccaf7dd07bd11084f854cfcc326ac874f4572bbcf0be9992d1fd3a85d51855"
+  end
+
   depends_on "automake" => :build
-  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on "gpatch" => :build
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
 
   skip_clean "bin/nc"
@@ -25,8 +31,8 @@ class Netcat < Formula
     # The closed tap recipe owns the reviewed network compatibility patches
     # and exact cross-configure assertions.
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "d95b926402a44d7a73644b03fde4fc9a1f9319868232b1d7b83aea41cd8c115a",
-      script_env: {},
+      manifest_sha256: "c54cf5ab55f198e0f371925448ab4111368a9b99066d52b0aa672ce4a9c5bdf5",
+      script_env:      {},
     )
     kandelo_validate_wasm_artifact(out_dir/"nc.wasm", fork: :forbidden)
     kandelo_install_bin(out_dir, "nc.wasm", "nc")
@@ -36,11 +42,4 @@ class Netcat < Formula
     output = kandelo_run_wasm(bin/"nc", ["--version"], merge_stderr: true)
     assert_match(/netcat \(The GNU Netcat\) 0\.7\.1/i, output)
   end
-
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 3
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "04ccaf7dd07bd11084f854cfcc326ac874f4572bbcf0be9992d1fd3a85d51855"
-  end
-
 end

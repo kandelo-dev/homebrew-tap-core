@@ -7,7 +7,9 @@
 set -euo pipefail
 
 HERE="${WASM_POSIX_DEP_RECIPE_DIR:?}"
-SRC="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
+SRC="$WORK_DIR/fbdoom-source"
 CDOOM_SRC="${WASM_POSIX_DEP_RESOURCE_CHOCOLATE_DOOM_DIR:?}"
 OUT_BIN="${WASM_POSIX_DEP_OUT_DIR:?}/fbdoom.wasm"
 
@@ -34,6 +36,14 @@ FBDOOM_SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
     exit 2
 }
 
+mkdir "$SRC"
+cp -a "$SOURCE_INPUT/." "$SRC/"
+# WHY: vendoring, patches, and make all write in tree. Keep the authenticated
+# source sealed and grant writes only to this private copy. -P prevents chmod
+# from following source-tree symlinks into another projected input.
+find -P "$SRC" -type d -exec chmod u+rwx {} +
+find -P "$SRC" -type f -exec chmod u+rw {} +
+
 # Sentinel: last file added by patches/0005-add-music-support.patch. If it is
 # present, the source tree is already fully vendored and patched. Re-vendoring
 # would clobber the earlier patch's edits to these imported sources.
@@ -46,11 +56,11 @@ apply_patches() {
     for patch_file in "$HERE/patches/"*.patch; do
         [ -f "$patch_file" ] || continue
         name="$(basename "$patch_file")"
-        if patch --forward --dry-run -d "$SRC" -p1 <"$patch_file" \
+        if gpatch --forward --dry-run -d "$SRC" -p1 <"$patch_file" \
             >/dev/null 2>&1; then
             echo "    $name"
-            patch --forward -d "$SRC" -p1 <"$patch_file"
-        elif patch --reverse --dry-run -d "$SRC" -p1 <"$patch_file" \
+            gpatch --forward -d "$SRC" -p1 <"$patch_file"
+        elif gpatch --reverse --dry-run -d "$SRC" -p1 <"$patch_file" \
             >/dev/null 2>&1; then
             echo "    $name (already applied)"
         elif [ "$mode" = "lenient" ]; then

@@ -22,7 +22,8 @@ set -euo pipefail
 #   WASM_POSIX_DEP_OUT_DIR/runtime/share/nethack/nhdat
 
 WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
-SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+SRC_DIR="$WORK_DIR/nethack-source"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
 BIN_DIR="$WORK_DIR/bin"
 RUNTIME_DIR="$WORK_DIR/runtime"
@@ -85,6 +86,13 @@ echo "==> ncurses at $NCURSES_PREFIX"
 export CPPFLAGS="${CPPFLAGS:-} -I$NCURSES_PREFIX/include"
 export LDFLAGS="${LDFLAGS:-} -L$NCURSES_PREFIX/lib"
 
+mkdir "$SRC_DIR"
+cp -a "$SOURCE_INPUT/." "$SRC_DIR/"
+# WHY: NetHack's setup, portability patches, host generators, and target
+# build all write in tree. Keep the authenticated source sealed and grant
+# writes only to this private copy. -P avoids following source-tree symlinks.
+find -P "$SRC_DIR" -type d -exec chmod u+rwx {} +
+find -P "$SRC_DIR" -type f -exec chmod u+rw {} +
 cd "$SRC_DIR"
 NETHACK_REGEN_DATA=0
 
@@ -406,11 +414,12 @@ if [ ! -f "$SRC_DIR/dat/nhdat" ]; then
     echo "==> Host phase: building util tools..."
     # `$(MAKE)` in top-level Makefile recurses with no CC override; the
     # Linux hints default is gcc, which we override on the command line.
-    # On macOS cc=clang works for these tools. The yacc rules for dgn_comp
-    # and lev_comp share y.tab.c/y.tab.h scratch names, so override ambient
-    # MAKEFLAGS and serialize this phase even when a package manager builds
-    # Formulae in parallel.
-    make -j1 CC=cc LD=cc -C util makedefs dgn_comp lev_comp dlb recover 2>&1 | tail -20
+    # On macOS cc=clang works for these tools. Use the Formula's declared
+    # parser generators rather than whichever yacc/lex happen to be installed
+    # on the publisher. The two yacc rules share y.tab.c/y.tab.h scratch names,
+    # so serialize this phase even when Formulae are built in parallel.
+    make -j1 CC=cc LD=cc YACC="bison -y" LEX=flex -C util \
+        makedefs dgn_comp lev_comp dlb recover 2>&1 | tail -20
 
     echo "==> Host phase: generating data files (dat/)..."
     # dat/Makefile's `all` builds $(VARDAT) + spec_levs + quest_levs + dungeon

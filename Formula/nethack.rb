@@ -21,6 +21,8 @@ class Nethack < Formula
     sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "fae9423a95dfc99b4c0de67f0be8c2b9bde81533bab1a7f79e9508a1257ca7ee"
   end
 
+  depends_on "bison" => :build
+  depends_on "flex" => :build
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/ncurses"
@@ -36,8 +38,8 @@ class Nethack < Formula
     # guest opt prefix, not a staging keg path.
 
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "a8530228d19dde76f04983319dd62503a7cf533e9f66d1accd984754dc8a2482",
-      script_env: {
+      manifest_sha256: "693344735e8311338d6216dbed3ff0e31a776f4a6c89703fed59c5e39299883b",
+      script_env:      {
         "NETHACK_HACKDIR" => GUEST_HACKDIR,
       },
     )
