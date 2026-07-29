@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "formula": "homebrew-bootstrap",
+  "arch": "wasm32",
+  "release_tag": "bottles-abi-v42",
+  "status": "failed",
+  "attempted_at": "2026-07-29T15:02:08Z",
+  "attempted_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30460860440",
+  "kandelo_commit": "85d2efccdf55f02eb23fde4e9a3d075a4b267104",
+  "tap_commit": "25d0c00638c66fe514e101953009ef73ff46f10e",
+  "error": "publish-handoff=success; validate-payload=success; publish=failure",
+  "error_detail": "Preparing worktree (detached HEAD 25d0c00)\nPreparing worktree (detached HEAD 25d0c00)\nPreparing worktree (detached HEAD 25d0c00)\nwarning: function `activate_index` is never used\n   --> tools/xtask/src/index_candidate.rs:325:4\n    |\n325 | fn activate_index(\n    |    ^^^^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: function `activate_index` is never used\n   --> tools/xtask/src/index_candidate.rs:325:4\n    |\n325 | fn activate_index(\n    |    ^^^^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nxtask homebrew-validate: homebrew metadata validation failed with 3 error(s):\n- metadata: schema: [] has less than 1 item\n- formula sidecar homebrew-bootstrap: schema: [] has less than 1 item\n- package homebrew-bootstrap bottle #0: schema: \"support_data_test\" is not one of [\"schema\",\"homebrew_audit\",\"bottle_build\",\"node_smoke\",\"browser_smoke\"]\n"
+}
