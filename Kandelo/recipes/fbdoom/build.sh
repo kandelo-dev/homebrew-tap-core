@@ -36,6 +36,19 @@ FBDOOM_SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
     exit 2
 }
 
+# WHY: Homebrew's gpatch Formula keeps the upstream `patch` name on Linux;
+# only macOS applies the `g` prefix. The closed publisher puts the declared
+# versioned keg before system paths, so require that exact Linux executable
+# instead of misreporting a missing `gpatch` command as source-patch drift.
+PATCH_BIN="$(command -v patch || true)"
+case "$PATCH_BIN" in
+    */Cellar/gpatch/*/bin/patch) ;;
+    *)
+        echo "ERROR: declared Homebrew gpatch executable is unavailable" >&2
+        exit 1
+        ;;
+esac
+
 mkdir "$SRC"
 cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$SRC/"
 # WHY: vendoring, patches, and make all write in tree. Keep the authenticated
@@ -56,11 +69,11 @@ apply_patches() {
     for patch_file in "$HERE/patches/"*.patch; do
         [ -f "$patch_file" ] || continue
         name="$(basename "$patch_file")"
-        if gpatch --forward --dry-run -d "$SRC" -p1 <"$patch_file" \
+        if "$PATCH_BIN" --forward --dry-run -d "$SRC" -p1 <"$patch_file" \
             >/dev/null 2>&1; then
             echo "    $name"
-            gpatch --forward -d "$SRC" -p1 <"$patch_file"
-        elif gpatch --reverse --dry-run -d "$SRC" -p1 <"$patch_file" \
+            "$PATCH_BIN" --forward -d "$SRC" -p1 <"$patch_file"
+        elif "$PATCH_BIN" --reverse --dry-run -d "$SRC" -p1 <"$patch_file" \
             >/dev/null 2>&1; then
             echo "    $name (already applied)"
         elif [ "$mode" = "lenient" ]; then
