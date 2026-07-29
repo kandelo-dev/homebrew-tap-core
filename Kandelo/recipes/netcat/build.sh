@@ -35,6 +35,18 @@ if ! command -v automake &>/dev/null; then
     exit 1
 fi
 
+# WHY: Homebrew's gpatch Formula keeps the upstream `patch` name on Linux;
+# only macOS applies the `g` prefix. The closed publisher puts the declared
+# versioned keg before system paths, so require that exact Linux executable.
+PATCH_BIN="$(command -v patch || true)"
+case "$PATCH_BIN" in
+    */Cellar/gpatch/*/bin/patch) ;;
+    *)
+        echo "ERROR: declared Homebrew gpatch executable is unavailable" >&2
+        exit 1
+        ;;
+esac
+
 if [ ! -f "$SYSROOT/lib/libc.a" ]; then
     echo "ERROR: sysroot not found. Run: bash scripts/build-musl.sh" >&2
     exit 1
@@ -76,10 +88,10 @@ PATCH_SET=(
 echo "==> Verifying Kandelo netcat portability patches..."
 for patch_name in "${PATCH_SET[@]}"; do
     patch_file="$SCRIPT_DIR/patches/$patch_name"
-    if gpatch --reverse --dry-run -p1 < "$patch_file" >/dev/null 2>&1; then
+    if "$PATCH_BIN" --reverse --dry-run -p1 < "$patch_file" >/dev/null 2>&1; then
         echo "    $patch_name already applied"
-    elif gpatch --forward --dry-run -p1 < "$patch_file" >/dev/null 2>&1; then
-        gpatch -p1 < "$patch_file"
+    elif "$PATCH_BIN" --forward --dry-run -p1 < "$patch_file" >/dev/null 2>&1; then
+        "$PATCH_BIN" -p1 < "$patch_file"
     else
         echo "ERROR: $patch_name does not apply and is not already present" >&2
         exit 1

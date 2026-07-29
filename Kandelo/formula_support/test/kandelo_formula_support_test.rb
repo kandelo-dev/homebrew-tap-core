@@ -1088,6 +1088,23 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
+  def test_tap_recipe_path_prioritizes_declared_native_kegs
+    Dir.mktmpdir("kandelo-native-build-path") do |dir|
+      base = Pathname(dir)
+      root = base/"platform"
+      native_bin = base/"Cellar/gpatch/2.8/bin"
+      native_bin.mkpath
+      harness = Harness.new
+      runtime = { "trusted_env" => {} }
+
+      entries = harness.kandelo_tap_recipe_runner_path(
+        root, [native_bin.parent], runtime
+      ).split(File::PATH_SEPARATOR)
+
+      assert_operator entries.index(native_bin.to_s), :<, entries.index("/usr/bin")
+    end
+  end
+
   def test_verified_formula_source_is_isolated_from_bridge_work_and_output_roots
     Dir.mktmpdir("kandelo-formula-source") do |dir|
       build_path = Pathname(dir)/"build"

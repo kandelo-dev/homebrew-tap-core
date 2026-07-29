@@ -42,7 +42,7 @@ class Fbdoom < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "edc92cda775fbf142cb599262d41e36190c1cf858c7df4964a430c3b3cf76e69",
+      manifest_sha256: "1e0621951982185a3b51e87eadb1c71bca0ad0afec3f3fabce5ca1e21670b6b0",
       resources:       ["chocolate-doom"],
       script_env:      {},
     )
