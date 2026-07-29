@@ -59,11 +59,28 @@ to a one-request root supervisor. The supervisor starts a network-disabled
 transient service under a distinct recipe uid, mounts only the attested
 recipe/source/platform/sysroot/dependency closure, waits for the entrypoint,
 kills and collects the entire recipe cgroup, validates the result, and copies it
-into a root-owned read-only tree. The Formula receives only that sealed tree.
-The supervisor, client, and sealed-output parent are outside the platform
-projection and are never mounted into the recipe service; putting the client
-below `HOMEBREW_KANDELO_ROOT` would let a recipe invoke the privileged boundary
-recursively.
+into a root-owned read-only tree. Formula support validates that sealed evidence
+in full, then copies the complete tree once into a private, Formula-owned
+materialization below the original `kandelo-package-out`. It preserves file
+bytes, executable meaning, nested directories, and contained relative
+symlinks; directories become `0755`, data files become `0644`, and executable
+files become `0755`. The sealed tree is never chmodded, unlinked, or moved.
+Only after both trees validate does Formula support return the private
+randomly named materialization. Method return is the publication boundary:
+there is no fixed-name rename that could replace a foreign path. Formulae can
+therefore use normal Homebrew `prefix.install out_dir.children` and
+`Pathname#install` move semantics for binaries, archives, and complete runtime
+trees. The supervisor, client, and sealed-output parent are outside the
+platform projection and are never mounted into the recipe service; putting the
+client below `HOMEBREW_KANDELO_ROOT` would let a recipe invoke the privileged
+boundary recursively.
+
+If a failure occurs after private materialization begins, Formula support
+leaves its partial tree below the mode-`0700` Formula-owned output root and
+raises. It never deletes a pathname during failure handling because an identity
+check followed by `unlink` or `rmdir` would still have a replacement race.
+Homebrew's outer workspace cleanup owns removal after the failed Formula
+process is finished.
 
 The preflight, Formula runtime, and root runner independently reject undeclared
 or changed input nodes, dependency environment-name collisions, traversal,
@@ -74,8 +91,10 @@ control characters and are bounded to 4,096 bytes. Output is limited to
 bytes; sparse files do not bypass the logical-byte limits. Directories must be
 `0555`/`0755`, regular files must be `0444`/`0555`/`0644`/`0755`, and special,
 set-id, or writable-by-group/other nodes are rejected. Formula support hashes
-the complete sealed tree again before returning it, so a changed response or
-post-seal mutation fails rather than reaching `prefix.install`.
+the complete sealed tree before copying and again afterward, and hashes the
+Formula-owned materialization before returning it. A changed response,
+post-seal mutation, incomplete copy, or ownership/mode drift therefore fails
+rather than reaching `prefix.install`.
 
 Changing recipe inputs requires updating `recipe.json` and its Formula literal;
 the resulting Formula SHA-256 invalidates reuse for that Formula only.
