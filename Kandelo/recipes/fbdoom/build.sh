@@ -37,10 +37,10 @@ FBDOOM_SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
 }
 
 mkdir "$SRC"
-cp -a "$SOURCE_INPUT/." "$SRC/"
+cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$SRC/"
 # WHY: vendoring, patches, and make all write in tree. Keep the authenticated
-# source sealed and grant writes only to this private copy. -P prevents chmod
-# from following source-tree symlinks into another projected input.
+# source sealed and grant writes only to this recipe-owned copy. Do not copy
+# root ownership, and do not follow symlinks into another projected input.
 find -P "$SRC" -type d -exec chmod u+rwx {} +
 find -P "$SRC" -type f -exec chmod u+rw {} +
 

@@ -87,10 +87,11 @@ export CPPFLAGS="${CPPFLAGS:-} -I$NCURSES_PREFIX/include"
 export LDFLAGS="${LDFLAGS:-} -L$NCURSES_PREFIX/lib"
 
 mkdir "$SRC_DIR"
-cp -a "$SOURCE_INPUT/." "$SRC_DIR/"
+cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$SRC_DIR/"
 # WHY: NetHack's setup, portability patches, host generators, and target
 # build all write in tree. Keep the authenticated source sealed and grant
-# writes only to this private copy. -P avoids following source-tree symlinks.
+# writes only to this recipe-owned copy. Do not copy root ownership or follow
+# source-tree symlinks into another projected input.
 find -P "$SRC_DIR" -type d -exec chmod u+rwx {} +
 find -P "$SRC_DIR" -type f -exec chmod u+rw {} +
 cd "$SRC_DIR"

@@ -75,10 +75,11 @@ copy_private_source() {
         exit 1
     }
     mkdir "$destination"
-    cp -a "$SOURCE_INPUT/." "$destination/"
+    cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$destination/"
     # WHY: the authenticated source is deliberately sealed 0444/0555.
     # Configure and make are in-tree writers, so only this recipe-owned copy
-    # becomes writable. -P keeps chmod from following source-tree symlinks.
+    # becomes writable. Do not copy the root ownership into an unprivileged
+    # recipe, and keep chmod from following source-tree symlinks.
     find -P "$destination" -type d -exec chmod u+rwx {} +
     find -P "$destination" -type f -exec chmod u+rw {} +
 }

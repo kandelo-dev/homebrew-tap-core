@@ -38,7 +38,7 @@ class Nethack < Formula
     # guest opt prefix, not a staging keg path.
 
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "693344735e8311338d6216dbed3ff0e31a776f4a6c89703fed59c5e39299883b",
+      manifest_sha256: "5080d22b6f03572f271523e97a15937b94e9fc50f58401935394444c22a92e49",
       script_env:      {
         "NETHACK_HACKDIR" => GUEST_HACKDIR,
       },

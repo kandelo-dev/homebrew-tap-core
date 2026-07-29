@@ -46,10 +46,10 @@ export WASM_POSIX_SYSROOT="$SYSROOT"
 : "${WASM_POSIX_GLUE_DIR:?}"
 
 mkdir "$SRC_DIR"
-cp -a "$SOURCE_INPUT/." "$SRC_DIR/"
+cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$SRC_DIR/"
 # WHY: upstream config helpers, patches, configure, and make all write in
 # tree. Keep the authenticated source sealed and grant writes only to this
-# private copy. -P prevents chmod from following source-tree symlinks.
+# recipe-owned copy. Do not copy root ownership or follow source symlinks.
 find -P "$SRC_DIR" -type d -exec chmod u+rwx {} +
 find -P "$SRC_DIR" -type f -exec chmod u+rw {} +
 cd "$SRC_DIR"
