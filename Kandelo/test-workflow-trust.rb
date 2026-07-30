@@ -772,11 +772,15 @@ def check_prefix_campaign_workflow(workflow, authority)
     publish_run.include?(
       "kandelo/scripts/publish-immutable-github-release.sh"
     ) &&
-      publish_run.include?("--exact-kandelo-main-sha") &&
+      publish_run.include?("--kandelo-main-contains-sha") &&
       publish_run.include?("--target-main-contains-sha") &&
+      publish_run.include?(
+        expression("needs.admit.outputs.kandelo-commit")
+      ) &&
       publish_run.include?(
         expression("needs.admit.outputs.source-tap-commit")
       ) &&
+      !publish_run.include?("--exact-kandelo-main-sha") &&
       !publish_run.include?("--exact-target-main-sha"),
     "#{label} immutable release authority changed"
   )
@@ -1295,6 +1299,28 @@ def self_test(
     step["run"] = step["run"].sub(
       /[ \t]*--target-main-contains-sha \\\n[^\n]*\n?/,
       ""
+    )
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("campaign release without Kandelo ancestry") do
+    mutated = deep_copy(prefix_campaign)
+    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+      item["name"] == "Publish immutable Formula handoff"
+    end
+    step["run"] = step["run"].sub(
+      /[ \t]*--kandelo-main-contains-sha \\\n[^\n]*\n?/,
+      ""
+    )
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("campaign release with exact-main authority") do
+    mutated = deep_copy(prefix_campaign)
+    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+      item["name"] == "Publish immutable Formula handoff"
+    end
+    step["run"] = step["run"].sub(
+      "--kandelo-main-contains-sha",
+      "--exact-kandelo-main-sha"
     )
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
