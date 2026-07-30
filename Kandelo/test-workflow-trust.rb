@@ -33,9 +33,16 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # Write publication executes and consumes packages from one reviewed Kandelo
 # main commit. Its rootfs package generation is admitted separately by a
 # content-addressed release tag, so preserved staging data can never become
-# caller authority. Dry runs retain independently selectable staging sources.
+# caller authority.
+#
+# WHY: the credential-free dry run may advance first so it can prove a new
+# publisher before that main commit owns an admitted package generation.
+# While split, credentialed callers retain their complete older tuple and
+# fail the publisher's current-main check. A full rotation converges both
+# pins only after a fresh generation is admitted.
 CURRENT_KANDELO_WORKFLOW_SHA = "4322468ce11f386c30f0cb4cdba6f3414eb0b737"
 CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
+DRY_RUN_KANDELO_WORKFLOW_SHA = "7887753a94070dd8733eb77e06147d24175e9bab"
 PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-8d08f8cc73b165b75d8367f257011ec1724974114e056fac2dfb0e63a4304454"
 
 def check(condition, message)
@@ -174,7 +181,7 @@ CALLER_SPECS = {
     name: "Dry run Kandelo bottles",
     event: "dry-run-kandelo-bottles",
     job: "dry-run",
-    reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@#{CURRENT_KANDELO_WORKFLOW_SHA}",
+    reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@#{DRY_RUN_KANDELO_WORKFLOW_SHA}",
     inputs: DRY_RUN_PUBLISH_INPUTS,
   },
   "maintenance" => {
@@ -497,6 +504,8 @@ def self_test(callers, contract, base_contract)
   arbitrary_specs = caller_specs_for_sha(SELF_TEST_KANDELO_WORKFLOW_SHA)
   test_profiles = { "current" => CALLER_SPECS }
   current_callers = callers_for_specs(callers, CALLER_SPECS)
+  write_tuple_specs = caller_specs_for_sha(CURRENT_KANDELO_WORKFLOW_SHA)
+  write_tuple_callers = callers_for_specs(callers, write_tuple_specs)
   retired_pat_callers = callers_for_specs(callers, retired_pat_specs)
   previous_callers = callers_for_specs(callers, previous_specs)
   retired_callers = callers_for_specs(callers, retired_specs)
@@ -504,6 +513,13 @@ def self_test(callers, contract, base_contract)
   check(check_caller_profile(current_callers, test_profiles) == "current",
         "current caller profile was not selected")
 
+  if DRY_RUN_KANDELO_WORKFLOW_SHA != CURRENT_KANDELO_WORKFLOW_SHA
+    expect_rejection("the fail-closed write publisher as the dry-run proof") do
+      mutated = deep_copy(current_callers)
+      mutated["dry-run"] = deep_copy(write_tuple_callers.fetch("dry-run"))
+      check_caller_profile(mutated, test_profiles)
+    end
+  end
   expect_rejection("mixed current and arbitrary caller generations") do
     mutated = deep_copy(current_callers)
     mutated["publish"] = deep_copy(arbitrary_callers.fetch("publish"))
@@ -764,6 +780,8 @@ begin
         "current Kandelo package-consumer pin is not an exact SHA")
   check(CURRENT_KANDELO_CONSUMER_SHA == CURRENT_KANDELO_WORKFLOW_SHA,
         "write publisher and package consumer must select the same Kandelo main SHA")
+  check(DRY_RUN_KANDELO_WORKFLOW_SHA.match?(/\A[0-9a-f]{40}\z/),
+        "dry-run Kandelo workflow pin is not an exact SHA")
   check(PACKAGE_GENERATION_WASM32_TAG.match?(
           /\Apackage-generation-rootfs-wasm32-abi-v42-sha256-[0-9a-f]{64}\z/
         ),
@@ -778,7 +796,7 @@ begin
     check(sha.match?(/\A[0-9a-f]{40}\z/),
           "#{label} Kandelo workflow pin is not an exact SHA")
   end
-  workflow_shas = [
+  complete_profile_shas = [
     CURRENT_KANDELO_WORKFLOW_SHA,
     REPOSITORY_CANARY_KANDELO_SHA,
     RETIRED_PAT_KANDELO_WORKFLOW_SHA,
@@ -786,8 +804,13 @@ begin
     RETIRED_KANDELO_WORKFLOW_SHA,
     SELF_TEST_KANDELO_WORKFLOW_SHA,
   ]
-  check(workflow_shas.uniq.length == workflow_shas.length,
+  check(complete_profile_shas.uniq.length == complete_profile_shas.length,
         "Kandelo workflow trust fixtures must use distinct SHAs")
+  check(
+    DRY_RUN_KANDELO_WORKFLOW_SHA == CURRENT_KANDELO_WORKFLOW_SHA ||
+      !complete_profile_shas.include?(DRY_RUN_KANDELO_WORKFLOW_SHA),
+    "split dry-run pin collides with another workflow trust fixture"
+  )
   callers = CALLER_SPECS.to_h do |key, spec|
     [key, load_workflow(spec.fetch(:path))]
   end
