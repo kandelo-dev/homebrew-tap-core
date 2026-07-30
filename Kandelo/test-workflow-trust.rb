@@ -322,13 +322,47 @@ BASE_MATERIALIZE_RUN = <<~'BASH'
         {path: "scripts/prefix-campaign-controller.py", mode: "100644", type: "blob"}
       ] and
     ([.tree[] |
+      select(.path == "scripts/prefix-campaign-source.py") |
+      {path, mode, type}]) == [
+        {path: "scripts/prefix-campaign-source.py", mode: "100644", type: "blob"}
+      ] and
+    ([.tree[] |
       select(.path == "scripts/test_prefix_campaign_controller.py") |
       {path, mode, type}]) == [
         {path: "scripts/test_prefix_campaign_controller.py", mode: "100644", type: "blob"}
+      ] and
+    ([.tree[] |
+      select(.path == "scripts/test_prefix_campaign_source.py") |
+      {path, mode, type}]) == [
+        {path: "scripts/test_prefix_campaign_source.py", mode: "100644", type: "blob"}
       ]
   ' "$tree_json" >/dev/null || {
     echo "::error::candidate workflow or trust-root file set changed"; exit 2;
   }
+  expected_manifest_blob="$(
+    git rev-parse HEAD:Kandelo/campaigns/prefix-v1/manifest.json
+  )"
+  expected_source_tree="$(
+    git rev-parse HEAD:Kandelo/campaigns/prefix-v1/source
+  )"
+  jq -e \
+    --arg manifest_blob "$expected_manifest_blob" \
+    --arg source_tree "$expected_source_tree" '
+      ([.tree[] |
+        select(.path ==
+          "Kandelo/campaigns/prefix-v1/manifest.json") |
+        {mode, sha, type}]) == [
+          {mode: "100644", sha: $manifest_blob, type: "blob"}
+        ] and
+      ([.tree[] |
+        select(.path ==
+          "Kandelo/campaigns/prefix-v1/source") |
+        {mode, sha, type}]) == [
+          {mode: "040000", sha: $source_tree, type: "tree"}
+        ]
+    ' "$tree_json" >/dev/null || {
+      echo "::error::candidate prefix source authority changed"; exit 2;
+    }
   paths=(
     .github/workflows/base-contract-checks.yml
     .github/workflows/contract-checks.yml
@@ -341,7 +375,9 @@ BASE_MATERIALIZE_RUN = <<~'BASH'
     Kandelo/test-workflow-trust.rb
     Kandelo/test-workflow-trust.sh
     scripts/prefix-campaign-controller.py
+    scripts/prefix-campaign-source.py
     scripts/test_prefix_campaign_controller.py
+    scripts/test_prefix_campaign_source.py
   )
   for path in "${paths[@]}"; do
     destination="$candidate_root/$path"
@@ -420,6 +456,7 @@ def check_prefix_campaign_authority(authority)
           source_tap_name
           source_tap_repository
           state
+          target_source
         ], "#{label} field set changed")
   check(authority["schema"] == 1, "#{label} schema changed")
   check(
@@ -440,6 +477,37 @@ def check_prefix_campaign_authority(authority)
   check(authority["state"].is_a?(String) &&
           authority["state"].match?(/\A(?:inert|active)\z/),
         "#{label} state changed")
+
+  target_source = authority["target_source"]
+  check(target_source.is_a?(Hash) &&
+          target_source.keys.sort == %w[
+            manifest_path
+            manifest_sha256
+            source_root
+            source_tree_git_oid
+            target_tree_git_oid
+          ], "#{label} target source changed")
+  check(
+    target_source["manifest_path"] ==
+      "Kandelo/campaigns/prefix-v1/manifest.json" &&
+      target_source["source_root"] ==
+        "Kandelo/campaigns/prefix-v1/source",
+    "#{label} target source paths changed"
+  )
+  check(
+    target_source["manifest_sha256"].is_a?(String) &&
+      target_source["manifest_sha256"].match?(/\A[0-9a-f]{64}\z/) &&
+      !target_source["manifest_sha256"].match?(/\A0+\z/),
+    "#{label} target manifest is not content-addressed"
+  )
+  %w[source_tree_git_oid target_tree_git_oid].each do |name|
+    check(
+      target_source[name].is_a?(String) &&
+        target_source[name].match?(/\A[0-9a-f]{40}\z/) &&
+        !target_source[name].match?(/\A0+\z/),
+      "#{label} #{name} is not an exact tree"
+    )
+  end
 
   campaign = authority["campaign_release"]
   check(campaign.is_a?(Hash) &&
@@ -607,6 +675,31 @@ def check_prefix_campaign_workflow(workflow, authority)
   ]
   check(values_for_key(workflow, "uses") == expected_uses,
         "#{label} executable dependency set changed")
+  source_checkouts = jobs.values.flat_map do |job|
+    job.fetch("steps", []).select do |step|
+      step["name"] == "Checkout exact campaign source tap"
+    end
+  end
+  check(
+    source_checkouts.map { |step| step["with"] } == [
+      {
+        "repository" => "kandelo-dev/homebrew-tap-core",
+        "ref" => expression("steps.authority.outputs.source-tap-commit"),
+        "path" => "source-tap",
+        "fetch-depth" => 0,
+        "persist-credentials" => false,
+      },
+      {
+        "repository" => "kandelo-dev/homebrew-tap-core",
+        "ref" =>
+          expression("needs.admit.outputs.source-tap-commit"),
+        "path" => "source-tap",
+        "fetch-depth" => 0,
+        "persist-credentials" => false,
+      },
+    ],
+    "#{label} source checkout is not exact full history"
+  )
   check(values_for_key(workflow, "secrets").empty?,
         "#{label} passes repository secrets")
   check(values_for_key(workflow, "env") == [
@@ -706,11 +799,14 @@ def check_contract_workflow(workflow)
 
   watched_paths = [
     ".github/workflows/**",
+    "Kandelo/campaigns/prefix-v1/**",
     "Kandelo/prefix-campaign-authority.json",
     "Kandelo/test-workflow-trust.sh",
     "Kandelo/test-workflow-trust.rb",
     "scripts/prefix-campaign-controller.py",
+    "scripts/prefix-campaign-source.py",
     "scripts/test_prefix_campaign_controller.py",
+    "scripts/test_prefix_campaign_source.py",
   ]
   check(workflow_events(workflow) == {
     "pull_request" => {},
@@ -723,7 +819,13 @@ def check_contract_workflow(workflow)
   check(jobs.is_a?(Hash) && jobs.keys == ["publisher-trust"],
         "#{label} has an unexpected job set")
   expected_steps = [
-    { "uses" => CHECKOUT_ACTION },
+    {
+      "uses" => CHECKOUT_ACTION,
+      "with" => {
+        "fetch-depth" => 0,
+        "persist-credentials" => false,
+      },
+    },
     {
       "uses" => RUBY_ACTION,
       "with" => { "ruby-version" => "3.4" },
@@ -737,6 +839,12 @@ def check_contract_workflow(workflow)
       "run" =>
         "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest " \
         "scripts/test_prefix_campaign_controller.py",
+    },
+    {
+      "name" => "Verify inert prefix-campaign source",
+      "run" =>
+        "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest " \
+        "scripts/test_prefix_campaign_source.py",
     },
   ]
   check(jobs.fetch("publisher-trust") == {

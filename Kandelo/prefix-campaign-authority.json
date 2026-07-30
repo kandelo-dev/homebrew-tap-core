@@ -17,5 +17,12 @@
   "source_tap_commit": "0000000000000000000000000000000000000000",
   "source_tap_name": "kandelo-dev/tap-core",
   "source_tap_repository": "kandelo-dev/homebrew-tap-core",
-  "state": "inert"
+  "state": "inert",
+  "target_source": {
+    "manifest_path": "Kandelo/campaigns/prefix-v1/manifest.json",
+    "manifest_sha256": "c09aedbb8cf93ba37c203f135efcc80246019631edba9d3c8f9a64179a08843e",
+    "source_root": "Kandelo/campaigns/prefix-v1/source",
+    "source_tree_git_oid": "0cc90e171da2876433bc78cd5db3533fe9c56d58",
+    "target_tree_git_oid": "fcfb7e57dd2979ddcfa7b5e08d9c034e3f3a974a"
+  }
 }

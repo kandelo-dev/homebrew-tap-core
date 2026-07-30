@@ -63,6 +63,7 @@ jobs:
           repository: kandelo-dev/homebrew-tap-core
           ref: ${{ steps.authority.outputs.source-tap-commit }}
           path: source-tap
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Admit one exact campaign task
@@ -187,6 +188,7 @@ jobs:
           repository: kandelo-dev/homebrew-tap-core
           ref: ${{ needs.admit.outputs.source-tap-commit }}
           path: source-tap
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Download wasm32 publication handoff
