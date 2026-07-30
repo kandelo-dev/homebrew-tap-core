@@ -768,20 +768,31 @@ def check_prefix_campaign_workflow(workflow, authority)
   publish_run = publish_step["run"]
   check(publish_run.is_a?(String),
         "#{label} immutable release command changed")
+  expected_publish_run = [
+    "set -euo pipefail",
+    "# WHY: credentials enter only after all task data is sealed.",
+    "# A campaign may outlive later Kandelo merges. Each release",
+    "# therefore re-proves that its sealed source remains on",
+    "# protected main.",
+    "bash kandelo/scripts/publish-immutable-github-release.sh \\",
+    "  --manifest \\",
+    "    \"$RUNNER_TEMP/prepared-handoff-release/" \
+      "release-manifest.json\" \\",
+    "  --asset-root \\",
+    "    \"$RUNNER_TEMP/prepared-handoff-release/assets\" \\",
+    "  --lock-root source-tap \\",
+    "  --receipt \"$RUNNER_TEMP/publish-receipt.json\" \\",
+    "  --kandelo-main-contains-sha \\",
+    "    \"#{expression(
+      'needs.admit.outputs.kandelo-commit'
+    )}\" \\",
+    "  --target-main-contains-sha \\",
+    "    \"#{expression(
+      'needs.admit.outputs.source-tap-commit'
+    )}\"",
+  ].join("\n") + "\n"
   check(
-    publish_run.include?(
-      "kandelo/scripts/publish-immutable-github-release.sh"
-    ) &&
-      publish_run.include?("--kandelo-main-contains-sha") &&
-      publish_run.include?("--target-main-contains-sha") &&
-      publish_run.include?(
-        expression("needs.admit.outputs.kandelo-commit")
-      ) &&
-      publish_run.include?(
-        expression("needs.admit.outputs.source-tap-commit")
-      ) &&
-      !publish_run.include?("--exact-kandelo-main-sha") &&
-      !publish_run.include?("--exact-target-main-sha"),
+    publish_run == expected_publish_run,
     "#{label} immutable release authority changed"
   )
 end
@@ -1322,6 +1333,22 @@ def self_test(
       "--kandelo-main-contains-sha",
       "--exact-kandelo-main-sha"
     )
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("campaign release with swapped ancestry") do
+    mutated = deep_copy(prefix_campaign)
+    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+      item["name"] == "Publish immutable Formula handoff"
+    end
+    kandelo = expression("needs.admit.outputs.kandelo-commit")
+    source_tap = expression(
+      "needs.admit.outputs.source-tap-commit"
+    )
+    sentinel = "__SWAPPED_CAMPAIGN_AUTHORITY__"
+    step["run"] = step["run"]
+      .sub(kandelo, sentinel)
+      .sub(source_tap, kandelo)
+      .sub(sentinel, source_tap)
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
   expect_rejection("handoff derivation outside the dev shell") do
