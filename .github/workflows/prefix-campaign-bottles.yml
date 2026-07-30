@@ -229,7 +229,8 @@ jobs:
         run: |
           set -euo pipefail
           # WHY: credentials enter only after all task data is sealed.
-          # The caller postdates the fixed campaign source commit.
+          # A campaign may outlive later Kandelo merges, so each release
+          # write re-proves that its sealed source remains on protected main.
           bash kandelo/scripts/publish-immutable-github-release.sh \
             --manifest \
               "$RUNNER_TEMP/prepared-handoff-release/release-manifest.json" \
@@ -237,7 +238,7 @@ jobs:
               "$RUNNER_TEMP/prepared-handoff-release/assets" \
             --lock-root source-tap \
             --receipt "$RUNNER_TEMP/publish-receipt.json" \
-            --exact-kandelo-main-sha \
+            --kandelo-main-contains-sha \
               "${{ needs.admit.outputs.kandelo-commit }}" \
             --target-main-contains-sha \
               "${{ needs.admit.outputs.source-tap-commit }}"

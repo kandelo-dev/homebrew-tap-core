@@ -41,6 +41,8 @@ BROWSER_WASM64_GENERATION = (
     "package-generation-browser-inputs-wasm64-abi-v42-sha256-"
     + "6" * 64
 )
+DEPENDENCY_FORMULA_SHA256 = "a" * 64
+LEAF_FORMULA_SHA256 = "b" * 64
 
 
 def variant(arch: str, kind: str) -> dict[str, object]:
@@ -50,30 +52,59 @@ def variant(arch: str, kind: str) -> dict[str, object]:
     }
 
 
+def formula_document(
+    name: str,
+    version: str,
+    dependencies: list[dict[str, str]],
+    disposition: str,
+    arches: tuple[str, ...],
+    formula_sha256: str,
+) -> dict[str, object]:
+    return {
+        "dependencies": dependencies,
+        "destination": {
+            "bottle_rebuild": 1,
+        },
+        "formula_source": {
+            "sha256": formula_sha256,
+        },
+        "name": name,
+        "variants": [
+            variant(arch, disposition)
+            for arch in arches
+        ],
+        "version": version,
+    }
+
+
 def campaign_document(
     *,
     formula: str = "leaf",
     disposition: str = "required-build",
     arches: tuple[str, ...] = ("wasm32",),
 ) -> dict[str, object]:
-    selected = {
-        "dependencies": [
-            {"full_name": "kandelo-dev/tap-core/dependency"}
+    selected = formula_document(
+        formula,
+        "2.0",
+        [
+            {
+                "full_name": "kandelo-dev/tap-core/dependency",
+                "version": "1.0",
+            }
         ],
-        "name": formula,
-        "variants": [
-            variant(arch, disposition)
-            for arch in arches
-        ],
-    }
+        disposition,
+        arches,
+        LEAF_FORMULA_SHA256,
+    )
     formulae = [
-        {
-            "dependencies": [],
-            "name": "dependency",
-            "variants": [
-                variant("wasm32", "required-build"),
-            ],
-        },
+        formula_document(
+            "dependency",
+            "1.0",
+            [],
+            "required-build",
+            ("wasm32",),
+            DEPENDENCY_FORMULA_SHA256,
+        ),
         selected,
     ]
     return {
@@ -149,6 +180,74 @@ def event_document(
             "formula": formula,
         },
     }
+
+
+def handoff_document(
+    authority: CONTROLLER.Authority,
+    plan: CONTROLLER.TaskPlan,
+) -> dict[str, object]:
+    formula = plan.formula
+    publications = []
+    for arch in plan.request.arches:
+        files = [
+            {
+                "asset_name": (
+                    f"{arch}.{relative.replace('/', '.')}"
+                ),
+                "bytes": index + 1,
+                "path": f"payload/{arch}/{relative}",
+                "sha256": f"{index + 1:x}" * 64,
+            }
+            for index, relative in enumerate(
+                CONTROLLER.HANDOFF_PUBLICATION_FILES
+            )
+        ]
+        publications.append({"arch": arch, "files": files})
+    return {
+        "campaign": {
+            "sha256": hashlib.sha256(
+                plan.campaign_payload
+            ).hexdigest(),
+        },
+        "dependency_handoffs": [
+            {
+                "formula": name,
+                "manifest_sha256": tag.removeprefix(
+                    "homebrew-prefix-handoff-sha256-"
+                ),
+                "tag": tag,
+            }
+            for name, tag in plan.request.dependency_tags
+        ],
+        "formula": {
+            "bottle_rebuild": (
+                formula["destination"]["bottle_rebuild"]
+            ),
+            "dependencies": formula["dependencies"],
+            "formula_sha256": (
+                formula["formula_source"]["sha256"]
+            ),
+            "name": formula["name"],
+            "version": formula["version"],
+        },
+        "kind": CONTROLLER.HANDOFF_KIND,
+        "publications": publications,
+        "schema": 1,
+        "source": {
+            "kandelo_commit": authority.kandelo_commit,
+            "source_tap_commit": authority.source_tap_commit,
+            "target_tree_git_oid": authority.target_tree,
+            "tap_name": authority.source_tap_name,
+            "tap_repository": authority.source_tap_repository,
+        },
+    }
+
+
+def tag_for_handoff(value: object) -> str:
+    return (
+        "homebrew-prefix-handoff-sha256-"
+        + hashlib.sha256(CONTROLLER.pretty_json(value)).hexdigest()
+    )
 
 
 class Fixture:
@@ -678,7 +777,8 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             dependency = fixture.root / "dependency-handoff"
             dependency.mkdir()
             output = fixture.root / "readback"
-            tag = "homebrew-prefix-handoff-sha256-" + "8" * 64
+            handoff = handoff_document(authority, plan)
+            tag = tag_for_handoff(handoff)
             commands: list[list[str]] = []
 
             def command_side_effect(
@@ -691,11 +791,8 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 )
                 fetched.mkdir()
                 write_pretty(
-                    fetched / "manifest.json",
-                    {
-                        "formula": {"name": "leaf"},
-                        "handoff_kind": "build",
-                    },
+                    fetched / "handoff.json",
+                    handoff,
                 )
                 receipt = pathlib.Path(
                     arguments[
@@ -752,6 +849,126 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     ).read_text()
                 ),
                 summary,
+            )
+
+    def test_readback_requires_the_exact_formula_handoff_contract(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(pathlib.Path(directory))
+            authority = CONTROLLER.load_authority(
+                fixture.authority,
+                require_active=True,
+            )
+            plan = fixture.plan()
+            valid = handoff_document(authority, plan)
+            handoff_path = fixture.root / "handoff.json"
+            write_pretty(handoff_path, valid)
+            tag = tag_for_handoff(valid)
+            self.assertEqual(
+                CONTROLLER.validate_readback_handoff(
+                    handoff_path,
+                    authority=authority,
+                    plan=plan,
+                    tag=tag,
+                ),
+                valid,
+            )
+
+            mutations: list[tuple[str, dict[str, object]]] = []
+            for label in (
+                "extra top-level field",
+                "legacy kind",
+                "different campaign",
+                "different Formula",
+                "different dependency",
+                "different source",
+                "different architecture",
+                "noncanonical payload path",
+                "invalid byte count",
+            ):
+                value = json.loads(
+                    json.dumps(valid)
+                )
+                if label == "extra top-level field":
+                    value["unexpected"] = True
+                elif label == "legacy kind":
+                    value["kind"] = "build"
+                elif label == "different campaign":
+                    value["campaign"]["sha256"] = "0" * 64
+                elif label == "different Formula":
+                    value["formula"]["name"] = "other"
+                elif label == "different dependency":
+                    value["dependency_handoffs"][0][
+                        "manifest_sha256"
+                    ] = "0" * 64
+                elif label == "different source":
+                    value["source"]["kandelo_commit"] = "0" * 40
+                elif label == "different architecture":
+                    value["publications"][0]["arch"] = "wasm64"
+                elif label == "noncanonical payload path":
+                    value["publications"][0]["files"][0][
+                        "path"
+                    ] = "payload/wasm32/other"
+                elif label == "invalid byte count":
+                    value["publications"][0]["files"][0][
+                        "bytes"
+                    ] = 0
+                mutations.append((label, value))
+
+            for label, value in mutations:
+                with self.subTest(label=label):
+                    write_pretty(handoff_path, value)
+                    with self.assertRaises(
+                        CONTROLLER.ControllerError
+                    ):
+                        CONTROLLER.validate_readback_handoff(
+                            handoff_path,
+                            authority=authority,
+                            plan=plan,
+                            tag=tag_for_handoff(value),
+                        )
+
+            write_pretty(handoff_path, valid)
+            with self.assertRaises(CONTROLLER.ControllerError):
+                CONTROLLER.validate_readback_handoff(
+                    handoff_path,
+                    authority=authority,
+                    plan=plan,
+                    tag=(
+                        "homebrew-prefix-handoff-sha256-"
+                        + "0" * 64
+                    ),
+                )
+
+    def test_readback_accepts_the_exact_multi_arch_handoff(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                arches=("wasm32", "wasm64"),
+            )
+            authority = CONTROLLER.load_authority(
+                fixture.authority,
+                require_active=True,
+            )
+            plan = fixture.plan()
+            handoff = handoff_document(authority, plan)
+            path = fixture.root / "handoff.json"
+            write_pretty(path, handoff)
+            validated = CONTROLLER.validate_readback_handoff(
+                path,
+                authority=authority,
+                plan=plan,
+                tag=tag_for_handoff(handoff),
+            )
+            self.assertEqual(
+                [
+                    publication["arch"]
+                    for publication in validated["publications"]
+                ],
+                ["wasm32", "wasm64"],
             )
 
     def test_anonymous_environment_removes_all_token_authority(

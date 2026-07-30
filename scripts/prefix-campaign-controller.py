@@ -53,12 +53,23 @@ BROWSER_WASM64_GENERATION = re.compile(
     r"sha256-([0-9a-f]{64})$"
 )
 MAX_JSON_BYTES = 64 * 1024 * 1024
+MAX_HANDOFF_ASSET_BYTES = 2 * 1024 * 1024 * 1024
+MAX_HANDOFF_TOTAL_BYTES = 8 * 1024 * 1024 * 1024
 MAX_COMMAND_OUTPUT = 16 * 1024 * 1024
 MAX_DEPENDENCIES = 256
 MAX_FORMULAE = 256
 COMMAND_TIMEOUT = 1800
 INERT_EXIT = 78
 UNAVAILABLE_EXIT = 69
+HANDOFF_KIND = "kandelo-homebrew-prefix-formula-handoff"
+HANDOFF_PUBLICATION_FILES = (
+    "build/bottle.json",
+    "build/bottle.tar.gz",
+    "build/dependency-provenance.json",
+    "build/manifest.json",
+    "composition/sidecars-input.json",
+    "receipt.json",
+)
 TOKEN_ENV = (
     "GH_TOKEN",
     "GITHUB_TOKEN",
@@ -244,6 +255,22 @@ def require_string(
         or not value
         or "\0" in value
         or (pattern is not None and pattern.fullmatch(value) is None)
+    ):
+        fail("invalid-contract", f"{label} is invalid", 2)
+    return value
+
+
+def require_integer(
+    value: Any,
+    label: str,
+    minimum: int,
+    maximum: int,
+) -> int:
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < minimum
+        or value > maximum
     ):
         fail("invalid-contract", f"{label} is invalid", 2)
     return value
@@ -1376,6 +1403,187 @@ def prepare_build_release(
         shutil.rmtree(working, ignore_errors=True)
 
 
+def validate_readback_handoff(
+    path: pathlib.Path,
+    *,
+    authority: Authority,
+    plan: TaskPlan,
+    tag: str,
+) -> dict[str, Any]:
+    manifest, payload = load_json_bytes(
+        path,
+        "read-back Formula handoff",
+        canonical=True,
+    )
+    manifest = exact_keys(
+        manifest,
+        {
+            "campaign",
+            "dependency_handoffs",
+            "formula",
+            "kind",
+            "publications",
+            "schema",
+            "source",
+        },
+        "read-back Formula handoff",
+    )
+    tag_match = HANDOFF_TAG.fullmatch(tag)
+    assert tag_match is not None
+    if (
+        manifest["schema"] != 1
+        or manifest["kind"] != HANDOFF_KIND
+        or hashlib.sha256(payload).hexdigest() != tag_match.group(1)
+    ):
+        fail(
+            "invalid-release",
+            "anonymous handoff readback has the wrong contract or tag",
+        )
+
+    campaign = exact_keys(
+        manifest["campaign"],
+        {"sha256"},
+        "read-back handoff campaign",
+    )
+    if campaign["sha256"] != hashlib.sha256(
+        plan.campaign_payload
+    ).hexdigest():
+        fail(
+            "invalid-release",
+            "anonymous handoff readback belongs to another campaign",
+        )
+
+    formula_source = plan.formula.get("formula_source")
+    destination = plan.formula.get("destination")
+    dependencies = plan.formula.get("dependencies")
+    if (
+        not isinstance(formula_source, dict)
+        or not isinstance(destination, dict)
+        or not isinstance(dependencies, list)
+    ):
+        fail(
+            "invalid-campaign",
+            "campaign Formula lacks exact handoff evidence",
+        )
+    expected_formula = {
+        "bottle_rebuild": require_integer(
+            destination.get("bottle_rebuild"),
+            "campaign Formula bottle rebuild",
+            0,
+            2**31 - 1,
+        ),
+        "dependencies": dependencies,
+        "formula_sha256": require_string(
+            formula_source.get("sha256"),
+            "campaign Formula SHA-256",
+            SHA256,
+        ),
+        "name": plan.request.formula,
+        "version": require_string(
+            plan.formula.get("version"),
+            "campaign Formula version",
+        ),
+    }
+    if manifest["formula"] != expected_formula:
+        fail(
+            "invalid-release",
+            "anonymous handoff readback has the wrong Formula identity",
+        )
+
+    expected_dependencies = [
+        {
+            "formula": name,
+            "manifest_sha256": dependency_tag.removeprefix(
+                "homebrew-prefix-handoff-sha256-"
+            ),
+            "tag": dependency_tag,
+        }
+        for name, dependency_tag in plan.request.dependency_tags
+    ]
+    if manifest["dependency_handoffs"] != expected_dependencies:
+        fail(
+            "invalid-release",
+            "anonymous handoff readback has the wrong dependencies",
+        )
+
+    expected_source = {
+        "kandelo_commit": authority.kandelo_commit,
+        "source_tap_commit": authority.source_tap_commit,
+        "target_tree_git_oid": authority.target_tree,
+        "tap_name": authority.source_tap_name,
+        "tap_repository": authority.source_tap_repository,
+    }
+    if manifest["source"] != expected_source:
+        fail(
+            "invalid-release",
+            "anonymous handoff readback has the wrong source authority",
+        )
+
+    publications = manifest["publications"]
+    if (
+        not isinstance(publications, list)
+        or len(publications) != len(plan.request.arches)
+    ):
+        fail(
+            "invalid-release",
+            "anonymous handoff readback has the wrong publications",
+        )
+    total_bytes = len(payload)
+    for index, arch in enumerate(plan.request.arches):
+        publication = exact_keys(
+            publications[index],
+            {"arch", "files"},
+            f"read-back {arch} publication",
+        )
+        files = publication["files"]
+        if (
+            publication["arch"] != arch
+            or not isinstance(files, list)
+            or len(files) != len(HANDOFF_PUBLICATION_FILES)
+        ):
+            fail(
+                "invalid-release",
+                f"anonymous {arch} handoff inventory is invalid",
+            )
+        for file_index, relative in enumerate(
+            HANDOFF_PUBLICATION_FILES
+        ):
+            record = exact_keys(
+                files[file_index],
+                {"asset_name", "bytes", "path", "sha256"},
+                f"read-back {arch} file #{file_index}",
+            )
+            expected_path = f"payload/{arch}/{relative}"
+            expected_asset = (
+                f"{arch}.{relative.replace('/', '.')}"
+            )
+            if (
+                record["path"] != expected_path
+                or record["asset_name"] != expected_asset
+            ):
+                fail(
+                    "invalid-release",
+                    f"anonymous {arch} handoff path is not canonical",
+                )
+            total_bytes += require_integer(
+                record["bytes"],
+                f"read-back {arch} file #{file_index} bytes",
+                1,
+                MAX_HANDOFF_ASSET_BYTES,
+            )
+            require_string(
+                record["sha256"],
+                f"read-back {arch} file #{file_index} SHA-256",
+                SHA256,
+            )
+            if total_bytes > MAX_HANDOFF_TOTAL_BYTES:
+                fail(
+                    "invalid-release",
+                    "anonymous handoff readback exceeds its size bound",
+                )
+    return manifest
+
+
 def verify_published_release(
     *,
     authority_path: pathlib.Path,
@@ -1445,22 +1653,15 @@ def verify_published_release(
             working / "readback-receipt.json",
             receipt_output,
         )
-        manifest, _payload = load_json_bytes(
-            output / "manifest.json",
-            "read-back handoff manifest",
-            canonical=True,
+        # WHY: fetch-release already validates the downloaded bytes, but this
+        # tap-owned boundary must also reject an executor whose output contract
+        # or selected task no longer matches the reviewed campaign caller.
+        validate_readback_handoff(
+            output / "handoff.json",
+            authority=authority,
+            plan=plan,
+            tag=tag,
         )
-        if (
-            not isinstance(manifest, dict)
-            or manifest.get("handoff_kind") != "build"
-            or not isinstance(manifest.get("formula"), dict)
-            or manifest["formula"].get("name")
-            != plan.request.formula
-        ):
-            fail(
-                "invalid-release",
-                "anonymous handoff readback has the wrong task identity",
-            )
         summary = {
             "formula": plan.request.formula,
             "kind": "kandelo-homebrew-prefix-build-release-readback",
