@@ -61,10 +61,10 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 CURRENT_KANDELO_WORKFLOW_SHA = "4322468ce11f386c30f0cb4cdba6f3414eb0b737"
 CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
 DRY_RUN_KANDELO_WORKFLOW_SHA = "3ef821db380d4008c5fb48f953a2e97d83a9a597"
-# WHY: the lifecycle caller must remain pinned to merged #1146. TA0, the
-# catalog, and the canary are separate final immutable authorities.
+# WHY: the lifecycle caller must remain pinned to reviewed Kandelo main. TA0,
+# the catalog, and the canary are separate final immutable authorities.
 MAIN_SHELL_MIRROR_KANDELO_SHA =
-  "a5b63d549805761e433a65ab1a006c0fd443639b"
+  "68fc4e812c6fa18bd7d25aca58eecf8e574d3e54"
 MAIN_SHELL_MIRROR_TAP_CATALOG_SHA = "6ad0e3dbc60e5572c4288c86919238f71c1bc110"
 MAIN_SHELL_MIRROR_AUTHORITY_SHA =
   "08f8f32c94bee8d6fc2948e453e53ece29b1c8e1"
