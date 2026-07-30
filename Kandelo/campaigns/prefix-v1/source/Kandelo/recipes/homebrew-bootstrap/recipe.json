@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "dependencies": [
+
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 1070,
+      "mode": "0644",
+      "path": "PATCH-LICENSE.md",
+      "sha256": "d2650ac56b8d0c9a03d92baa44e5ad7388cc7d087fa2549270ca9511f0b5101c"
+    },
+    {
+      "bytes": 7589,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "c4a1bb9a3e205b890667010c859c2de2433bf0e2f1c6f199d39d79926bb251f3"
+    },
+    {
+      "bytes": 3681,
+      "mode": "0755",
+      "path": "create-deterministic-zip.sh",
+      "sha256": "bb549dfac4e9249ab55388d6eea1d1c56d65e56ba22300fe2d2d4fcaee94b097"
+    },
+    {
+      "bytes": 5851,
+      "mode": "0644",
+      "path": "patches/0001-add-kandelo-wasm-bottle-tags.patch",
+      "sha256": "faf62befeb70033ea450e88eb1b21427e221030a7f6b6ce932ad2c7c728ac2bc"
+    },
+    {
+      "bytes": 1882,
+      "mode": "0644",
+      "path": "source-lock.json",
+      "sha256": "f4c5af73497c6e6fb34aeeb6fe78314485c3628a056380d02f001d54524d70a5"
+    },
+    {
+      "bytes": 12729,
+      "mode": "0755",
+      "path": "verify-source-lock.rb",
+      "sha256": "c2cb998e1eac24550b747006876ff19095f23bedd4eb4d42a927ea5d265d274d"
+    }
+  ]
+}
