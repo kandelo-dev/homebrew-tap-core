@@ -9,16 +9,16 @@ jobs:
     permissions:
       actions: read
       contents: write
-    # WHY: The reusable workflow owns every executable step and derives its
-    # tap publication authority from this protected caller's live-main SHA.
-    # Keeping all three product identities literal prevents event data from
-    # selecting code, bottle metadata, or a third-party tap revision.
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-main-shell-mirror-publish.yml@1afb9cabfea7fe318662988528f4c6d2df8ffc22
+    # WHY: the reusable workflow owns every executable step and derives TA1
+    # from this protected caller's live-main SHA. Keeping all four input
+    # identities literal prevents event data from selecting code or artifacts.
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-main-shell-mirror-publish.yml@a5b63d549805761e433a65ab1a006c0fd443639b
     with:
-      kandelo-ref: 1afb9cabfea7fe318662988528f4c6d2df8ffc22
-      # WHY: TF owns the reviewed bottle bytes. The later caller commit owns
-      # only the release write and proves that TF is its ancestor.
+      kandelo-ref: a5b63d549805761e433a65ab1a006c0fd443639b
+      # WHY: TF owns the reviewed bottle catalog, while TA0 owns the existing
+      # immutable mirror. TA1 may publish only the lifecycle-input release.
       tap-catalog-ref: 6ad0e3dbc60e5572c4288c86919238f71c1bc110
+      mirror-authority-ref: 08f8f32c94bee8d6fc2948e453e53ece29b1c8e1
       # WHY: third-party installation must use an immutable revision from a
       # genuinely independent public tap.
       canary-ref: d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc
