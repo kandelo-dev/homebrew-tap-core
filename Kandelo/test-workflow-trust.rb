@@ -61,10 +61,11 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 CURRENT_KANDELO_WORKFLOW_SHA = "4322468ce11f386c30f0cb4cdba6f3414eb0b737"
 CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
 DRY_RUN_KANDELO_WORKFLOW_SHA = "3ef821db380d4008c5fb48f953a2e97d83a9a597"
-# WHY: mirror publication must run the exact merged #1144 code that owns the
-# sealed shell. The catalog and independent canary are separate immutable
-# authorities, so all three values remain literal and event-independent.
-MAIN_SHELL_MIRROR_KANDELO_SHA = "bb44da782a226e4e500bf62dac9f1fbd7aed67d7"
+# WHY: mirror publication must run the exact merged Kandelo code that owns
+# direct-root shell and bootstrap selection. The catalog and independent
+# canary are separate immutable authorities, so all three values remain
+# literal and event-independent.
+MAIN_SHELL_MIRROR_KANDELO_SHA = "1afb9cabfea7fe318662988528f4c6d2df8ffc22"
 MAIN_SHELL_MIRROR_TAP_CATALOG_SHA = "6ad0e3dbc60e5572c4288c86919238f71c1bc110"
 MAIN_SHELL_MIRROR_CANARY_SHA = "d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc"
 PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-8d08f8cc73b165b75d8367f257011ec1724974114e056fac2dfb0e63a4304454"
