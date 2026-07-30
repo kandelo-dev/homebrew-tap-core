@@ -6,11 +6,14 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/**"
+      - "Kandelo/campaigns/prefix-v1/**"
       - "Kandelo/prefix-campaign-authority.json"
       - "Kandelo/test-workflow-trust.sh"
       - "Kandelo/test-workflow-trust.rb"
       - "scripts/prefix-campaign-controller.py"
+      - "scripts/prefix-campaign-source.py"
       - "scripts/test_prefix_campaign_controller.py"
+      - "scripts/test_prefix_campaign_source.py"
 
 permissions:
   contents: read
@@ -20,6 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9 # v1
         with:
           ruby-version: "3.4"
@@ -29,3 +35,7 @@ jobs:
         run: >-
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest
           scripts/test_prefix_campaign_controller.py
+      - name: Verify inert prefix-campaign source
+        run: >-
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest
+          scripts/test_prefix_campaign_source.py

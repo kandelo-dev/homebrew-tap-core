@@ -75,13 +75,47 @@ jobs:
                 {path: "scripts/prefix-campaign-controller.py", mode: "100644", type: "blob"}
               ] and
             ([.tree[] |
+              select(.path == "scripts/prefix-campaign-source.py") |
+              {path, mode, type}]) == [
+                {path: "scripts/prefix-campaign-source.py", mode: "100644", type: "blob"}
+              ] and
+            ([.tree[] |
               select(.path == "scripts/test_prefix_campaign_controller.py") |
               {path, mode, type}]) == [
                 {path: "scripts/test_prefix_campaign_controller.py", mode: "100644", type: "blob"}
+              ] and
+            ([.tree[] |
+              select(.path == "scripts/test_prefix_campaign_source.py") |
+              {path, mode, type}]) == [
+                {path: "scripts/test_prefix_campaign_source.py", mode: "100644", type: "blob"}
               ]
           ' "$tree_json" >/dev/null || {
             echo "::error::candidate workflow or trust-root file set changed"; exit 2;
           }
+          expected_manifest_blob="$(
+            git rev-parse HEAD:Kandelo/campaigns/prefix-v1/manifest.json
+          )"
+          expected_source_tree="$(
+            git rev-parse HEAD:Kandelo/campaigns/prefix-v1/source
+          )"
+          jq -e \
+            --arg manifest_blob "$expected_manifest_blob" \
+            --arg source_tree "$expected_source_tree" '
+              ([.tree[] |
+                select(.path ==
+                  "Kandelo/campaigns/prefix-v1/manifest.json") |
+                {mode, sha, type}]) == [
+                  {mode: "100644", sha: $manifest_blob, type: "blob"}
+                ] and
+              ([.tree[] |
+                select(.path ==
+                  "Kandelo/campaigns/prefix-v1/source") |
+                {mode, sha, type}]) == [
+                  {mode: "040000", sha: $source_tree, type: "tree"}
+                ]
+            ' "$tree_json" >/dev/null || {
+              echo "::error::candidate prefix source authority changed"; exit 2;
+            }
           paths=(
             .github/workflows/base-contract-checks.yml
             .github/workflows/contract-checks.yml
@@ -94,7 +128,9 @@ jobs:
             Kandelo/test-workflow-trust.rb
             Kandelo/test-workflow-trust.sh
             scripts/prefix-campaign-controller.py
+            scripts/prefix-campaign-source.py
             scripts/test_prefix_campaign_controller.py
+            scripts/test_prefix_campaign_source.py
           )
           for path in "${paths[@]}"; do
             destination="$candidate_root/$path"

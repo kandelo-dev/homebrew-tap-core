@@ -31,6 +31,9 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 REPOSITORY = re.compile(
     r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
 )
+REPOSITORY_PATH = re.compile(
+    r"^[A-Za-z0-9_.+-]+(?:/[A-Za-z0-9_.+-]+)*$"
+)
 CAMPAIGN_TAG = re.compile(
     r"^homebrew-prefix-campaign-sha256-([0-9a-f]{64})$"
 )
@@ -96,6 +99,11 @@ class Authority:
     browser_inputs_wasm64: str
     release_tag: str
     reusable_workflow_commit: str
+    target_manifest_path: str
+    target_manifest_sha256: str
+    target_source_root: str
+    target_source_tree: str
+    target_tree: str
     state: str
     payload: bytes
 
@@ -280,6 +288,7 @@ def load_authority(
             "source_tap_name",
             "source_tap_repository",
             "state",
+            "target_source",
         },
         "campaign caller authority",
     )
@@ -296,6 +305,17 @@ def load_authority(
             "rootfs_wasm32",
         },
         "package generation authority",
+    )
+    target_source = exact_keys(
+        value["target_source"],
+        {
+            "manifest_path",
+            "manifest_sha256",
+            "source_root",
+            "source_tree_git_oid",
+            "target_tree_git_oid",
+        },
+        "campaign target-source authority",
     )
     if (
         value["schema"] != 1
@@ -368,6 +388,31 @@ def load_authority(
             "reusable workflow commit",
             SHA,
         ),
+        target_manifest_path=require_string(
+            target_source["manifest_path"],
+            "target source manifest path",
+            REPOSITORY_PATH,
+        ),
+        target_manifest_sha256=require_string(
+            target_source["manifest_sha256"],
+            "target source manifest SHA-256",
+            SHA256,
+        ),
+        target_source_root=require_string(
+            target_source["source_root"],
+            "target source root",
+            REPOSITORY_PATH,
+        ),
+        target_source_tree=require_string(
+            target_source["source_tree_git_oid"],
+            "target source tree",
+            SHA,
+        ),
+        target_tree=require_string(
+            target_source["target_tree_git_oid"],
+            "target reconstructed tree",
+            SHA,
+        ),
         state=value["state"],
         payload=payload,
     )
@@ -381,6 +426,13 @@ def load_authority(
         or authority.release_tag != "bottles-abi-v42"
         or authority.reusable_workflow_commit
         != authority.kandelo_commit
+        or authority.target_manifest_path
+        != "Kandelo/campaigns/prefix-v1/manifest.json"
+        or authority.target_source_root
+        != "Kandelo/campaigns/prefix-v1/source"
+        or set(authority.target_manifest_sha256) == {"0"}
+        or set(authority.target_source_tree) == {"0"}
+        or set(authority.target_tree) == {"0"}
     ):
         fail(
             "invalid-contract",
@@ -632,6 +684,80 @@ def require_exact_checkout(
             f"{label} uses unsafe Git index flags",
         )
     return root
+
+
+def target_source_identity(authority: Authority) -> tuple[str, ...]:
+    return (
+        authority.target_manifest_path,
+        authority.target_manifest_sha256,
+        authority.target_source_root,
+        authority.target_source_tree,
+        authority.target_tree,
+    )
+
+
+def require_target_source_checkout(
+    authority: Authority,
+    source_tap_root: pathlib.Path,
+) -> pathlib.Path:
+    source_authority = load_authority(
+        source_tap_root / "Kandelo/prefix-campaign-authority.json",
+        require_active=False,
+    )
+    if target_source_identity(source_authority) != target_source_identity(
+        authority
+    ):
+        fail(
+            "invalid-checkout",
+            "source tap differs from the protected target-source authority",
+        )
+    verifier = source_tap_root / "scripts/prefix-campaign-source.py"
+    run_command(
+        [
+            "python3",
+            str(verifier),
+            "verify",
+            "--root",
+            str(source_tap_root),
+            "--authority",
+            str(
+                source_tap_root
+                / "Kandelo/prefix-campaign-authority.json"
+            ),
+            "--manifest",
+            str(source_tap_root / authority.target_manifest_path),
+        ],
+        cwd=source_tap_root,
+    )
+    return source_tap_root / authority.target_source_root
+
+
+def materialize_target_source(
+    authority: Authority,
+    source_tap_root: pathlib.Path,
+    output: pathlib.Path,
+) -> pathlib.Path:
+    verifier = source_tap_root / "scripts/prefix-campaign-source.py"
+    run_command(
+        [
+            "python3",
+            str(verifier),
+            "materialize",
+            "--root",
+            str(source_tap_root),
+            "--authority",
+            str(
+                source_tap_root
+                / "Kandelo/prefix-campaign-authority.json"
+            ),
+            "--manifest",
+            str(source_tap_root / authority.target_manifest_path),
+            "--out",
+            str(output),
+        ],
+        cwd=source_tap_root,
+    )
+    return output
 
 
 def fetch_campaign(
@@ -909,6 +1035,13 @@ def build_plan_document(
         "kind": "kandelo-homebrew-prefix-campaign-task-plan",
         "schema": 1,
         "source_tap_commit": authority.source_tap_commit,
+        "target_source": {
+            "manifest_path": authority.target_manifest_path,
+            "manifest_sha256": authority.target_manifest_sha256,
+            "source_root": authority.target_source_root,
+            "source_tree_git_oid": authority.target_source_tree,
+            "target_tree_git_oid": authority.target_tree,
+        },
     }
 
 
@@ -954,11 +1087,12 @@ def prepare_task(
         authority.kandelo_commit,
         "Kandelo checkout",
     )
-    require_exact_checkout(
+    source_tap_root = require_exact_checkout(
         source_tap_root,
         authority.source_tap_commit,
         "source tap checkout",
     )
+    require_target_source_checkout(authority, source_tap_root)
     campaign_path = fetch_campaign(
         authority,
         kandelo_root,
@@ -1133,6 +1267,11 @@ def prepare_build_release(
             event_path=event_path,
             working=working,
         )
+        target_source_root = materialize_target_source(
+            authority,
+            source_tap_root.resolve(),
+            working / "target-source",
+        )
         dependencies = fetch_dependency_handoffs(
             kandelo_root=kandelo_root,
             plan=plan,
@@ -1154,7 +1293,7 @@ def prepare_build_release(
             "--campaign",
             str(plan.campaign_path),
             "--source-tap-root",
-            str(source_tap_root),
+            str(target_source_root),
             "--formula",
             plan.request.formula,
             "--out",

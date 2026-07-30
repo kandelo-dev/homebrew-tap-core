@@ -119,6 +119,14 @@ def active_authority(
         "source_tap_name": "kandelo-dev/tap-core",
         "source_tap_repository": "kandelo-dev/homebrew-tap-core",
         "state": "active",
+        "target_source": {
+            "manifest_path":
+            "Kandelo/campaigns/prefix-v1/manifest.json",
+            "manifest_sha256": "7" * 64,
+            "source_root": "Kandelo/campaigns/prefix-v1/source",
+            "source_tree_git_oid": "8" * 40,
+            "target_tree_git_oid": "9" * 40,
+        },
     }
 
 
@@ -327,6 +335,10 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 ),
                 mock.patch.object(
                     CONTROLLER,
+                    "require_target_source_checkout",
+                ),
+                mock.patch.object(
+                    CONTROLLER,
                     "fetch_campaign",
                     return_value=fixture.campaign,
                 ),
@@ -340,6 +352,12 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     github_output=github_output,
                 )
             self.assertEqual(document["disposition"], "build")
+            self.assertEqual(
+                document["target_source"],
+                active_authority(
+                    fixture.campaign.read_bytes()
+                )["target_source"],
+            )
             self.assertEqual(output.read_bytes(), CONTROLLER.pretty_json(document))
             values = dict(
                 line.split("=", 1)
@@ -370,6 +388,10 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     CONTROLLER,
                     "require_exact_checkout",
                     side_effect=lambda root, *_args: root.resolve(),
+                ),
+                mock.patch.object(
+                    CONTROLLER,
+                    "require_target_source_checkout",
                 ),
                 mock.patch.object(
                     CONTROLLER,
@@ -443,6 +465,52 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 ],
             )
 
+    def test_target_source_uses_the_frozen_overlay_verifier(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(pathlib.Path(directory))
+            source_authority = (
+                fixture.source_tap
+                / "Kandelo/prefix-campaign-authority.json"
+            )
+            source_authority.parent.mkdir(parents=True)
+            source_authority.write_bytes(fixture.authority.read_bytes())
+            authority = CONTROLLER.load_authority(
+                fixture.authority,
+                require_active=True,
+            )
+            with mock.patch.object(
+                CONTROLLER,
+                "run_command",
+            ) as run:
+                result = CONTROLLER.require_target_source_checkout(
+                    authority,
+                    fixture.source_tap,
+                )
+            self.assertEqual(
+                result,
+                fixture.source_tap
+                / "Kandelo/campaigns/prefix-v1/source",
+            )
+            command = run.call_args.args[0]
+            self.assertEqual(
+                command[:3],
+                [
+                    "python3",
+                    str(
+                        fixture.source_tap
+                        / "scripts/prefix-campaign-source.py"
+                    ),
+                    "verify",
+                ],
+            )
+            self.assertIn(
+                str(
+                    fixture.source_tap
+                    / "Kandelo/campaigns/prefix-v1/manifest.json"
+                ),
+                command,
+            )
+
     def test_build_release_uses_publications_and_dependency_handoffs(
         self,
     ) -> None:
@@ -490,6 +558,11 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     CONTROLLER,
                     "prepare_task",
                     return_value=(authority, plan),
+                ),
+                mock.patch.object(
+                    CONTROLLER,
+                    "materialize_target_source",
+                    return_value=fixture.source_tap,
                 ),
                 mock.patch.object(
                     CONTROLLER,
