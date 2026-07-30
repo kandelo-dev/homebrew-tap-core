@@ -23,7 +23,8 @@ sys.modules[SPEC.name] = finalizer
 SPEC.loader.exec_module(finalizer)
 
 ROOT = SCRIPT.parent.parent
-MPRE = "a123456789012345678901234567890123456789"
+KANDELO = "a123456789012345678901234567890123456789"
+TA0 = finalizer.EXPECTED_MIRROR_AUTHORITY_SHA
 TF = finalizer.EXPECTED_TAP_CATALOG_SHA
 C = finalizer.EXPECTED_CANARY_SHA
 
@@ -58,12 +59,12 @@ class MainShellMirrorCallerFinalizationTests(unittest.TestCase):
             self.force_scalar(
                 finalizer.CALLER_PATH,
                 pattern,
-                finalizer.MPRE_PLACEHOLDER,
+                finalizer.KANDELO_PLACEHOLDER,
             )
         self.force_scalar(
             finalizer.TRUST_PATH,
             finalizer.TRUST_KANDELO,
-            finalizer.MPRE_PLACEHOLDER,
+            finalizer.KANDELO_PLACEHOLDER,
         )
 
     def tearDown(self) -> None:
@@ -72,7 +73,7 @@ class MainShellMirrorCallerFinalizationTests(unittest.TestCase):
     def build(self):
         return finalizer.build_finalization(
             self.root,
-            kandelo_sha=MPRE,
+            kandelo_sha=KANDELO,
         )
 
     def snapshots(self) -> dict[pathlib.Path, bytes]:
@@ -90,7 +91,8 @@ class MainShellMirrorCallerFinalizationTests(unittest.TestCase):
         finalizer.apply_finalization(self.root, preview)
         self.assertEqual((), self.build().changed)
         caller = (self.root / finalizer.CALLER_PATH).read_text()
-        self.assertEqual(2, caller.count(MPRE))
+        self.assertEqual(2, caller.count(KANDELO))
+        self.assertEqual(1, caller.count(TA0))
         self.assertEqual(1, caller.count(TF))
         self.assertEqual(1, caller.count(C))
 
@@ -111,7 +113,7 @@ class MainShellMirrorCallerFinalizationTests(unittest.TestCase):
             candidate.contents[finalizer.TRUST_PATH]
         )
         caller = (self.root / finalizer.CALLER_PATH).read_text()
-        self.assertIn(finalizer.MPRE_PLACEHOLDER, caller)
+        self.assertIn(finalizer.KANDELO_PLACEHOLDER, caller)
 
         resumed = self.build()
         self.assertIn(finalizer.CALLER_PATH, resumed.changed)
@@ -123,7 +125,7 @@ class MainShellMirrorCallerFinalizationTests(unittest.TestCase):
         caller = self.root / finalizer.CALLER_PATH
         caller.write_text(
             caller.read_text().replace(
-                finalizer.MPRE_PLACEHOLDER,
+                finalizer.KANDELO_PLACEHOLDER,
                 "d" * 40,
                 1,
             )
@@ -131,22 +133,37 @@ class MainShellMirrorCallerFinalizationTests(unittest.TestCase):
         before = self.snapshots()
         with self.assertRaisesRegex(
             finalizer.FinalizationError,
-            "caller reusable Mpre has unexpected value",
+            "caller reusable Kandelo SHA has unexpected value",
         ):
             self.build()
         self.assertEqual(before, self.snapshots())
 
-    def test_mismatched_final_mpre_is_rejected(self) -> None:
+    def test_mismatched_final_kandelo_sha_is_rejected(self) -> None:
         caller = self.root / finalizer.CALLER_PATH
         caller.write_text(
             caller.read_text().replace(
-                "kandelo-ref: " + finalizer.MPRE_PLACEHOLDER,
+                "kandelo-ref: " + finalizer.KANDELO_PLACEHOLDER,
                 "kandelo-ref: " + "e" * 40,
             )
         )
         with self.assertRaisesRegex(
             finalizer.FinalizationError,
-            "caller input Mpre has unexpected value",
+            "caller input Kandelo SHA has unexpected value",
+        ):
+            self.build()
+
+    def test_event_selected_mirror_authority_is_rejected(self) -> None:
+        caller = self.root / finalizer.CALLER_PATH
+        caller.write_text(
+            caller.read_text().replace(
+                TA0,
+                "${{ github.event.client_payload.mirror_sha }}",
+                1,
+            )
+        )
+        with self.assertRaisesRegex(
+            finalizer.FinalizationError,
+            "caller mirror authority TA0",
         ):
             self.build()
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Bind the protected main-shell mirror caller to merged Kandelo code.
+"""Bind the protected lifecycle caller to merged Kandelo PR #1146.
 
 The checked-in caller template is intentionally inert. This helper previews
-the final Kandelo-SHA replacement by default and writes only with --apply.
-The bottle catalog and canary authorities are already final literal inputs.
+the remaining SHA replacement by default and writes only with --apply. TA0,
+the bottle catalog, and the canary are already final literal inputs.
 """
 
 from __future__ import annotations
@@ -18,8 +18,9 @@ import tempfile
 from collections.abc import Mapping
 
 
-MPRE_PLACEHOLDER = "__FINAL_KANDELO_MPRE_SHA__"
+KANDELO_PLACEHOLDER = "__FINAL_KANDELO_LIFECYCLE_SHA__"
 EXPECTED_TAP_CATALOG_SHA = "6ad0e3dbc60e5572c4288c86919238f71c1bc110"
+EXPECTED_MIRROR_AUTHORITY_SHA = "08f8f32c94bee8d6fc2948e453e53ece29b1c8e1"
 EXPECTED_CANARY_SHA = "d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc"
 SHA = re.compile(r"[0-9a-f]{40}")
 
@@ -52,6 +53,7 @@ CALLER_USES = scalar_pattern(
 )
 CALLER_KANDELO = scalar_pattern(r"\s+kandelo-ref:\s+")
 CALLER_TAP = scalar_pattern(r"\s+tap-catalog-ref:\s+")
+CALLER_MIRROR_AUTHORITY = scalar_pattern(r"\s+mirror-authority-ref:\s+")
 CALLER_CANARY = scalar_pattern(r"\s+canary-ref:\s+")
 TRUST_KANDELO = scalar_pattern(
     r'MAIN_SHELL_MIRROR_KANDELO_SHA\s*=\s*"',
@@ -59,6 +61,10 @@ TRUST_KANDELO = scalar_pattern(
 )
 TRUST_TAP = scalar_pattern(
     r'MAIN_SHELL_MIRROR_TAP_CATALOG_SHA\s*=\s*"',
+    suffix=r'"\s*',
+)
+TRUST_MIRROR_AUTHORITY = scalar_pattern(
+    r'MAIN_SHELL_MIRROR_AUTHORITY_SHA\s*=\s*"',
     suffix=r'"\s*',
 )
 TRUST_CANARY = scalar_pattern(
@@ -131,7 +137,7 @@ def build_finalization(
 ) -> Finalization:
     if SHA.fullmatch(kandelo_sha) is None:
         raise FinalizationError(
-            "Kandelo Mpre must be exactly 40 lowercase hex characters"
+            "Kandelo lifecycle SHA must be exactly 40 lowercase hex characters"
         )
 
     original = read_inputs(root)
@@ -139,8 +145,18 @@ def build_finalization(
 
     caller = original[CALLER_PATH].decode()
     for pattern, placeholder, replacement, label in (
-        (CALLER_USES, MPRE_PLACEHOLDER, kandelo_sha, "caller reusable Mpre"),
-        (CALLER_KANDELO, MPRE_PLACEHOLDER, kandelo_sha, "caller input Mpre"),
+        (
+            CALLER_USES,
+            KANDELO_PLACEHOLDER,
+            kandelo_sha,
+            "caller reusable Kandelo SHA",
+        ),
+        (
+            CALLER_KANDELO,
+            KANDELO_PLACEHOLDER,
+            kandelo_sha,
+            "caller input Kandelo SHA",
+        ),
     ):
         caller = replace_scalar(
             caller,
@@ -153,7 +169,12 @@ def build_finalization(
 
     trust = original[TRUST_PATH].decode()
     for pattern, placeholder, replacement, label in (
-        (TRUST_KANDELO, MPRE_PLACEHOLDER, kandelo_sha, "trust Mpre"),
+        (
+            TRUST_KANDELO,
+            KANDELO_PLACEHOLDER,
+            kandelo_sha,
+            "trust Kandelo SHA",
+        ),
     ):
         trust = replace_scalar(
             trust,
@@ -166,17 +187,23 @@ def build_finalization(
 
     # WHY: a partially prepared tuple must never become dispatchable. The
     # workflow is data-only, so literal refs are its complete source authority.
-    if MPRE_PLACEHOLDER in caller:
+    if KANDELO_PLACEHOLDER in caller:
         raise FinalizationError(
             f"{CALLER_PATH} still contains unresolved placeholder "
-            f"{MPRE_PLACEHOLDER}"
+            f"{KANDELO_PLACEHOLDER}"
         )
 
     if (
-        scalar_value(caller, CALLER_USES, label="final caller reusable Mpre")
+        scalar_value(
+            caller,
+            CALLER_USES,
+            label="final caller reusable Kandelo SHA",
+        )
         != kandelo_sha
         or scalar_value(
-            caller, CALLER_KANDELO, label="final caller input Mpre"
+            caller,
+            CALLER_KANDELO,
+            label="final caller input Kandelo SHA",
         )
         != kandelo_sha
     ):
@@ -186,15 +213,27 @@ def build_finalization(
     if (
         scalar_value(caller, CALLER_TAP, label="final caller input TF")
         != EXPECTED_TAP_CATALOG_SHA
+        or scalar_value(
+            caller,
+            CALLER_MIRROR_AUTHORITY,
+            label="final caller mirror authority TA0",
+        )
+        != EXPECTED_MIRROR_AUTHORITY_SHA
         or scalar_value(caller, CALLER_CANARY, label="final caller input C")
         != EXPECTED_CANARY_SHA
         or scalar_value(trust, TRUST_TAP, label="final trust TF")
         != EXPECTED_TAP_CATALOG_SHA
         or scalar_value(trust, TRUST_CANARY, label="final trust C")
         != EXPECTED_CANARY_SHA
+        or scalar_value(
+            trust,
+            TRUST_MIRROR_AUTHORITY,
+            label="final trust mirror authority TA0",
+        )
+        != EXPECTED_MIRROR_AUTHORITY_SHA
     ):
         raise FinalizationError(
-            "fixed catalog or canary authority differs from the reviewed tuple"
+            "final caller authority tuple differs from reviewed inputs"
         )
     forbidden = (
         "github.event.client_payload",
@@ -272,7 +311,10 @@ def main(argv: list[str]) -> int:
             paths = ", ".join(str(path) for path in finalization.changed)
             print(f"{action}: {paths}")
         else:
-            print(f"{action}: caller already matches the requested Kandelo SHA")
+            print(
+                f"{action}: caller already matches the requested "
+                "Kandelo SHA"
+            )
         return 0
     except FinalizationError as error:
         print(f"finalize-main-shell-mirror-caller: {error}", file=sys.stderr)

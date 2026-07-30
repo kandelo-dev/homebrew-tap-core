@@ -61,12 +61,13 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 CURRENT_KANDELO_WORKFLOW_SHA = "4322468ce11f386c30f0cb4cdba6f3414eb0b737"
 CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
 DRY_RUN_KANDELO_WORKFLOW_SHA = "3ef821db380d4008c5fb48f953a2e97d83a9a597"
-# WHY: mirror publication must run the exact merged Kandelo code that owns
-# direct-root shell and bootstrap selection. The catalog and independent
-# canary are separate immutable authorities, so all three values remain
-# literal and event-independent.
-MAIN_SHELL_MIRROR_KANDELO_SHA = "1afb9cabfea7fe318662988528f4c6d2df8ffc22"
+# WHY: the lifecycle caller must remain pinned to merged #1146. TA0, the
+# catalog, and the canary are separate final immutable authorities.
+MAIN_SHELL_MIRROR_KANDELO_SHA =
+  "a5b63d549805761e433a65ab1a006c0fd443639b"
 MAIN_SHELL_MIRROR_TAP_CATALOG_SHA = "6ad0e3dbc60e5572c4288c86919238f71c1bc110"
+MAIN_SHELL_MIRROR_AUTHORITY_SHA =
+  "08f8f32c94bee8d6fc2948e453e53ece29b1c8e1"
 MAIN_SHELL_MIRROR_CANARY_SHA = "d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc"
 PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-8d08f8cc73b165b75d8367f257011ec1724974114e056fac2dfb0e63a4304454"
 
@@ -251,6 +252,7 @@ CALLER_SPECS = {
     inputs: {
       "kandelo-ref" => MAIN_SHELL_MIRROR_KANDELO_SHA,
       "tap-catalog-ref" => MAIN_SHELL_MIRROR_TAP_CATALOG_SHA,
+      "mirror-authority-ref" => MAIN_SHELL_MIRROR_AUTHORITY_SHA,
       "canary-ref" => MAIN_SHELL_MIRROR_CANARY_SHA,
     }.freeze,
   },
@@ -1144,6 +1146,16 @@ def self_test(
       "main-shell-mirror workflow"
     )
   end
+  expect_rejection("an event-selected main-shell mirror authority") do
+    mutated = deep_copy(current_callers.fetch("main-shell-mirror"))
+    mutated.dig("jobs", "publish", "with")["mirror-authority-ref"] =
+      expression("github.event.client_payload.mirror_sha")
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("main-shell-mirror"),
+      "main-shell-mirror workflow"
+    )
+  end
   expect_rejection("a mutable main-shell mirror publisher") do
     mutated = deep_copy(current_callers.fetch("main-shell-mirror"))
     mutated.dig("jobs", "publish")["uses"] =
@@ -1375,8 +1387,9 @@ begin
         ),
         "rootfs package generation is not an exact ABI 42 content tag")
   {
-    "main-shell mirror Kandelo Mpre" => MAIN_SHELL_MIRROR_KANDELO_SHA,
+    "main-shell lifecycle Kandelo M" => MAIN_SHELL_MIRROR_KANDELO_SHA,
     "main-shell mirror tap catalog TF" => MAIN_SHELL_MIRROR_TAP_CATALOG_SHA,
+    "main-shell mirror authority TA0" => MAIN_SHELL_MIRROR_AUTHORITY_SHA,
     "main-shell mirror canary C" => MAIN_SHELL_MIRROR_CANARY_SHA,
   }.each do |label, sha|
     check(sha.match?(/\A[0-9a-f]{40}\z/),
