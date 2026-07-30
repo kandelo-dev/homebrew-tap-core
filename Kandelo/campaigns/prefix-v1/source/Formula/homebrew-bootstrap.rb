@@ -68,7 +68,7 @@ class HomebrewBootstrap < Formula
     assert_includes (extracted/"Library/Homebrew/utils/bottles.rb").read,
       "HOMEBREW_KANDELO_BOTTLE_TAG"
     assert_includes (extracted/"Library/Homebrew/utils/bottles.rb").read,
-      KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+      KANDELO_GUEST_HOMEBREW_PREFIX
     assert_includes (extracted/"Library/Homebrew/github_packages.rb").read,
       "Retain its `homebrew-` prefix"
   end

@@ -128,6 +128,31 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_equal allowed, used.uniq.sort
   end
 
+  def test_fork_instrumented_formulae_delegate_fork_import_validation_to_shared_contract
+    formula_dir = Pathname(__dir__).join("../../..", "Formula").cleanpath
+    offenders = formula_dir.glob("*.rb").sort.filter_map do |path|
+      source = path.binread
+      instrumentation = source.index("kandelo_fork_instrument")
+      next if instrumentation.nil?
+
+      # WHY: non-ABI import audits remain useful before instrumentation, but
+      # imports added afterward belong to Kandelo's generated fork contract.
+      # Parsing them here or spelling their names in a Formula can drift from
+      # the shared structural validator whenever that contract changes.
+      after_instrumentation = source.byteslice(instrumentation..)
+      formula_owns_fork_imports =
+        after_instrumentation.include?("<- env") ||
+        source.match?(/\b__wpk_fork_[A-Za-z0-9_]*\b/)
+      path.basename.to_s if formula_owns_fork_imports
+    end
+
+    assert_empty(
+      offenders,
+      "fork-instrumented Formulae must delegate fork-import validation " \
+      "to kandelo_validate_wasm_artifact",
+    )
+  end
+
   # Minimal Formula double for command-construction tests.
   class Harness
     include KandeloFormulaSupport

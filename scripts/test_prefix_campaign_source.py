@@ -42,11 +42,11 @@ class PrefixCampaignSourceTests(unittest.TestCase):
         self.assertEqual(summary["files"], 41)
         self.assertEqual(
             summary["base_commit"],
-            "3b06d495dec866dc68cd697c3018c03272d9803e",
+            "2fed34309c4828b2919f124d7ceb89bee764d8f4",
         )
         self.assertEqual(
             summary["target_tree_git_oid"],
-            "fcfb7e57dd2979ddcfa7b5e08d9c034e3f3a974a",
+            "5c98b4613ee3e85997f10f013ffc1220ad901ad1",
         )
 
         active_helper = (
@@ -76,7 +76,7 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
             self.assertEqual(
                 SOURCE.source_tree_oid(output),
-                "fcfb7e57dd2979ddcfa7b5e08d9c034e3f3a974a",
+                "5c98b4613ee3e85997f10f013ffc1220ad901ad1",
             )
 
     def test_materialized_prefix_contracts_are_mutually_green(

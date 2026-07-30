@@ -111,20 +111,16 @@ class Redis < Formula
       cli = buildpath/"src/redis-cli.optimized"
       system "wasm-opt", "-O2", "--strip-debug", buildpath/"src/redis-server", "-o", server
       system "wasm-opt", "-O2", "--strip-debug", buildpath/"src/redis-cli", "-o", cli
-      kandelo_fork_instrument(server)
 
-      kandelo_validate_wasm_artifact(server, fork: :required)
-      kandelo_validate_wasm_artifact(cli, fork: :forbidden)
-
-      # WHY: Redis uses Kandelo's dynamic-loader bridge, and the instrumented server
-      # imports the continuation frame protocol validated above. Reject every
-      # other env import so a suppressed dependency-build failure stays loud.
+      # WHY: reject unresolved build inputs before fork instrumentation. The
+      # instrumenter adds imports from Kandelo's generated fork contract; a
+      # Formula-local list of those names would duplicate the ABI and drift.
       system "bash", "-c", <<~SH
         set -euo pipefail
         for artifact in #{server.to_s.shellescape} #{cli.to_s.shellescape}; do
           unexpected_env_imports=$(wasm-objdump -x "$artifact" |
             awk '/<- env[.]/ { sub(/^.*<- env[.]/, ""); print $1 }' |
-            grep -Ev '^(__channel_base|memory|__wasm_dlclose|__wasm_dlerror|__wasm_dlopen|__wasm_dlsym|__wpk_fork_frame_(commit|next|reserve))$' || true)
+            grep -Ev '^(__channel_base|memory|__wasm_dlclose|__wasm_dlerror|__wasm_dlopen|__wasm_dlsym)$' || true)
           if [ -n "$unexpected_env_imports" ]; then
             echo "ERROR: Redis contains unresolved non-ABI env imports: $artifact" >&2
             echo "$unexpected_env_imports" >&2
@@ -132,6 +128,10 @@ class Redis < Formula
           fi
         done
       SH
+
+      kandelo_fork_instrument(server)
+      kandelo_validate_wasm_artifact(server, fork: :required)
+      kandelo_validate_wasm_artifact(cli, fork: :forbidden)
     end
 
     kandelo_install_bin(buildpath/"src", "redis-server.optimized", "redis-server")
