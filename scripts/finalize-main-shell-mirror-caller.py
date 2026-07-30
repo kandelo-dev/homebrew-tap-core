@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bind the protected main-shell mirror caller to merged Kandelo PR #1144.
+"""Bind the protected main-shell mirror caller to merged Kandelo code.
 
 The checked-in caller template is intentionally inert. This helper previews
 the final Kandelo-SHA replacement by default and writes only with --apply.
