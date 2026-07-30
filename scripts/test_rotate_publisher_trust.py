@@ -68,6 +68,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
             rotation.TRUST_PATH,
             rotation.TRUST_KANDELO_SHA,
         )
+        self.predecessor_dry_run_sha = self.scalar_value(
+            rotation.TRUST_PATH,
+            rotation.TRUST_DRY_RUN_KANDELO_SHA,
+        )
         self.predecessor_generation = self.scalar_value(
             rotation.TRUST_PATH,
             rotation.TRUST_GENERATION,
@@ -93,6 +97,9 @@ class PublisherTrustRotationTests(unittest.TestCase):
     def build(self, **overrides):
         arguments = {
             "predecessor_kandelo_sha": self.predecessor_sha,
+            "predecessor_dry_run_kandelo_sha": (
+                self.predecessor_dry_run_sha
+            ),
             "predecessor_generation_tag": self.predecessor_generation,
             "predecessor_caller_sha256": self.predecessor_caller,
             "kandelo_sha": NEW_SHA,
@@ -107,6 +114,8 @@ class PublisherTrustRotationTests(unittest.TestCase):
             str(self.root),
             "--predecessor-kandelo-sha",
             self.predecessor_sha,
+            "--predecessor-dry-run-kandelo-sha",
+            self.predecessor_dry_run_sha,
             "--predecessor-generation-tag",
             self.predecessor_generation,
             "--predecessor-caller-sha256",
@@ -120,7 +129,11 @@ class PublisherTrustRotationTests(unittest.TestCase):
     def unknown_kandelo_sha(self) -> str:
         for digit in "456789":
             candidate = digit * 39 + "a"
-            if candidate not in (self.predecessor_sha, NEW_SHA):
+            if candidate not in (
+                self.predecessor_sha,
+                self.predecessor_dry_run_sha,
+                NEW_SHA,
+            ):
                 return candidate
         raise AssertionError("test SHA candidates unexpectedly exhausted")
 
@@ -180,6 +193,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
 
         trust = candidate.contents[rotation.TRUST_PATH].decode()
         self.assertIn(f'CURRENT_KANDELO_WORKFLOW_SHA = "{NEW_SHA}"', trust)
+        self.assertIn(
+            f'DRY_RUN_KANDELO_WORKFLOW_SHA = "{NEW_SHA}"',
+            trust,
+        )
         self.assertIn(
             f'PACKAGE_GENERATION_WASM32_TAG = "{NEW_TAG}"',
             trust,
@@ -296,6 +313,15 @@ class PublisherTrustRotationTests(unittest.TestCase):
                 for relative in rotation.ROTATION_PATHS
             },
         )
+
+    def test_wrong_predecessor_dry_run_sha_is_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "dry-run reusable workflow SHA has unexpected value",
+        ):
+            self.build(
+                predecessor_dry_run_kandelo_sha=self.unknown_kandelo_sha()
+            )
 
     def test_unknown_generation_slot_is_rejected(self) -> None:
         self.force_scalar(
@@ -442,6 +468,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
             self.predecessor_sha, arguments.predecessor_kandelo_sha
         )
         self.assertEqual(
+            self.predecessor_dry_run_sha,
+            arguments.predecessor_dry_run_kandelo_sha,
+        )
+        self.assertEqual(
             self.predecessor_generation,
             arguments.predecessor_generation_tag,
         )
@@ -455,6 +485,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
 
         for option in (
             "--predecessor-kandelo-sha",
+            "--predecessor-dry-run-kandelo-sha",
             "--predecessor-generation-tag",
             "--predecessor-caller-sha256",
         ):
@@ -499,6 +530,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
     def test_helper_does_not_embed_the_checked_in_authority(self) -> None:
         source = SCRIPT.read_text()
         self.assertNotIn(self.predecessor_sha, source)
+        self.assertNotIn(self.predecessor_dry_run_sha, source)
         self.assertNotIn(self.predecessor_generation, source)
         self.assertNotIn(self.predecessor_caller, source)
 

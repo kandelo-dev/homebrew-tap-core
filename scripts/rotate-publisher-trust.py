@@ -73,6 +73,9 @@ PACKAGE_GENERATION = scalar_pattern(r"\s+package-generation-wasm32:\s+")
 TRUST_KANDELO_SHA = scalar_pattern(
     r'CURRENT_KANDELO_WORKFLOW_SHA\s*=\s*"'
 )
+TRUST_DRY_RUN_KANDELO_SHA = scalar_pattern(
+    r'DRY_RUN_KANDELO_WORKFLOW_SHA\s*=\s*"'
+)
 TRUST_GENERATION = scalar_pattern(
     r'PACKAGE_GENERATION_WASM32_TAG\s*=\s*"'
 )
@@ -215,6 +218,7 @@ def build_rotation(
     root: pathlib.Path,
     *,
     predecessor_kandelo_sha: str,
+    predecessor_dry_run_kandelo_sha: str,
     predecessor_generation_tag: str,
     predecessor_caller_sha256: str,
     kandelo_sha: str,
@@ -222,6 +226,10 @@ def build_rotation(
 ) -> Rotation:
     validate_kandelo_sha(
         predecessor_kandelo_sha, "predecessor Kandelo SHA"
+    )
+    validate_kandelo_sha(
+        predecessor_dry_run_kandelo_sha,
+        "predecessor dry-run Kandelo SHA",
     )
     validate_generation_tag(
         predecessor_generation_tag, "predecessor generation tag"
@@ -238,8 +246,11 @@ def build_rotation(
             "successor generation tag still names the predecessor"
         )
 
-    allowed_kandelo_shas = frozenset(
+    allowed_write_kandelo_shas = frozenset(
         (predecessor_kandelo_sha, kandelo_sha)
+    )
+    allowed_dry_run_kandelo_shas = frozenset(
+        (predecessor_dry_run_kandelo_sha, kandelo_sha)
     )
     allowed_generation_tags = frozenset(
         (predecessor_generation_tag, generation_tag)
@@ -251,7 +262,7 @@ def build_rotation(
     dry_run = rotate_workflow(
         original[DRY_RUN_PATH].decode(),
         uses_pattern=DRY_RUN_USES,
-        allowed_kandelo_shas=allowed_kandelo_shas,
+        allowed_kandelo_shas=allowed_dry_run_kandelo_shas,
         new_sha=kandelo_sha,
         exact_ref=False,
         allowed_generation_tags=None,
@@ -261,7 +272,7 @@ def build_rotation(
     maintenance = rotate_workflow(
         original[MAINTENANCE_PATH].decode(),
         uses_pattern=MAINTENANCE_USES,
-        allowed_kandelo_shas=allowed_kandelo_shas,
+        allowed_kandelo_shas=allowed_write_kandelo_shas,
         new_sha=kandelo_sha,
         exact_ref=True,
         allowed_generation_tags=allowed_generation_tags,
@@ -271,7 +282,7 @@ def build_rotation(
     publish = rotate_workflow(
         original[PUBLISH_PATH].decode(),
         uses_pattern=PUBLISH_USES,
-        allowed_kandelo_shas=allowed_kandelo_shas,
+        allowed_kandelo_shas=allowed_write_kandelo_shas,
         new_sha=kandelo_sha,
         exact_ref=True,
         allowed_generation_tags=allowed_generation_tags,
@@ -286,9 +297,16 @@ def build_rotation(
     trust = replace_scalar(
         trust,
         TRUST_KANDELO_SHA,
-        allowed=allowed_kandelo_shas,
+        allowed=allowed_write_kandelo_shas,
         replacement=kandelo_sha,
         label="trust-test Kandelo SHA",
+    )
+    trust = replace_scalar(
+        trust,
+        TRUST_DRY_RUN_KANDELO_SHA,
+        allowed=allowed_dry_run_kandelo_shas,
+        replacement=kandelo_sha,
+        label="trust-test dry-run Kandelo SHA",
     )
     trust = replace_scalar(
         trust,
@@ -323,7 +341,7 @@ def build_rotation(
     controller = replace_scalar(
         controller,
         CONTROLLER_MAIN_SHA,
-        allowed=allowed_kandelo_shas,
+        allowed=allowed_write_kandelo_shas,
         replacement=kandelo_sha,
         label="rollout-controller Kandelo SHA",
     )
@@ -403,6 +421,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="exact Kandelo SHA selected by the protected callers now",
     )
     parser.add_argument(
+        "--predecessor-dry-run-kandelo-sha",
+        required=True,
+        help="exact Kandelo SHA selected by the dry-run caller now",
+    )
+    parser.add_argument(
         "--predecessor-generation-tag",
         required=True,
         help="exact rootfs generation selected by the write callers now",
@@ -437,6 +460,9 @@ def main(argv: list[str]) -> int:
         rotation = build_rotation(
             root,
             predecessor_kandelo_sha=args.predecessor_kandelo_sha,
+            predecessor_dry_run_kandelo_sha=(
+                args.predecessor_dry_run_kandelo_sha
+            ),
             predecessor_generation_tag=args.predecessor_generation_tag,
             predecessor_caller_sha256=args.predecessor_caller_sha256,
             kandelo_sha=args.kandelo_sha,
