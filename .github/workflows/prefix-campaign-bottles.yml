@@ -1,0 +1,266 @@
+# Publish one content-addressed prefix-campaign Formula handoff.
+#
+# WHY: one reviewed task keeps dependency order explicit. A partial
+# campaign can never become tap Git authority.
+name: Publish prefix-campaign bottle
+
+on:
+  repository_dispatch:
+    types: [publish-prefix-campaign-bottle]
+
+jobs:
+  admit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      arches: ${{ steps.admit.outputs.arches }}
+      browser-wasm32-generation: >-
+        ${{ steps.authority.outputs.browser-wasm32-generation }}
+      browser-wasm64-generation: >-
+        ${{ steps.authority.outputs.browser-wasm64-generation }}
+      campaign-tag: ${{ steps.authority.outputs.campaign-tag }}
+      dependencies: ${{ steps.admit.outputs.dependencies }}
+      disposition: ${{ steps.admit.outputs.disposition }}
+      formula: ${{ steps.admit.outputs.formula }}
+      generation-kind: ${{ steps.admit.outputs.generation-kind }}
+      generation-wasm32: ${{ steps.admit.outputs.generation-wasm32 }}
+      generation-wasm64: ${{ steps.admit.outputs.generation-wasm64 }}
+      kandelo-commit: ${{ steps.authority.outputs.kandelo-commit }}
+      release-tag: ${{ steps.authority.outputs.release-tag }}
+      rootfs-wasm32-generation: >-
+        ${{ steps.authority.outputs.rootfs-wasm32-generation }}
+      source-tap-commit: >-
+        ${{ steps.authority.outputs.source-tap-commit }}
+    steps:
+      - name: Checkout protected caller
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - name: Admit protected authority and event shape
+        id: authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/prefix-campaign-controller.py preflight \
+            --event "$GITHUB_EVENT_PATH" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Checkout exact Kandelo executor
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: Automattic/kandelo
+          ref: ${{ steps.authority.outputs.kandelo-commit }}
+          path: kandelo
+          persist-credentials: false
+          submodules: false
+
+      - name: Checkout exact campaign source tap
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: kandelo-dev/homebrew-tap-core
+          ref: ${{ steps.authority.outputs.source-tap-commit }}
+          path: source-tap
+          persist-credentials: false
+
+      - name: Admit one exact campaign task
+        id: admit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/prefix-campaign-controller.py admit \
+            --kandelo-root kandelo \
+            --source-tap-root source-tap \
+            --event "$GITHUB_EVENT_PATH" \
+            --out "$RUNNER_TEMP/campaign-task.json" \
+            --github-output "$GITHUB_OUTPUT"
+
+  publish-rootfs:
+    needs: [admit]
+    if: >-
+      ${{
+        needs.admit.outputs.disposition == 'build' &&
+        needs.admit.outputs.generation-kind == 'rootfs-wasm32'
+      }}
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@0000000000000000000000000000000000000000
+    with:
+      kandelo-repository: Automattic/kandelo
+      kandelo-ref: ${{ needs.admit.outputs.kandelo-commit }}
+      tap-repository: kandelo-dev/homebrew-tap-core
+      tap-name: kandelo-dev/tap-core
+      tap-ref: ${{ needs.admit.outputs.source-tap-commit }}
+      formulae: ${{ needs.admit.outputs.formula }}
+      arches: ${{ needs.admit.outputs.arches }}
+      release-tag: ${{ needs.admit.outputs.release-tag }}
+      expected-cache-keys: ""
+      package-generation-wasm32: >-
+        ${{ needs.admit.outputs.rootfs-wasm32-generation }}
+      force: true
+      dry-run: false
+      require-vfs-acceptance: false
+      defer-tap-finalization: true
+      prefix-campaign-tag: ${{ needs.admit.outputs.campaign-tag }}
+      prefix-campaign-dependencies: >-
+        ${{ needs.admit.outputs.dependencies }}
+
+  publish-browser:
+    needs: [admit]
+    if: >-
+      ${{
+        needs.admit.outputs.disposition == 'build' &&
+        needs.admit.outputs.generation-kind == 'browser-inputs'
+      }}
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@0000000000000000000000000000000000000000
+    with:
+      kandelo-repository: Automattic/kandelo
+      kandelo-ref: ${{ needs.admit.outputs.kandelo-commit }}
+      tap-repository: kandelo-dev/homebrew-tap-core
+      tap-name: kandelo-dev/tap-core
+      tap-ref: ${{ needs.admit.outputs.source-tap-commit }}
+      formulae: ${{ needs.admit.outputs.formula }}
+      arches: ${{ needs.admit.outputs.arches }}
+      release-tag: ${{ needs.admit.outputs.release-tag }}
+      expected-cache-keys: ""
+      package-generation-wasm32: >-
+        ${{ needs.admit.outputs.browser-wasm32-generation }}
+      package-generation-wasm64: >-
+        ${{ needs.admit.outputs.browser-wasm64-generation }}
+      force: true
+      dry-run: false
+      require-vfs-acceptance: false
+      defer-tap-finalization: true
+      prefix-campaign-tag: ${{ needs.admit.outputs.campaign-tag }}
+      prefix-campaign-dependencies: >-
+        ${{ needs.admit.outputs.dependencies }}
+
+  seal-build:
+    needs: [admit, publish-rootfs, publish-browser]
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.admit.result == 'success' &&
+        (
+          (
+            needs.publish-rootfs.result == 'success' &&
+            needs.publish-browser.result == 'skipped'
+          ) ||
+          (
+            needs.publish-browser.result == 'success' &&
+            needs.publish-rootfs.result == 'skipped'
+          )
+        )
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Checkout protected caller
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - name: Checkout exact Kandelo executor
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: Automattic/kandelo
+          ref: ${{ needs.admit.outputs.kandelo-commit }}
+          path: kandelo
+          persist-credentials: false
+          submodules: false
+
+      - name: Checkout exact campaign source tap
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: kandelo-dev/homebrew-tap-core
+          ref: ${{ needs.admit.outputs.source-tap-commit }}
+          path: source-tap
+          persist-credentials: false
+
+      - name: Download wasm32 publication handoff
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: >-
+            homebrew-publish-handoff-${{ needs.admit.outputs.formula }}-wasm32-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/campaign-publications/wasm32
+
+      - name: Download wasm64 publication handoff
+        if: ${{ contains(needs.admit.outputs.arches, 'wasm64') }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: >-
+            homebrew-publish-handoff-${{ needs.admit.outputs.formula }}-wasm64-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/campaign-publications/wasm64
+
+      - name: Derive and prepare immutable Formula handoff
+        id: handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd kandelo
+          bash scripts/dev-shell.sh \
+            python3 "$GITHUB_WORKSPACE/scripts/prefix-campaign-controller.py" \
+            prepare-build \
+            --kandelo-root "$GITHUB_WORKSPACE/kandelo" \
+            --source-tap-root "$GITHUB_WORKSPACE/source-tap" \
+            --event "$GITHUB_EVENT_PATH" \
+            --publications-root "$RUNNER_TEMP/campaign-publications" \
+            --out "$RUNNER_TEMP/prepared-handoff-release" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Publish immutable Formula handoff
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # WHY: credentials enter only after all task data is sealed.
+          # The caller postdates the fixed campaign source commit.
+          bash kandelo/scripts/publish-immutable-github-release.sh \
+            --manifest \
+              "$RUNNER_TEMP/prepared-handoff-release/release-manifest.json" \
+            --asset-root \
+              "$RUNNER_TEMP/prepared-handoff-release/assets" \
+            --lock-root source-tap \
+            --receipt "$RUNNER_TEMP/publish-receipt.json" \
+            --exact-kandelo-main-sha \
+              "${{ needs.admit.outputs.kandelo-commit }}" \
+            --target-main-contains-sha \
+              "${{ needs.admit.outputs.source-tap-commit }}"
+
+      - name: Revalidate the release without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/prefix-campaign-controller.py verify-release \
+            --kandelo-root kandelo \
+            --source-tap-root source-tap \
+            --event "$GITHUB_EVENT_PATH" \
+            --tag "${{ steps.handoff.outputs.handoff-tag }}" \
+            --out "$RUNNER_TEMP/readback-handoff"
+
+      - name: Retain bounded controller evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: >-
+            prefix-campaign-controller-${{ needs.admit.outputs.formula }}-attempt-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/controller-summary.json
+            ${{ runner.temp }}/publish-receipt.json
+            ${{ runner.temp }}/readback-receipt.json
+            ${{ runner.temp }}/readback-summary.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14

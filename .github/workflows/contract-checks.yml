@@ -6,8 +6,11 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/**"
+      - "Kandelo/prefix-campaign-authority.json"
       - "Kandelo/test-workflow-trust.sh"
       - "Kandelo/test-workflow-trust.rb"
+      - "scripts/prefix-campaign-controller.py"
+      - "scripts/test_prefix_campaign_controller.py"
 
 permissions:
   contents: read
@@ -22,3 +25,7 @@ jobs:
           ruby-version: "3.4"
       - name: Validate publisher trust boundaries
         run: bash Kandelo/test-workflow-trust.sh
+      - name: Exercise prefix-campaign controller
+        run: >-
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest
+          scripts/test_prefix_campaign_controller.py

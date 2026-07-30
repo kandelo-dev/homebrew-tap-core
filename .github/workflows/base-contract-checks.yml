@@ -50,8 +50,14 @@ jobs:
                 {path: ".github/workflows/contract-checks.yml", mode: "100644", type: "blob"},
                 {path: ".github/workflows/dry-run-bottles.yml", mode: "100644", type: "blob"},
                 {path: ".github/workflows/maintain-bottles.yml", mode: "100644", type: "blob"},
+                {path: ".github/workflows/prefix-campaign-bottles.yml", mode: "100644", type: "blob"},
                 {path: ".github/workflows/publish-bottles.yml", mode: "100644", type: "blob"},
                 {path: ".github/workflows/repository-namespace-canary.yml", mode: "100644", type: "blob"}
+              ] and
+            ([.tree[] |
+              select(.path == "Kandelo/prefix-campaign-authority.json") |
+              {path, mode, type}]) == [
+                {path: "Kandelo/prefix-campaign-authority.json", mode: "100644", type: "blob"}
               ] and
             ([.tree[] |
               select(.path == "Kandelo/test-workflow-trust.rb") |
@@ -62,6 +68,16 @@ jobs:
               select(.path == "Kandelo/test-workflow-trust.sh") |
               {path, mode, type}]) == [
                 {path: "Kandelo/test-workflow-trust.sh", mode: "100755", type: "blob"}
+              ] and
+            ([.tree[] |
+              select(.path == "scripts/prefix-campaign-controller.py") |
+              {path, mode, type}]) == [
+                {path: "scripts/prefix-campaign-controller.py", mode: "100644", type: "blob"}
+              ] and
+            ([.tree[] |
+              select(.path == "scripts/test_prefix_campaign_controller.py") |
+              {path, mode, type}]) == [
+                {path: "scripts/test_prefix_campaign_controller.py", mode: "100644", type: "blob"}
               ]
           ' "$tree_json" >/dev/null || {
             echo "::error::candidate workflow or trust-root file set changed"; exit 2;
@@ -71,10 +87,14 @@ jobs:
             .github/workflows/contract-checks.yml
             .github/workflows/dry-run-bottles.yml
             .github/workflows/maintain-bottles.yml
+            .github/workflows/prefix-campaign-bottles.yml
             .github/workflows/publish-bottles.yml
             .github/workflows/repository-namespace-canary.yml
+            Kandelo/prefix-campaign-authority.json
             Kandelo/test-workflow-trust.rb
             Kandelo/test-workflow-trust.sh
+            scripts/prefix-campaign-controller.py
+            scripts/test_prefix_campaign_controller.py
           )
           for path in "${paths[@]}"; do
             destination="$candidate_root/$path"
