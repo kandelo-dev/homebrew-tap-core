@@ -1,0 +1,126 @@
+require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kandelo_formula_support").to_s
+
+class Tar < Formula
+  include KandeloFormulaSupport
+
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/tar".freeze
+
+  desc "GNU archiving utility for Kandelo"
+  homepage "https://www.gnu.org/software/tar/"
+  url "https://ftpmirror.gnu.org/gnu/tar/tar-1.35.tar.xz"
+  mirror "https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz"
+  sha256 "4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16"
+  license "GPL-3.0-or-later"
+
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
+  depends_on "kandelo-dev/tap-core/dash"
+  depends_on "kandelo-dev/tap-core/gzip"
+
+  skip_clean "bin/tar", "libexec/rmt"
+
+  def install
+    kandelo_require_arch!("wasm32")
+
+    kandelo_wasm_build do
+      ENV["DEFAULT_RMT_DIR"] = "#{GUEST_OPT_PREFIX}/libexec"
+
+      system kandelo_configure, *kandelo_std_configure_args,
+        "--disable-nls",
+        "--without-selinux",
+        "--without-posix-acls",
+        "--with-xattrs=no"
+      system "make"
+      tar = kandelo_fork_instrument(buildpath/"src/tar")
+      kandelo_validate_wasm_artifact(tar, fork: :required)
+      kandelo_validate_wasm_artifact(buildpath/"rmt/rmt", fork: :forbidden)
+      system "make", "install", "DEFAULT_RMT_DIR=#{libexec}"
+    end
+  end
+
+  test do
+    source = testpath/"source"
+    extracted = testpath/"extracted"
+    gzip_extracted = testpath/"gzip-extracted"
+    source.mkpath
+    extracted.mkpath
+    gzip_extracted.mkpath
+    (source/"alpha.txt").write "alpha\n"
+    (source/"nested").mkpath
+    (source/"nested/beta.txt").write "beta\n"
+
+    dash = formula_opt_bin("kandelo-dev/tap-core/dash")/"dash"
+    gzip = formula_opt_bin("kandelo-dev/tap-core/gzip")/"gzip"
+    env = { "KERNEL_CWD" => "/work", "KERNEL_PATH" => "/bin" }
+    mount = { "/work" => testpath }
+    exec_programs = { "/bin/sh" => dash, "/bin/gzip" => gzip }
+
+    tar_binary = (bin/"tar").binread
+    assert_includes tar_binary, "#{GUEST_OPT_PREFIX}/libexec/rmt"
+    refute_includes tar_binary, prefix.to_s
+    [man1/"tar.1", man8/"rmt.8", info/"tar.info", info/"tar.info-1",
+     info/"tar.info-2", info/"tar.info-3"].each do |document|
+      assert_path_exists document
+    end
+    assert_match(/^rmt \(GNU tar\) 1\.35$/,
+      kandelo_run_wasm(libexec/"rmt", ["--version"]).lines.first.chomp)
+
+    kandelo_run_wasm(
+      bin/"tar", ["-cf", "archive.tar", "source"], env: env, writable_host_directories: mount
+    )
+    listing = kandelo_run_wasm(
+      bin/"tar", ["-tf", "archive.tar"], env: env, writable_host_directories: mount
+    )
+    expected_entries = [
+      "source/",
+      "source/alpha.txt",
+      "source/nested/",
+      "source/nested/beta.txt",
+    ]
+    assert_equal expected_entries.sort, listing.lines.map(&:chomp).sort
+
+    kandelo_run_wasm(
+      bin/"tar",
+      ["-xf", "archive.tar", "-C", "extracted"],
+      env:                       env,
+      writable_host_directories: mount,
+    )
+    assert_equal "alpha\n", (extracted/"source/alpha.txt").read
+    assert_equal "beta\n", (extracted/"source/nested/beta.txt").read
+
+    kandelo_run_wasm(
+      bin/"tar", ["-czf", "archive.tar.gz", "source"],
+      env:                       env,
+      exec_programs:             exec_programs,
+      writable_host_directories: mount,
+      expected_fork_descendants: 1
+    )
+    assert_equal [0x1f, 0x8b], (testpath/"archive.tar.gz").binread(2).bytes
+    gzip_listing = kandelo_run_wasm(
+      bin/"tar", ["-tzf", "archive.tar.gz"],
+      env:                       env,
+      exec_programs:             exec_programs,
+      writable_host_directories: mount,
+      expected_fork_descendants: 1
+    )
+    assert_equal expected_entries.sort, gzip_listing.lines.map(&:chomp).sort
+
+    kandelo_run_wasm(
+      bin/"tar", ["-xzf", "archive.tar.gz", "-C", "gzip-extracted"],
+      env:                       env,
+      exec_programs:             exec_programs,
+      writable_host_directories: mount,
+      expected_fork_descendants: 1
+    )
+    assert_equal "alpha\n", (gzip_extracted/"source/alpha.txt").read
+    assert_equal "beta\n", (gzip_extracted/"source/nested/beta.txt").read
+  end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "057a97a7c9eccaa898ddb1f9abefd73767b893d458487b1424880b1c610f8548"
+  end
+
+end
