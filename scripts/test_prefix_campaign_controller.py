@@ -885,7 +885,13 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 "different source",
                 "different architecture",
                 "noncanonical payload path",
+                "noncanonical asset name",
+                "malformed payload SHA-256",
                 "invalid byte count",
+                "boolean byte count",
+                "oversized file",
+                "oversized aggregate",
+                "reordered files",
             ):
                 value = json.loads(
                     json.dumps(valid)
@@ -910,10 +916,36 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     value["publications"][0]["files"][0][
                         "path"
                     ] = "payload/wasm32/other"
+                elif label == "noncanonical asset name":
+                    value["publications"][0]["files"][0][
+                        "asset_name"
+                    ] = "wasm32.other"
+                elif label == "malformed payload SHA-256":
+                    value["publications"][0]["files"][0][
+                        "sha256"
+                    ] = "not-a-sha256"
                 elif label == "invalid byte count":
                     value["publications"][0]["files"][0][
                         "bytes"
                     ] = 0
+                elif label == "boolean byte count":
+                    value["publications"][0]["files"][0][
+                        "bytes"
+                    ] = True
+                elif label == "oversized file":
+                    value["publications"][0]["files"][0][
+                        "bytes"
+                    ] = CONTROLLER.MAX_HANDOFF_ASSET_BYTES + 1
+                elif label == "oversized aggregate":
+                    for record in value["publications"][0][
+                        "files"
+                    ]:
+                        record["bytes"] = (
+                            CONTROLLER.MAX_HANDOFF_ASSET_BYTES
+                        )
+                elif label == "reordered files":
+                    files = value["publications"][0]["files"]
+                    files[0], files[1] = files[1], files[0]
                 mutations.append((label, value))
 
             for label, value in mutations:

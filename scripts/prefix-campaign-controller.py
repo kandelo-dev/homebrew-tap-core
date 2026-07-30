@@ -1653,9 +1653,10 @@ def verify_published_release(
             working / "readback-receipt.json",
             receipt_output,
         )
-        # WHY: fetch-release already validates the downloaded bytes, but this
-        # tap-owned boundary must also reject an executor whose output contract
-        # or selected task no longer matches the reviewed campaign caller.
+        # WHY: fetch-release already validates the downloaded bytes.
+        # This tap-owned boundary must also reject an executor whose
+        # output contract or selected task no longer matches the
+        # reviewed campaign caller.
         validate_readback_handoff(
             output / "handoff.json",
             authority=authority,
