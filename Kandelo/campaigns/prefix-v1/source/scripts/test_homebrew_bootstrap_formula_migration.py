@@ -106,7 +106,7 @@ def assert_formula_contract() -> None:
             'system formula_opt_bin("unzip")/"unzip", "-q", archive',
             'assert_predicate extracted/"bin/brew", :executable?',
             'assert_path_exists extracted/"LICENSE.txt"',
-            "KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX",
+            "KANDELO_GUEST_HOMEBREW_PREFIX",
             "Retain its `homebrew-` prefix",
         ),
         FORMULA,
