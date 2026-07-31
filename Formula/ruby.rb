@@ -5,6 +5,13 @@ class Ruby < Formula
 
   KANDELO_TAP_RECIPE = true
 
+  # WHY — TEMPORARY UPSTREAM DEVIATION: this Formula applies a
+  # Kandelo-only CRuby patch that routes exactly representable command
+  # launches through posix_spawn. Kandelo currently copies the complete
+  # WebAssembly.Memory for fork, and Brew can create those copies faster
+  # than browsers reclaim them. Other command shapes keep CRuby's fork path.
+  # Remove the patch when the platform fix meets the criteria in:
+  # https://github.com/Automattic/kandelo/pull/1166
   RUBY_API_VERSION = "4.0.0".freeze
   GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/ruby".freeze
   GUEST_RUNTIME = "#{GUEST_OPT_PREFIX}/lib/ruby/#{RUBY_API_VERSION}".freeze
