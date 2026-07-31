@@ -33,7 +33,7 @@ CALLER_PERMISSIONS = {
   "contents" => "write",
   "packages" => "write",
 }.freeze
-REPOSITORY_CANARY_PERMISSIONS = {
+FIRST_PUBLICATION_PERMISSIONS = {
   "actions" => "read",
   "contents" => "read",
   "packages" => "write",
@@ -192,7 +192,7 @@ PAT_PUBLISH_SECRETS = {
     expression("secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN"),
 }.freeze
 
-REPOSITORY_CANARY_KANDELO_SHA = "7d9854e4a6be178e2431816cd21b8a19a1ff6d67"
+FIRST_PUBLICATION_KANDELO_SHA = "5d133fcfd42a25f5ddaec21294b2d71d1564fee0"
 RETIRED_PAT_KANDELO_WORKFLOW_SHA = "acc54b0d0fb5ffc1e742d437081a58bfd163e785"
 PREVIOUS_KANDELO_WORKFLOW_SHA = "a71ab7a03cef9cb456e24c7b5f46bbc42122d9c4"
 RETIRED_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
@@ -256,15 +256,30 @@ CALLER_SPECS = {
       "canary-ref" => MAIN_SHELL_MIRROR_CANARY_SHA,
     }.freeze,
   },
-  "repository-canary" => {
+  "first-publication" => {
     path: File.join(WORKFLOW_ROOT, "repository-namespace-canary.yml"),
-    name: "Test repository-rooted GHCR package",
-    event: "test-repository-rooted-ghcr-package",
-    job: "canary",
-    permissions: REPOSITORY_CANARY_PERMISSIONS,
-    reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@#{REPOSITORY_CANARY_KANDELO_SHA}",
+    name: "Publish first libyaml GHCR child",
+    event: "publish-first-homebrew-child",
+    job: "first-publication",
+    permissions: FIRST_PUBLICATION_PERMISSIONS,
+    reusable: "Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@#{FIRST_PUBLICATION_KANDELO_SHA}",
     inputs: {
-      "kandelo-ref" => REPOSITORY_CANARY_KANDELO_SHA,
+      "kandelo-ref" => FIRST_PUBLICATION_KANDELO_SHA,
+      "tap-ref" => expression("github.sha"),
+      "formula" => "libyaml",
+      "arch" => "wasm32",
+      "dry-run-run-id" => expression(
+        "github.event.client_payload.dry_run_run_id"
+      ),
+      "dry-run-run-attempt" => expression(
+        "github.event.client_payload.dry_run_run_attempt"
+      ),
+      "dry-run-child-artifact-digest" => expression(
+        "github.event.client_payload.dry_run_child_artifact_digest"
+      ),
+      "expected-child-manifest-digest" => expression(
+        "github.event.client_payload.expected_child_manifest_digest"
+      ),
     }.freeze,
   },
 }.freeze
@@ -1117,45 +1132,86 @@ def self_test(
       expression("github.actor")
     check_caller_profile(mutated, test_profiles)
   end
-  expect_rejection("a package secret on the repository namespace canary") do
-    mutated = deep_copy(current_callers.fetch("repository-canary"))
-    mutated.dig("jobs", "canary")["secrets"] = {
+  expect_rejection("a package secret on first publication") do
+    mutated = deep_copy(current_callers.fetch("first-publication"))
+    mutated.dig("jobs", "first-publication")["secrets"] = {
       "HOMEBREW_GITHUB_PACKAGES_TOKEN" =>
         expression("secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN"),
     }
     check_caller(
       mutated,
-      CALLER_SPECS.fetch("repository-canary"),
-      "repository-canary workflow"
+      CALLER_SPECS.fetch("first-publication"),
+      "first-publication workflow"
     )
   end
-  expect_rejection("an event-selected Kandelo ref on the repository namespace canary") do
-    mutated = deep_copy(current_callers.fetch("repository-canary"))
-    mutated.dig("jobs", "canary", "with")["kandelo-ref"] =
+  expect_rejection("an event-selected Kandelo ref on first publication") do
+    mutated = deep_copy(current_callers.fetch("first-publication"))
+    mutated.dig("jobs", "first-publication", "with")["kandelo-ref"] =
       expression("github.event.client_payload.kandelo_ref")
     check_caller(
       mutated,
-      CALLER_SPECS.fetch("repository-canary"),
-      "repository-canary workflow"
+      CALLER_SPECS.fetch("first-publication"),
+      "first-publication workflow"
     )
   end
-  expect_rejection("write-capable contents on the repository namespace canary") do
-    mutated = deep_copy(current_callers.fetch("repository-canary"))
-    mutated.dig("jobs", "canary", "permissions")["contents"] = "write"
+  expect_rejection("an event-selected Formula on first publication") do
+    mutated = deep_copy(current_callers.fetch("first-publication"))
+    mutated.dig("jobs", "first-publication", "with")["formula"] =
+      expression("github.event.client_payload.formula")
     check_caller(
       mutated,
-      CALLER_SPECS.fetch("repository-canary"),
-      "repository-canary workflow"
+      CALLER_SPECS.fetch("first-publication"),
+      "first-publication workflow"
     )
   end
-  expect_rejection("a mutable repository namespace canary target") do
-    mutated = deep_copy(current_callers.fetch("repository-canary"))
-    mutated.dig("jobs", "canary")["uses"] =
+  expect_rejection("an event-selected architecture on first publication") do
+    mutated = deep_copy(current_callers.fetch("first-publication"))
+    mutated.dig("jobs", "first-publication", "with")["arch"] =
+      expression("github.event.client_payload.arch")
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("first-publication"),
+      "first-publication workflow"
+    )
+  end
+  expect_rejection("an event-selected tap ref on first publication") do
+    mutated = deep_copy(current_callers.fetch("first-publication"))
+    mutated.dig("jobs", "first-publication", "with")["tap-ref"] =
+      expression("github.event.client_payload.tap_ref")
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("first-publication"),
+      "first-publication workflow"
+    )
+  end
+  expect_rejection("missing artifact evidence on first publication") do
+    mutated = deep_copy(current_callers.fetch("first-publication"))
+    mutated.dig("jobs", "first-publication", "with").delete(
+      "dry-run-child-artifact-digest"
+    )
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("first-publication"),
+      "first-publication workflow"
+    )
+  end
+  expect_rejection("write-capable contents on first publication") do
+    mutated = deep_copy(current_callers.fetch("first-publication"))
+    mutated.dig("jobs", "first-publication", "permissions")["contents"] = "write"
+    check_caller(
+      mutated,
+      CALLER_SPECS.fetch("first-publication"),
+      "first-publication workflow"
+    )
+  end
+  expect_rejection("a mutable first-publication target") do
+    mutated = deep_copy(current_callers.fetch("first-publication"))
+    mutated.dig("jobs", "first-publication")["uses"] =
       "Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@main"
     check_caller(
       mutated,
-      CALLER_SPECS.fetch("repository-canary"),
-      "repository-canary workflow"
+      CALLER_SPECS.fetch("first-publication"),
+      "first-publication workflow"
     )
   end
   expect_rejection("a mismatched main-shell mirror Kandelo input") do
@@ -1466,7 +1522,7 @@ begin
           "#{label} is not finalized to an exact SHA")
   end
   {
-    "repository canary" => REPOSITORY_CANARY_KANDELO_SHA,
+    "first publication" => FIRST_PUBLICATION_KANDELO_SHA,
     "retired PAT" => RETIRED_PAT_KANDELO_WORKFLOW_SHA,
     "previous" => PREVIOUS_KANDELO_WORKFLOW_SHA,
     "retired" => RETIRED_KANDELO_WORKFLOW_SHA,
@@ -1477,7 +1533,7 @@ begin
   end
   complete_profile_shas = [
     CURRENT_KANDELO_WORKFLOW_SHA,
-    REPOSITORY_CANARY_KANDELO_SHA,
+    FIRST_PUBLICATION_KANDELO_SHA,
     RETIRED_PAT_KANDELO_WORKFLOW_SHA,
     PREVIOUS_KANDELO_WORKFLOW_SHA,
     RETIRED_KANDELO_WORKFLOW_SHA,

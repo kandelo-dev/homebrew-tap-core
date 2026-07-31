@@ -1,15 +1,25 @@
-name: Test repository-rooted GHCR package
+# Publish one actual child from a successful protected-main dry run. This
+# separate event has no campaign authority and cannot publish an index or edit
+# Formula state; the reusable workflow also requires the package to be absent.
+name: Publish first libyaml GHCR child
 
 on:
   repository_dispatch:
-    types: [test-repository-rooted-ghcr-package]
+    types: [publish-first-homebrew-child]
 
 jobs:
-  canary:
+  first-publication:
     permissions:
       actions: read
       contents: read
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@7d9854e4a6be178e2431816cd21b8a19a1ff6d67
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@5d133fcfd42a25f5ddaec21294b2d71d1564fee0
     with:
-      kandelo-ref: 7d9854e4a6be178e2431816cd21b8a19a1ff6d67
+      kandelo-ref: 5d133fcfd42a25f5ddaec21294b2d71d1564fee0
+      tap-ref: ${{ github.sha }}
+      formula: libyaml
+      arch: wasm32
+      dry-run-run-id: ${{ github.event.client_payload.dry_run_run_id }}
+      dry-run-run-attempt: ${{ github.event.client_payload.dry_run_run_attempt }}
+      dry-run-child-artifact-digest: ${{ github.event.client_payload.dry_run_child_artifact_digest }}
+      expected-child-manifest-digest: ${{ github.event.client_payload.expected_child_manifest_digest }}
