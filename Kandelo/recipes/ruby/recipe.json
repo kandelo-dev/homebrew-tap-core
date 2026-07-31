@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "dependencies": [
+    "kandelo-dev/tap-core/libyaml",
+    "kandelo-dev/tap-core/zlib"
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 51209,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "6bc501cae8cebbbb8ff745eb4a03afec899a579c3e39d3f79eac0bdb66125d36"
+    },
+    {
+      "bytes": 1132,
+      "mode": "0644",
+      "path": "kandelo-ruby-cc",
+      "sha256": "2df5c1adecce131713ca4dcdf5798fcebda2fd729187ee3e1d3757da1be449d3"
+    },
+    {
+      "bytes": 3003,
+      "mode": "0644",
+      "path": "patches/kandelo-require-libraries-roots.patch",
+      "sha256": "52e5fa1f7dd73740d4e290db6bb48542622519bba66cf4582b4487f928ea0632"
+    },
+    {
+      "bytes": 11826,
+      "mode": "0644",
+      "path": "patches/kandelo-posix-spawn.patch",
+      "sha256": "828441ed6cd84b13ed064137ee5442c16a36ee44f7e3bdbb69557218277b63ea"
+    }
+  ]
+}

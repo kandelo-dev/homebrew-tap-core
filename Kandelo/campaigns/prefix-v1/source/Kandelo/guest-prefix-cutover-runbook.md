@@ -58,21 +58,22 @@ or size.
 
 ## Audited Campaign Inventory
 
-The exact 2026-07-29 inventory contains:
+The exact 2026-07-31 inventory contains:
 
 - 52 selected ABI-42 Formulae and 58 selected variants;
 - 63 Formula sidecars and 70 sidecar variants;
 - 11 additional Formula sidecars containing 12 ABI-41 variants;
 - 34 ABI-42, retired-prefix-free reuse candidates;
 - 36 required replacement variants; and
-- one new `homebrew-bootstrap/wasm32` variant.
+- one new `homebrew-bootstrap/wasm32` variant; and
+- one new `libyaml/wasm32` variant.
 
-The final catalog therefore contains 64 Formulae and 71 variants if no
+The final catalog therefore contains 65 Formulae and 72 variants if no
 Formula changes before cutover.
 
 The source snapshot is intentionally not a partially migrated catalog.
 Before the atomic final wave, the retired prefix remains in all 63 Formula
-sidecars and their 70 variants, all 139 live link manifests, 13 Formula
+sidecars and their 70 variants, all 139 live link manifests, 12 Formula
 bottle blocks, two VFS acceptance configurations, and four schema examples.
 The selected metadata still contains 52 Formulae and 58 variants. Those
 counts are staging-input evidence, not permission to expose a mixed catalog.
@@ -202,8 +203,9 @@ The shortest dependency path to an unselected, immutable bootstrap bottle
 does not wait for unrelated packages.
 
 Build `homebrew-bootstrap` immediately after checking the exact campaign
-source. It is an independent Formula-scoped task with no target runtime
-dependency.
+source. In parallel, build `libyaml`. The bootstrap is an independent
+Formula-scoped task with no target runtime dependency. Libyaml is Ruby's
+new tap-owned target dependency.
 
 In parallel, produce canonical-prefix reuse handoffs for:
 
@@ -221,7 +223,8 @@ zlib
 
 Then keep these dependency-ready builds moving:
 
-1. in parallel: `ruby`, `diffutils`, `ncurses`, and `openssl`;
+1. after Libyaml, build `ruby`; in parallel, build `diffutils`, `ncurses`,
+   and `openssl`;
 2. after OpenSSL: admit `libcurl`;
 3. after Ncurses: `less` and `vim` in parallel; and
 4. after Diffutils, Less, Libcurl, OpenSSL, and Vim: `git`.
@@ -238,17 +241,17 @@ lifecycle, not for producing the support-data bottle.
 
 ## Complete Dependency-Ready Queue
 
-`homebrew-bootstrap` is already ready at campaign start.
-It is not a final wave after Git.
+`homebrew-bootstrap` and `libyaml` are already ready at campaign start.
+Neither is a final wave after Git.
 
 After all reuse handoffs exist, the remaining replacement graph is:
 
 1. `binutils`, `diffutils`, `dinit`, `erlang`, `gawk`, `icu`,
-   `libiconv`, `libmagic`, `libpng`, `make`, `ncurses`, `openssl`,
-   `patch`, `pax`, `perl`, `procps`, `python`, `ruby`, `sqlite`, `tar`,
+   `libiconv`, `libmagic`, `libpng`, `libyaml`, `make`, `ncurses`,
+   `openssl`, `patch`, `pax`, `perl`, `procps`, `python`, `sqlite`, `tar`,
    `tcl`, and `what`;
 2. `bash`, `curl`, `file-formula`, `less`, `libxml2`, `nano`,
-   `nethack`, `texlive`, `vim`, and `wget`;
+   `nethack`, `ruby`, `texlive`, `vim`, and `wget`;
 3. `git`.
 
 This is a readiness graph, not four global barriers. Keep no more than
@@ -259,10 +262,11 @@ selected architectures in one task. `libcxx`, `zlib`, `openssl`, and
 `wasm32` bottles. Tex Live has no downstream consumer and must not delay
 the bootstrap critical path.
 
-The exact 21-Formula in-guest runtime-support closure is:
+The exact 22-Formula in-guest runtime-support closure is:
 
 ```text
 zlib
+libyaml
 ruby
 coreutils
 dash
@@ -478,18 +482,19 @@ readback, and verifier handoff.
 
 ### 5. Finalize once
 
-After all 64 Formula-scoped handoffs covering 71 variants are available:
+After all 65 Formula-scoped handoffs covering 72 variants are available:
 
 1. compose every handoff into one fresh local publisher-tap candidate;
-2. select exactly 64 Formula sidecars containing 71 variants and retain
-   exactly 71 selected live link manifests;
+2. select exactly 65 Formula sidecars containing 72 variants and retain
+   exactly 72 selected live link manifests;
 3. preserve all 139 existing root-level provenance reports byte-for-byte,
-   add the 37 new build/bootstrap reports, and therefore retain 176 root
+   add the 38 new build/bootstrap reports, and therefore retain 177 root
    provenance reports when the audited inventory has not changed;
 4. preserve historical failure and rollback namespaces;
 5. remove every unreferenced live formula variant and link sidecar;
-6. regenerate the 13 affected Formula bottle blocks, two VFS acceptance
-   configurations, and four schema examples;
+6. regenerate the 12 retired-prefix Formula bottle blocks, add blocks for
+   Ruby, Libyaml, and the bootstrap, and regenerate two VFS acceptance
+   configurations and four schema examples;
 7. run the complete tap validator once;
 8. run the final retired-prefix guard over live metadata while explicitly
    preserving truthful historical provenance;

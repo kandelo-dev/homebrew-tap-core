@@ -20,9 +20,9 @@
   "state": "inert",
   "target_source": {
     "manifest_path": "Kandelo/campaigns/prefix-v1/manifest.json",
-    "manifest_sha256": "4dbcc2e35b2933ba805159a8839bbc91e73d480f707696e191bef63a0169da6f",
+    "manifest_sha256": "4557965ef283592c36f3f8b75d49ded461283c127f34380df5a44107e76251db",
     "source_root": "Kandelo/campaigns/prefix-v1/source",
-    "source_tree_git_oid": "0cb2375afaa233a4c986c64aa94af596d45ad0bb",
-    "target_tree_git_oid": "5c98b4613ee3e85997f10f013ffc1220ad901ad1"
+    "source_tree_git_oid": "aedd9a2e443f18d651ae7c3c1c3e23ed012a474c",
+    "target_tree_git_oid": "a0645bd773df86b89d70083a5883ff40a1b4c88f"
   }
 }

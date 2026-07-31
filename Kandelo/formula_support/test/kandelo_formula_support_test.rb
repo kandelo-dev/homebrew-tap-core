@@ -3436,23 +3436,40 @@ class KandeloFormulaSupportTest < Minitest::Test
     ENV.replace(original) if original
   end
 
-  def test_ruby_declares_every_registry_script_native_build_dependency
+  def test_ruby_declares_every_closed_recipe_native_build_dependency
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
     native_declarations = formula.lines.grep(
-      /^\s*depends_on (?:"(?:rust|unzip)"|KandeloFormulaSupport::WabtRequirement)/,
+      /^\s*depends_on (?:"(?:gpatch|llvm|make|perl|python@3\.13|rust|unzip)"|KandeloFormulaSupport::(?:Binaryen|Wabt)Requirement) => :build/,
     )
 
     assert_equal [
+      %Q(  depends_on "gpatch" => :build\n),
+      "  depends_on KandeloFormulaSupport::BinaryenRequirement => :build\n",
+      "  depends_on KandeloFormulaSupport::WabtRequirement => :build\n",
+      %Q(  depends_on "llvm" => :build\n),
+      %Q(  depends_on "make" => :build\n),
+      %Q(  depends_on "perl" => :build\n),
+      %Q(  depends_on "python@3.13" => :build\n),
       %Q(  depends_on "rust" => :build\n),
       %Q(  depends_on "unzip" => :build\n),
-      "  depends_on KandeloFormulaSupport::WabtRequirement => :build\n",
     ], native_declarations
+
+    assert_includes formula, "  KANDELO_TAP_RECIPE = true\n"
+    assert_includes formula, 'depends_on "kandelo-dev/tap-core/libyaml"'
+    assert_includes formula, "kandelo_build_tap_recipe("
+    refute_includes formula, "KANDELO_REGISTRY_BRIDGE"
+    refute_includes formula, "kandelo_build_package("
+
+    recipe = File.read(File.expand_path("../../recipes/ruby/build.sh", __dir__), encoding: "UTF-8")
+    refute_match(/\b(?:curl|wget)\b/, recipe)
+    refute_includes recipe, "build-deps resolve"
+    refute_includes recipe, "install-local-binary"
   end
 
   def test_ruby_exercises_the_installed_guest_runtime_without_rubylib
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
 
-    assert_includes formula, "  revision 1\n"
+    assert_includes formula, "  revision 2\n"
     assert_includes formula, '"WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX'
     assert_includes formula, "guest_files: runtime_files"
     assert_includes formula, "raise 'RUBYLIB leaked into installed runtime test'"
@@ -3467,6 +3484,89 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_match(/"#{Regexp.escape(command)}"\s*=>/, formula)
     end
     refute_match(/"RUBYLIB"\s*=>/, formula)
+  end
+
+  def test_ruby_closed_recipe_owns_the_posix_spawn_backend
+    recipe_root = Pathname(File.expand_path("../../recipes/ruby", __dir__))
+    build = (recipe_root/"build.sh").binread
+    patch_path = recipe_root/"patches/kandelo-posix-spawn.patch"
+    patch = patch_path.binread
+    manifest_path = recipe_root/"recipe.json"
+    manifest = JSON.parse(manifest_path.binread)
+    patch_record = manifest.fetch("files").find do |entry|
+      entry.fetch("path") == "patches/kandelo-posix-spawn.patch"
+    end
+
+    assert_includes(
+      build,
+      'gpatch -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-posix-spawn.patch"',
+    )
+    refute_nil patch_record
+    assert_equal patch.bytesize, patch_record.fetch("bytes")
+    assert_equal Digest::SHA256.hexdigest(patch), patch_record.fetch("sha256")
+    assert_equal "0644", patch_record.fetch("mode")
+    %w[
+      kandelo_execarg_can_posix_spawn
+      kandelo_execarg_has_independent_redirects
+      kandelo_execarg_clear_nonblock_stdio
+      kandelo_execarg_restore_fd_flags
+      posix_spawn_file_actions_adddup2
+      posix_spawn_file_actions_addchdir
+      POSIX_SPAWN_SETSIGMASK
+      POSIX_SPAWN_SETSIGDEF
+      POSIX_SPAWN_SETPGROUP
+      ARGVSTR2ARGV
+      RB_IMEMO_TMPBUF_PTR
+      rb_is_absolute_path
+      handle_fork_error
+    ].each { |contract| assert_includes patch, contract }
+    assert_includes patch, "eargp->close_others_do"
+    assert_includes patch, "eargp->fd_close != Qfalse"
+    assert_includes patch, "pid >= 0 || errno != ENOEXEC"
+    refute_includes patch, "posix_spawn_file_actions_addclose"
+    assert_operator patch.index("prefork();"), :<,
+                    patch.index("posix_spawn_file_actions_init(&actions)")
+
+    formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
+    assert_includes(
+      formula,
+      %Q(manifest_sha256: "#{Digest::SHA256.hexdigest(manifest_path.binread)}"),
+    )
+  end
+
+  def test_ruby_exercises_homebrew_system_command_spawn_shape_on_both_hosts
+    formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
+    separator_line = formula.lines.find do |line|
+      line.include?("File.binread('/proc/self/cmdline')")
+    end
+
+    # WHY: the outer Formula heredoc must retain one backslash for the nested
+    # Ruby program. A single source backslash would become a literal NUL in the
+    # Process.spawn argv and fail before Ruby could start the child.
+    assert_includes separator_line, 'split("\\\\0", -1)'
+    assert_includes formula, 'refute_includes spawn_program, "\\0"'
+    assert_includes(
+      formula,
+      %q(assert_includes spawn_program, 'split("\\0", -1)'),
+    )
+    assert_includes formula, "Process.spawn("
+    assert_includes formula, "[executable, executable]"
+    assert_includes formula, "in: input_read"
+    assert_includes formula, "out: output_write"
+    assert_includes formula, "err: error_write"
+    assert_includes formula, "pgroup: true"
+    assert_includes formula, 'chdir: "/tmp"'
+    assert_includes formula, "kandelo_run_wasm("
+    assert_includes formula, "kandelo_run_browser_wasm("
+    assert_includes formula, "exec_programs: spawn_exec_programs"
+    assert_includes(
+      formula,
+      'assert_equal "ruby-homebrew-spawn-ok\\n", spawn_output',
+    )
+    assert_includes(
+      formula,
+      'assert_equal "ruby-browser-homebrew-spawn-ok\\n", browser_spawn_output',
+    )
   end
 
   def test_nethack_declares_its_canonical_dotted_version
