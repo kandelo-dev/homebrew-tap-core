@@ -12,9 +12,9 @@ jobs:
     # WHY: the reusable workflow owns every executable step and derives TA1
     # from this protected caller's live-main SHA. Keeping all four input
     # identities literal prevents event data from selecting code or artifacts.
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-main-shell-mirror-publish.yml@cc0d1dbffadb519762d107b6a133aa46cc5979bd
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-main-shell-mirror-publish.yml@dea041cf341a29bf677b8a47b62f04c4b10358a3
     with:
-      kandelo-ref: cc0d1dbffadb519762d107b6a133aa46cc5979bd
+      kandelo-ref: dea041cf341a29bf677b8a47b62f04c4b10358a3
       # WHY: TF owns the reviewed bottle catalog, while TA0 owns the existing
       # immutable mirror. TA1 may publish only the lifecycle-input release.
       tap-catalog-ref: 6ad0e3dbc60e5572c4288c86919238f71c1bc110
