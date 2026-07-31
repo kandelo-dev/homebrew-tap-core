@@ -168,11 +168,11 @@ class GuestPrefixCutoverInventoryTests(unittest.TestCase):
         )
         self.assertEqual(
             final["formula_sidecars"],
-            source["formula_sidecars"] + 1,
+            source["formula_sidecars"] + 2,
         )
         self.assertEqual(
             final["formula_sidecar_variants"],
-            source["formula_sidecar_variants"] + 1,
+            source["formula_sidecar_variants"] + 2,
         )
         self.assertEqual(
             final["live_link_manifests"],
@@ -180,7 +180,7 @@ class GuestPrefixCutoverInventoryTests(unittest.TestCase):
         )
         self.assertEqual(
             final["new_root_provenance_reports"],
-            source["required_replacement_variants"] + 1,
+            source["required_replacement_variants"] + 2,
         )
         self.assertEqual(
             final["root_provenance_reports"],
@@ -210,6 +210,10 @@ class GuestPrefixCutoverInventoryTests(unittest.TestCase):
             earliest.index("Build `homebrew-bootstrap` immediately"),
             earliest.index("In parallel, produce canonical-prefix"),
         )
+        self.assertLess(
+            earliest.index("build `libyaml`"),
+            earliest.index("after Libyaml, build `ruby`"),
+        )
         self.assertNotIn("libcxx/wasm32", earliest)
         self.assertNotIn("zlib/wasm32", earliest)
         self.assertNotIn("openssl/wasm32", earliest)
@@ -217,10 +221,11 @@ class GuestPrefixCutoverInventoryTests(unittest.TestCase):
         complete = runbook.split(
             "## Complete Dependency-Ready Queue", 1
         )[1].split(
-            "The exact 21-Formula in-guest runtime-support closure", 1
+            "The exact 22-Formula in-guest runtime-support closure", 1
         )[0]
         self.assertIn(
-            "`homebrew-bootstrap` is already ready at campaign start",
+            "`homebrew-bootstrap` and `libyaml` are already ready at "
+            "campaign start",
             complete,
         )
         self.assertNotIn("4. `homebrew-bootstrap`", complete)

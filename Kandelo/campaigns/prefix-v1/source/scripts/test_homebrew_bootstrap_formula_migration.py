@@ -108,6 +108,7 @@ def assert_formula_contract() -> None:
             'assert_path_exists extracted/"LICENSE.txt"',
             "KANDELO_GUEST_HOMEBREW_PREFIX",
             "Retain its `homebrew-` prefix",
+            "Process.spawn",
         ),
         FORMULA,
     )

@@ -1,11 +1,11 @@
 {
   "final_catalog": {
-    "formula_sidecar_variants": 71,
-    "formula_sidecars": 64,
+    "formula_sidecar_variants": 72,
+    "formula_sidecars": 65,
     "historical_root_provenance_reports": 139,
-    "live_link_manifests": 71,
-    "new_root_provenance_reports": 37,
-    "root_provenance_reports": 176
+    "live_link_manifests": 72,
+    "new_root_provenance_reports": 38,
+    "root_provenance_reports": 177
   },
   "kind": "kandelo-homebrew-guest-prefix-cutover-inventory",
   "retained_historical_reports": {
@@ -714,7 +714,7 @@
   "schema": 1,
   "source_snapshot": {
     "byte_clean_reuse_variants": 34,
-    "formula_bottle_blocks_with_retired_prefix": 13,
+    "formula_bottle_blocks_with_retired_prefix": 12,
     "formula_sidecar_variants": 70,
     "formula_sidecars": 63,
     "formula_sidecars_with_retired_prefix": 63,

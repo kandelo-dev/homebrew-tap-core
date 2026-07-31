@@ -71,5 +71,10 @@ class HomebrewBootstrap < Formula
       KANDELO_GUEST_HOMEBREW_PREFIX
     assert_includes (extracted/"Library/Homebrew/github_packages.rb").read,
       "Retain its `homebrew-` prefix"
+    # WHY: Kandelo's Ruby maps this standard API to non-forking posix_spawn.
+    # A bootstrap older than this upstream Homebrew change would clone the
+    # long-lived Ruby address space for every external command.
+    assert_includes (extracted/"Library/Homebrew/system_command.rb").read,
+      "Process.spawn"
   end
 end
