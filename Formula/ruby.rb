@@ -37,7 +37,7 @@ class Ruby < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "f4b5ecd7092796bbc5f03bed70db8341669dcc9384bc19ade18e5f073b5af49a",
+      manifest_sha256: "4274b55d135925220109e278320c5b1d47b5484e368bdb6eb6bd9bbbabdde041",
       script_env:      {
         "WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX,
       },
@@ -145,6 +145,97 @@ class Ruby < Formula
       timeout_ms:   180_000
     )
     assert_equal "ruby-browser-runtime-ok:4.0.5:rubygems-4.0.10:bundler-4.0.10\n", browser_output
+
+    spawn_executable = "#{GUEST_OPT_PREFIX}/bin/ruby"
+    spawn_program = <<~RUBY
+      executable = #{spawn_executable.dump}
+      child_program = <<~'CHILD'
+        argv0 = File.binread('/proc/self/cmdline').split("\\0", -1).fetch(0)
+        puts "argv0=" + argv0
+        puts "arg1=" + ARGV.fetch(0)
+        puts "env=" + ENV.fetch('K_TEST')
+        puts "cwd=" + Dir.pwd
+        puts "pid=" + Process.pid.to_s
+        puts "pgrp=" + Process.getpgrp.to_s
+        puts "input=" + STDIN.read
+        warn "stderr-ok"
+        exit 23
+      CHILD
+
+      input_read, input_write = IO.pipe
+      output_read, output_write = IO.pipe
+      error_read, error_write = IO.pipe
+
+      # WHY: Homebrew's SystemCommand#exec3 uses this exact Process.spawn
+      # shape. Keep it here as an installed-bottle compatibility test on both
+      # hosts. Kandelo's package tests separately inspect fork counts to prove
+      # that Ruby selects its direct posix_spawn backend for this shape.
+      pid = Process.spawn(
+        { "COLUMNS" => "80", "K_TEST" => "homebrew-env-ok" },
+        [executable, executable],
+        "--disable-gems",
+        "-e",
+        child_program,
+        "homebrew-argument",
+        in: input_read,
+        out: output_write,
+        err: error_write,
+        pgroup: true,
+        chdir: "/tmp",
+      )
+
+      input_read.close
+      output_write.close
+      error_write.close
+      input_write.write("homebrew-input")
+      input_write.close
+
+      stdout = output_read.read
+      stderr = error_read.read
+      status = Process.detach(pid).value
+      lines = stdout.lines.map(&:chomp)
+      expected = [
+        "argv0=" + executable,
+        "arg1=homebrew-argument",
+        "env=homebrew-env-ok",
+        "cwd=/tmp",
+        "input=homebrew-input",
+      ]
+      unless status.exitstatus == 23 && expected.all? { |line| lines.include?(line) }
+        raise "unexpected Homebrew-shaped spawn result: %p %p" % [status, stdout]
+      end
+      pid_field = stdout[/^pid=(\d+)$/, 1]
+      pgrp_field = stdout[/^pgrp=(\d+)$/, 1]
+      unless pid_field && pid_field == pgrp_field
+        raise "spawned process did not enter its own process group: %p" % stdout
+      end
+      raise "unexpected child stderr: %p" % stderr unless stderr == "stderr-ok\n"
+
+      puts "ruby-homebrew-spawn-ok"
+    RUBY
+    refute_includes spawn_program, "\0"
+    assert_includes spawn_program, 'split("\0", -1)'
+    spawn_exec_programs = { spawn_executable => bin/"ruby" }
+    spawn_output = kandelo_run_wasm(
+      bin/"ruby", ["--disable-gems", "-e", spawn_program],
+      env:           { "HOME" => "/tmp" },
+      exec_programs: spawn_exec_programs,
+      guest_files:   runtime_files
+    )
+    assert_equal "ruby-homebrew-spawn-ok\n", spawn_output
+
+    browser_spawn_program = spawn_program.sub(
+      "ruby-homebrew-spawn-ok", "ruby-browser-homebrew-spawn-ok"
+    )
+    browser_spawn_output = kandelo_run_browser_wasm(
+      bin/"ruby", ["--disable-gems", "-e", browser_spawn_program],
+      env:           { "HOME" => "/tmp" },
+      exec_programs: spawn_exec_programs,
+      guest_files:   runtime_files,
+      allow_stderr:  false,
+      timeout_ms:    180_000
+    )
+    assert_equal "ruby-browser-homebrew-spawn-ok\n", browser_spawn_output
 
     command_versions = {
       "gem"     => "4.0.10\n",

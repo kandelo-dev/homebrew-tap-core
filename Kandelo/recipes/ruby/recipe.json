@@ -7,10 +7,10 @@
   "entrypoint": "build.sh",
   "files": [
     {
-      "bytes": 50959,
+      "bytes": 51209,
       "mode": "0755",
       "path": "build.sh",
-      "sha256": "4d886403d1107d855463b389d42a08899efc123bd4e404a5f82db53cf234f54d"
+      "sha256": "6bc501cae8cebbbb8ff745eb4a03afec899a579c3e39d3f79eac0bdb66125d36"
     },
     {
       "bytes": 1132,
@@ -23,6 +23,12 @@
       "mode": "0644",
       "path": "patches/kandelo-require-libraries-roots.patch",
       "sha256": "52e5fa1f7dd73740d4e290db6bb48542622519bba66cf4582b4487f928ea0632"
+    },
+    {
+      "bytes": 11826,
+      "mode": "0644",
+      "path": "patches/kandelo-posix-spawn.patch",
+      "sha256": "828441ed6cd84b13ed064137ee5442c16a36ee44f7e3bdbb69557218277b63ea"
     }
   ]
 }
