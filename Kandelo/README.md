@@ -118,6 +118,53 @@ verification, Homebrew pour/test evidence, and runtime and browser gates.
 Formula-specific provenance records the bottle and runtime results; run-scoped
 transport receipts provide the registry proof.
 
+## First `libyaml` GHCR Child
+
+`.github/workflows/repository-namespace-canary.yml` is the narrow bootstrap
+caller for the absent public `homebrew-tap-core/libyaml` package. It is fixed in
+reviewed YAML to Formula `libyaml`, architecture `wasm32`, this tap's exact
+protected-main commit, and one immutable Kandelo workflow commit. The workflow
+can run only through the separate `publish-first-homebrew-child` repository
+dispatch; neither an ordinary dry run nor the prefix campaign can invoke it.
+
+The dispatch supplies evidence, not publication policy: one completed-success
+`dry-run-bottles.yml` run ID and attempt from the same tap commit, the unique
+unexpired Actions archive digest for
+`homebrew-oci-child-libyaml-wasm32-attempt-<N>`, and that child's OCI manifest
+digest. The reusable workflow validates the archive and its receipt without
+registry credentials. Only then does its repository-scoped `GITHUB_TOKEN`
+require authenticated absence of both the descriptor and package repository,
+copy the actual content-derived child, retire its ORAS credentials, and require
+anonymous readback of the exact digest. A mutable ref, a different or failed
+run, ambiguous or expired artifact evidence, an existing public or private
+package, or non-public readback fails closed.
+
+This path publishes no marker, mutable version index, Formula edit, sidecar, or
+campaign handoff. It is serialized per Formula and must reject every replay
+after the package repository exists. A separate normal `libyaml` publication
+must later publish and verify the complete index, finalize tap state, and pass
+the acceptance procedure below. `Kandelo/prefix-campaign-authority.json`
+remains inert, and campaign selection and reuse continue to require anonymous
+public evidence.
+
+After the prerequisite Kandelo commit and this caller are both on their exact
+protected `main` refs, first run a fresh `libyaml`/`wasm32` dry run at that tap
+commit. Inspect the run and artifact through the GitHub API, download the exact
+named child to read `.oci.manifest.digest` from `receipt.json`, and only then
+dispatch the reviewed event with string-valued evidence:
+
+```json
+{
+  "event_type": "publish-first-homebrew-child",
+  "client_payload": {
+    "dry_run_run_id": "<successful-run-id>",
+    "dry_run_run_attempt": "<attempt>",
+    "dry_run_child_artifact_digest": "sha256:<actions-archive-digest>",
+    "expected_child_manifest_digest": "sha256:<oci-manifest-digest>"
+  }
+}
+```
+
 ## Post-Publication Acceptance
 
 Treat a write run as accepted only after the centralized
