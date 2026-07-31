@@ -257,6 +257,7 @@ class Fixture:
         *,
         disposition: str = "required-build",
         arches: tuple[str, ...] = ("wasm32",),
+        request_arch: str | None = None,
     ) -> None:
         self.root = root
         self.campaign = root / "campaign.json"
@@ -270,7 +271,9 @@ class Fixture:
         self.event = root / "event.json"
         write_pretty(
             self.event,
-            event_document(arches=arches),
+            event_document(
+                arches=(request_arch or arches[0],),
+            ),
         )
         self.kandelo = root / "kandelo"
         self.source_tap = root / "source-tap"
@@ -342,6 +345,15 @@ class PrefixCampaignControllerTests(unittest.TestCase):
 
             value = event_document(
                 arches=("wasm64",),
+            )
+            write_pretty(event, value)
+            self.assertEqual(
+                CONTROLLER.load_task_request(event).arches,
+                ("wasm64",),
+            )
+
+            value = event_document(
+                arches=("wasm32", "wasm64"),
             )
             write_pretty(event, value)
             with self.assertRaises(CONTROLLER.ControllerError):
@@ -463,6 +475,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 for line in github_output.read_text().splitlines()
             )
             self.assertEqual(values["formula"], "leaf")
+            self.assertEqual(values["arch"], "wasm32")
             self.assertEqual(values["arches"], "wasm32")
             self.assertEqual(
                 values["dependencies"],
@@ -973,19 +986,22 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     ),
                 )
 
-    def test_readback_accepts_the_exact_multi_arch_handoff(
+    def test_dual_arch_formula_selects_one_sibling_and_generation_lane(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = Fixture(
                 pathlib.Path(directory),
                 arches=("wasm32", "wasm64"),
+                request_arch="wasm32",
             )
             authority = CONTROLLER.load_authority(
                 fixture.authority,
                 require_active=True,
             )
             plan = fixture.plan()
+            self.assertEqual(plan.request.arches, ("wasm32",))
+            self.assertEqual(plan.generation_kind, "browser-inputs")
             handoff = handoff_document(authority, plan)
             path = fixture.root / "handoff.json"
             write_pretty(path, handoff)
@@ -1000,7 +1016,72 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     publication["arch"]
                     for publication in validated["publications"]
                 ],
-                ["wasm32", "wasm64"],
+                ["wasm32"],
+            )
+
+            event = json.loads(fixture.event.read_text())
+            event["client_payload"]["arches"] = ["wasm64"]
+            write_pretty(fixture.event, event)
+            wasm64_plan = fixture.plan()
+            self.assertEqual(wasm64_plan.request.arches, ("wasm64",))
+            self.assertEqual(
+                wasm64_plan.generation_kind,
+                "browser-inputs",
+            )
+
+    def test_sibling_dispositions_are_independent_but_all_validated(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                arches=("wasm32", "wasm64"),
+                request_arch="wasm32",
+            )
+            campaign = json.loads(fixture.campaign.read_text())
+            selected = next(
+                formula
+                for formula in campaign["formulae"]
+                if formula["name"] == "leaf"
+            )
+            selected["variants"][0]["disposition"]["kind"] = (
+                "byte-clean-reuse-candidate"
+            )
+            payload = write_pretty(fixture.campaign, campaign)
+            write_pretty(fixture.authority, active_authority(payload))
+            self.assertEqual(fixture.plan().disposition, "reuse")
+
+            event = json.loads(fixture.event.read_text())
+            event["client_payload"]["arches"] = ["wasm64"]
+            write_pretty(fixture.event, event)
+            self.assertEqual(fixture.plan().disposition, "build")
+
+            selected["variants"][0]["disposition"]["kind"] = (
+                "required-build"
+            )
+            selected["variants"][1]["disposition"]["kind"] = "unknown"
+            payload = write_pretty(fixture.campaign, campaign)
+            write_pretty(fixture.authority, active_authority(payload))
+            event["client_payload"]["arches"] = ["wasm32"]
+            write_pretty(fixture.event, event)
+            with self.assertRaises(CONTROLLER.ControllerError) as raised:
+                fixture.plan()
+            self.assertEqual(raised.exception.status, "invalid-campaign")
+
+    def test_campaign_rejects_an_undeclared_requested_architecture(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                arches=("wasm32",),
+                request_arch="wasm64",
+            )
+            with self.assertRaises(CONTROLLER.ControllerError) as raised:
+                fixture.plan()
+            self.assertEqual(
+                raised.exception.status,
+                "invalid-task-selection",
             )
 
     def test_anonymous_environment_removes_all_token_authority(

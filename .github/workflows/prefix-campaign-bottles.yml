@@ -15,6 +15,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      arch: ${{ steps.admit.outputs.arch }}
       arches: ${{ steps.admit.outputs.arches }}
       browser-wasm32-generation: >-
         ${{ steps.authority.outputs.browser-wasm32-generation }}
@@ -191,20 +192,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Download wasm32 publication handoff
+      - name: Download admitted publication handoff
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: >-
-            homebrew-publish-handoff-${{ needs.admit.outputs.formula }}-wasm32-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/campaign-publications/wasm32
-
-      - name: Download wasm64 publication handoff
-        if: ${{ contains(needs.admit.outputs.arches, 'wasm64') }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: >-
-            homebrew-publish-handoff-${{ needs.admit.outputs.formula }}-wasm64-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/campaign-publications/wasm64
+            homebrew-publish-handoff-${{ needs.admit.outputs.formula }}-${{ needs.admit.outputs.arch }}-attempt-${{ github.run_attempt }}
+          path: >-
+            ${{ runner.temp }}/campaign-publications/${{ needs.admit.outputs.arch }}
 
       - name: Derive and prepare immutable Formula handoff
         id: handoff
@@ -259,7 +253,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: >-
-            prefix-campaign-controller-${{ needs.admit.outputs.formula }}-attempt-${{ github.run_attempt }}
+            prefix-campaign-controller-${{ needs.admit.outputs.formula }}-${{ needs.admit.outputs.arch }}-attempt-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/controller-summary.json
             ${{ runner.temp }}/publish-receipt.json

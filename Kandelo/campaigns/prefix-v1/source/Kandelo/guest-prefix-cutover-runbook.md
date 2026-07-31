@@ -204,8 +204,8 @@ does not wait for unrelated packages.
 
 Build `homebrew-bootstrap` immediately after checking the exact campaign
 source. In parallel, build `libyaml`. The bootstrap is an independent
-Formula-scoped task with no target runtime dependency. Libyaml is Ruby's
-new tap-owned target dependency.
+Formula/architecture task with no target runtime dependency. Libyaml is
+Ruby's new tap-owned target dependency.
 
 In parallel, produce canonical-prefix reuse handoffs for:
 
@@ -255,12 +255,13 @@ After all reuse handoffs exist, the remaining replacement graph is:
 3. `git`.
 
 This is a readiness graph, not four global barriers. Keep no more than
-eight Formula tasks active, refill a slot immediately, and prioritize
-Ncurses, OpenSSL, Libmagic, Libiconv, and Libpng. Keep every Formula's
-selected architectures in one task. `libcxx`, `zlib`, `openssl`, and
-`libcurl` therefore include both siblings. The bootstrap path uses their
-`wasm32` bottles. Tex Live has no downstream consumer and must not delay
-the bootstrap critical path.
+eight Formula/architecture tasks active, refill a slot immediately, and
+prioritize Ncurses, OpenSSL, Libmagic, Libiconv, and Libpng. Each selected
+architecture is an independent task and produces its own immutable handoff.
+The `libcxx`, `zlib`, `openssl`, and `libcurl` siblings may therefore finish
+at different times; a consumer uses only the dependency handoff for its own
+architecture. The bootstrap path uses their `wasm32` bottles. Tex Live has
+no downstream consumer and must not delay the bootstrap critical path.
 
 The exact 22-Formula in-guest runtime-support closure is:
 
@@ -482,7 +483,7 @@ readback, and verifier handoff.
 
 ### 5. Finalize once
 
-After all 65 Formula-scoped handoffs covering 72 variants are available:
+After all 72 Formula/architecture handoffs are available:
 
 1. compose every handoff into one fresh local publisher-tap candidate;
 2. select exactly 65 Formula sidecars containing 72 variants and retain
