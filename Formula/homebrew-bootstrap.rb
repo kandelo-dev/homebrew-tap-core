@@ -14,9 +14,9 @@ class HomebrewBootstrap < Formula
 
   desc "Patched Homebrew runtime source tree for Kandelo"
   homepage "https://brew.sh/"
-  url "https://github.com/Homebrew/brew/archive/4ead8619231cb15cbe15e8e8188081e347d6f7cd.tar.gz"
-  version "6.0.3-4-g4ead861"
-  sha256 "4b9fdfb4872bd2fbff001c69f91ec7b2c2b7a956459132b6c3adba878f551155"
+  url "https://github.com/Homebrew/brew/archive/d6c1be418446eec7de09fc72441ba4462282a142.tar.gz"
+  version "6.0.4-3-gd6c1be4"
+  sha256 "d3a38612b71eba6ab297a67c06b367829b96250fef48bc0a5088e832a659fc5c"
   license all_of: ["BSD-2-Clause", "GPL-2.0-or-later"]
 
   depends_on "git" => :build
@@ -31,7 +31,7 @@ class HomebrewBootstrap < Formula
     kandelo_require_arch!("wasm32")
 
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "c56e5b08d3f581c47501193d831bd659f319112d6ff3a726430aed634783bbd6",
+      manifest_sha256: "327ef4323d832a9497bd156b72680fcec12a5a0598a0cf945061ce124727eeac",
       script_env:      {
         # WHY: the sealed recipe root does not expose Homebrew's own portable
         # Ruby. Bind this declared native keg explicitly so the lock verifier
@@ -48,9 +48,9 @@ class HomebrewBootstrap < Formula
     environment = libexec/ENVIRONMENT_POLICY
     assert_path_exists archive
     assert_path_exists environment
-    assert_equal "68095c118c8bb99245124fe8558f9211bf6d22e2331852ed27541bd34b725eb9",
+    assert_equal "96aafa1546d0f737b2242589dbd0e47decf2af8352a3069d0552638eb2ebe03b",
       Digest::SHA256.file(archive).hexdigest
-    assert_equal 5_026_784, archive.size
+    assert_equal 5_046_915, archive.size
     assert_equal <<~ENVIRONMENT, environment.read
       HOMEBREW_NO_ANALYTICS=1
       HOMEBREW_NO_AUTO_UPDATE=1
@@ -69,5 +69,10 @@ class HomebrewBootstrap < Formula
       "HOMEBREW_KANDELO_BOTTLE_TAG"
     assert_includes (extracted/"Library/Homebrew/github_packages.rb").read,
       "Retain its `homebrew-` prefix"
+    # WHY: Kandelo's Ruby maps this standard API to non-forking posix_spawn.
+    # A bootstrap older than this upstream Homebrew change would clone the
+    # long-lived Ruby address space for every external command.
+    assert_includes (extracted/"Library/Homebrew/system_command.rb").read,
+      "Process.spawn"
   end
 end
