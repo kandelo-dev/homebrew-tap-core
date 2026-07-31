@@ -629,6 +629,11 @@ def check_prefix_campaign_workflow(workflow, authority)
           jobs.dig("admit", "permissions"),
           { "contents" => "read" }
         ), "#{label} admission permissions changed")
+  check(
+    jobs.dig("admit", "outputs", "arch") ==
+      expression("steps.admit.outputs.arch"),
+    "#{label} does not expose the admitted architecture"
+  )
   publish_permissions = {
     "actions" => "read",
     "contents" => "read",
@@ -699,7 +704,6 @@ def check_prefix_campaign_workflow(workflow, authority)
     CHECKOUT_ACTION,
     CHECKOUT_ACTION,
     DOWNLOAD_ACTION,
-    DOWNLOAD_ACTION,
     UPLOAD_ACTION,
   ]
   check(values_for_key(workflow, "uses") == expected_uses,
@@ -754,12 +758,25 @@ def check_prefix_campaign_workflow(workflow, authority)
   end
   check(downloads.map { |step| step.dig("with", "name") } == [
           "homebrew-publish-handoff-" \
-          "#{expression('needs.admit.outputs.formula')}-wasm32-" \
-          "attempt-#{expression('github.run_attempt')}",
-          "homebrew-publish-handoff-" \
-          "#{expression('needs.admit.outputs.formula')}-wasm64-" \
+          "#{expression('needs.admit.outputs.formula')}-" \
+          "#{expression('needs.admit.outputs.arch')}-" \
           "attempt-#{expression('github.run_attempt')}",
         ], "#{label} publication artifact names changed")
+  check(downloads.map { |step| step.dig("with", "path") } == [
+          "#{expression('runner.temp')}/campaign-publications/" \
+          "#{expression('needs.admit.outputs.arch')}",
+        ], "#{label} publication artifact paths changed")
+  evidence_step = seal_steps.find do |step|
+    step["uses"] == UPLOAD_ACTION
+  end
+  check(
+    evidence_step&.dig("with", "name") ==
+      "prefix-campaign-controller-" \
+      "#{expression('needs.admit.outputs.formula')}-" \
+      "#{expression('needs.admit.outputs.arch')}-" \
+      "attempt-#{expression('github.run_attempt')}",
+    "#{label} controller evidence is not architecture-scoped"
+  )
   publish_step = seal_steps.find do |step|
     step["name"] == "Publish immutable Formula handoff"
   end

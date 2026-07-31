@@ -517,10 +517,10 @@ def parse_arches(value: Any) -> tuple[str, ...]:
             2,
         )
     arches = tuple(value)
-    if arches not in (("wasm32",), ("wasm32", "wasm64")):
+    if arches not in (("wasm32",), ("wasm64",)):
         fail(
             "invalid-task-selection",
-            "architectures must be exactly wasm32 or wasm32,wasm64",
+            "architectures must select exactly one of wasm32 or wasm64",
             2,
         )
     return arches
@@ -974,8 +974,8 @@ def validate_campaign(
             "invalid-campaign",
             f"{request.formula} has no campaign variants",
         )
-    arches: list[str] = []
-    kinds: set[str] = set()
+    declared_arches: list[str] = []
+    selected_kind: str | None = None
     for variant in variants:
         if not isinstance(variant, dict):
             fail(
@@ -998,23 +998,28 @@ def validate_campaign(
                 "invalid-campaign",
                 f"{request.formula} variant identity is invalid",
             )
-        arches.append(arch)
-        kinds.add(disposition["kind"])
-    if tuple(arches) != request.arches:
-        fail(
-            "invalid-task-selection",
-            "requested architectures differ from the campaign task",
-            2,
-        )
-    if kinds == {"byte-clean-reuse-candidate"}:
-        disposition = "reuse"
-    elif kinds and kinds <= {"required-build", "required-rebuild"}:
-        disposition = "build"
-    else:
+        declared_arches.append(arch)
+        if arch == request.arches[0]:
+            selected_kind = disposition["kind"]
+    if tuple(declared_arches) != tuple(sorted(set(declared_arches))):
         fail(
             "invalid-campaign",
-            f"{request.formula} mixes build and reuse dispositions",
+            f"{request.formula} variants must be unique and sorted",
         )
+    if selected_kind is None:
+        fail(
+            "invalid-task-selection",
+            "requested architecture is not declared by the campaign task",
+            2,
+        )
+    # WHY: sibling architectures are independent publication units. One may
+    # already have reusable bytes while the other still needs a build, so the
+    # selected architecture alone determines this task's disposition.
+    if selected_kind == "byte-clean-reuse-candidate":
+        disposition = "reuse"
+    else:
+        assert selected_kind in ("required-build", "required-rebuild")
+        disposition = "build"
     expected_dependencies = dependency_closure(campaign, formula)
     actual_dependencies = tuple(
         name for name, _tag in request.dependency_tags
@@ -1027,7 +1032,10 @@ def validate_campaign(
         )
     generation_kind = (
         "browser-inputs"
-        if "wasm64" in request.arches
+        # WHY: a Formula with any wasm64 variant belongs to the browser-input
+        # generation lane for both siblings. Selecting its wasm32 sibling must
+        # not silently switch that Formula to the unrelated rootfs closure.
+        if "wasm64" in declared_arches
         else "rootfs-wasm32"
     )
     return TaskPlan(
@@ -1757,6 +1765,7 @@ def admit(
             append_github_output(
                 github_output,
                 {
+                    "arch": plan.request.arches[0],
                     "arches": ",".join(plan.request.arches),
                     "dependencies": compact_json(
                         plan.request.dependency_document()

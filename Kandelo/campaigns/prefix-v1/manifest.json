@@ -499,10 +499,10 @@
       "base": null,
       "path": "Kandelo/guest-prefix-cutover-runbook.md",
       "target": {
-        "blob_git_oid": "63268cccc3b4e9cdb662539099ece80577ca1927",
-        "bytes": 18837,
+        "blob_git_oid": "1363fd08d2784f0fb096b378e05786f45e2f3cc1",
+        "bytes": 18965,
         "mode": "100644",
-        "sha256": "e225bd57afcd57ebfcb71a4e01f1b1e18b103a6723c17df966ea3eea402c67c2"
+        "sha256": "4a377a4fe40567b94a2da0181d0be1f7e27022f82a03e84b27e31072293e8f8e"
       }
     },
     {
@@ -584,10 +584,10 @@
       "base": null,
       "path": "scripts/test_guest_prefix_cutover_inventory.py",
       "target": {
-        "blob_git_oid": "2fa556a3812420f675c86c5709a7023dca15fdd7",
-        "bytes": 10322,
+        "blob_git_oid": "af22e8456ff42d1241626c022474dacb67f34cdd",
+        "bytes": 10442,
         "mode": "100644",
-        "sha256": "30cada4c742ca31738399110d8448cf28066416a422311f5c418598cd1dbef9b"
+        "sha256": "e671082a7a2637ebe3525666918129467c33c2a5807411d29ff1137741b62609"
       }
     },
     {
@@ -609,5 +609,5 @@
   "kind": "kandelo-homebrew-prefix-campaign-source-overlay",
   "schema": 1,
   "source_root": "Kandelo/campaigns/prefix-v1/source",
-  "target_tree_git_oid": "a0645bd773df86b89d70083a5883ff40a1b4c88f"
+  "target_tree_git_oid": "77f06a124c2693031d84220cff57f8e351ddcf63"
 }

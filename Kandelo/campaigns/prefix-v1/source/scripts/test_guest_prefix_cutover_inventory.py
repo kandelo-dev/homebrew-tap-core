@@ -230,8 +230,12 @@ class GuestPrefixCutoverInventoryTests(unittest.TestCase):
         )
         self.assertNotIn("4. `homebrew-bootstrap`", complete)
         self.assertIn(
-            "Keep every Formula's\nselected architectures in one task",
+            "Each selected\narchitecture is an independent task",
             complete,
+        )
+        self.assertIn(
+            "After all 72 Formula/architecture handoffs are available",
+            runbook,
         )
 
     def test_runbook_does_not_assign_formula_tests_to_reuse_tasks(self) -> None:
