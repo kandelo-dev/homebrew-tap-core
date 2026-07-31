@@ -5,6 +5,13 @@ class Ruby < Formula
 
   KANDELO_REGISTRY_BRIDGE = true
 
+  # COMPATIBILITY WORKAROUND: Kandelo's current package build makes
+  # representable Ruby fork/exec requests use non-forking posix_spawn.
+  # Browser WebAssembly cannot copy process memory on write, so Brew's many
+  # short-lived helpers can otherwise outrun memory reclamation. Unsupported
+  # requests retain Ruby's upstream fork path. This is temporary; its removal
+  # criteria are documented here:
+  # https://github.com/Automattic/kandelo/blob/main/docs/plans/2026-07-21-homebrew-migration-execution-plan.md#temporary-ruby-process-spawn-exception--2026-07-31
   RUBY_API_VERSION = "4.0.0".freeze
   GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/ruby".freeze
   GUEST_RUNTIME = "#{GUEST_OPT_PREFIX}/lib/ruby/#{RUBY_API_VERSION}".freeze
