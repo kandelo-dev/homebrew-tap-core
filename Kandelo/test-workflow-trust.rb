@@ -16,18 +16,24 @@ PREFIX_CAMPAIGN_PATH =
   File.join(WORKFLOW_ROOT, "prefix-campaign-bottles.yml")
 PREFIX_CAMPAIGN_AUTHORITY_PATH =
   File.join(ROOT, "Kandelo/prefix-campaign-authority.json")
+PREFIX_CAMPAIGN_COMPLETION_PATH =
+  File.join(ROOT, "Kandelo/campaigns/prefix-v1/completion.json")
 PREFIX_CAMPAIGN_CONTROLLER_PATH =
   File.join(ROOT, "scripts/prefix-campaign-controller.py")
-EXPECTED_WORKFLOW_FILES = %w[
+PREFIX_CAMPAIGN_RETIRED = File.exist?(PREFIX_CAMPAIGN_COMPLETION_PATH)
+COMMON_WORKFLOW_FILES = %w[
   base-contract-checks.yml
   contract-checks.yml
   dry-run-bottles.yml
   maintain-bottles.yml
-  prefix-campaign-bottles.yml
   publish-bottles.yml
   publish-main-shell-mirror.yml
   repository-namespace-canary.yml
 ].freeze
+EXPECTED_WORKFLOW_FILES = (
+  COMMON_WORKFLOW_FILES +
+    (PREFIX_CAMPAIGN_RETIRED ? [] : ["prefix-campaign-bottles.yml"])
+).sort.freeze
 CALLER_PERMISSIONS = {
   "actions" => "read",
   "contents" => "write",
@@ -313,137 +319,28 @@ CALLER_PROFILES = {
   "current" => CALLER_SPECS,
 }.freeze
 
-BASE_MATERIALIZE_RUN = <<~'BASH'
-  set -euo pipefail
-  [[ "$HEAD_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || {
-    echo "::error::invalid pull-request head repository"; exit 2;
-  }
-  [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || {
-    echo "::error::invalid pull-request head SHA"; exit 2;
-  }
-
-  candidate_root="$RUNNER_TEMP/tap-contract-candidate"
-  rm -rf "$candidate_root"
-  tree_json="$RUNNER_TEMP/tap-contract-tree.json"
-  gh api --method GET \
-    -H "Accept: application/vnd.github+json" \
-    "repos/${HEAD_REPOSITORY}/git/trees/${HEAD_SHA}?recursive=1" \
-    >"$tree_json"
-  jq -e '
-    .truncated == false and
-    ([.tree[] |
-      select(.path | startswith(".github/workflows/")) |
-      select(.type != "tree") |
-      {path, mode, type}] | sort_by(.path)) == [
-        {path: ".github/workflows/base-contract-checks.yml", mode: "100644", type: "blob"},
-        {path: ".github/workflows/contract-checks.yml", mode: "100644", type: "blob"},
-        {path: ".github/workflows/dry-run-bottles.yml", mode: "100644", type: "blob"},
-        {path: ".github/workflows/maintain-bottles.yml", mode: "100644", type: "blob"},
-        {path: ".github/workflows/prefix-campaign-bottles.yml", mode: "100644", type: "blob"},
-        {path: ".github/workflows/publish-bottles.yml", mode: "100644", type: "blob"},
-        {path: ".github/workflows/publish-main-shell-mirror.yml", mode: "100644", type: "blob"},
-        {path: ".github/workflows/repository-namespace-canary.yml", mode: "100644", type: "blob"}
-      ] and
-    ([.tree[] |
-      select(.path == "Kandelo/prefix-campaign-authority.json") |
-      {path, mode, type}]) == [
-        {path: "Kandelo/prefix-campaign-authority.json", mode: "100644", type: "blob"}
-      ] and
-    ([.tree[] |
-      select(.path == "Kandelo/test-workflow-trust.rb") |
-      {path, mode, type}]) == [
-        {path: "Kandelo/test-workflow-trust.rb", mode: "100644", type: "blob"}
-      ] and
-    ([.tree[] |
-      select(.path == "Kandelo/test-workflow-trust.sh") |
-      {path, mode, type}]) == [
-        {path: "Kandelo/test-workflow-trust.sh", mode: "100755", type: "blob"}
-      ] and
-    ([.tree[] |
-      select(.path == "scripts/prefix-campaign-controller.py") |
-      {path, mode, type}]) == [
-        {path: "scripts/prefix-campaign-controller.py", mode: "100644", type: "blob"}
-      ] and
-    ([.tree[] |
-      select(.path == "scripts/prefix-campaign-source.py") |
-      {path, mode, type}]) == [
-        {path: "scripts/prefix-campaign-source.py", mode: "100644", type: "blob"}
-      ] and
-    ([.tree[] |
-      select(.path == "scripts/test_prefix_campaign_controller.py") |
-      {path, mode, type}]) == [
-        {path: "scripts/test_prefix_campaign_controller.py", mode: "100644", type: "blob"}
-      ] and
-    ([.tree[] |
-      select(.path == "scripts/test_prefix_campaign_source.py") |
-      {path, mode, type}]) == [
-        {path: "scripts/test_prefix_campaign_source.py", mode: "100644", type: "blob"}
-      ]
-  ' "$tree_json" >/dev/null || {
-    echo "::error::candidate workflow or trust-root file set changed"; exit 2;
-  }
-  expected_manifest_blob="$(
-    git rev-parse HEAD:Kandelo/campaigns/prefix-v1/manifest.json
-  )"
-  expected_source_tree="$(
-    git rev-parse HEAD:Kandelo/campaigns/prefix-v1/source
-  )"
-  jq -e \
-    --arg manifest_blob "$expected_manifest_blob" \
-    --arg source_tree "$expected_source_tree" '
-      ([.tree[] |
-        select(.path ==
-          "Kandelo/campaigns/prefix-v1/manifest.json") |
-        {mode, sha, type}]) == [
-          {mode: "100644", sha: $manifest_blob, type: "blob"}
-        ] and
-      ([.tree[] |
-        select(.path ==
-          "Kandelo/campaigns/prefix-v1/source") |
-        {mode, sha, type}]) == [
-          {mode: "040000", sha: $source_tree, type: "tree"}
-        ]
-    ' "$tree_json" >/dev/null || {
-      echo "::error::candidate prefix source authority changed"; exit 2;
-    }
-  paths=(
-    .github/workflows/base-contract-checks.yml
-    .github/workflows/contract-checks.yml
-    .github/workflows/dry-run-bottles.yml
-    .github/workflows/maintain-bottles.yml
-    .github/workflows/prefix-campaign-bottles.yml
-    .github/workflows/publish-bottles.yml
-    .github/workflows/publish-main-shell-mirror.yml
-    .github/workflows/repository-namespace-canary.yml
-    Kandelo/prefix-campaign-authority.json
-    Kandelo/test-workflow-trust.rb
-    Kandelo/test-workflow-trust.sh
-    scripts/prefix-campaign-controller.py
-    scripts/prefix-campaign-source.py
-    scripts/test_prefix_campaign_controller.py
-    scripts/test_prefix_campaign_source.py
-  )
-  for path in "${paths[@]}"; do
-    destination="$candidate_root/$path"
-    mkdir -p "$(dirname "$destination")"
-    gh api --method GET \
-      -H "Accept: application/vnd.github.raw+json" \
-      "repos/${HEAD_REPOSITORY}/contents/${path}?ref=${HEAD_SHA}" \
-      >"$destination"
-  done
-
-  for path in "${paths[@]}"; do
-    cmp -s "$GITHUB_WORKSPACE/$path" "$candidate_root/$path" || {
-      echo "::error::base-owned trust contract changed: $path"; exit 2;
-    }
-  done
-  printf 'KANDELO_TAP_CONTRACT_CANDIDATE=%s\n' "$candidate_root" >>"$GITHUB_ENV"
-BASH
+BASE_MATERIALIZE_RUN =
+  "bash scripts/materialize-tap-contract-candidate.sh"
 
 def check_workflow_file_set
   actual = Dir.children(WORKFLOW_ROOT).sort
   check(actual == EXPECTED_WORKFLOW_FILES,
         "workflow file set changed: expected #{EXPECTED_WORKFLOW_FILES.inspect}, got #{actual.inspect}")
+end
+
+def check_prefix_campaign_lifecycle_file_set
+  authority = File.exist?(PREFIX_CAMPAIGN_AUTHORITY_PATH)
+  completion = File.exist?(PREFIX_CAMPAIGN_COMPLETION_PATH)
+  workflow = File.exist?(PREFIX_CAMPAIGN_PATH)
+  check(authority != completion,
+        "prefix campaign must have authority or completion, not both")
+  if completion
+    check(!workflow,
+          "retired prefix campaign retains its dispatch workflow")
+  else
+    check(workflow,
+          "active prefix campaign lost its dispatch workflow")
+  end
 end
 
 def check_caller(workflow, spec, label)
@@ -619,6 +516,108 @@ def check_prefix_campaign_authority(authority)
     check(zero_identities.zero?,
           "#{label} active state retains inert authority")
   end
+end
+
+def check_prefix_campaign_completion(completion)
+  label = "prefix-campaign completion"
+  check(completion.keys.sort == %w[
+          campaign
+          campaign_release
+          catalog_cohort_sha256
+          expected_parent_commit
+          guest_layout_sha256
+          handoffs_sha256
+          kind
+          schema
+          source
+        ], "#{label} field set changed")
+  check(completion["schema"] == 1, "#{label} schema changed")
+  check(
+    completion["kind"] ==
+      "kandelo-homebrew-prefix-campaign-completion",
+    "#{label} kind changed"
+  )
+  check(completion["campaign"] == "prefix-v1",
+        "#{label} campaign changed")
+  check(
+    completion["expected_parent_commit"].is_a?(String) &&
+      completion["expected_parent_commit"].match?(/\A[0-9a-f]{40}\z/) &&
+      !completion["expected_parent_commit"].match?(/\A0+\z/),
+    "#{label} parent is not an exact commit"
+  )
+  %w[
+    catalog_cohort_sha256
+    guest_layout_sha256
+    handoffs_sha256
+  ].each do |name|
+    check(
+      completion[name].is_a?(String) &&
+        completion[name].match?(/\A[0-9a-f]{64}\z/) &&
+        !completion[name].match?(/\A0+\z/),
+      "#{label} #{name} is not content-addressed"
+    )
+  end
+
+  campaign = completion["campaign_release"]
+  check(campaign.is_a?(Hash) &&
+          campaign.keys.sort == %w[manifest_sha256 repository tag],
+        "#{label} campaign release changed")
+  check(campaign["repository"] == "kandelo-dev/homebrew-tap-core",
+        "#{label} campaign repository changed")
+  check(
+    campaign["manifest_sha256"].is_a?(String) &&
+      campaign["manifest_sha256"].match?(/\A[0-9a-f]{64}\z/) &&
+      !campaign["manifest_sha256"].match?(/\A0+\z/) &&
+      campaign["tag"] ==
+        "homebrew-prefix-campaign-sha256-" \
+        "#{campaign['manifest_sha256']}",
+    "#{label} campaign release is not exact"
+  )
+
+  source = completion["source"]
+  check(source.is_a?(Hash) &&
+          source.keys.sort == %w[
+            manifest_sha256
+            source_tree_git_oid
+            target_tree_git_oid
+          ], "#{label} source changed")
+  check(
+    source["manifest_sha256"].is_a?(String) &&
+      source["manifest_sha256"].match?(/\A[0-9a-f]{64}\z/) &&
+      !source["manifest_sha256"].match?(/\A0+\z/),
+    "#{label} source manifest is not content-addressed"
+  )
+  %w[source_tree_git_oid target_tree_git_oid].each do |name|
+    check(
+      source[name].is_a?(String) &&
+        source[name].match?(/\A[0-9a-f]{40}\z/) &&
+        !source[name].match?(/\A0+\z/),
+      "#{label} source #{name} is not an exact tree"
+    )
+  end
+end
+
+def prefix_campaign_completion_fixture
+  campaign_sha = "1" * 64
+  {
+    "campaign" => "prefix-v1",
+    "campaign_release" => {
+      "manifest_sha256" => campaign_sha,
+      "repository" => "kandelo-dev/homebrew-tap-core",
+      "tag" => "homebrew-prefix-campaign-sha256-#{campaign_sha}",
+    },
+    "catalog_cohort_sha256" => "2" * 64,
+    "expected_parent_commit" => "3" * 40,
+    "guest_layout_sha256" => "4" * 64,
+    "handoffs_sha256" => "5" * 64,
+    "kind" => "kandelo-homebrew-prefix-campaign-completion",
+    "schema" => 1,
+    "source" => {
+      "manifest_sha256" => "6" * 64,
+      "source_tree_git_oid" => "7" * 40,
+      "target_tree_git_oid" => "8" * 40,
+    },
+  }
 end
 
 def check_prefix_campaign_workflow(workflow, authority)
@@ -879,6 +878,7 @@ def check_contract_workflow(workflow)
     "Kandelo/prefix-campaign-authority.json",
     "Kandelo/test-workflow-trust.sh",
     "Kandelo/test-workflow-trust.rb",
+    "scripts/materialize-tap-contract-candidate.sh",
     "scripts/prefix-campaign-controller.py",
     "scripts/prefix-campaign-source.py",
     "scripts/test_prefix_campaign_controller.py",
@@ -917,7 +917,7 @@ def check_contract_workflow(workflow)
         "scripts/test_prefix_campaign_controller.py",
     },
     {
-      "name" => "Verify inert prefix-campaign source",
+      "name" => "Verify prefix-campaign lifecycle",
       "run" =>
         "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest " \
         "scripts/test_prefix_campaign_source.py",
@@ -1333,119 +1333,139 @@ def self_test(
       "Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@#{CURRENT_KANDELO_WORKFLOW_SHA}"
     check_caller(mutated, CALLER_SPECS.fetch("maintenance"), "maintenance workflow")
   end
-  expect_rejection("campaign publication with tap finalization") do
-    mutated = deep_copy(prefix_campaign)
-    mutated.dig(
-      "jobs",
-      "publish-rootfs",
-      "with",
-    )["defer-tap-finalization"] = false
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("campaign publication with VFS acceptance") do
-    mutated = deep_copy(prefix_campaign)
-    mutated.dig(
-      "jobs",
-      "publish-browser",
-      "with",
-    )["require-vfs-acceptance"] = true
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("reuse task routed through the build publisher") do
-    mutated = deep_copy(prefix_campaign)
-    mutated.dig("jobs", "publish-rootfs")["if"] =
-      expression(
-        "needs.admit.outputs.generation-kind == 'rootfs-wasm32'"
+  if prefix_campaign
+    expect_rejection("campaign publication with tap finalization") do
+      mutated = deep_copy(prefix_campaign)
+      mutated.dig(
+        "jobs",
+        "publish-rootfs",
+        "with",
+      )["defer-tap-finalization"] = false
+      check_prefix_campaign_workflow(mutated, prefix_authority)
+    end
+    expect_rejection("campaign publication with VFS acceptance") do
+      mutated = deep_copy(prefix_campaign)
+      mutated.dig(
+        "jobs",
+        "publish-browser",
+        "with",
+      )["require-vfs-acceptance"] = true
+      check_prefix_campaign_workflow(mutated, prefix_authority)
+    end
+    expect_rejection("reuse task routed through the build publisher") do
+      mutated = deep_copy(prefix_campaign)
+      mutated.dig("jobs", "publish-rootfs")["if"] =
+        expression(
+          "needs.admit.outputs.generation-kind == 'rootfs-wasm32'"
+        )
+      check_prefix_campaign_workflow(mutated, prefix_authority)
+    end
+    expect_rejection("an event-selected campaign publisher") do
+      mutated = deep_copy(prefix_campaign)
+      mutated.dig("jobs", "publish-rootfs")["uses"] =
+        expression("github.event.client_payload.reusable")
+      check_prefix_campaign_workflow(mutated, prefix_authority)
+    end
+    expect_rejection("a secret inherited by the campaign publisher") do
+      mutated = deep_copy(prefix_campaign)
+      mutated.dig("jobs", "publish-browser")["secrets"] = "inherit"
+      check_prefix_campaign_workflow(mutated, prefix_authority)
+    end
+    expect_rejection("write permission during campaign admission") do
+      mutated = deep_copy(prefix_campaign)
+      mutated.dig("jobs", "admit", "permissions")["contents"] = "write"
+      check_prefix_campaign_workflow(mutated, prefix_authority)
+    end
+    expect_rejection("campaign release without source ancestry") do
+      mutated = deep_copy(prefix_campaign)
+      step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+        item["name"] == "Publish immutable Formula handoff"
+      end
+      step["run"] = step["run"].sub(
+        /[ \t]*--target-main-contains-sha \\\n[^\n]*\n?/,
+        ""
       )
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("an event-selected campaign publisher") do
-    mutated = deep_copy(prefix_campaign)
-    mutated.dig("jobs", "publish-rootfs")["uses"] =
-      expression("github.event.client_payload.reusable")
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("a secret inherited by the campaign publisher") do
-    mutated = deep_copy(prefix_campaign)
-    mutated.dig("jobs", "publish-browser")["secrets"] = "inherit"
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("write permission during campaign admission") do
-    mutated = deep_copy(prefix_campaign)
-    mutated.dig("jobs", "admit", "permissions")["contents"] = "write"
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("campaign release without source ancestry") do
-    mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
-      item["name"] == "Publish immutable Formula handoff"
+      check_prefix_campaign_workflow(mutated, prefix_authority)
     end
-    step["run"] = step["run"].sub(
-      /[ \t]*--target-main-contains-sha \\\n[^\n]*\n?/,
-      ""
-    )
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("campaign release without Kandelo ancestry") do
-    mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
-      item["name"] == "Publish immutable Formula handoff"
+    expect_rejection("campaign release without Kandelo ancestry") do
+      mutated = deep_copy(prefix_campaign)
+      step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+        item["name"] == "Publish immutable Formula handoff"
+      end
+      step["run"] = step["run"].sub(
+        /[ \t]*--kandelo-main-contains-sha \\\n[^\n]*\n?/,
+        ""
+      )
+      check_prefix_campaign_workflow(mutated, prefix_authority)
     end
-    step["run"] = step["run"].sub(
-      /[ \t]*--kandelo-main-contains-sha \\\n[^\n]*\n?/,
-      ""
-    )
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("campaign release with exact-main authority") do
-    mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
-      item["name"] == "Publish immutable Formula handoff"
+    expect_rejection("campaign release with exact-main authority") do
+      mutated = deep_copy(prefix_campaign)
+      step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+        item["name"] == "Publish immutable Formula handoff"
+      end
+      step["run"] = step["run"].sub(
+        "--kandelo-main-contains-sha",
+        "--exact-kandelo-main-sha"
+      )
+      check_prefix_campaign_workflow(mutated, prefix_authority)
     end
-    step["run"] = step["run"].sub(
-      "--kandelo-main-contains-sha",
-      "--exact-kandelo-main-sha"
-    )
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("campaign release with swapped ancestry") do
-    mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
-      item["name"] == "Publish immutable Formula handoff"
+    expect_rejection("campaign release with swapped ancestry") do
+      mutated = deep_copy(prefix_campaign)
+      step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+        item["name"] == "Publish immutable Formula handoff"
+      end
+      kandelo = expression("needs.admit.outputs.kandelo-commit")
+      source_tap = expression(
+        "needs.admit.outputs.source-tap-commit"
+      )
+      sentinel = "__SWAPPED_CAMPAIGN_AUTHORITY__"
+      step["run"] = step["run"]
+        .sub(kandelo, sentinel)
+        .sub(source_tap, kandelo)
+        .sub(sentinel, source_tap)
+      check_prefix_campaign_workflow(mutated, prefix_authority)
     end
-    kandelo = expression("needs.admit.outputs.kandelo-commit")
-    source_tap = expression(
-      "needs.admit.outputs.source-tap-commit"
-    )
-    sentinel = "__SWAPPED_CAMPAIGN_AUTHORITY__"
-    step["run"] = step["run"]
-      .sub(kandelo, sentinel)
-      .sub(source_tap, kandelo)
-      .sub(sentinel, source_tap)
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("handoff derivation outside the dev shell") do
-    mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
-      item["name"] ==
-        "Derive and prepare immutable Formula handoff"
+    expect_rejection("handoff derivation outside the dev shell") do
+      mutated = deep_copy(prefix_campaign)
+      step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+        item["name"] ==
+          "Derive and prepare immutable Formula handoff"
+      end
+      step["run"] = step["run"].sub(
+        "bash scripts/dev-shell.sh \\\n",
+        ""
+      )
+      check_prefix_campaign_workflow(mutated, prefix_authority)
     end
-    step["run"] = step["run"].sub(
-      "bash scripts/dev-shell.sh \\\n",
-      ""
-    )
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("workflow SHA as campaign source ancestry") do
-    mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
-      item["name"] == "Publish immutable Formula handoff"
+    expect_rejection("workflow SHA as campaign source ancestry") do
+      mutated = deep_copy(prefix_campaign)
+      step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+        item["name"] == "Publish immutable Formula handoff"
+      end
+      step["run"] = step["run"].sub(
+        expression("needs.admit.outputs.source-tap-commit"),
+        expression("github.sha")
+      )
+      check_prefix_campaign_workflow(mutated, prefix_authority)
     end
-    step["run"] = step["run"].sub(
-      expression("needs.admit.outputs.source-tap-commit"),
-      expression("github.sha")
-    )
-    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+
+  completion = prefix_campaign_completion_fixture
+  check_prefix_campaign_completion(completion)
+  expect_rejection("a completion with mutable campaign identity") do
+    mutated = deep_copy(completion)
+    mutated["campaign_release"]["tag"] = "main"
+    check_prefix_campaign_completion(mutated)
+  end
+  expect_rejection("a completion without its handoff cohort") do
+    mutated = deep_copy(completion)
+    mutated.delete("handoffs_sha256")
+    check_prefix_campaign_completion(mutated)
+  end
+  expect_rejection("a completion with an inert parent") do
+    mutated = deep_copy(completion)
+    mutated["expected_parent_commit"] = "0" * 40
+    check_prefix_campaign_completion(mutated)
   end
   expect_rejection("path-filtered pull-request checks") do
     mutated = deep_copy(contract)
@@ -1499,6 +1519,7 @@ def self_test(
 end
 
 begin
+  check_prefix_campaign_lifecycle_file_set
   check_workflow_file_set
   check(CURRENT_KANDELO_WORKFLOW_SHA.match?(/\A[0-9a-f]{40}\z/),
         "current Kandelo workflow pin is not an exact SHA")
@@ -1575,13 +1596,27 @@ begin
   end
   contract = load_workflow(CONTRACT_PATH)
   base_contract = load_workflow(BASE_CONTRACT_PATH)
-  prefix_authority = load_json(PREFIX_CAMPAIGN_AUTHORITY_PATH)
-  prefix_campaign = load_workflow(PREFIX_CAMPAIGN_PATH)
-  check(
-    File.read(PREFIX_CAMPAIGN_AUTHORITY_PATH) ==
-      JSON.pretty_generate(prefix_authority) + "\n",
-    "prefix-campaign authority is not canonical pretty JSON"
-  )
+  if PREFIX_CAMPAIGN_RETIRED
+    prefix_authority = nil
+    prefix_campaign = nil
+    prefix_completion = load_json(PREFIX_CAMPAIGN_COMPLETION_PATH)
+    check(
+      File.read(PREFIX_CAMPAIGN_COMPLETION_PATH) ==
+        JSON.pretty_generate(prefix_completion) + "\n",
+      "prefix-campaign completion is not canonical pretty JSON"
+    )
+  else
+    prefix_authority = load_json(PREFIX_CAMPAIGN_AUTHORITY_PATH)
+    prefix_campaign = load_workflow(PREFIX_CAMPAIGN_PATH)
+    prefix_completion = nil
+  end
+  if prefix_authority
+    check(
+      File.read(PREFIX_CAMPAIGN_AUTHORITY_PATH) ==
+        JSON.pretty_generate(prefix_authority) + "\n",
+      "prefix-campaign authority is not canonical pretty JSON"
+    )
+  end
 
   self_test(
     callers,
@@ -1591,8 +1626,12 @@ begin
     prefix_authority
   )
   check_caller_profile(callers)
-  check_prefix_campaign_authority(prefix_authority)
-  check_prefix_campaign_workflow(prefix_campaign, prefix_authority)
+  if prefix_completion
+    check_prefix_campaign_completion(prefix_completion)
+  else
+    check_prefix_campaign_authority(prefix_authority)
+    check_prefix_campaign_workflow(prefix_campaign, prefix_authority)
+  end
   check_contract_workflow(contract)
   check_base_contract_workflow(base_contract)
   puts "test-workflow-trust.rb: ok"
