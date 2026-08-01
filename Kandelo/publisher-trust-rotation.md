@@ -3,7 +3,9 @@
 This runbook rotates the three protected tap callers and their in-repository
 trust roots from one complete authority tuple to another:
 
-- `P_M`: the exact predecessor Kandelo main commit selected by every caller;
+- `P_M`: the exact predecessor Kandelo main commit selected by write callers;
+- `P_D`: the exact predecessor Kandelo main commit selected by the dry-run
+  caller;
 - `P_G`: the predecessor content-addressed rootfs-wasm32 generation;
 - `P_C`: the SHA-256 of the predecessor raw production caller bytes;
 - `M`: the exact new Kandelo main commit;
@@ -16,16 +18,17 @@ The predecessor is explicit input rather than code in the helper. This keeps a
 future merge SHA and generation out of the repository while still making the
 tree prove exactly which current authority it is replacing.
 
-## Post-#1123 predecessor
+## Pre-#1160 predecessor
 
-The protected tap `main` and tap PR #129 selected this tuple when this runbook
-was prepared:
+Protected tap `main` selected this tuple before the #1160 rotation was
+prepared:
 
 ```bash
-P_M=c647adda31d0918de944135543fb94039135cef1
-P_G=package-generation-rootfs-wasm32-abi-v42-sha256-e7e56ceac71c2f78d8f8078021a71ab9502c76e72a2e96ba8046334139be1f2f
-P_C=05b3e1e851d437d1706c6ff32cfdf9548e0c46e6e911c026c9c6c8f5c6447603
-export P_M P_G P_C
+P_M=4322468ce11f386c30f0cb4cdba6f3414eb0b737
+P_D=3ef821db380d4008c5fb48f953a2e97d83a9a597
+P_G=package-generation-rootfs-wasm32-abi-v42-sha256-8d08f8cc73b165b75d8367f257011ec1724974114e056fac2dfb0e63a4304454
+P_C=eea191a190495a0b760df906122d3de55f61d2281b7e360d855feaa3a200e094
+export P_M P_D P_G P_C
 ```
 
 Re-query protected tap `main` immediately before preparing the live rotation.
@@ -37,7 +40,7 @@ rotation-owned; never globally replace `P_M`.
 
 ## Establish the successor
 
-1. Merge Automattic/kandelo PR #1123 and query its actual merge commit from
+1. Merge Automattic/kandelo PR #1160 and query its actual merge commit from
    protected `main`. Do not use the PR head or GitHub's synthetic test merge as
    `M`.
 2. Confirm `M` is still the freshly queried `Automattic/kandelo` `main`.
@@ -118,10 +121,10 @@ historical tuple to both `APPROVED_PUBLICATION_WORKFLOWS` and
 `APPROVED_CAMPAIGN_CONTRACTS`, with tests proving its exact historical caller
 bytes. Do not make the generic helper invent that recovery authority.
 
-### Prepared predecessor recovery audit
+### Historical predecessor recovery audit
 
-The 2026-07-28 preparation audit found no recovery reason to retain
-`P_M/P_G/P_C` as a historical controller tuple:
+The 2026-07-28 preparation audit found no recovery reason to retain its
+then-current `P_M/P_G/P_C` as a historical controller tuple:
 
 - runs `30323151878`, `30324284741`, and `30329085073` were direct
   `repository_dispatch` operations, not controller-led dispatches recorded in
@@ -143,12 +146,12 @@ The 2026-07-28 preparation audit found no recovery reason to retain
   or their dispatch tokens, and neither has a pending or unresolved dispatch.
 
 There were no active publish or maintenance writes when that audit completed.
-These facts justify retiring `P_M/P_G/P_C` from the current controller maps
-instead of granting it open-ended historical authority. They are a preparation
-record, not a substitute for the immediate pre-rotation check: re-audit active
-runs, protected-main history, canonical sidecars, and every private ledger
-created since this record. If new unresolved evidence names `P_C`, stop and add
-one bounded, purpose-named historical tuple before applying the rotation.
+Those facts justified retiring that historical tuple instead of granting it
+open-ended authority. They do not authorize retiring the current values above.
+Re-audit active runs, protected-main history, canonical sidecars, and every
+private ledger created since this record. If unresolved evidence names current
+`P_C`, stop and add one bounded, purpose-named historical tuple before applying
+the rotation.
 
 ## Preview and apply
 
@@ -159,6 +162,7 @@ set -euo pipefail
 
 python3 -B scripts/rotate-publisher-trust.py \
   --predecessor-kandelo-sha "$P_M" \
+  --predecessor-dry-run-kandelo-sha "$P_D" \
   --predecessor-generation-tag "$P_G" \
   --predecessor-caller-sha256 "$P_C" \
   --kandelo-sha "$M" \
@@ -166,6 +170,7 @@ python3 -B scripts/rotate-publisher-trust.py \
 
 python3 -B scripts/rotate-publisher-trust.py \
   --predecessor-kandelo-sha "$P_M" \
+  --predecessor-dry-run-kandelo-sha "$P_D" \
   --predecessor-generation-tag "$P_G" \
   --predecessor-caller-sha256 "$P_C" \
   --kandelo-sha "$M" \
@@ -188,7 +193,7 @@ also requires the raw production caller to hash to either `P_C` or the rendered
 successor `C`; this prevents scalar-only validation from approving extra jobs,
 permissions, secrets, or other unreviewed caller bytes. Files are replaced
 atomically one at a time. If the host stops between files, rerun with the same
-five inputs to converge the partial application. A complete second invocation
+six inputs to converge the partial application. A complete second invocation
 is a no-op.
 
 Review exactly the owned diff and the derived caller digest:
@@ -254,9 +259,9 @@ controller fixture failure into evidence for or against the rotation.
 The base-owned `publisher-trust-base` pull-request-target job intentionally
 requires protected trust-root bytes to equal the current base. It therefore
 cannot pass a legitimate authority rotation. Require the candidate-owned
-`publisher-trust` job and the local validations above, review the exact
-`P_M/P_G/P_C -> M/G/C` diff, and use only the explicitly authorized
-branch-protection/admin path for this trust-root change.
+`publisher-trust` job and the local validations above. Review the exact
+convergence of `P_M` and `P_D` to `M`, and of `P_G/P_C` to `G/C`. Use only the
+explicitly authorized branch-protection/admin path for this trust-root change.
 
 Do not dispatch a Formula until the exact rotation commit is on protected tap
 `main`, candidate trust checks are green, any required historical controller
