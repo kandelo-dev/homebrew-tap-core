@@ -502,7 +502,7 @@ def check_prefix_campaign_authority(authority)
           state
           target_source
         ], "#{label} field set changed")
-  check(authority["schema"] == 1, "#{label} schema changed")
+  check(authority["schema"] == 2, "#{label} schema changed")
   check(
     authority["kind"] ==
       "kandelo-homebrew-prefix-campaign-caller-authority",
@@ -568,16 +568,9 @@ def check_prefix_campaign_authority(authority)
 
   generations = authority["package_generations"]
   check(generations.is_a?(Hash) &&
-          generations.keys.sort == %w[
-            browser_inputs_wasm32
-            browser_inputs_wasm64
-            rootfs_wasm32
-          ], "#{label} package generation set changed")
+          generations.keys == %w[rootfs_wasm32],
+        "#{label} package generation set changed")
   generation_patterns = {
-    "browser_inputs_wasm32" =>
-      /\Apackage-generation-browser-inputs-wasm32-abi-v42-sha256-[0-9a-f]{64}\z/,
-    "browser_inputs_wasm64" =>
-      /\Apackage-generation-browser-inputs-wasm64-abi-v42-sha256-[0-9a-f]{64}\z/,
     "rootfs_wasm32" =>
       /\Apackage-generation-rootfs-wasm32-abi-v42-sha256-[0-9a-f]{64}\z/,
   }
@@ -637,8 +630,7 @@ def check_prefix_campaign_workflow(workflow, authority)
   check(jobs.is_a?(Hash) && jobs.keys == %w[
           admit
           publish-rootfs
-          publish-browser
-          seal-build
+          seal-handoff
         ], "#{label} job set changed")
   check(exact_permissions?(
           jobs.dig("admit", "permissions"),
@@ -654,7 +646,7 @@ def check_prefix_campaign_workflow(workflow, authority)
     "contents" => "read",
     "packages" => "write",
   }
-  %w[publish-rootfs publish-browser].each do |name|
+  %w[publish-rootfs].each do |name|
     job = jobs.fetch(name)
     reusable = [
       "Automattic/kandelo/.github/workflows/",
@@ -700,7 +692,7 @@ def check_prefix_campaign_workflow(workflow, authority)
     )
   end
   check(exact_permissions?(
-          jobs.dig("seal-build", "permissions"),
+          jobs.dig("seal-handoff", "permissions"),
           { "actions" => "read", "contents" => "write" }
         ), "#{label} release permissions changed")
 
@@ -714,7 +706,7 @@ def check_prefix_campaign_workflow(workflow, authority)
     CHECKOUT_ACTION,
     CHECKOUT_ACTION,
     reusable,
-    reusable,
+    CHECKOUT_ACTION,
     CHECKOUT_ACTION,
     CHECKOUT_ACTION,
     CHECKOUT_ACTION,
@@ -754,7 +746,22 @@ def check_prefix_campaign_workflow(workflow, authority)
           { "GH_TOKEN" => expression("github.token") },
         ], "#{label} credential boundary changed")
 
-  seal_steps = jobs.dig("seal-build", "steps")
+  historical_checkout = jobs.dig("seal-handoff", "steps").find do |step|
+    step["name"] == "Checkout exact historical tap for reuse"
+  end
+  check(
+    historical_checkout&.dig("if") ==
+      expression("needs.admit.outputs.disposition == 'reuse'") &&
+      historical_checkout&.dig("with") == {
+        "repository" => "kandelo-dev/homebrew-tap-core",
+        "ref" => expression("needs.admit.outputs.old-tap-commit"),
+        "path" => "old-tap",
+        "persist-credentials" => false,
+      },
+    "#{label} historical reuse checkout changed"
+  )
+
+  seal_steps = jobs.dig("seal-handoff", "steps")
   check(seal_steps.is_a?(Array), "#{label} release steps changed")
   prepare_step = seal_steps.find do |step|
     step["name"] == "Derive and prepare immutable Formula handoff"
@@ -764,7 +771,13 @@ def check_prefix_campaign_workflow(workflow, authority)
       prepare_step["run"].is_a?(String) &&
       prepare_step["run"].include?("cd kandelo\n") &&
       prepare_step["run"].include?(
-        "bash scripts/dev-shell.sh \\\n"
+        'bash scripts/dev-shell.sh "${controller[@]}" '
+      ) &&
+      prepare_step["run"].include?(
+        'controller+=(prepare-reuse)'
+      ) &&
+      prepare_step["run"].include?(
+        '--old-tap-root "$GITHUB_WORKSPACE/old-tap"'
       ),
     "#{label} handoff derivation bypasses the Kandelo dev shell"
   )
@@ -1346,7 +1359,7 @@ def self_test(
     mutated = deep_copy(prefix_campaign)
     mutated.dig(
       "jobs",
-      "publish-browser",
+      "publish-rootfs",
       "with",
     )["require-vfs-acceptance"] = true
     check_prefix_campaign_workflow(mutated, prefix_authority)
@@ -1367,7 +1380,7 @@ def self_test(
   end
   expect_rejection("a secret inherited by the campaign publisher") do
     mutated = deep_copy(prefix_campaign)
-    mutated.dig("jobs", "publish-browser")["secrets"] = "inherit"
+    mutated.dig("jobs", "publish-rootfs")["secrets"] = "inherit"
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
   expect_rejection("write permission during campaign admission") do
@@ -1377,7 +1390,7 @@ def self_test(
   end
   expect_rejection("campaign release without source ancestry") do
     mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+    step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
       item["name"] == "Publish immutable Formula handoff"
     end
     step["run"] = step["run"].sub(
@@ -1388,7 +1401,7 @@ def self_test(
   end
   expect_rejection("campaign release without Kandelo ancestry") do
     mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+    step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
       item["name"] == "Publish immutable Formula handoff"
     end
     step["run"] = step["run"].sub(
@@ -1399,7 +1412,7 @@ def self_test(
   end
   expect_rejection("campaign release with exact-main authority") do
     mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+    step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
       item["name"] == "Publish immutable Formula handoff"
     end
     step["run"] = step["run"].sub(
@@ -1410,7 +1423,7 @@ def self_test(
   end
   expect_rejection("campaign release with swapped ancestry") do
     mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+    step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
       item["name"] == "Publish immutable Formula handoff"
     end
     kandelo = expression("needs.admit.outputs.kandelo-commit")
@@ -1426,19 +1439,19 @@ def self_test(
   end
   expect_rejection("handoff derivation outside the dev shell") do
     mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+    step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
       item["name"] ==
         "Derive and prepare immutable Formula handoff"
     end
     step["run"] = step["run"].sub(
-      "bash scripts/dev-shell.sh \\\n",
+      'bash scripts/dev-shell.sh "${controller[@]}" ',
       ""
     )
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
   expect_rejection("workflow SHA as campaign source ancestry") do
     mutated = deep_copy(prefix_campaign)
-    step = mutated.dig("jobs", "seal-build", "steps").find do |item|
+    step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
       item["name"] == "Publish immutable Formula handoff"
     end
     step["run"] = step["run"].sub(

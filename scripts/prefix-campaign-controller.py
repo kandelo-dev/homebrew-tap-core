@@ -44,14 +44,6 @@ ROOTFS_GENERATION = re.compile(
     r"^package-generation-rootfs-wasm32-abi-v42-"
     r"sha256-([0-9a-f]{64})$"
 )
-BROWSER_WASM32_GENERATION = re.compile(
-    r"^package-generation-browser-inputs-wasm32-abi-v42-"
-    r"sha256-([0-9a-f]{64})$"
-)
-BROWSER_WASM64_GENERATION = re.compile(
-    r"^package-generation-browser-inputs-wasm64-abi-v42-"
-    r"sha256-([0-9a-f]{64})$"
-)
 MAX_JSON_BYTES = 64 * 1024 * 1024
 MAX_HANDOFF_ASSET_BYTES = 2 * 1024 * 1024 * 1024
 MAX_HANDOFF_TOTAL_BYTES = 8 * 1024 * 1024 * 1024
@@ -62,13 +54,19 @@ COMMAND_TIMEOUT = 1800
 INERT_EXIT = 78
 UNAVAILABLE_EXIT = 69
 HANDOFF_KIND = "kandelo-homebrew-prefix-formula-handoff"
-HANDOFF_PUBLICATION_FILES = (
+BUILD_HANDOFF_PUBLICATION_FILES = (
     "build/bottle.json",
     "build/bottle.tar.gz",
     "build/dependency-provenance.json",
     "build/manifest.json",
     "composition/sidecars-input.json",
     "receipt.json",
+)
+REUSE_HANDOFF_PUBLICATION_FILES = (
+    "composition/sidecars-input.json",
+    "reuse/bottle.json",
+    "reuse/bottle.tar.gz",
+    "reuse/evidence.json",
 )
 TOKEN_ENV = (
     "GH_TOKEN",
@@ -106,8 +104,6 @@ class Authority:
     campaign_repository: str
     campaign_tag: str
     rootfs_wasm32: str
-    browser_inputs_wasm32: str
-    browser_inputs_wasm64: str
     release_tag: str
     reusable_workflow_commit: str
     target_manifest_path: str
@@ -144,6 +140,7 @@ class TaskPlan:
     request: TaskRequest
     disposition: str
     generation_kind: str
+    old_tap_commit: str
     campaign_path: pathlib.Path
     campaign_payload: bytes
     campaign: dict[str, Any]
@@ -326,11 +323,7 @@ def load_authority(
     )
     generations = exact_keys(
         value["package_generations"],
-        {
-            "browser_inputs_wasm32",
-            "browser_inputs_wasm64",
-            "rootfs_wasm32",
-        },
+        {"rootfs_wasm32"},
         "package generation authority",
     )
     target_source = exact_keys(
@@ -345,7 +338,7 @@ def load_authority(
         "campaign target-source authority",
     )
     if (
-        value["schema"] != 1
+        value["schema"] != 2
         or value["kind"]
         != "kandelo-homebrew-prefix-campaign-caller-authority"
         or value["state"] not in ("inert", "active")
@@ -395,16 +388,6 @@ def load_authority(
             generations["rootfs_wasm32"],
             "rootfs wasm32 generation",
             ROOTFS_GENERATION,
-        ),
-        browser_inputs_wasm32=require_string(
-            generations["browser_inputs_wasm32"],
-            "browser-inputs wasm32 generation",
-            BROWSER_WASM32_GENERATION,
-        ),
-        browser_inputs_wasm64=require_string(
-            generations["browser_inputs_wasm64"],
-            "browser-inputs wasm64 generation",
-            BROWSER_WASM64_GENERATION,
         ),
         release_tag=require_string(
             value["release_tag"],
@@ -483,16 +466,6 @@ def load_authority(
                 authority.rootfs_wasm32,
                 ROOTFS_GENERATION,
                 "rootfs wasm32 generation",
-            ),
-            (
-                authority.browser_inputs_wasm32,
-                BROWSER_WASM32_GENERATION,
-                "browser-inputs wasm32 generation",
-            ),
-            (
-                authority.browser_inputs_wasm64,
-                BROWSER_WASM64_GENERATION,
-                "browser-inputs wasm64 generation",
             ),
         ):
             nonzero_match(value, pattern, label)
@@ -960,6 +933,11 @@ def validate_campaign(
             "invalid-campaign",
             "campaign differs from the protected caller authority",
         )
+    old_tap_commit = require_string(
+        campaign_authority.get("old_tap_commit"),
+        "campaign old tap commit",
+        SHA,
+    )
     formulae = formula_index(campaign)
     formula = formulae.get(request.formula)
     if formula is None:
@@ -1030,18 +1008,28 @@ def validate_campaign(
             "dependency handoff tags differ from the exact transitive closure",
             2,
         )
-    generation_kind = (
-        "browser-inputs"
-        # WHY: a Formula with any wasm64 variant belongs to the browser-input
-        # generation lane for both siblings. Selecting its wasm32 sibling must
-        # not silently switch that Formula to the unrelated rootfs closure.
-        if "wasm64" in declared_arches
-        else "rootfs-wasm32"
-    )
+    if disposition == "reuse":
+        # Reuse reads and verifies already-built public bytes. It does
+        # not execute a Formula and therefore needs no package runtime.
+        generation_kind = "none"
+    elif request.arches == ("wasm32",):
+        generation_kind = "rootfs-wasm32"
+    else:
+        # WHY: the previous broad browser-input generation cannot be
+        # made for this campaign. It includes browser images outside the
+        # package build runtime, and some of those images have no wasm64
+        # closure. Fail here instead of dispatching a task whose inputs
+        # cannot exist.
+        fail(
+            "package-generation-unavailable",
+            "new wasm64 builds need a dedicated package runtime generation",
+            UNAVAILABLE_EXIT,
+        )
     return TaskPlan(
         request=request,
         disposition=disposition,
         generation_kind=generation_kind,
+        old_tap_commit=old_tap_commit,
         campaign_path=path,
         campaign_payload=payload,
         campaign=campaign,
@@ -1068,7 +1056,8 @@ def build_plan_document(
         "formula": plan.request.formula,
         "generation_kind": plan.generation_kind,
         "kind": "kandelo-homebrew-prefix-campaign-task-plan",
-        "schema": 1,
+        "schema": 2,
+        "old_tap_commit": plan.old_tap_commit,
         "source_tap_commit": authority.source_tap_commit,
         "target_source": {
             "manifest_path": authority.target_manifest_path,
@@ -1134,14 +1123,6 @@ def prepare_task(
         working / "campaign",
     )
     plan = validate_campaign(campaign_path, authority, request)
-    if plan.disposition == "reuse":
-        # WHY: reuse must be proved by one reviewed Kandelo generator.
-        # A tap-side substitute creates a second admission authority.
-        fail(
-            "reuse-admission-api-unavailable",
-            "Kandelo has no reviewed reuse evidence generator",
-            UNAVAILABLE_EXIT,
-        )
     return authority, plan
 
 
@@ -1271,6 +1252,87 @@ def require_publication_roots(
     return output
 
 
+def prepare_handoff_release(
+    *,
+    authority: Authority,
+    plan: TaskPlan,
+    kandelo_root: pathlib.Path,
+    dependencies: Mapping[str, pathlib.Path],
+    handoff: pathlib.Path,
+    working: pathlib.Path,
+    output: pathlib.Path,
+    github_output: pathlib.Path | None,
+) -> dict[str, Any]:
+    executor = (
+        kandelo_root
+        / "scripts/homebrew-prefix-campaign-executor.py"
+    )
+    prepared = working / "prepared-release"
+    prepare = [
+        "python3",
+        str(executor),
+        "prepare-release",
+        "--campaign",
+        str(plan.campaign_path),
+        "--handoff",
+        str(handoff),
+        "--out",
+        str(prepared),
+    ]
+    for name in sorted(dependencies):
+        prepare.extend(
+            ["--dependency-handoff", str(dependencies[name])]
+        )
+    run_command(prepare, cwd=kandelo_root)
+    manifest, _payload = load_json_bytes(
+        prepared / "release-manifest.json",
+        "prepared release manifest",
+        canonical=True,
+    )
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("repository")
+        != authority.source_tap_repository
+        or manifest.get("target_commitish")
+        != authority.source_tap_commit
+    ):
+        fail(
+            "invalid-release",
+            "prepared release differs from caller authority",
+        )
+    tag = require_string(
+        manifest.get("tag"),
+        "prepared handoff release tag",
+        HANDOFF_TAG,
+    )
+    summary = {
+        "arches": list(plan.request.arches),
+        "authority_sha256": authority.sha256,
+        "dependencies": plan.request.dependency_document(),
+        "disposition": plan.disposition,
+        "formula": plan.request.formula,
+        "kind": "kandelo-homebrew-prefix-release-preparation",
+        "release_tag": tag,
+        "schema": 2,
+        "target_commitish": authority.source_tap_commit,
+    }
+    summary_path = output.parent / "controller-summary.json"
+    if summary_path.exists() or summary_path.is_symlink():
+        fail(
+            "invalid-output",
+            "controller summary output already exists",
+            2,
+        )
+    os.rename(prepared, output)
+    summary_path.write_bytes(pretty_json(summary))
+    if github_output is not None:
+        append_github_output(
+            github_output,
+            {"handoff-tag": tag},
+        )
+    return summary
+
+
 def prepare_build_release(
     *,
     authority_path: pathlib.Path,
@@ -1302,6 +1364,12 @@ def prepare_build_release(
             event_path=event_path,
             working=working,
         )
+        if plan.disposition != "build":
+            fail(
+                "invalid-task-selection",
+                "build preparation requires a campaign build task",
+                2,
+            )
         target_source_root = materialize_target_source(
             authority,
             source_tap_root.resolve(),
@@ -1344,69 +1412,113 @@ def prepare_build_release(
             )
         run_command(derive, cwd=kandelo_root)
 
-        prepared = working / "prepared-release"
-        prepare = [
-            "python3",
-            str(executor),
-            "prepare-release",
-            "--campaign",
-            str(plan.campaign_path),
-            "--handoff",
-            str(handoff),
-            "--out",
-            str(prepared),
-        ]
-        for name in sorted(dependencies):
-            prepare.extend(
-                ["--dependency-handoff", str(dependencies[name])]
-            )
-        run_command(prepare, cwd=kandelo_root)
-        manifest, _payload = load_json_bytes(
-            prepared / "release-manifest.json",
-            "prepared release manifest",
-            canonical=True,
+        return prepare_handoff_release(
+            authority=authority,
+            plan=plan,
+            kandelo_root=kandelo_root,
+            dependencies=dependencies,
+            handoff=handoff,
+            working=working,
+            output=output,
+            github_output=github_output,
         )
-        if (
-            not isinstance(manifest, dict)
-            or manifest.get("repository")
-            != authority.source_tap_repository
-            or manifest.get("target_commitish")
-            != authority.source_tap_commit
-        ):
-            fail(
-                "invalid-release",
-                "prepared release differs from caller authority",
-            )
-        tag = require_string(
-            manifest.get("tag"),
-            "prepared handoff release tag",
-            HANDOFF_TAG,
+    finally:
+        shutil.rmtree(working, ignore_errors=True)
+
+
+def prepare_reuse_release(
+    *,
+    authority_path: pathlib.Path,
+    kandelo_root: pathlib.Path,
+    source_tap_root: pathlib.Path,
+    old_tap_root: pathlib.Path,
+    event_path: pathlib.Path,
+    output: pathlib.Path,
+    github_output: pathlib.Path | None,
+) -> dict[str, Any]:
+    if output.exists() or output.is_symlink():
+        fail(
+            "invalid-output",
+            "reuse release output must not already exist",
+            2,
         )
-        summary = {
-            "arches": list(plan.request.arches),
-            "authority_sha256": authority.sha256,
-            "dependencies": plan.request.dependency_document(),
-            "formula": plan.request.formula,
-            "kind": "kandelo-homebrew-prefix-build-release-preparation",
-            "release_tag": tag,
-            "schema": 1,
-            "target_commitish": authority.source_tap_commit,
-        }
-        summary_path = output.parent / "controller-summary.json"
-        if summary_path.exists() or summary_path.is_symlink():
+    output.parent.mkdir(parents=True, exist_ok=True)
+    working = pathlib.Path(
+        tempfile.mkdtemp(
+            prefix=f".{output.name}.",
+            dir=output.parent,
+        )
+    )
+    try:
+        authority, plan = prepare_task(
+            authority_path=authority_path,
+            kandelo_root=kandelo_root,
+            source_tap_root=source_tap_root,
+            event_path=event_path,
+            working=working,
+        )
+        if plan.disposition != "reuse":
             fail(
-                "invalid-output",
-                "controller summary output already exists",
+                "invalid-task-selection",
+                "reuse preparation requires a campaign reuse task",
                 2,
             )
-        os.rename(prepared, output)
-        summary_path.write_bytes(pretty_json(summary))
-        if github_output is not None:
-            append_github_output(
-                github_output,
-                {"handoff-tag": tag},
+        old_tap_root = require_exact_checkout(
+            old_tap_root,
+            plan.old_tap_commit,
+            "historical tap checkout",
+        )
+        target_source_root = materialize_target_source(
+            authority,
+            source_tap_root.resolve(),
+            working / "target-source",
+        )
+        dependencies = fetch_dependency_handoffs(
+            kandelo_root=kandelo_root,
+            plan=plan,
+            root=working / "dependencies",
+        )
+        executor = (
+            kandelo_root
+            / "scripts/homebrew-prefix-campaign-executor.py"
+        )
+        handoff = working / "formula-handoff"
+        derive = [
+            "python3",
+            str(executor),
+            "derive-reuse",
+            "--campaign",
+            str(plan.campaign_path),
+            "--source-tap-root",
+            str(target_source_root),
+            "--old-tap-root",
+            str(old_tap_root),
+            "--formula",
+            plan.request.formula,
+            "--arch",
+            plan.request.arches[0],
+            "--out",
+            str(handoff),
+        ]
+        for name in sorted(dependencies):
+            derive.extend(
+                ["--dependency-handoff", str(dependencies[name])]
             )
-        return summary
+        # WHY: the tap only selects inputs and publishes the result.
+        # Kandelo's reviewed executor re-fetches the public bottle and
+        # owns every reuse provenance, layout, dependency, and archive
+        # validation rule.
+        run_command(derive, cwd=kandelo_root)
+        return prepare_handoff_release(
+            authority=authority,
+            plan=plan,
+            kandelo_root=kandelo_root,
+            dependencies=dependencies,
+            handoff=handoff,
+            working=working,
+            output=output,
+            github_output=github_output,
+        )
     finally:
         shutil.rmtree(working, ignore_errors=True)
 
@@ -1439,7 +1551,7 @@ def validate_readback_handoff(
     tag_match = HANDOFF_TAG.fullmatch(tag)
     assert tag_match is not None
     if (
-        manifest["schema"] != 1
+        manifest["schema"] != 2
         or manifest["kind"] != HANDOFF_KIND
         or hashlib.sha256(payload).hexdigest() != tag_match.group(1)
     ):
@@ -1536,25 +1648,31 @@ def validate_readback_handoff(
             "invalid-release",
             "anonymous handoff readback has the wrong publications",
         )
+    expected_files = (
+        BUILD_HANDOFF_PUBLICATION_FILES
+        if plan.disposition == "build"
+        else REUSE_HANDOFF_PUBLICATION_FILES
+    )
     total_bytes = len(payload)
     for index, arch in enumerate(plan.request.arches):
         publication = exact_keys(
             publications[index],
-            {"arch", "files"},
+            {"arch", "files", "kind"},
             f"read-back {arch} publication",
         )
         files = publication["files"]
         if (
             publication["arch"] != arch
+            or publication["kind"] != plan.disposition
             or not isinstance(files, list)
-            or len(files) != len(HANDOFF_PUBLICATION_FILES)
+            or len(files) != len(expected_files)
         ):
             fail(
                 "invalid-release",
                 f"anonymous {arch} handoff inventory is invalid",
             )
         for file_index, relative in enumerate(
-            HANDOFF_PUBLICATION_FILES
+            expected_files
         ):
             record = exact_keys(
                 files[file_index],
@@ -1702,10 +1820,6 @@ def preflight(
         append_github_output(
             github_output,
             {
-                "browser-wasm32-generation":
-                authority.browser_inputs_wasm32,
-                "browser-wasm64-generation":
-                authority.browser_inputs_wasm64,
                 "campaign-tag": authority.campaign_tag,
                 "kandelo-commit": authority.kandelo_commit,
                 "release-tag": authority.release_tag,
@@ -1756,10 +1870,8 @@ def admit(
                 }
                 if plan.generation_kind == "rootfs-wasm32"
                 else {
-                    "generation-wasm32":
-                    authority.browser_inputs_wasm32,
-                    "generation-wasm64":
-                    authority.browser_inputs_wasm64,
+                    "generation-wasm32": "",
+                    "generation-wasm64": "",
                 }
             )
             append_github_output(
@@ -1773,6 +1885,7 @@ def admit(
                     "disposition": plan.disposition,
                     "formula": plan.request.formula,
                     "generation-kind": plan.generation_kind,
+                    "old-tap-commit": plan.old_tap_commit,
                     **generations,
                 },
             )
@@ -1853,6 +1966,23 @@ def parse_args() -> argparse.Namespace:
         type=pathlib.Path,
     )
 
+    reuse_parser = commands.add_parser("prepare-reuse")
+    add_common_task_arguments(reuse_parser)
+    reuse_parser.add_argument(
+        "--old-tap-root",
+        type=pathlib.Path,
+        required=True,
+    )
+    reuse_parser.add_argument(
+        "--out",
+        type=pathlib.Path,
+        required=True,
+    )
+    reuse_parser.add_argument(
+        "--github-output",
+        type=pathlib.Path,
+    )
+
     verify_parser = commands.add_parser("verify-release")
     add_common_task_arguments(verify_parser)
     verify_parser.add_argument("--tag", required=True)
@@ -1894,6 +2024,20 @@ def main() -> int:
                 source_tap_root=args.source_tap_root,
                 event_path=args.event,
                 publications_root=args.publications_root,
+                output=args.out,
+                github_output=args.github_output,
+            )
+            print(
+                "prefix-campaign-controller: prepared immutable handoff "
+                f"{document['release_tag']}"
+            )
+        elif args.command == "prepare-reuse":
+            document = prepare_reuse_release(
+                authority_path=args.authority,
+                kandelo_root=args.kandelo_root,
+                source_tap_root=args.source_tap_root,
+                old_tap_root=args.old_tap_root,
+                event_path=args.event,
                 output=args.out,
                 github_output=args.github_output,
             )

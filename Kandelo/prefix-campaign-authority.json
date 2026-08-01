@@ -7,13 +7,11 @@
   "kandelo_repository": "Automattic/kandelo",
   "kind": "kandelo-homebrew-prefix-campaign-caller-authority",
   "package_generations": {
-    "browser_inputs_wasm32": "package-generation-browser-inputs-wasm32-abi-v42-sha256-0000000000000000000000000000000000000000000000000000000000000000",
-    "browser_inputs_wasm64": "package-generation-browser-inputs-wasm64-abi-v42-sha256-0000000000000000000000000000000000000000000000000000000000000000",
     "rootfs_wasm32": "package-generation-rootfs-wasm32-abi-v42-sha256-0000000000000000000000000000000000000000000000000000000000000000"
   },
   "release_tag": "bottles-abi-v42",
   "reusable_workflow_commit": "0000000000000000000000000000000000000000",
-  "schema": 1,
+  "schema": 2,
   "source_tap_commit": "0000000000000000000000000000000000000000",
   "source_tap_name": "kandelo-dev/tap-core",
   "source_tap_repository": "kandelo-dev/homebrew-tap-core",
