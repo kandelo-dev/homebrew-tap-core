@@ -9,6 +9,7 @@ import importlib.util
 import io
 import pathlib
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -614,6 +615,83 @@ class PublisherTrustRotationTests(unittest.TestCase):
             )
         self.assertIn("updated 6 file(s)", apply_output.getvalue())
         self.assertEqual((), self.build().changed)
+
+    def test_fully_applied_rotation_passes_ruby_trust_contract(
+        self,
+    ) -> None:
+        full_root = self.root / "full-tap"
+        shutil.copytree(
+            ROOT,
+            full_root,
+            ignore=shutil.ignore_patterns(".git", "__pycache__"),
+        )
+        candidate = rotation.build_rotation(
+            full_root,
+            predecessor_kandelo_sha=self.predecessor_sha,
+            predecessor_dry_run_kandelo_sha=(
+                self.predecessor_dry_run_sha
+            ),
+            predecessor_first_publication_kandelo_sha=(
+                self.predecessor_first_publication_sha
+            ),
+            predecessor_generation_tag=self.predecessor_generation,
+            predecessor_caller_sha256=self.predecessor_caller,
+            kandelo_sha=NEW_SHA,
+            generation_tag=NEW_TAG,
+        )
+        rotation.apply_rotation(full_root, candidate)
+
+        result = subprocess.run(
+            (
+                "ruby",
+                "Kandelo/test-workflow-trust.rb",
+                str(full_root),
+            ),
+            cwd=full_root,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertIn("test-workflow-trust.rb: ok", result.stdout)
+
+        trust_path = full_root / rotation.TRUST_PATH
+        trust = trust_path.read_text()
+        retired_pattern = rotation.scalar_pattern(
+            r'RETIRED_PAT_KANDELO_WORKFLOW_SHA\s*=\s*"'
+        )
+        retired_matches = tuple(retired_pattern.finditer(trust))
+        self.assertEqual(1, len(retired_matches))
+        retired_sha = (
+            retired_matches[0].group("value").removesuffix('"')
+        )
+        trust_path.write_text(
+            rotation.replace_scalar(
+                trust,
+                rotation.TRUST_FIRST_PUBLICATION_KANDELO_SHA,
+                allowed=frozenset((NEW_SHA,)),
+                replacement=retired_sha,
+                label="test first-publication Kandelo SHA",
+            )
+        )
+        collision = subprocess.run(
+            (
+                "ruby",
+                "Kandelo/test-workflow-trust.rb",
+                str(full_root),
+            ),
+            cwd=full_root,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        self.assertNotEqual(0, collision.returncode, collision.stdout)
+        self.assertIn(
+            "first-publication pin collides with a historical workflow",
+            collision.stdout,
+        )
 
     def test_helper_does_not_embed_the_checked_in_authority(self) -> None:
         source = SCRIPT.read_text()
