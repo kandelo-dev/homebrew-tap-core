@@ -1,11 +1,13 @@
 # Publisher Trust Rotation
 
-This runbook rotates the three protected tap callers and their in-repository
-trust roots from one complete authority tuple to another:
+This runbook rotates the four protected tap callers and their
+in-repository trust roots from one complete authority tuple to another:
 
 - `P_M`: the exact predecessor Kandelo main commit selected by write callers;
 - `P_D`: the exact predecessor Kandelo main commit selected by the dry-run
   caller;
+- `P_F`: the exact predecessor Kandelo commit selected by the
+  first-publication namespace canary;
 - `P_G`: the predecessor content-addressed rootfs-wasm32 generation;
 - `P_C`: the SHA-256 of the predecessor raw production caller bytes;
 - `M`: the exact new Kandelo main commit;
@@ -26,9 +28,10 @@ prepared:
 ```bash
 P_M=4322468ce11f386c30f0cb4cdba6f3414eb0b737
 P_D=3ef821db380d4008c5fb48f953a2e97d83a9a597
+P_F=5d133fcfd42a25f5ddaec21294b2d71d1564fee0
 P_G=package-generation-rootfs-wasm32-abi-v42-sha256-8d08f8cc73b165b75d8367f257011ec1724974114e056fac2dfb0e63a4304454
 P_C=eea191a190495a0b760df906122d3de55f61d2281b7e360d855feaa3a200e094
-export P_M P_D P_G P_C
+export P_M P_D P_F P_G P_C
 ```
 
 Re-query protected tap `main` immediately before preparing the live rotation.
@@ -88,7 +91,7 @@ after the tap has selected it.
 
 Start from a clean checkout containing the final tap changes that the rotation
 will accompany. If the closed-recipe work from PR #129 lands first, stack the
-rotation helper commit onto that exact result. PR #129 did not change the five
+rotation helper commit onto that exact result. PR #129 did not change the six
 rotation-owned files when this runbook was prepared.
 
 Confirm the complete predecessor production caller, not only its visible pins:
@@ -163,6 +166,7 @@ set -euo pipefail
 python3 -B scripts/rotate-publisher-trust.py \
   --predecessor-kandelo-sha "$P_M" \
   --predecessor-dry-run-kandelo-sha "$P_D" \
+  --predecessor-first-publication-kandelo-sha "$P_F" \
   --predecessor-generation-tag "$P_G" \
   --predecessor-caller-sha256 "$P_C" \
   --kandelo-sha "$M" \
@@ -171,6 +175,7 @@ python3 -B scripts/rotate-publisher-trust.py \
 python3 -B scripts/rotate-publisher-trust.py \
   --predecessor-kandelo-sha "$P_M" \
   --predecessor-dry-run-kandelo-sha "$P_D" \
+  --predecessor-first-publication-kandelo-sha "$P_F" \
   --predecessor-generation-tag "$P_G" \
   --predecessor-caller-sha256 "$P_C" \
   --kandelo-sha "$M" \
@@ -183,9 +188,12 @@ Apply changes only these reviewed slots:
 
 - dry-run reusable publisher: `M`; its event-selected `kandelo-ref` remains
   unchanged and it receives no package-generation input;
+- first-publication reusable namespace canary and its exact `kandelo-ref`:
+  `M`; it receives no package-generation input;
 - maintenance reusable publisher and `kandelo-ref`: `M`; generation: `G`;
 - production reusable publisher and `kandelo-ref`: `M`; generation: `G`;
-- Ruby caller trust constants: `M` and `G`; and
+- Ruby caller trust constants, including first-publication trust: `M` and
+  `G`; and
 - rollout-controller current authority: `M`, `G`, and derived `C`.
 
 The helper accepts only predecessor or successor values in each owned slot. It
@@ -193,7 +201,7 @@ also requires the raw production caller to hash to either `P_C` or the rendered
 successor `C`; this prevents scalar-only validation from approving extra jobs,
 permissions, secrets, or other unreviewed caller bytes. Files are replaced
 atomically one at a time. If the host stops between files, rerun with the same
-six inputs to converge the partial application. A complete second invocation
+seven inputs to converge the partial application. A complete second invocation
 is a no-op.
 
 Review exactly the owned diff and the derived caller digest:
@@ -203,6 +211,7 @@ git diff -- \
   .github/workflows/dry-run-bottles.yml \
   .github/workflows/maintain-bottles.yml \
   .github/workflows/publish-bottles.yml \
+  .github/workflows/repository-namespace-canary.yml \
   Kandelo/test-workflow-trust.rb \
   scripts/abi42-rollout.py
 
@@ -260,8 +269,9 @@ The base-owned `publisher-trust-base` pull-request-target job intentionally
 requires protected trust-root bytes to equal the current base. It therefore
 cannot pass a legitimate authority rotation. Require the candidate-owned
 `publisher-trust` job and the local validations above. Review the exact
-convergence of `P_M` and `P_D` to `M`, and of `P_G/P_C` to `G/C`. Use only the
-explicitly authorized branch-protection/admin path for this trust-root change.
+convergence of `P_M`, `P_D`, and `P_F` to `M`, and of `P_G/P_C` to `G/C`.
+Use only the explicitly authorized branch-protection/admin path for this
+trust-root change.
 
 Do not dispatch a Formula until the exact rotation commit is on protected tap
 `main`, candidate trust checks are green, any required historical controller
