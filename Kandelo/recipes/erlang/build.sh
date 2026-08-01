@@ -2,12 +2,12 @@
 set -euo pipefail
 
 # Build the Formula's verified Erlang/OTP source without registry authority.
-REPO_ROOT="${HOMEBREW_KANDELO_ROOT:?}"
 RECIPE_DIR="${WASM_POSIX_DEP_RECIPE_DIR:?}"
 SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"
 WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
 SYSROOT="${WASM_POSIX_SYSROOT:?}"
+FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"
 OTP_VERSION="${WASM_POSIX_DEP_VERSION:?}"
 SOURCE_URL="${WASM_POSIX_DEP_SOURCE_URL:?}"
 SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
@@ -22,6 +22,10 @@ if [ "$TARGET_ARCH" != "wasm32" ] ||
 fi
 if [ ! -f "$SYSROOT/lib/libc.a" ]; then
     echo "ERROR: Erlang requires the attested Kandelo sysroot" >&2
+    exit 1
+fi
+if [ ! -x "$FORK_INSTRUMENT" ]; then
+    echo "ERROR: Erlang requires the sealed Kandelo fork instrumenter" >&2
     exit 1
 fi
 for tool in erl erlc gmake gtar python3.13 wasm32posix-ar \
@@ -385,35 +389,12 @@ if grep -q 'rfile_start(ErlDrvPort, char\*);' "$RAM_FILE_DRV" 2>/dev/null; then
     echo "==> Patched ram_file_drv.c driver start signature (3-arg for wasm call_indirect)"
 fi
 
-# Patch Makefile: compile certain files at -O1.
-# LLVM's wasm32 backend miscompiles several BEAM files at -O2, causing
-# shadow-stack pointer corruption and incorrect aggregate initialization. Keep
-# this optimizer workaround bounded to the affected translation units; it must
-# not turn a runtime memory failure into synthetic success.
-if [ -f "$EMU_MAKEFILE" ] && ! grep -q 'erl_unicode.o:' "$EMU_MAKEFILE"; then
-    # The single-quoted sed program intentionally preserves Make variables for
-    # the generated Makefile instead of expanding them in this recipe shell.
-    # shellcheck disable=SC2016
-    sed -i.bak '/\$(OBJDIR)\/beam_emu\.o: beam\/emu\/beam_emu\.c/i\
-# wasm32: erl_unicode.c miscompiles at -O2 (iodata traversal returns garbage).\
-$(OBJDIR)/erl_unicode.o: beam/erl_unicode.c\
-	$(V_CC) $(subst -O2,-O1,$(CFLAGS)) $(INCLUDES) -c $< -o $@\
-\
-# wasm32: erl_db_util.c miscompiles at -O2 (db_is_fully_bound OOB crash).\
-$(OBJDIR)/erl_db_util.o: beam/erl_db_util.c\
-	$(V_CC) $(subst -O2,-O1,$(CFLAGS)) $(INCLUDES) -c $< -o $@\
-\
-# wasm32: erl_db_hash.c miscompiles at -O2 (match_traverse corruption).\
-$(OBJDIR)/erl_db_hash.o: beam/erl_db_hash.c\
-	$(V_CC) $(subst -O2,-O1,$(CFLAGS)) $(INCLUDES) -c $< -o $@\
-\
-# wasm32: erl_db.c at -O1 for consistent ETS optimization level.\
-$(OBJDIR)/erl_db.o: beam/erl_db.c\
-	$(V_CC) $(subst -O2,-O1,$(CFLAGS)) $(INCLUDES) -c $< -o $@\
-
-' "$EMU_MAKEFILE"
-    echo "==> Patched Makefile: erl_unicode.c, erl_db_util.c, erl_db_hash.c at -O1"
-fi
+# LLVM 21's wasm32 backend miscompiles OTP's inline-to-heap work-stack
+# transition at -O2. The fail-closed patcher accepts only an unmodified
+# generated Makefile or its own complete five-rule block; partial application
+# must never quietly produce a mixed-optimizer runtime.
+python3.13 "$RECIPE_DIR/patches/patch-erts-o1.py" "$EMU_MAKEFILE"
+echo "==> Patched Makefile: five reviewed ERTS translation units build at -O1"
 
 echo "==> Starting build..."
 
@@ -451,32 +432,81 @@ echo "==> Erlang/OTP ${OTP_VERSION} build complete!"
 echo "==> Install directory: $INSTALL_DIR"
 
 # Validate and, when the real OTP forker imports fork(), instrument the final
-# BEAM module through Kandelo's normal continuation pipeline. The retired
-# wasm32 patch that disabled the forker is deliberately not applied.
-# shellcheck source=/dev/null
-source "$REPO_ROOT/scripts/wasm-artifact-guards.sh"
-CURRENT_ABI="$(wasm_current_abi_version "$REPO_ROOT")"
+# BEAM module through Kandelo's normal continuation pipeline. The closed recipe
+# receives that one sealed executable rather than authority over the complete
+# Kandelo checkout. Formula installation performs the authoritative ABI check.
+wasm_is_binary() {
+    local path="${1:-}"
+    [ -f "$path" ] || return 1
+    [ "$(od -An -tx1 -N4 "$path" 2>/dev/null | tr -d ' \n')" = "0061736d" ]
+}
+
 prepare_runtime_wasm() {
     local artifact="$1"
     local instrumented
-    local artifact_abi
+    local dump
+    local imports_fork
+    local export_name
+    local export_count
 
     wasm-strip "$artifact"
-    if wasm_imports_kernel_fork "$artifact" && ! wasm_has_complete_fork_instrumentation "$artifact"; then
-        if wasm_has_any_fork_instrumentation "$artifact"; then
-            wasm_require_fork_instrumentation_if_needed "$artifact"
-            return 1
+    if ! wasm_is_binary "$artifact"; then
+        echo "ERROR: runtime helper is not a Wasm binary: $artifact" >&2
+        return 1
+    fi
+    if LC_ALL=C grep -aFq 'asyncify_' "$artifact"; then
+        echo "ERROR: runtime helper retains retired Asyncify state: $artifact" >&2
+        return 1
+    fi
+    dump="$(wasm-objdump -x "$artifact" 2>/dev/null)" || {
+        echo "ERROR: wasm-objdump could not inspect runtime helper: $artifact" >&2
+        return 1
+    }
+    imports_fork=0
+    if grep -Fq '<- kernel.kernel_fork' <<<"$dump"; then
+        imports_fork=1
+    fi
+    export_count=0
+    for export_name in \
+        wpk_fork_unwind_begin wpk_fork_unwind_end \
+        wpk_fork_rewind_begin wpk_fork_rewind_end wpk_fork_state; do
+        if grep -Fq -- "-> \"$export_name\"" <<<"$dump"; then
+            export_count=$((export_count + 1))
         fi
+    done
+
+    if [ "$imports_fork" -eq 1 ] && [ "$export_count" -eq 0 ]; then
         instrumented=$(mktemp "$WORK_DIR/erlang-fork-instrument.XXXXXX.wasm")
-        "$REPO_ROOT/scripts/run-wasm-fork-instrument.sh" "$artifact" -o "$instrumented"
+        "$FORK_INSTRUMENT" "$artifact" -o "$instrumented"
         chmod 0755 "$instrumented"
         mv "$instrumented" "$artifact"
+        dump="$(wasm-objdump -x "$artifact" 2>/dev/null)" || {
+            echo "ERROR: wasm-objdump could not inspect instrumented helper: $artifact" >&2
+            return 1
+        }
+        export_count=0
+        for export_name in \
+            wpk_fork_unwind_begin wpk_fork_unwind_end \
+            wpk_fork_rewind_begin wpk_fork_rewind_end wpk_fork_state; do
+            if grep -Fq -- "-> \"$export_name\"" <<<"$dump"; then
+                export_count=$((export_count + 1))
+            fi
+        done
     fi
-    wasm_require_no_legacy_asyncify "$artifact"
-    wasm_require_fork_instrumentation_if_needed "$artifact"
-    artifact_abi=$(wasm_extract_abi_version "$artifact" || true)
-    if [ -z "$CURRENT_ABI" ] || [ "$artifact_abi" != "$CURRENT_ABI" ]; then
-        echo "ERROR: runtime helper ABI ${artifact_abi:-missing} does not match Kandelo ABI ${CURRENT_ABI:-missing}: $artifact" >&2
+
+    # WHY: a partial export set cannot be repaired safely because offsets may
+    # already describe a different transform. Likewise, instrumentation on a
+    # fork-free helper is stale continuation state and must not be packaged.
+    if [ "$imports_fork" -eq 1 ] && [ "$export_count" -ne 5 ]; then
+        echo "ERROR: fork-capable runtime helper has incomplete instrumentation: $artifact" >&2
+        return 1
+    fi
+    if [ "$imports_fork" -eq 0 ] && [ "$export_count" -ne 0 ]; then
+        echo "ERROR: fork-free runtime helper carries fork instrumentation: $artifact" >&2
+        return 1
+    fi
+    if LC_ALL=C grep -aFq 'asyncify_' "$artifact"; then
+        echo "ERROR: transformed runtime helper retains retired Asyncify state: $artifact" >&2
         return 1
     fi
 }
@@ -485,7 +515,7 @@ chmod 0755 "$ARTIFACT_DIR/erlang.wasm"
 
 # Fail before packaging if a compiler diagnostic or debug section retained a
 # caller checkout, work root, sysroot, or common CI scratch prefix.
-for forbidden in "$WORK_DIR" "$REPO_ROOT" "$SYSROOT" /private/tmp/ /Users/ /home/runner/work/ /home/runner/_work/ /nix/store/; do
+for forbidden in "$WORK_DIR" "$SRC_DIR" "$RECIPE_DIR" "$SYSROOT" /private/tmp/ /Users/ /home/runner/work/ /home/runner/_work/ /nix/store/; do
     if LC_ALL=C grep -aFq "$forbidden" "$ARTIFACT_DIR/erlang.wasm"; then
         echo "ERROR: erlang.wasm embeds forbidden host path: $forbidden" >&2
         exit 1
@@ -556,7 +586,7 @@ if [ ! -x "$OTP_STAGE/$ERTS_RUNTIME_NAME/bin/erl_child_setup" ]; then
 fi
 
 while IFS= read -r -d '' runtime_file; do
-    for forbidden in "$WORK_DIR" "$REPO_ROOT" "$SYSROOT" /private/tmp/ /Users/ /home/runner/work/ /home/runner/_work/ /nix/store/; do
+    for forbidden in "$WORK_DIR" "$SRC_DIR" "$RECIPE_DIR" "$SYSROOT" /private/tmp/ /Users/ /home/runner/work/ /home/runner/_work/ /nix/store/; do
         if LC_ALL=C grep -aFq "$forbidden" "$runtime_file"; then
             echo "ERROR: OTP runtime file embeds forbidden host path: $runtime_file ($forbidden)" >&2
             exit 1
