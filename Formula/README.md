@@ -92,6 +92,12 @@ rather than reaching `prefix.install`.
 Changing recipe inputs requires updating `recipe.json` and its Formula literal;
 the resulting Formula SHA-256 invalidates reuse for that Formula only.
 
+Composition Formulae may expose another Formula's installed program under a
+different command identity when both recipes declare that relationship and
+freeze enough provenance to reject dependency drift. Keep the dependency's
+Wasm bytes authoritative: use a symlink to its declared output instead of
+copying the module into a second bottle.
+
 Formula tests must execute produced Wasm through Kandelo. A support-data
 Formula with no Wasm program, such as `homebrew-bootstrap`, must instead verify
 its complete installed archive contract in `test do` and declare exactly

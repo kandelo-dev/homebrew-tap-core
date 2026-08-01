@@ -100,7 +100,10 @@ Formula source currently present in this repository includes:
   built directly from the checksum-pinned upstream source;
 - `spidermonkey`, Mozilla's Firefox ESR JavaScript shell built directly from
   the pinned upstream source with its Kandelo platform patches, complete ICU
-  data, shell-worker support, and Node.js/Chromium host-runtime coverage; and
+  data, shell-worker support, and Node.js/Chromium host-runtime coverage;
+- `node`, the Node.js 22 compatibility command composed without copying
+  SpiderMonkey's Wasm module, with exact embedded-bootstrap provenance and
+  package-owned Node.js/Chromium runtime coverage; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
 
 These seven exact-shell Formulae and Ruby intentionally use the transitional
