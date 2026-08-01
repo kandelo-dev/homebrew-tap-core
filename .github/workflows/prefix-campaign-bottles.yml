@@ -15,6 +15,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      admission-kind: ${{ steps.admit.outputs.admission-kind }}
       arch: ${{ steps.admit.outputs.arch }}
       arches: ${{ steps.admit.outputs.arches }}
       campaign-tag: ${{ steps.authority.outputs.campaign-tag }}
@@ -81,7 +82,121 @@ jobs:
     if: >-
       ${{
         needs.admit.outputs.disposition == 'build' &&
-        needs.admit.outputs.generation-kind == 'rootfs-wasm32'
+        needs.admit.outputs.generation-kind == 'rootfs-wasm32' &&
+        needs.admit.outputs.admission-kind == 'anonymous-absence'
+      }}
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@0000000000000000000000000000000000000000
+    with:
+      kandelo-repository: Automattic/kandelo
+      kandelo-ref: ${{ needs.admit.outputs.kandelo-commit }}
+      tap-repository: kandelo-dev/homebrew-tap-core
+      tap-name: kandelo-dev/tap-core
+      tap-ref: ${{ needs.admit.outputs.source-tap-commit }}
+      formulae: ${{ needs.admit.outputs.formula }}
+      arches: ${{ needs.admit.outputs.arches }}
+      release-tag: ${{ needs.admit.outputs.release-tag }}
+      expected-cache-keys: ""
+      package-generation-wasm32: >-
+        ${{ needs.admit.outputs.rootfs-wasm32-generation }}
+      force: true
+      dry-run: false
+      require-vfs-acceptance: false
+      defer-tap-finalization: true
+      prefix-campaign-tag: ${{ needs.admit.outputs.campaign-tag }}
+      prefix-campaign-dependencies: >-
+        ${{ needs.admit.outputs.dependencies }}
+
+  build-bootstrap-rootfs:
+    # WHY: an anonymous GHCR authentication challenge cannot distinguish a
+    # package that does not exist from a private package. Build first without
+    # package authority so the credentialed phase receives only sealed bytes.
+    # Kandelo gives these artifacts a bootstrap-only name because the ordinary
+    # publisher later emits its normal artifacts in this same workflow run.
+    needs: [admit]
+    if: >-
+      ${{
+        needs.admit.outputs.disposition == 'build' &&
+        needs.admit.outputs.generation-kind == 'rootfs-wasm32' &&
+        needs.admit.outputs.admission-kind ==
+          'first-package-namespace-bootstrap-required'
+      }}
+    permissions:
+      actions: read
+      contents: read
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@0000000000000000000000000000000000000000
+    with:
+      kandelo-repository: Automattic/kandelo
+      kandelo-ref: ${{ needs.admit.outputs.kandelo-commit }}
+      tap-repository: kandelo-dev/homebrew-tap-core
+      tap-name: kandelo-dev/tap-core
+      tap-ref: ${{ needs.admit.outputs.source-tap-commit }}
+      formulae: ${{ needs.admit.outputs.formula }}
+      arches: ${{ needs.admit.outputs.arches }}
+      release-tag: ${{ needs.admit.outputs.release-tag }}
+      expected-cache-keys: ""
+      package-generation-wasm32: >-
+        ${{ needs.admit.outputs.rootfs-wasm32-generation }}
+      force: true
+      dry-run: true
+      require-vfs-acceptance: false
+      defer-tap-finalization: true
+      prefix-campaign-tag: ${{ needs.admit.outputs.campaign-tag }}
+      prefix-campaign-dependencies: >-
+        ${{ needs.admit.outputs.dependencies }}
+
+  publish-first-child:
+    # WHY: creating the first child makes the package namespace public, but it
+    # does not create Homebrew's version index. This reusable may write only
+    # that child (or resume by anonymously proving the exact child is public).
+    needs: [admit, build-bootstrap-rootfs]
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.admit.result == 'success' &&
+        needs.build-bootstrap-rootfs.result == 'success' &&
+        needs.admit.outputs.disposition == 'build' &&
+        needs.admit.outputs.generation-kind == 'rootfs-wasm32' &&
+        needs.admit.outputs.admission-kind ==
+          'first-package-namespace-bootstrap-required'
+      }}
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-prefix-first-child-publish.yml@0000000000000000000000000000000000000000
+    with:
+      kandelo-repository: Automattic/kandelo
+      kandelo-ref: ${{ needs.admit.outputs.kandelo-commit }}
+      tap-repository: kandelo-dev/homebrew-tap-core
+      tap-name: kandelo-dev/tap-core
+      tap-ref: ${{ needs.admit.outputs.source-tap-commit }}
+      formula: ${{ needs.admit.outputs.formula }}
+      arch: ${{ needs.admit.outputs.arch }}
+      release-tag: ${{ needs.admit.outputs.release-tag }}
+      prefix-campaign-tag: ${{ needs.admit.outputs.campaign-tag }}
+      prefix-campaign-dependencies: >-
+        ${{ needs.admit.outputs.dependencies }}
+
+  publish-bootstrap-rootfs:
+    # WHY: Formula finalization needs the ordinary public version index,
+    # sidecar inputs, and verification handoff. Run the regular publisher only
+    # after the bounded first-child gate; its handoff is the one sealed below.
+    needs: [admit, publish-first-child]
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.admit.result == 'success' &&
+        needs.publish-first-child.result == 'success' &&
+        needs.admit.outputs.disposition == 'build' &&
+        needs.admit.outputs.generation-kind == 'rootfs-wasm32' &&
+        needs.admit.outputs.admission-kind ==
+          'first-package-namespace-bootstrap-required'
       }}
     permissions:
       actions: read
@@ -109,7 +224,12 @@ jobs:
         ${{ needs.admit.outputs.dependencies }}
 
   seal-handoff:
-    needs: [admit, publish-rootfs]
+    needs:
+      - admit
+      - publish-rootfs
+      - build-bootstrap-rootfs
+      - publish-first-child
+      - publish-bootstrap-rootfs
     if: >-
       ${{
         always() &&
@@ -118,11 +238,30 @@ jobs:
         (
           (
             needs.admit.outputs.disposition == 'build' &&
-            needs.publish-rootfs.result == 'success' &&
-            needs.admit.outputs.generation-kind == 'rootfs-wasm32'
+            needs.admit.outputs.generation-kind == 'rootfs-wasm32' &&
+            (
+              (
+                needs.admit.outputs.admission-kind ==
+                  'anonymous-absence' &&
+                needs.publish-rootfs.result == 'success' &&
+                needs.build-bootstrap-rootfs.result == 'skipped' &&
+                needs.publish-first-child.result == 'skipped' &&
+                needs.publish-bootstrap-rootfs.result == 'skipped'
+              ) || (
+                needs.admit.outputs.admission-kind ==
+                  'first-package-namespace-bootstrap-required' &&
+                needs.publish-rootfs.result == 'skipped' &&
+                needs.build-bootstrap-rootfs.result == 'success' &&
+                needs.publish-first-child.result == 'success' &&
+                needs.publish-bootstrap-rootfs.result == 'success'
+              )
+            )
           ) || (
             needs.admit.outputs.disposition == 'reuse' &&
             needs.publish-rootfs.result == 'skipped' &&
+            needs.build-bootstrap-rootfs.result == 'skipped' &&
+            needs.publish-first-child.result == 'skipped' &&
+            needs.publish-bootstrap-rootfs.result == 'skipped' &&
             needs.admit.outputs.generation-kind == 'none'
           )
         )

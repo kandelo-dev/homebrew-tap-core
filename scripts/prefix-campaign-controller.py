@@ -138,6 +138,7 @@ class TaskRequest:
 @dataclasses.dataclass(frozen=True)
 class TaskPlan:
     request: TaskRequest
+    admission_kind: str
     disposition: str
     generation_kind: str
     old_tap_commit: str
@@ -897,6 +898,58 @@ def dependency_closure(
     return tuple(sorted(reached))
 
 
+def destination_admission_kind(formula: dict[str, Any]) -> str:
+    name = formula.get("name", "Formula")
+    destination = exact_keys(
+        formula.get("destination"),
+        {"admission", "bottle_rebuild", "reference", "remote"},
+        f"{name} destination",
+    )
+    require_integer(
+        destination["bottle_rebuild"],
+        f"{name} destination bottle rebuild",
+        0,
+        2**31 - 1,
+    )
+    require_string(
+        destination["reference"],
+        f"{name} destination reference",
+    )
+    require_string(
+        destination["remote"],
+        f"{name} destination remote",
+    )
+    admission = exact_keys(
+        destination.get("admission"),
+        {"kind", "method", "probe", "schema"},
+        f"{name} destination admission",
+    )
+    probe = exact_keys(
+        admission["probe"],
+        {"digest", "kind", "schema", "status"},
+        f"{name} destination admission probe",
+    )
+    kind = admission["kind"]
+    expected_status = {
+        "anonymous-absence": "missing",
+        "first-package-namespace-bootstrap-required": "auth-required",
+    }.get(kind)
+    if (
+        admission["schema"] != 1
+        or admission["method"] != "anonymous-oras-manifest-probe"
+        or expected_status is None
+        or probe["schema"] != 1
+        or probe["kind"] != "manifest"
+        or probe["status"] != expected_status
+        or probe["digest"] is not None
+    ):
+        fail(
+            "invalid-campaign",
+            f"{name} destination admission is invalid",
+        )
+    return kind
+
+
 def validate_campaign(
     path: pathlib.Path,
     authority: Authority,
@@ -909,6 +962,15 @@ def validate_campaign(
     )
     if not isinstance(campaign, dict):
         fail("invalid-campaign", "campaign manifest must be an object")
+    if (
+        campaign.get("schema") != 2
+        or campaign.get("kind")
+        != "kandelo-homebrew-guest-prefix-campaign"
+    ):
+        fail(
+            "invalid-campaign",
+            "campaign manifest has an unsupported schema",
+        )
     tag_match = CAMPAIGN_TAG.fullmatch(authority.campaign_tag)
     assert tag_match is not None
     if hashlib.sha256(payload).hexdigest() != tag_match.group(1):
@@ -946,6 +1008,7 @@ def validate_campaign(
             f"campaign does not contain Formula {request.formula}",
             2,
         )
+    admission_kind = destination_admission_kind(formula)
     variants = formula.get("variants")
     if not isinstance(variants, list) or not variants:
         fail(
@@ -984,6 +1047,34 @@ def validate_campaign(
             "invalid-campaign",
             f"{request.formula} variants must be unique and sorted",
         )
+    if admission_kind == "first-package-namespace-bootstrap-required":
+        if formula.get("source_kind") != "reviewed-new-entrant":
+            fail(
+                "invalid-campaign",
+                "package namespace bootstrap requires a reviewed new entrant",
+            )
+        for variant in variants:
+            if (
+                variant.get("selected_by")
+                != "reviewed-campaign-input"
+                or not isinstance(variant.get("build_input"), dict)
+                or not isinstance(variant.get("disposition"), dict)
+                or variant["disposition"].get("kind")
+                != "required-build"
+                or variant["disposition"].get("reasons")
+                != ["new-campaign-entrant"]
+                or "old_record" in variant
+            ):
+                # WHY: an anonymous auth challenge is ambiguous: it can mean
+                # either an absent package or an existing private package.
+                # Only the separately reviewed new-entrant contract may defer
+                # that distinction to the credentialed canary's whole-package
+                # absence check immediately before its one allowed write.
+                fail(
+                    "invalid-campaign",
+                    "package namespace bootstrap Formula is not an exact "
+                    "reviewed new entrant",
+                )
     if selected_kind is None:
         fail(
             "invalid-task-selection",
@@ -998,6 +1089,18 @@ def validate_campaign(
     else:
         assert selected_kind in ("required-build", "required-rebuild")
         disposition = "build"
+    if (
+        admission_kind
+        == "first-package-namespace-bootstrap-required"
+        and disposition != "build"
+    ):
+        # WHY: the namespace bootstrap is a one-time child write for a new
+        # package. Reuse can only select an already public package and must
+        # therefore remain on the ordinary anonymous-absence path.
+        fail(
+            "invalid-campaign",
+            "package namespace bootstrap requires a build task",
+        )
     expected_dependencies = dependency_closure(campaign, formula)
     actual_dependencies = tuple(
         name for name, _tag in request.dependency_tags
@@ -1027,6 +1130,7 @@ def validate_campaign(
         )
     return TaskPlan(
         request=request,
+        admission_kind=admission_kind,
         disposition=disposition,
         generation_kind=generation_kind,
         old_tap_commit=old_tap_commit,
@@ -1042,6 +1146,10 @@ def build_plan_document(
     plan: TaskPlan,
 ) -> dict[str, Any]:
     return {
+        "admission": {
+            "kind": plan.admission_kind,
+            "schema": 1,
+        },
         "arches": list(plan.request.arches),
         "authority_sha256": authority.sha256,
         "campaign": {
@@ -1877,6 +1985,7 @@ def admit(
             append_github_output(
                 github_output,
                 {
+                    "admission-kind": plan.admission_kind,
                     "arch": plan.request.arches[0],
                     "arches": ",".join(plan.request.arches),
                     "dependencies": compact_json(

@@ -121,6 +121,10 @@ def expression(source)
   "$" + "{{ #{source} }}"
 end
 
+def compact_expression(source)
+  source.is_a?(String) ? source.split.join(" ") : source
+end
+
 def deep_copy(value)
   Marshal.load(Marshal.dump(value))
 end
@@ -630,12 +634,20 @@ def check_prefix_campaign_workflow(workflow, authority)
   check(jobs.is_a?(Hash) && jobs.keys == %w[
           admit
           publish-rootfs
+          build-bootstrap-rootfs
+          publish-first-child
+          publish-bootstrap-rootfs
           seal-handoff
         ], "#{label} job set changed")
   check(exact_permissions?(
           jobs.dig("admit", "permissions"),
           { "contents" => "read" }
         ), "#{label} admission permissions changed")
+  check(
+    jobs.dig("admit", "outputs", "admission-kind") ==
+      expression("steps.admit.outputs.admission-kind"),
+    "#{label} does not expose the admitted destination kind"
+  )
   check(
     jobs.dig("admit", "outputs", "arch") ==
       expression("steps.admit.outputs.arch"),
@@ -646,7 +658,33 @@ def check_prefix_campaign_workflow(workflow, authority)
     "contents" => "read",
     "packages" => "write",
   }
-  %w[publish-rootfs].each do |name|
+  publisher_conditions = {
+    "publish-rootfs" => expression([
+      "needs.admit.outputs.disposition == 'build'",
+      "&& needs.admit.outputs.generation-kind == 'rootfs-wasm32'",
+      "&& needs.admit.outputs.admission-kind == 'anonymous-absence'",
+    ].join(" ")),
+    "build-bootstrap-rootfs" => expression([
+      "needs.admit.outputs.disposition == 'build'",
+      "&& needs.admit.outputs.generation-kind == 'rootfs-wasm32'",
+      "&& needs.admit.outputs.admission-kind ==",
+      "'first-package-namespace-bootstrap-required'",
+    ].join(" ")),
+    "publish-bootstrap-rootfs" => expression([
+      "always() && !cancelled()",
+      "&& needs.admit.result == 'success'",
+      "&& needs.publish-first-child.result == 'success'",
+      "&& needs.admit.outputs.disposition == 'build'",
+      "&& needs.admit.outputs.generation-kind == 'rootfs-wasm32'",
+      "&& needs.admit.outputs.admission-kind ==",
+      "'first-package-namespace-bootstrap-required'",
+    ].join(" ")),
+  }
+  %w[
+    publish-rootfs
+    build-bootstrap-rootfs
+    publish-bootstrap-rootfs
+  ].each do |name|
     job = jobs.fetch(name)
     reusable = [
       "Automattic/kandelo/.github/workflows/",
@@ -656,13 +694,22 @@ def check_prefix_campaign_workflow(workflow, authority)
     check(job["uses"] == reusable,
           "#{label} #{name} reusable target changed")
     check(
-      job["if"].is_a?(String) &&
-        job["if"].include?(
-          "needs.admit.outputs.disposition == 'build'"
-        ),
-      "#{label} #{name} may execute for a reuse task"
+      compact_expression(job["if"]) == publisher_conditions[name],
+      "#{label} #{name} route changed"
     )
-    check(exact_permissions?(job["permissions"], publish_permissions),
+    expected_needs = if name == "publish-bootstrap-rootfs"
+      ["admit", "publish-first-child"]
+    else
+      ["admit"]
+    end
+    check(job["needs"] == expected_needs,
+          "#{label} #{name} dependencies changed")
+    expected_permissions = if name == "build-bootstrap-rootfs"
+      { "actions" => "read", "contents" => "read" }
+    else
+      publish_permissions
+    end
+    check(exact_permissions?(job["permissions"], expected_permissions),
           "#{label} #{name} permissions changed")
     inputs = job["with"]
     check(inputs.is_a?(Hash), "#{label} #{name} inputs changed")
@@ -670,8 +717,9 @@ def check_prefix_campaign_workflow(workflow, authority)
           "#{label} #{name} may finalize tap Git")
     check(inputs["require-vfs-acceptance"] == false,
           "#{label} #{name} may run per-Formula VFS acceptance")
-    check(inputs["dry-run"] == false,
-          "#{label} #{name} is not a write publisher")
+    expected_dry_run = name == "build-bootstrap-rootfs"
+    check(inputs["dry-run"] == expected_dry_run,
+          "#{label} #{name} dry-run mode changed")
     check(inputs["force"] == true,
           "#{label} #{name} may accept a cached campaign build")
     check(
@@ -691,10 +739,106 @@ def check_prefix_campaign_workflow(workflow, authority)
       "#{label} #{name} task selection changed"
     )
   end
+  first_child = jobs["publish-first-child"]
+  first_child_reusable = [
+    "Automattic/kandelo/.github/workflows/",
+    "reusable-homebrew-prefix-first-child-publish.yml@",
+    authority["reusable_workflow_commit"],
+  ].join
+  check(
+    first_child["uses"] == first_child_reusable,
+    "#{label} first-child reusable target changed"
+  )
+  check(
+    compact_expression(first_child["if"]) == expression([
+      "always() && !cancelled()",
+      "&& needs.admit.result == 'success'",
+      "&& needs.build-bootstrap-rootfs.result == 'success'",
+      "&& needs.admit.outputs.disposition == 'build'",
+      "&& needs.admit.outputs.generation-kind == 'rootfs-wasm32'",
+      "&& needs.admit.outputs.admission-kind ==",
+      "'first-package-namespace-bootstrap-required'",
+    ].join(" ")) &&
+      first_child["needs"] == [
+        "admit", "build-bootstrap-rootfs",
+      ],
+    "#{label} first-child route is not bootstrap-only"
+  )
+  check(
+    exact_permissions?(
+      first_child["permissions"], publish_permissions
+    ),
+    "#{label} first-child permissions changed"
+  )
+  first_child_inputs = first_child["with"]
+  check(
+    first_child_inputs.is_a?(Hash) &&
+      first_child_inputs.keys.sort == %w[
+        arch
+        formula
+        kandelo-ref
+        kandelo-repository
+        prefix-campaign-dependencies
+        prefix-campaign-tag
+        release-tag
+        tap-name
+        tap-ref
+        tap-repository
+      ] &&
+      first_child_inputs["formula"] ==
+        expression("needs.admit.outputs.formula") &&
+      first_child_inputs["arch"] ==
+        expression("needs.admit.outputs.arch") &&
+      first_child_inputs["kandelo-ref"] ==
+        expression("needs.admit.outputs.kandelo-commit") &&
+      first_child_inputs["tap-ref"] ==
+        expression("needs.admit.outputs.source-tap-commit") &&
+      first_child_inputs["prefix-campaign-tag"] ==
+        expression("needs.admit.outputs.campaign-tag") &&
+      first_child_inputs["prefix-campaign-dependencies"] ==
+        expression("needs.admit.outputs.dependencies"),
+    "#{label} first-child inputs changed"
+  )
   check(exact_permissions?(
           jobs.dig("seal-handoff", "permissions"),
           { "actions" => "read", "contents" => "write" }
         ), "#{label} release permissions changed")
+  check(
+    jobs.dig("seal-handoff", "needs") == [
+      "admit",
+      "publish-rootfs",
+      "build-bootstrap-rootfs",
+      "publish-first-child",
+      "publish-bootstrap-rootfs",
+    ],
+    "#{label} release dependencies changed"
+  )
+  check(
+    compact_expression(jobs.dig("seal-handoff", "if")) == expression([
+      "always() && !cancelled()",
+      "&& needs.admit.result == 'success'",
+      "&& ( ( needs.admit.outputs.disposition == 'build'",
+      "&& needs.admit.outputs.generation-kind == 'rootfs-wasm32'",
+      "&& ( ( needs.admit.outputs.admission-kind == 'anonymous-absence'",
+      "&& needs.publish-rootfs.result == 'success'",
+      "&& needs.build-bootstrap-rootfs.result == 'skipped'",
+      "&& needs.publish-first-child.result == 'skipped'",
+      "&& needs.publish-bootstrap-rootfs.result == 'skipped' )",
+      "|| ( needs.admit.outputs.admission-kind ==",
+      "'first-package-namespace-bootstrap-required'",
+      "&& needs.publish-rootfs.result == 'skipped'",
+      "&& needs.build-bootstrap-rootfs.result == 'success'",
+      "&& needs.publish-first-child.result == 'success'",
+      "&& needs.publish-bootstrap-rootfs.result == 'success' ) ) )",
+      "|| ( needs.admit.outputs.disposition == 'reuse'",
+      "&& needs.publish-rootfs.result == 'skipped'",
+      "&& needs.build-bootstrap-rootfs.result == 'skipped'",
+      "&& needs.publish-first-child.result == 'skipped'",
+      "&& needs.publish-bootstrap-rootfs.result == 'skipped'",
+      "&& needs.admit.outputs.generation-kind == 'none' ) )",
+    ].join(" ")),
+    "#{label} release route changed"
+  )
 
   reusable = [
     "Automattic/kandelo/.github/workflows/",
@@ -705,6 +849,9 @@ def check_prefix_campaign_workflow(workflow, authority)
     CHECKOUT_ACTION,
     CHECKOUT_ACTION,
     CHECKOUT_ACTION,
+    reusable,
+    reusable,
+    first_child_reusable,
     reusable,
     CHECKOUT_ACTION,
     CHECKOUT_ACTION,
@@ -1370,6 +1517,57 @@ def self_test(
       expression(
         "needs.admit.outputs.generation-kind == 'rootfs-wasm32'"
       )
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("bootstrap task routed through the ordinary writer") do
+    mutated = deep_copy(prefix_campaign)
+    mutated.dig("jobs", "publish-rootfs")["if"] = expression(
+      "needs.admit.outputs.disposition == 'build'"
+    )
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("bootstrap build given package write authority") do
+    mutated = deep_copy(prefix_campaign)
+    mutated.dig(
+      "jobs", "build-bootstrap-rootfs", "permissions"
+    )["packages"] = "write"
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("bootstrap build changed into a normal write") do
+    mutated = deep_copy(prefix_campaign)
+    mutated.dig(
+      "jobs", "build-bootstrap-rootfs", "with"
+    )["dry-run"] = false
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("first-child publisher enabled for ordinary absence") do
+    mutated = deep_copy(prefix_campaign)
+    mutated.dig("jobs", "publish-first-child")["if"] = expression(
+      "needs.admit.outputs.disposition == 'build'"
+    )
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("first-child publisher replaced by normal publisher") do
+    mutated = deep_copy(prefix_campaign)
+    mutated.dig("jobs", "publish-first-child")["uses"] = [
+      "Automattic/kandelo/.github/workflows/",
+      "reusable-homebrew-bottle-publish.yml@",
+      prefix_authority["reusable_workflow_commit"],
+    ].join
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("bootstrap completion changed into another dry run") do
+    mutated = deep_copy(prefix_campaign)
+    mutated.dig(
+      "jobs", "publish-bootstrap-rootfs", "with"
+    )["dry-run"] = true
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("bootstrap completion no longer waits for first child") do
+    mutated = deep_copy(prefix_campaign)
+    mutated.dig("jobs", "publish-bootstrap-rootfs")["needs"] = [
+      "admit",
+    ]
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
   expect_rejection("an event-selected campaign publisher") do

@@ -52,20 +52,57 @@ def formula_document(
     disposition: str,
     arches: tuple[str, ...],
     formula_sha256: str,
+    admission_kind: str = "anonymous-absence",
 ) -> dict[str, object]:
+    probe_status = (
+        "auth-required"
+        if admission_kind
+        == "first-package-namespace-bootstrap-required"
+        else "missing"
+    )
+    variants = [variant(arch, disposition) for arch in arches]
+    if admission_kind == "first-package-namespace-bootstrap-required":
+        variants = [
+            {
+                **value,
+                "build_input": {"kind": "formula-source"},
+                "disposition": {
+                    "kind": "required-build",
+                    "reasons": ["new-campaign-entrant"],
+                },
+                "selected_by": "reviewed-campaign-input",
+            }
+            for value in variants
+        ]
     return {
         "dependencies": dependencies,
         "destination": {
+            "admission": {
+                "kind": admission_kind,
+                "method": "anonymous-oras-manifest-probe",
+                "probe": {
+                    "digest": None,
+                    "kind": "manifest",
+                    "schema": 1,
+                    "status": probe_status,
+                },
+                "schema": 1,
+            },
             "bottle_rebuild": 1,
+            "reference": "2.0-rebuild1",
+            "remote": f"ghcr.io/kandelo-dev/homebrew-tap-core/{name}",
         },
         "formula_source": {
             "sha256": formula_sha256,
         },
         "name": name,
-        "variants": [
-            variant(arch, disposition)
-            for arch in arches
-        ],
+        **(
+            {"source_kind": "reviewed-new-entrant"}
+            if admission_kind
+            == "first-package-namespace-bootstrap-required"
+            else {}
+        ),
+        "variants": variants,
         "version": version,
     }
 
@@ -75,6 +112,7 @@ def campaign_document(
     formula: str = "leaf",
     disposition: str = "required-build",
     arches: tuple[str, ...] = ("wasm32",),
+    admission_kind: str = "anonymous-absence",
 ) -> dict[str, object]:
     selected = formula_document(
         formula,
@@ -88,6 +126,7 @@ def campaign_document(
         disposition,
         arches,
         LEAF_FORMULA_SHA256,
+        admission_kind,
     )
     formulae = [
         formula_document(
@@ -101,6 +140,8 @@ def campaign_document(
         selected,
     ]
     return {
+        "kind": "kandelo-homebrew-guest-prefix-campaign",
+        "schema": 2,
         "authority": {
             "kandelo_commit": KANDELO_COMMIT,
             "old_tap_commit": OLD_TAP_COMMIT,
@@ -259,12 +300,14 @@ class Fixture:
         disposition: str = "required-build",
         arches: tuple[str, ...] = ("wasm32",),
         request_arch: str | None = None,
+        admission_kind: str = "anonymous-absence",
     ) -> None:
         self.root = root
         self.campaign = root / "campaign.json"
         campaign = campaign_document(
             disposition=disposition,
             arches=arches,
+            admission_kind=admission_kind,
         )
         payload = write_pretty(self.campaign, campaign)
         self.authority = root / "authority.json"
@@ -460,6 +503,10 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     github_output=github_output,
                 )
             self.assertEqual(document["disposition"], "build")
+            self.assertEqual(
+                document["admission"],
+                {"kind": "anonymous-absence", "schema": 1},
+            )
             self.assertEqual(document["schema"], 2)
             self.assertEqual(
                 document["target_source"],
@@ -473,6 +520,10 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 for line in github_output.read_text().splitlines()
             )
             self.assertEqual(values["formula"], "leaf")
+            self.assertEqual(
+                values["admission-kind"],
+                "anonymous-absence",
+            )
             self.assertEqual(values["arch"], "wasm32")
             self.assertEqual(values["arches"], "wasm32")
             self.assertEqual(
@@ -530,6 +581,108 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 "none",
             )
             self.assertTrue(output.is_file())
+
+    def test_first_package_namespace_bootstrap_routes_only_a_build(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                admission_kind=(
+                    "first-package-namespace-bootstrap-required"
+                ),
+            )
+            plan = fixture.plan()
+            self.assertEqual(plan.disposition, "build")
+            self.assertEqual(
+                plan.admission_kind,
+                "first-package-namespace-bootstrap-required",
+            )
+
+            campaign = json.loads(fixture.campaign.read_text())
+            selected = next(
+                value
+                for value in campaign["formulae"]
+                if value["name"] == "leaf"
+            )
+            selected["destination"]["admission"]["probe"][
+                "status"
+            ] = "missing"
+            payload = write_pretty(fixture.campaign, campaign)
+            write_pretty(fixture.authority, active_authority(payload))
+            with self.assertRaises(
+                CONTROLLER.ControllerError
+            ) as raised:
+                fixture.plan()
+            self.assertEqual(
+                raised.exception.status,
+                "invalid-campaign",
+            )
+
+            selected["destination"]["admission"]["probe"][
+                "status"
+            ] = "auth-required"
+            selected["variants"][0]["disposition"] = {
+                "kind": "byte-clean-reuse-candidate"
+            }
+            payload = write_pretty(fixture.campaign, campaign)
+            write_pretty(fixture.authority, active_authority(payload))
+            with self.assertRaises(
+                CONTROLLER.ControllerError
+            ) as raised:
+                fixture.plan()
+            self.assertEqual(
+                raised.exception.status,
+                "invalid-campaign",
+            )
+
+    def test_destination_admission_requires_the_exact_contract(self) -> None:
+        mutations = {
+            "old campaign schema": lambda campaign, _formula: campaign.update(
+                schema=1
+            ),
+            "wrong campaign kind": lambda campaign, _formula: campaign.update(
+                kind="other"
+            ),
+            "extra destination field": lambda _campaign, formula: formula[
+                "destination"
+            ].update(unexpected=True),
+            "extra admission field": lambda _campaign, formula: formula[
+                "destination"
+            ]["admission"].update(unexpected=True),
+            "unknown admission kind": lambda _campaign, formula: formula[
+                "destination"
+            ]["admission"].update(kind="other"),
+            "ordinary authentication ambiguity": (
+                lambda _campaign, formula: formula["destination"][
+                    "admission"
+                ]["probe"].update(status="auth-required")
+            ),
+            "digest on missing probe": lambda _campaign, formula: formula[
+                "destination"
+            ]["admission"]["probe"].update(digest="sha256:" + "0" * 64),
+        }
+        for label, mutate in mutations.items():
+            with (
+                self.subTest(label=label),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                fixture = Fixture(pathlib.Path(directory))
+                campaign = json.loads(fixture.campaign.read_text())
+                selected = next(
+                    value
+                    for value in campaign["formulae"]
+                    if value["name"] == "leaf"
+                )
+                mutate(campaign, selected)
+                payload = write_pretty(fixture.campaign, campaign)
+                write_pretty(fixture.authority, active_authority(payload))
+                with self.assertRaises(
+                    CONTROLLER.ControllerError
+                ) as raised:
+                    fixture.plan()
+                self.assertIn(
+                    raised.exception.status,
+                    ("invalid-campaign", "invalid-contract"),
+                )
 
     def test_campaign_fetch_uses_frozen_executor_cli(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
