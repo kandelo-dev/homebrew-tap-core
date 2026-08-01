@@ -43,7 +43,7 @@ class Erlang < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "7b544080a69ee401e78e0af654607178226946508ea8a31ec6c105db982e5447",
+      manifest_sha256: "1981748f147427637ac18f4828f3d5219e20f49b89f631cfd34a6a17eef59df4",
       script_env:      {},
     )
     kandelo_validate_wasm_artifact(out_dir/"erlang.wasm", fork: :required)

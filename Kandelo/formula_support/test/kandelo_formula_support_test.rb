@@ -4793,7 +4793,17 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_equal entry.fetch("mode").to_i(8), member.stat.mode & 0777
     end
 
-    assert_includes recipe, 'SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"'
+    assert_includes recipe, 'SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"'
+    assert_includes recipe, 'SRC_DIR="$WORK_DIR/erlang-source"'
+    assert_includes recipe,
+                    'cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$SRC_DIR/"'
+    assert_includes recipe,
+                    'find -P "$SRC_DIR" -type d -exec chmod u+rwx {} +'
+    assert_includes recipe,
+                    'find -P "$SRC_DIR" -type f -exec chmod u+rw {} +'
+    assert_includes recipe, 'cd "$SRC_DIR"'
+    refute_includes recipe, 'cd "$SOURCE_INPUT"'
+    refute_includes recipe, 'SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"'
     assert_includes recipe, 'SYSROOT="${WASM_POSIX_SYSROOT:?}"'
     assert_includes recipe, 'SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"'
     assert_includes recipe, 'HOST_OTP_REL="$(erl -boot start_clean'

@@ -3,8 +3,9 @@ set -euo pipefail
 
 # Build the Formula's verified Erlang/OTP source without registry authority.
 RECIPE_DIR="${WASM_POSIX_DEP_RECIPE_DIR:?}"
-SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"
 WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
+SRC_DIR="$WORK_DIR/erlang-source"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
 SYSROOT="${WASM_POSIX_SYSROOT:?}"
 FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"
@@ -45,6 +46,19 @@ CONFIG_SITE="$RECIPE_DIR/config.site-wasm32-posix"
 
 mkdir -p "$ARTIFACT_DIR"
 export WASM_POSIX_SYSROOT="$SYSROOT"
+
+# WHY: OTP's clean, configure, generators, patchers, and makefiles all write
+# in tree. The authenticated source projection is deliberately read-only, so
+# preserve it and grant writes only to this recipe-owned complete copy.
+[ ! -e "$SRC_DIR" ] || {
+    echo "ERROR: private Erlang source already exists: $SRC_DIR" >&2
+    exit 1
+}
+mkdir "$SRC_DIR"
+cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$SRC_DIR/"
+# Do not follow source-tree symlinks while making the private copy writable.
+find -P "$SRC_DIR" -type d -exec chmod u+rwx {} +
+find -P "$SRC_DIR" -type f -exec chmod u+rw {} +
 
 NPROC="${WASM_POSIX_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)}"
 PACKAGE_TAR=gtar
@@ -515,7 +529,9 @@ chmod 0755 "$ARTIFACT_DIR/erlang.wasm"
 
 # Fail before packaging if a compiler diagnostic or debug section retained a
 # caller checkout, work root, sysroot, or common CI scratch prefix.
-for forbidden in "$WORK_DIR" "$SRC_DIR" "$RECIPE_DIR" "$SYSROOT" /private/tmp/ /Users/ /home/runner/work/ /home/runner/_work/ /nix/store/; do
+for forbidden in "$WORK_DIR" "$SRC_DIR" "$SOURCE_INPUT" "$RECIPE_DIR" \
+    "$SYSROOT" /private/tmp/ /Users/ /home/runner/work/ \
+    /home/runner/_work/ /nix/store/; do
     if LC_ALL=C grep -aFq "$forbidden" "$ARTIFACT_DIR/erlang.wasm"; then
         echo "ERROR: erlang.wasm embeds forbidden host path: $forbidden" >&2
         exit 1
@@ -586,7 +602,9 @@ if [ ! -x "$OTP_STAGE/$ERTS_RUNTIME_NAME/bin/erl_child_setup" ]; then
 fi
 
 while IFS= read -r -d '' runtime_file; do
-    for forbidden in "$WORK_DIR" "$SRC_DIR" "$RECIPE_DIR" "$SYSROOT" /private/tmp/ /Users/ /home/runner/work/ /home/runner/_work/ /nix/store/; do
+    for forbidden in "$WORK_DIR" "$SRC_DIR" "$SOURCE_INPUT" "$RECIPE_DIR" \
+        "$SYSROOT" /private/tmp/ /Users/ /home/runner/work/ \
+        /home/runner/_work/ /nix/store/; do
         if LC_ALL=C grep -aFq "$forbidden" "$runtime_file"; then
             echo "ERROR: OTP runtime file embeds forbidden host path: $runtime_file ($forbidden)" >&2
             exit 1
