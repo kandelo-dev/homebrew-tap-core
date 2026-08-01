@@ -72,6 +72,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
             rotation.TRUST_PATH,
             rotation.TRUST_DRY_RUN_KANDELO_SHA,
         )
+        self.predecessor_first_publication_sha = self.scalar_value(
+            rotation.TRUST_PATH,
+            rotation.TRUST_FIRST_PUBLICATION_KANDELO_SHA,
+        )
         self.predecessor_generation = self.scalar_value(
             rotation.TRUST_PATH,
             rotation.TRUST_GENERATION,
@@ -100,6 +104,9 @@ class PublisherTrustRotationTests(unittest.TestCase):
             "predecessor_dry_run_kandelo_sha": (
                 self.predecessor_dry_run_sha
             ),
+            "predecessor_first_publication_kandelo_sha": (
+                self.predecessor_first_publication_sha
+            ),
             "predecessor_generation_tag": self.predecessor_generation,
             "predecessor_caller_sha256": self.predecessor_caller,
             "kandelo_sha": NEW_SHA,
@@ -116,6 +123,8 @@ class PublisherTrustRotationTests(unittest.TestCase):
             self.predecessor_sha,
             "--predecessor-dry-run-kandelo-sha",
             self.predecessor_dry_run_sha,
+            "--predecessor-first-publication-kandelo-sha",
+            self.predecessor_first_publication_sha,
             "--predecessor-generation-tag",
             self.predecessor_generation,
             "--predecessor-caller-sha256",
@@ -132,6 +141,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
             if candidate not in (
                 self.predecessor_sha,
                 self.predecessor_dry_run_sha,
+                self.predecessor_first_publication_sha,
                 NEW_SHA,
             ):
                 return candidate
@@ -191,10 +201,25 @@ class PublisherTrustRotationTests(unittest.TestCase):
             self.assertIn(f"kandelo-ref: {NEW_SHA}", source)
             self.assertIn(f"package-generation-wasm32: {NEW_TAG}", source)
 
+        first_publication = candidate.contents[
+            rotation.FIRST_PUBLICATION_PATH
+        ].decode()
+        self.assertIn(
+            "reusable-homebrew-repository-namespace-canary.yml"
+            f"@{NEW_SHA}",
+            first_publication,
+        )
+        self.assertIn(f"kandelo-ref: {NEW_SHA}", first_publication)
+        self.assertNotIn("package-generation-", first_publication)
+
         trust = candidate.contents[rotation.TRUST_PATH].decode()
         self.assertIn(f'CURRENT_KANDELO_WORKFLOW_SHA = "{NEW_SHA}"', trust)
         self.assertIn(
             f'DRY_RUN_KANDELO_WORKFLOW_SHA = "{NEW_SHA}"',
+            trust,
+        )
+        self.assertIn(
+            f'FIRST_PUBLICATION_KANDELO_SHA = "{NEW_SHA}"',
             trust,
         )
         self.assertIn(
@@ -220,10 +245,15 @@ class PublisherTrustRotationTests(unittest.TestCase):
             rotation.DRY_RUN_PATH,
             rotation.MAINTENANCE_PATH,
             rotation.PUBLISH_PATH,
+            rotation.FIRST_PUBLICATION_PATH,
             rotation.TRUST_PATH,
         ):
             source = candidate.contents[relative].decode()
             self.assertNotIn(self.predecessor_sha, source)
+            self.assertNotIn(
+                self.predecessor_first_publication_sha,
+                source,
+            )
             self.assertNotIn(self.predecessor_generation, source)
             self.assertNotIn(self.predecessor_caller, source)
 
@@ -252,6 +282,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
         for relative in (
             rotation.DRY_RUN_PATH,
             rotation.MAINTENANCE_PATH,
+            rotation.FIRST_PUBLICATION_PATH,
             rotation.TRUST_PATH,
         ):
             (self.root / relative).write_bytes(candidate.contents[relative])
@@ -259,6 +290,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
         resumed = self.build()
         self.assertNotIn(rotation.DRY_RUN_PATH, resumed.changed)
         self.assertNotIn(rotation.MAINTENANCE_PATH, resumed.changed)
+        self.assertNotIn(
+            rotation.FIRST_PUBLICATION_PATH,
+            resumed.changed,
+        )
         self.assertNotIn(rotation.TRUST_PATH, resumed.changed)
         self.assertIn(rotation.PUBLISH_PATH, resumed.changed)
         self.assertIn(rotation.CONTROLLER_PATH, resumed.changed)
@@ -322,6 +357,47 @@ class PublisherTrustRotationTests(unittest.TestCase):
             self.build(
                 predecessor_dry_run_kandelo_sha=self.unknown_kandelo_sha()
             )
+
+    def test_wrong_predecessor_first_publication_sha_is_rejected(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "first-publication reusable workflow SHA has "
+            "unexpected value",
+        ):
+            self.build(
+                predecessor_first_publication_kandelo_sha=(
+                    self.unknown_kandelo_sha()
+                )
+            )
+
+    def test_unknown_first_publication_ref_is_rejected(self) -> None:
+        self.force_scalar(
+            rotation.FIRST_PUBLICATION_PATH,
+            rotation.EXACT_KANDELO_REF,
+            self.unknown_kandelo_sha(),
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "first-publication kandelo-ref has unexpected value",
+        ):
+            self.build()
+
+    def test_unknown_first_publication_trust_root_is_rejected(
+        self,
+    ) -> None:
+        self.force_scalar(
+            rotation.TRUST_PATH,
+            rotation.TRUST_FIRST_PUBLICATION_KANDELO_SHA,
+            self.unknown_kandelo_sha(),
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "trust-test first-publication Kandelo SHA has "
+            "unexpected value",
+        ):
+            self.build()
 
     def test_unknown_generation_slot_is_rejected(self) -> None:
         self.force_scalar(
@@ -416,6 +492,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
                 "predecessor Kandelo SHA must contain at least one hex letter",
             ),
             (
+                {"predecessor_first_publication_kandelo_sha": "main"},
+                "predecessor first-publication Kandelo SHA must be exactly",
+            ),
+            (
                 {"predecessor_generation_tag": "generation"},
                 "predecessor generation tag must be an exact ABI 42",
             ),
@@ -472,6 +552,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
             arguments.predecessor_dry_run_kandelo_sha,
         )
         self.assertEqual(
+            self.predecessor_first_publication_sha,
+            arguments.predecessor_first_publication_kandelo_sha,
+        )
+        self.assertEqual(
             self.predecessor_generation,
             arguments.predecessor_generation_tag,
         )
@@ -486,6 +570,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
         for option in (
             "--predecessor-kandelo-sha",
             "--predecessor-dry-run-kandelo-sha",
+            "--predecessor-first-publication-kandelo-sha",
             "--predecessor-generation-tag",
             "--predecessor-caller-sha256",
         ):
@@ -508,7 +593,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
         preview_output = io.StringIO()
         with contextlib.redirect_stdout(preview_output):
             self.assertEqual(0, rotation.main(self.cli_arguments()))
-        self.assertIn("would update 5 file(s)", preview_output.getvalue())
+        self.assertIn(
+            "would update 6 file(s)",
+            preview_output.getvalue(),
+        )
         self.assertIn("caller-sha256=", preview_output.getvalue())
         self.assertEqual(
             before,
@@ -524,13 +612,14 @@ class PublisherTrustRotationTests(unittest.TestCase):
                 0,
                 rotation.main(self.cli_arguments() + ["--apply"]),
             )
-        self.assertIn("updated 5 file(s)", apply_output.getvalue())
+        self.assertIn("updated 6 file(s)", apply_output.getvalue())
         self.assertEqual((), self.build().changed)
 
     def test_helper_does_not_embed_the_checked_in_authority(self) -> None:
         source = SCRIPT.read_text()
         self.assertNotIn(self.predecessor_sha, source)
         self.assertNotIn(self.predecessor_dry_run_sha, source)
+        self.assertNotIn(self.predecessor_first_publication_sha, source)
         self.assertNotIn(self.predecessor_generation, source)
         self.assertNotIn(self.predecessor_caller, source)
 

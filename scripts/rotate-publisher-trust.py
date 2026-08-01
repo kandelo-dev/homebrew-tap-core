@@ -30,12 +30,16 @@ CALLER_SHA256 = re.compile(r"[0-9a-f]{64}")
 DRY_RUN_PATH = pathlib.Path(".github/workflows/dry-run-bottles.yml")
 MAINTENANCE_PATH = pathlib.Path(".github/workflows/maintain-bottles.yml")
 PUBLISH_PATH = pathlib.Path(".github/workflows/publish-bottles.yml")
+FIRST_PUBLICATION_PATH = pathlib.Path(
+    ".github/workflows/repository-namespace-canary.yml"
+)
 TRUST_PATH = pathlib.Path("Kandelo/test-workflow-trust.rb")
 CONTROLLER_PATH = pathlib.Path("scripts/abi42-rollout.py")
 ROTATION_PATHS = (
     DRY_RUN_PATH,
     MAINTENANCE_PATH,
     PUBLISH_PATH,
+    FIRST_PUBLICATION_PATH,
     TRUST_PATH,
     CONTROLLER_PATH,
 )
@@ -68,6 +72,10 @@ MAINTENANCE_USES = scalar_pattern(
     r"reusable-homebrew-bottle-maintenance\.yml@"
 )
 PUBLISH_USES = DRY_RUN_USES
+FIRST_PUBLICATION_USES = scalar_pattern(
+    r"\s+uses:\s+Automattic/kandelo/\.github/workflows/"
+    r"reusable-homebrew-repository-namespace-canary\.yml@"
+)
 EXACT_KANDELO_REF = scalar_pattern(r"\s+kandelo-ref:\s+")
 PACKAGE_GENERATION = scalar_pattern(r"\s+package-generation-wasm32:\s+")
 TRUST_KANDELO_SHA = scalar_pattern(
@@ -75,6 +83,9 @@ TRUST_KANDELO_SHA = scalar_pattern(
 )
 TRUST_DRY_RUN_KANDELO_SHA = scalar_pattern(
     r'DRY_RUN_KANDELO_WORKFLOW_SHA\s*=\s*"'
+)
+TRUST_FIRST_PUBLICATION_KANDELO_SHA = scalar_pattern(
+    r'FIRST_PUBLICATION_KANDELO_SHA\s*=\s*"'
 )
 TRUST_GENERATION = scalar_pattern(
     r'PACKAGE_GENERATION_WASM32_TAG\s*=\s*"'
@@ -200,7 +211,9 @@ def rotate_workflow(
     generation_matches = tuple(PACKAGE_GENERATION.finditer(source))
     if new_generation is None:
         if generation_matches or "package-generation-" in source:
-            raise RotationError("dry-run caller must not select a package generation")
+            raise RotationError(
+                f"{label} caller must not select a package generation"
+            )
     else:
         if allowed_generation_tags is None:
             raise AssertionError("write caller has no generation authority")
@@ -219,6 +232,7 @@ def build_rotation(
     *,
     predecessor_kandelo_sha: str,
     predecessor_dry_run_kandelo_sha: str,
+    predecessor_first_publication_kandelo_sha: str,
     predecessor_generation_tag: str,
     predecessor_caller_sha256: str,
     kandelo_sha: str,
@@ -230,6 +244,10 @@ def build_rotation(
     validate_kandelo_sha(
         predecessor_dry_run_kandelo_sha,
         "predecessor dry-run Kandelo SHA",
+    )
+    validate_kandelo_sha(
+        predecessor_first_publication_kandelo_sha,
+        "predecessor first-publication Kandelo SHA",
     )
     validate_generation_tag(
         predecessor_generation_tag, "predecessor generation tag"
@@ -251,6 +269,9 @@ def build_rotation(
     )
     allowed_dry_run_kandelo_shas = frozenset(
         (predecessor_dry_run_kandelo_sha, kandelo_sha)
+    )
+    allowed_first_publication_kandelo_shas = frozenset(
+        (predecessor_first_publication_kandelo_sha, kandelo_sha)
     )
     allowed_generation_tags = frozenset(
         (predecessor_generation_tag, generation_tag)
@@ -289,9 +310,22 @@ def build_rotation(
         new_generation=generation_tag,
         label="publish",
     )
+    first_publication = rotate_workflow(
+        original[FIRST_PUBLICATION_PATH].decode(),
+        uses_pattern=FIRST_PUBLICATION_USES,
+        allowed_kandelo_shas=(
+            allowed_first_publication_kandelo_shas
+        ),
+        new_sha=kandelo_sha,
+        exact_ref=True,
+        allowed_generation_tags=None,
+        new_generation=None,
+        label="first-publication",
+    )
     rendered[DRY_RUN_PATH] = dry_run.encode()
     rendered[MAINTENANCE_PATH] = maintenance.encode()
     rendered[PUBLISH_PATH] = publish.encode()
+    rendered[FIRST_PUBLICATION_PATH] = first_publication.encode()
 
     trust = original[TRUST_PATH].decode()
     trust = replace_scalar(
@@ -307,6 +341,13 @@ def build_rotation(
         allowed=allowed_dry_run_kandelo_shas,
         replacement=kandelo_sha,
         label="trust-test dry-run Kandelo SHA",
+    )
+    trust = replace_scalar(
+        trust,
+        TRUST_FIRST_PUBLICATION_KANDELO_SHA,
+        allowed=allowed_first_publication_kandelo_shas,
+        replacement=kandelo_sha,
+        label="trust-test first-publication Kandelo SHA",
     )
     trust = replace_scalar(
         trust,
@@ -426,6 +467,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="exact Kandelo SHA selected by the dry-run caller now",
     )
     parser.add_argument(
+        "--predecessor-first-publication-kandelo-sha",
+        required=True,
+        help=(
+            "exact Kandelo SHA selected by the first-publication "
+            "caller now"
+        ),
+    )
+    parser.add_argument(
         "--predecessor-generation-tag",
         required=True,
         help="exact rootfs generation selected by the write callers now",
@@ -463,6 +512,9 @@ def main(argv: list[str]) -> int:
             predecessor_dry_run_kandelo_sha=(
                 args.predecessor_dry_run_kandelo_sha
             ),
+            predecessor_first_publication_kandelo_sha=(
+                args.predecessor_first_publication_kandelo_sha
+            ),
             predecessor_generation_tag=args.predecessor_generation_tag,
             predecessor_caller_sha256=args.predecessor_caller_sha256,
             kandelo_sha=args.kandelo_sha,
@@ -480,7 +532,7 @@ def main(argv: list[str]) -> int:
         if not args.apply:
             print(
                 "preview only; rerun with --apply after reviewing "
-                "P_M/P_G/P_C -> M/G/C"
+                "P_M/P_D/P_F/P_G/P_C -> M/G/C"
             )
         return 0
     except (OSError, RotationError) as error:
