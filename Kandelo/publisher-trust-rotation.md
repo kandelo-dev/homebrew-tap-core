@@ -47,7 +47,11 @@ rotation-owned; never globally replace `P_M`.
    protected `main`. Do not use the PR head or GitHub's synthetic test merge as
    `M`.
 2. Confirm `M` is still the freshly queried `Automattic/kandelo` `main`.
-3. Let the canonical `binaries-abi-v42` package release finish for `M`.
+3. Rebuild `rootfs/wasm32` and its package closure from exact `M`.
+   The reviewed pull-request head already passed the complete suites,
+   so this provenance-only rebuild may use `skip_tests=true`; bottle
+   publication and the later live lifecycle still supply shipping
+   evidence.
 4. From exact `M`, promote a fresh rootfs-wasm32 package generation with
    exact-main authority, `source-tag=binaries-abi-v42`,
    `validation-method=identical-git-tree-v1`, `expected-abi=42`,
@@ -66,6 +70,16 @@ set -euo pipefail
 M="$(
   gh api repos/Automattic/kandelo/commits/main --jq .sha
 )"
+gh workflow run force-rebuild.yml \
+  --repo Automattic/kandelo \
+  --ref main \
+  -f packages=rootfs \
+  -f arches=wasm32 \
+  -f ref="$M" \
+  -f skip_tests=true \
+  -f bump_packages=false
+
+# Wait for the exact-M rebuild before promotion.
 gh workflow run promote-package-generation.yml \
   --repo Automattic/kandelo \
   --ref main \
@@ -86,6 +100,35 @@ If Kandelo `main` advances before promotion or before the final publisher write
 boundary, use the new current-main commit and promote its own generation.
 Publication and maintenance re-query `main`; a stale `M` fails closed even
 after the tap has selected it.
+
+### Overlap the one-time Libyaml bootstrap
+
+The rootfs rebuild normally takes longer than the namespace bootstrap.
+This migration may overlap them without granting production publication
+authority early:
+
+1. Start the exact-`M` rootfs rebuild immediately.
+2. In a separate tap pull request, rotate only the dry-run caller, the
+   first-publication caller, and their two Ruby trust constants to `M`.
+   Leave production, maintenance, generation, and rollout-controller
+   authority unchanged.
+3. Merge that tap pull request and record its exact protected-main
+   commit as `D`.
+4. At exact `D`, run the Libyaml dry run and one-time first-child
+   publication. Keep tap `main == D` between those two runs.
+5. Disable the first-publication workflow again after the child
+   succeeds.
+6. Once the rootfs generation yields `G`, run the complete helper below
+   with `P_D="$M"` and `P_F="$M"`, while retaining the recorded
+   predecessor values for `P_M`, `P_G`, and `P_C`.
+
+The split state is intentional: dry-run cannot publish, and
+first-publication can create only the exact absent Libyaml child proved
+by that dry run. Normal Formula publication remains pinned to
+`P_M/P_G/P_C` until the complete rotation lands.
+`Kandelo/test-workflow-trust.rb` permits these two live callers to
+converge on current authority but still rejects collisions with
+historical test fixtures.
 
 ## Audit authority before changing files
 
