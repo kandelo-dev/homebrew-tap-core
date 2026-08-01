@@ -21,6 +21,9 @@ sys.dont_write_bytecode = True
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT_AUTHORITY = ROOT / "Kandelo/prefix-campaign-authority.json"
+DEFAULT_COMPLETION = (
+    ROOT / "Kandelo/campaigns/prefix-v1/completion.json"
+)
 DEFAULT_MANIFEST = (
     ROOT / "Kandelo/campaigns/prefix-v1/manifest.json"
 )
@@ -65,16 +68,20 @@ def load_json(path: pathlib.Path, label: str) -> tuple[Any, bytes]:
         fail(f"{label} must be a regular non-symlink file")
     if len(payload) > MAX_JSON_BYTES:
         fail(f"{label} exceeds the size ceiling")
+    value = parse_json(payload, label)
+    if payload != canonical_json(value):
+        fail(f"{label} is not canonical JSON")
+    return value, payload
+
+
+def parse_json(payload: bytes, label: str) -> Any:
     try:
-        value = json.loads(
+        return json.loads(
             payload,
             object_pairs_hook=reject_duplicate_keys,
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         fail(f"{label} is not valid JSON: {error}")
-    if payload != canonical_json(value):
-        fail(f"{label} is not canonical JSON")
-    return value, payload
 
 
 def exact_keys(
@@ -428,6 +435,270 @@ def load_manifest(
     return value, payload
 
 
+def load_completion(
+    completion_path: pathlib.Path,
+) -> tuple[dict[str, Any], bytes]:
+    value, payload = load_json(
+        completion_path,
+        "campaign completion tombstone",
+    )
+    value = exact_keys(
+        value,
+        {
+            "campaign",
+            "campaign_release",
+            "catalog_cohort_sha256",
+            "expected_parent_commit",
+            "guest_layout_sha256",
+            "handoffs_sha256",
+            "kind",
+            "schema",
+            "source",
+        },
+        "campaign completion tombstone",
+    )
+    campaign_release = exact_keys(
+        value["campaign_release"],
+        {"manifest_sha256", "repository", "tag"},
+        "campaign completion release",
+    )
+    source = exact_keys(
+        value["source"],
+        {
+            "manifest_sha256",
+            "source_tree_git_oid",
+            "target_tree_git_oid",
+        },
+        "campaign completion source",
+    )
+    campaign_digest = str(campaign_release["manifest_sha256"])
+    expected_tag = f"homebrew-prefix-campaign-sha256-{campaign_digest}"
+    if (
+        value["schema"] != 1
+        or value["kind"]
+        != "kandelo-homebrew-prefix-campaign-completion"
+        or value["campaign"] != "prefix-v1"
+        or campaign_release["repository"]
+        != "kandelo-dev/homebrew-tap-core"
+        or campaign_release["tag"] != expected_tag
+        or SHA256.fullmatch(campaign_digest) is None
+        or set(campaign_digest) == {"0"}
+        or SHA.fullmatch(str(value["expected_parent_commit"])) is None
+        or set(str(value["expected_parent_commit"])) == {"0"}
+    ):
+        fail("campaign completion tombstone has an unsupported contract")
+    for name in (
+        "catalog_cohort_sha256",
+        "guest_layout_sha256",
+        "handoffs_sha256",
+    ):
+        item = str(value[name])
+        if SHA256.fullmatch(item) is None or set(item) == {"0"}:
+            fail(f"campaign completion {name} is not content-addressed")
+    manifest_digest = str(source["manifest_sha256"])
+    if SHA256.fullmatch(manifest_digest) is None or set(manifest_digest) == {
+        "0"
+    }:
+        fail("campaign completion source manifest is not content-addressed")
+    for name in ("source_tree_git_oid", "target_tree_git_oid"):
+        item = str(source[name])
+        if SHA.fullmatch(item) is None or set(item) == {"0"}:
+            fail(f"campaign completion source {name} is not exact")
+    return value, payload
+
+
+def parse_parent_authority(payload: bytes) -> dict[str, Any]:
+    value = parse_json(payload, "pre-retirement campaign authority")
+    if payload != canonical_json(value):
+        fail("pre-retirement campaign authority is not canonical JSON")
+    value = exact_keys(
+        value,
+        {
+            "campaign_release",
+            "kandelo_commit",
+            "kandelo_repository",
+            "kind",
+            "package_generations",
+            "release_tag",
+            "reusable_workflow_commit",
+            "schema",
+            "source_tap_commit",
+            "source_tap_name",
+            "source_tap_repository",
+            "state",
+            "target_source",
+        },
+        "pre-retirement campaign authority",
+    )
+    campaign_release = exact_keys(
+        value["campaign_release"],
+        {"repository", "tag"},
+        "pre-retirement campaign release",
+    )
+    target_source = exact_keys(
+        value["target_source"],
+        {
+            "manifest_path",
+            "manifest_sha256",
+            "source_root",
+            "source_tree_git_oid",
+            "target_tree_git_oid",
+        },
+        "pre-retirement campaign target source",
+    )
+    if (
+        value["schema"] != 1
+        or value["kind"]
+        != "kandelo-homebrew-prefix-campaign-caller-authority"
+        or value["state"] != "active"
+        or campaign_release["repository"]
+        != "kandelo-dev/homebrew-tap-core"
+        or value["source_tap_repository"]
+        != "kandelo-dev/homebrew-tap-core"
+        or target_source["manifest_path"]
+        != "Kandelo/campaigns/prefix-v1/manifest.json"
+        or target_source["source_root"]
+        != "Kandelo/campaigns/prefix-v1/source"
+    ):
+        fail("pre-retirement campaign authority is not active and exact")
+    return value
+
+
+def git_entry(
+    root: pathlib.Path,
+    revision: str,
+    path: pathlib.PurePosixPath,
+) -> str:
+    return run_git(
+        ["ls-tree", revision, "--", path.as_posix()],
+        root=root,
+    ).decode("utf-8").rstrip("\n")
+
+
+def verify_completion(
+    *,
+    root: pathlib.Path,
+    completion_path: pathlib.Path,
+    require_git_history: bool,
+) -> dict[str, Any]:
+    root = root.resolve()
+    completion_path = completion_path.resolve()
+    try:
+        completion_relative = completion_path.relative_to(root)
+    except ValueError:
+        fail("campaign completion tombstone must be inside the repository")
+    completion, completion_payload = load_completion(completion_path)
+
+    retired_paths = (
+        pathlib.PurePosixPath(
+            ".github/workflows/prefix-campaign-bottles.yml"
+        ),
+        pathlib.PurePosixPath(
+            "Kandelo/prefix-campaign-authority.json"
+        ),
+        pathlib.PurePosixPath(
+            "Kandelo/campaigns/prefix-v1/manifest.json"
+        ),
+        pathlib.PurePosixPath("Kandelo/campaigns/prefix-v1/source"),
+    )
+    for path in retired_paths:
+        live = root.joinpath(*path.parts)
+        if live.exists() or live.is_symlink():
+            fail(f"retired campaign path {path} is still live")
+
+    if require_git_history:
+        additions = run_git(
+            [
+                "log",
+                "--diff-filter=A",
+                "--format=%H",
+                "--",
+                completion_relative.as_posix(),
+            ],
+            root=root,
+        ).decode("ascii").splitlines()
+        if len(additions) != 1 or SHA.fullmatch(additions[0]) is None:
+            fail("campaign completion must have one exact introduction")
+        final_commit = additions[0]
+        ancestry = run_git(
+            ["rev-list", "--parents", "-n", "1", final_commit],
+            root=root,
+        ).decode("ascii").split()
+        if len(ancestry) != 2 or ancestry[0] != final_commit:
+            fail("campaign completion was not one normal commit")
+        parent = ancestry[1]
+        if parent != completion["expected_parent_commit"]:
+            fail("campaign completion selected a different live parent")
+        run_git(
+            ["merge-base", "--is-ancestor", final_commit, "HEAD"],
+            root=root,
+        )
+        committed_payload, _mode, _object_id = git_file(
+            root,
+            final_commit,
+            pathlib.PurePosixPath(completion_relative.as_posix()),
+        )
+        if committed_payload != completion_payload:
+            fail("campaign completion changed after finalization")
+        head_payload, _mode, _object_id = git_file(
+            root,
+            "HEAD",
+            pathlib.PurePosixPath(completion_relative.as_posix()),
+        )
+        if head_payload != completion_payload:
+            fail("working completion differs from the current Git tree")
+
+        for path in retired_paths:
+            parent_entry = git_entry(root, parent, path)
+            if not parent_entry:
+                fail(f"retired campaign path {path} was absent from parent")
+            if git_entry(root, final_commit, path):
+                fail(f"retired campaign path {path} survived finalization")
+            if git_entry(root, "HEAD", path):
+                fail(f"retired campaign path {path} was later restored")
+
+        authority_payload, _mode, _object_id = git_file(
+            root,
+            parent,
+            pathlib.PurePosixPath(
+                "Kandelo/prefix-campaign-authority.json"
+            ),
+        )
+        authority = parse_parent_authority(authority_payload)
+        target_source = authority["target_source"]
+        campaign_release = authority["campaign_release"]
+        expected_source = {
+            "manifest_sha256": target_source["manifest_sha256"],
+            "source_tree_git_oid": target_source[
+                "source_tree_git_oid"
+            ],
+            "target_tree_git_oid": target_source["target_tree_git_oid"],
+        }
+        expected_campaign_release = {
+            "manifest_sha256": campaign_release["tag"].removeprefix(
+                "homebrew-prefix-campaign-sha256-"
+            ),
+            "repository": campaign_release["repository"],
+            "tag": campaign_release["tag"],
+        }
+        if completion["source"] != expected_source:
+            fail("campaign completion differs from its active source")
+        if completion["campaign_release"] != expected_campaign_release:
+            fail("campaign completion differs from its active release")
+
+    return {
+        "campaign": completion["campaign"],
+        "catalog_cohort_sha256": completion[
+            "catalog_cohort_sha256"
+        ],
+        "expected_parent_commit": completion[
+            "expected_parent_commit"
+        ],
+        "sha256": digest(completion_payload),
+        "state": "retired",
+    }
+
+
 def verify_record(
     path: pathlib.Path,
     record: dict[str, Any],
@@ -521,6 +792,13 @@ def verify_source(
     require_live_base: bool,
 ) -> dict[str, Any]:
     root = root.resolve()
+    completion_path = (
+        root / "Kandelo/campaigns/prefix-v1/completion.json"
+    )
+    # WHY: accepting both contracts at once would let a partial finalization
+    # look active to the builder and retired to later repository checks.
+    if completion_path.exists() or completion_path.is_symlink():
+        fail("campaign completion exists while source authority is active")
     authority, _authority_payload = load_json(
         authority_path,
         "campaign caller authority",
@@ -592,6 +870,38 @@ def verify_source(
         "source_tree_git_oid": source_tree_oid(source_root),
         "target_tree_git_oid": manifest["target_tree_git_oid"],
     }
+
+
+def verify_lifecycle(
+    *,
+    root: pathlib.Path,
+    authority_path: pathlib.Path,
+    manifest_path: pathlib.Path,
+    completion_path: pathlib.Path,
+    require_live_base: bool,
+    require_git_history: bool,
+) -> dict[str, Any]:
+    authority_exists = authority_path.exists() or authority_path.is_symlink()
+    completion_exists = (
+        completion_path.exists() or completion_path.is_symlink()
+    )
+    if authority_exists == completion_exists:
+        fail(
+            "campaign lifecycle must contain exactly one of active "
+            "authority or retired completion"
+        )
+    if completion_exists:
+        return verify_completion(
+            root=root,
+            completion_path=completion_path,
+            require_git_history=require_git_history,
+        )
+    return verify_source(
+        root=root,
+        authority_path=authority_path,
+        manifest_path=manifest_path,
+        require_live_base=require_live_base,
+    )
 
 
 def materialize(
@@ -691,6 +1001,11 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MANIFEST,
     )
     verify.add_argument(
+        "--completion",
+        type=pathlib.Path,
+        default=DEFAULT_COMPLETION,
+    )
+    verify.add_argument(
         "--allow-live-target",
         action="store_true",
     )
@@ -732,16 +1047,24 @@ def main() -> int:
             )
             print("prefix-campaign-source: sealed manifest")
         elif arguments.command == "verify":
-            summary = verify_source(
+            summary = verify_lifecycle(
                 root=arguments.root,
                 authority_path=arguments.authority,
                 manifest_path=arguments.manifest,
+                completion_path=arguments.completion,
                 require_live_base=not arguments.allow_live_target,
+                require_git_history=True,
             )
-            print(
-                "prefix-campaign-source: verified "
-                f"{summary['files']} inert target files"
-            )
+            if summary.get("state") == "retired":
+                print(
+                    "prefix-campaign-source: verified retired "
+                    f"{summary['campaign']} campaign"
+                )
+            else:
+                print(
+                    "prefix-campaign-source: verified "
+                    f"{summary['files']} inert target files"
+                )
         elif arguments.command == "materialize":
             summary = materialize(
                 root=arguments.root,

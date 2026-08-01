@@ -18,6 +18,7 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts/prefix-campaign-controller.py"
 AUTHORITY = ROOT / "Kandelo/prefix-campaign-authority.json"
+COMPLETION = ROOT / "Kandelo/campaigns/prefix-v1/completion.json"
 SPEC = importlib.util.spec_from_file_location(
     "prefix_campaign_controller",
     SCRIPT,
@@ -294,22 +295,31 @@ class Fixture:
 
 
 class PrefixCampaignControllerTests(unittest.TestCase):
-    def test_checked_in_authority_is_explicitly_inert(self) -> None:
+    def test_checked_in_authority_is_inert_or_permanently_retired(
+        self,
+    ) -> None:
         with self.assertRaises(CONTROLLER.ControllerError) as raised:
             CONTROLLER.load_authority(
                 AUTHORITY,
                 require_active=True,
             )
+        expected_status = (
+            "campaign-authority-retired"
+            if COMPLETION.exists()
+            else "campaign-authority-inert"
+        )
         self.assertEqual(
             raised.exception.status,
-            "campaign-authority-inert",
+            expected_status,
         )
         self.assertEqual(
             raised.exception.exit_code,
             CONTROLLER.INERT_EXIT,
         )
 
-    def test_cli_reports_inert_before_external_checkout(self) -> None:
+    def test_cli_reports_inert_or_retired_before_external_checkout(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             event = pathlib.Path(directory) / "event.json"
             write_pretty(event, event_document())
@@ -328,9 +338,34 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 stderr=subprocess.PIPE,
             )
         self.assertEqual(result.returncode, CONTROLLER.INERT_EXIT)
+        expected_status = (
+            "campaign-authority-retired"
+            if COMPLETION.exists()
+            else "campaign-authority-inert"
+        )
         self.assertIn(
-            "status=campaign-authority-inert",
+            f"status={expected_status}",
             result.stderr,
+        )
+
+    def test_missing_authority_with_completion_is_retired(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            completion = root / "Kandelo/campaigns/prefix-v1/completion.json"
+            completion.parent.mkdir(parents=True)
+            completion.write_text("{}\n", encoding="utf-8")
+            with self.assertRaises(CONTROLLER.ControllerError) as raised:
+                CONTROLLER.load_authority(
+                    root / "Kandelo/prefix-campaign-authority.json",
+                    require_active=True,
+                )
+        self.assertEqual(
+            raised.exception.status,
+            "campaign-authority-retired",
+        )
+        self.assertEqual(
+            raised.exception.exit_code,
+            CONTROLLER.INERT_EXIT,
         )
 
     def test_event_accepts_only_exact_task_selection(self) -> None:

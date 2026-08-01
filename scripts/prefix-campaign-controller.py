@@ -295,6 +295,21 @@ def load_authority(
     *,
     require_active: bool,
 ) -> Authority:
+    completion = path.parent / "campaigns/prefix-v1/completion.json"
+    # WHY: the finalizer deletes caller authority. A retained completion
+    # tombstone must report a deliberate retirement, not an ambiguous
+    # missing-file error that operators might try to repair by restoring
+    # the privileged workflow.
+    if (
+        not path.exists()
+        and not path.is_symlink()
+        and (completion.exists() or completion.is_symlink())
+    ):
+        fail(
+            "campaign-authority-retired",
+            "prefix-v1 caller authority was permanently retired",
+            INERT_EXIT,
+        )
     value, payload = load_json_bytes(
         path,
         "campaign caller authority",
