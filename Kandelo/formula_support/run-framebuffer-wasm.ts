@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import {
@@ -17,6 +17,7 @@ import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { rootfsSizeForStagedBytes, validateGuestPath } from "./rootfs-size.ts";
+import { spawnFormulaVite } from "./formula-vite-launcher.ts";
 
 const O_WRONLY = 0x0001;
 const O_CREAT = 0x0040;
@@ -389,31 +390,20 @@ async function main(): Promise<void> {
     );
     const kernelWasmPath = await resolveKernelWasm(root);
 
-    vite = spawn(
-      "npx",
-      [
-        "vite",
-        pageDir,
-        "--config",
-        join(supportDir, "framebuffer-vite.config.ts"),
-        "--host",
-        "127.0.0.1",
-        "--port",
-        String(port),
-        "--strictPort",
-      ],
-      {
-        cwd: browserDemoDir,
-        env: {
-          ...process.env,
-          KANDELO_FORMULA_BROWSER_ROOT: root,
-          KANDELO_FORMULA_BROWSER_PAGE_ROOT: pageDir,
-          KANDELO_FORMULA_BROWSER_KERNEL_WASM: kernelWasmPath,
-          KANDELO_FORMULA_BROWSER_ROOTFS_VFS: rootfsPath,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
+    vite = spawnFormulaVite({
+      kandeloRoot: root,
+      pageRoot: pageDir,
+      configPath: join(supportDir, "framebuffer-vite.config.ts"),
+      port,
+      cwd: browserDemoDir,
+      environment: {
+        ...process.env,
+        KANDELO_FORMULA_BROWSER_ROOT: root,
+        KANDELO_FORMULA_BROWSER_PAGE_ROOT: pageDir,
+        KANDELO_FORMULA_BROWSER_KERNEL_WASM: kernelWasmPath,
+        KANDELO_FORMULA_BROWSER_ROOTFS_VFS: rootfsPath,
       },
-    );
+    });
     const viteLog = captureChildProcessLog(vite);
     await waitForVite(`${urlBase}/`, vite, viteLog);
 

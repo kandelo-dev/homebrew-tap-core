@@ -2898,6 +2898,21 @@ module KandeloFormulaSupport
     ].join(" ") << " "
   end
 
+  def kandelo_formula_vite_cli
+    trusted_env = kandelo_tier2_runtime!.fetch("trusted_env")
+    trusted_root = Pathname(trusted_env.fetch("HOMEBREW_KANDELO_ROOT"))
+    trusted_root/"node_modules/vite/bin/vite.js"
+  end
+
+  def kandelo_browser_runner_environment
+    # WHY: a Formula can mutate its process environment after support loading.
+    # Derive the Vite entrypoint from the frozen publisher authority and
+    # override any ambient value at the final browser-helper boundary.
+    vite_cli = kandelo_formula_vite_cli
+    kandelo_node_runner_environment +
+      "KANDELO_FORMULA_VITE_CLI=#{Shellwords.escape(vite_cli)} "
+  end
+
   # Run a built `.wasm` under the Node kernel host and return its stdout. The
   # guest inherits the passed `env:`, matching how a real `brew test` exercises
   # behavior. `network: true` opts into Node's real external-TCP backend, while
@@ -3244,7 +3259,7 @@ module KandeloFormulaSupport
     ].map { |arg| Shellwords.escape(arg.to_s) }.join(" ")
 
     shell_output(
-      "cd #{Shellwords.escape(root)} && #{kandelo_node_runner_environment}#{command} < /dev/null",
+      "cd #{Shellwords.escape(root)} && #{kandelo_browser_runner_environment}#{command} < /dev/null",
     )
   end
 
@@ -3310,7 +3325,7 @@ module KandeloFormulaSupport
     ].map { |arg| Shellwords.escape(arg.to_s) }.join(" ")
 
     shell_output(
-      "cd #{Shellwords.escape(root)} && #{kandelo_node_runner_environment}#{command} < /dev/null",
+      "cd #{Shellwords.escape(root)} && #{kandelo_browser_runner_environment}#{command} < /dev/null",
     )
   end
 
@@ -3348,7 +3363,7 @@ module KandeloFormulaSupport
     ].map { |arg| Shellwords.escape(arg.to_s) }.join(" ")
 
     shell_output(
-      "cd #{Shellwords.escape(root)} && #{kandelo_node_runner_environment}#{command} < /dev/null",
+      "cd #{Shellwords.escape(root)} && #{kandelo_browser_runner_environment}#{command} < /dev/null",
     )
   end
 

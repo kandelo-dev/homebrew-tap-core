@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
@@ -20,6 +20,7 @@ import {
   rootfsUsedBytes,
   validateGuestPath,
 } from "./rootfs-size.ts";
+import { spawnFormulaVite } from "./formula-vite-launcher.ts";
 
 interface RunnerConfig {
   argv: string[];
@@ -375,19 +376,19 @@ async function main(): Promise<void> {
     };
 
     const viteLog: string[] = [];
-    vite = spawn("npx", [
-      "vite", pageRoot, "--config", join(supportDir, "browser-vite.config.ts"),
-      "--host", "127.0.0.1", "--port", String(port), "--strictPort",
-    ], {
+    vite = spawnFormulaVite({
+      kandeloRoot: root,
+      pageRoot,
+      configPath: join(supportDir, "browser-vite.config.ts"),
+      port,
       cwd: browserApp,
-      env: {
+      environment: {
         ...process.env,
         KANDELO_FORMULA_BROWSER_ROOT: root,
         KANDELO_FORMULA_BROWSER_PAGE_ROOT: pageRoot,
         KANDELO_FORMULA_BROWSER_KERNEL_WASM: kernelWasm,
         KANDELO_FORMULA_BROWSER_ROOTFS_VFS: rootfsVfs,
       },
-      stdio: ["ignore", "pipe", "pipe"],
     });
     vite.stdout?.on("data", (data: Buffer) => viteLog.push(data.toString()));
     vite.stderr?.on("data", (data: Buffer) => viteLog.push(data.toString()));
