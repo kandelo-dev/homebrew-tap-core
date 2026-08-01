@@ -30,6 +30,8 @@ interface RunnerConfig {
   allowStderr: boolean;
   mergeStderr: boolean;
   expectedStatus: number;
+  launchCount: number;
+  maxProcessMemoryBytes?: number;
 }
 
 interface BrowserSmokeResult {
@@ -93,7 +95,7 @@ function writeStagedFile(
   }
 }
 
-function parseConfig(text: string): RunnerConfig {
+export function parseConfig(text: string): RunnerConfig {
   const value = JSON.parse(text) as Partial<RunnerConfig>;
   if (!Array.isArray(value.argv) || !value.argv.every((arg) => typeof arg === "string")) {
     throw new Error("formula browser argv must be a string array");
@@ -132,6 +134,23 @@ function parseConfig(text: string): RunnerConfig {
     (value.expectedStatus ?? -1) > 255
   ) {
     throw new Error(`invalid formula browser expected status: ${String(value.expectedStatus)}`);
+  }
+  if (
+    !Number.isSafeInteger(value.launchCount) ||
+    (value.launchCount ?? 0) < 1 ||
+    (value.launchCount ?? 0) > 16
+  ) {
+    throw new Error(`invalid formula browser launch count: ${String(value.launchCount)}`);
+  }
+  if (
+    value.maxProcessMemoryBytes !== undefined &&
+    (!Number.isSafeInteger(value.maxProcessMemoryBytes) ||
+      value.maxProcessMemoryBytes < 1 ||
+      value.maxProcessMemoryBytes > 1_073_741_824)
+  ) {
+    throw new Error(
+      `invalid formula browser process memory limit: ${String(value.maxProcessMemoryBytes)}`,
+    );
   }
   return value as RunnerConfig;
 }

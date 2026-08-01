@@ -8,6 +8,8 @@ interface BrowserSmokeRequest {
   timeoutMs: number;
   guestProgram: string;
   vfsUrl: string;
+  launchCount: number;
+  maxProcessMemoryBytes?: number;
 }
 
 interface BrowserSmokeResult {
@@ -36,6 +38,63 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
   }
 }
 
+async function waitForProcessMemory(
+  kernel: BrowserKernel,
+  pid: number,
+  timeoutMs: number,
+): Promise<number> {
+  const deadline = Date.now() + Math.min(timeoutMs, 10_000);
+  while (Date.now() < deadline) {
+    const process = (await kernel.enumProcs()).find((candidate) => candidate.pid === pid);
+    if (process?.memoryBytes != null) return process.memoryBytes;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`formula browser process ${pid} did not report its memory size`);
+}
+
+async function waitForProcessTreeRemoval(
+  kernel: BrowserKernel,
+  observedPids: Set<number>,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  let livePids: number[] = [];
+  let retainedPids: number[] = [];
+  while (Date.now() < deadline) {
+    // WHY: enumProcs() is intentionally a live-process view and omits exited
+    // and limbo entries. readProcMaps() stays non-null while the kernel still
+    // owns an observed PID, so the two queries together distinguish worker
+    // exit from actual process-table reaping.
+    const [liveProcesses, ownership] = await Promise.all([
+      kernel.enumProcs(),
+      Promise.all(
+        [...observedPids].map(async (pid) => ({
+          pid,
+          maps: await kernel.readProcMaps(pid),
+        })),
+      ),
+    ]);
+    // The kernel intentionally retains a synthetic init identity and may host
+    // other unrelated processes. This launch owns only the PIDs observed
+    // through its process events, so scope both lifecycle views to that set.
+    livePids = liveProcesses
+      .filter((candidate) => observedPids.has(candidate.pid))
+      .map((candidate) => candidate.pid);
+    retainedPids = ownership
+      .filter(({ maps }) => maps !== null)
+      .map(({ pid }) => pid);
+    if (livePids.length === 0 && retainedPids.length === 0) {
+      observedPids.clear();
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(
+    "formula browser process tree remained after exit: " +
+      `live ${livePids.join(",") || "none"}; ` +
+      `retained ${retainedPids.join(",") || "none"}`,
+  );
+}
+
 async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
   if (activeKernel) throw new Error("a formula browser process is already running");
 
@@ -44,10 +103,14 @@ async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
   const mergedChunks: Uint8Array[] = [];
   let stdout = "";
   let stderr = "";
+  const observedPids = new Set<number>();
   const kernel = new BrowserKernel({
     kernelOwnedFs: true,
     maxWorkers: 6,
     maxMemoryPages: 16_384,
+    onProcessEvent: (event) => {
+      if (event.kind === "spawn") observedPids.add(event.pid);
+    },
     onStdout: (data) => {
       stdout += stdoutDecoder.decode(data, { stream: true });
       mergedChunks.push(data.slice());
@@ -81,7 +144,7 @@ async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
       ["PATH", "/usr/local/bin:/usr/bin:/bin"],
       ...Object.entries(request.env),
     ]);
-    const process = await kernel.boot({
+    const firstProcess = await kernel.boot({
       kernelWasm,
       vfsImage,
       argv: [request.guestProgram, ...request.argv],
@@ -91,10 +154,43 @@ async function run(request: BrowserSmokeRequest): Promise<BrowserSmokeResult> {
       gid: 0,
       stdin: new Uint8Array(),
     });
-    const exitCode = await withTimeout(
-      process.exit,
-      request.timeoutMs,
-    );
+    let exitCode = 0;
+    for (let index = 0; index < request.launchCount; index++) {
+      const process = index === 0
+        ? firstProcess
+        : await kernel.spawnFromVfs(
+          request.guestProgram,
+          [request.guestProgram, ...request.argv],
+          {
+            env: [...guestEnv].map(([key, value]) => `${key}=${value}`),
+            cwd: "/root",
+            uid: 0,
+            gid: 0,
+            stdin: new Uint8Array(),
+          },
+        );
+      // Keep the directly launched process in the ownership check even if a
+      // future host changes the timing of its main-thread process event.
+      observedPids.add(process.pid);
+      const memoryBytes = request.maxProcessMemoryBytes === undefined
+        ? null
+        : await waitForProcessMemory(kernel, process.pid, request.timeoutMs);
+      exitCode = await withTimeout(process.exit, request.timeoutMs);
+      // WHY: a parent exit is not sufficient lifecycle evidence. Require every
+      // child and zombie from this launch to disappear before reusing the same
+      // kernel for the next launch.
+      await waitForProcessTreeRemoval(kernel, observedPids);
+      if (
+        memoryBytes !== null &&
+        memoryBytes >= request.maxProcessMemoryBytes!
+      ) {
+        throw new Error(
+          `formula browser process ${process.pid} used ${memoryBytes} bytes; ` +
+          `expected less than ${request.maxProcessMemoryBytes}`,
+        );
+      }
+      if (exitCode !== request.expectedStatus) break;
+    }
     stdout += stdoutDecoder.decode();
     stderr += stderrDecoder.decode();
     const mergedBytes = new Uint8Array(
