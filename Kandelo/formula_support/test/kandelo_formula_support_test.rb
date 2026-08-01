@@ -3466,6 +3466,32 @@ class KandeloFormulaSupportTest < Minitest::Test
     refute_includes recipe, "install-local-binary"
   end
 
+  def test_ruby_closed_recipe_uses_only_sealed_source_and_transform_inputs
+    recipe = File.read(
+      File.expand_path("../../recipes/ruby/build.sh", __dir__),
+      encoding: "UTF-8",
+    )
+
+    assert_includes recipe, 'SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"'
+    assert_includes recipe, 'SRC_DIR="$WORK_DIR/ruby-source"'
+    assert_includes recipe,
+                    'cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$SRC_DIR/"'
+    assert_includes recipe,
+                    'find -P "$SRC_DIR" -type d -exec chmod u+rwx {} +'
+    assert_includes recipe,
+                    'find -P "$SRC_DIR" -type f -exec chmod u+rw {} +'
+    assert_includes recipe,
+                    'ROOT_SPILL="${WASM_POSIX_LOCAL_ROOT_SPILL:?}"'
+    assert_includes recipe,
+                    'FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"'
+    refute_includes recipe, "HOMEBREW_KANDELO_ROOT"
+    refute_match(/\bREPO_ROOT\b/, recipe)
+    refute_includes recipe, 'SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"'
+    refute_includes recipe, 'cd "$SOURCE_INPUT"'
+    assert_operator recipe.index('cp -a --no-preserve=ownership'), :<,
+                    recipe.index("# ─── Source patches for wasm32-posix")
+  end
+
   def test_ruby_exercises_the_installed_guest_runtime_without_rubylib
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
 
@@ -3493,6 +3519,11 @@ class KandeloFormulaSupportTest < Minitest::Test
     patch = patch_path.binread
     manifest_path = recipe_root/"recipe.json"
     manifest = JSON.parse(manifest_path.binread)
+    manifest_paths = manifest.fetch("files").map { |entry| entry.fetch("path") }
+    assert_equal manifest_paths.sort, manifest_paths
+    build_record = manifest.fetch("files").find do |entry|
+      entry.fetch("path") == "build.sh"
+    end
     patch_record = manifest.fetch("files").find do |entry|
       entry.fetch("path") == "patches/kandelo-posix-spawn.patch"
     end
@@ -3501,6 +3532,10 @@ class KandeloFormulaSupportTest < Minitest::Test
       build,
       'gpatch -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-posix-spawn.patch"',
     )
+    refute_nil build_record
+    assert_equal build.bytesize, build_record.fetch("bytes")
+    assert_equal Digest::SHA256.hexdigest(build), build_record.fetch("sha256")
+    assert_equal "0755", build_record.fetch("mode")
     refute_nil patch_record
     assert_equal patch.bytesize, patch_record.fetch("bytes")
     assert_equal Digest::SHA256.hexdigest(patch), patch_record.fetch("sha256")

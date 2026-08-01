@@ -10,12 +10,14 @@ set -euo pipefail
 # The schema-3 Formula helper owns every path and supplies only the declared
 # target dependency closure. This recipe deliberately has no package-registry,
 # resolver, downloader, or local-binary installation authority.
-REPO_ROOT="${HOMEBREW_KANDELO_ROOT:?}"
 SCRIPT_DIR="${WASM_POSIX_DEP_RECIPE_DIR:?}"
-SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"
 WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
+SRC_DIR="$WORK_DIR/ruby-source"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
 SOURCE_SYSROOT="${WASM_POSIX_SYSROOT:?}"
+ROOT_SPILL="${WASM_POSIX_LOCAL_ROOT_SPILL:?}"
+FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"
 RUBY_VERSION="${WASM_POSIX_DEP_VERSION:?}"
 SOURCE_URL="${WASM_POSIX_DEP_SOURCE_URL:?}"
 SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
@@ -68,6 +70,14 @@ for tool in gmake gpatch perl python3.13 wasm32posix-ar wasm32posix-cc \
         exit 1
     }
 done
+if [ ! -x "$ROOT_SPILL" ]; then
+    echo "ERROR: Ruby requires the sealed local-root-spill transform" >&2
+    exit 1
+fi
+if [ ! -x "$FORK_INSTRUMENT" ]; then
+    echo "ERROR: Ruby requires the sealed fork instrumenter" >&2
+    exit 1
+fi
 
 HOST_BUILD_DIR="$WORK_DIR/ruby-host-build"
 CROSS_BUILD_DIR="$WORK_DIR/ruby-cross-build"
@@ -76,6 +86,20 @@ BIN_DIR="$WORK_DIR/bin"
 RUNTIME_ZIP="$BIN_DIR/ruby-runtime.zip"
 mkdir -p "$WORK_DIR"
 BUILD_JOBS="${WASM_POSIX_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)}"
+
+# WHY: Ruby's patches, configure probes, generators, and build all write in
+# the source tree. The authenticated source projection is deliberately
+# read-only, so preserve it and grant writes only to this complete,
+# recipe-owned copy. Do not retain the projection's root ownership.
+[ ! -e "$SRC_DIR" ] || {
+    echo "ERROR: private Ruby source already exists: $SRC_DIR" >&2
+    exit 1
+}
+mkdir "$SRC_DIR"
+cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$SRC_DIR/"
+# Do not follow source-tree symlinks while making the private copy writable.
+find -P "$SRC_DIR" -type d -exec chmod u+rwx {} +
+find -P "$SRC_DIR" -type f -exec chmod u+rw {} +
 
 # Ruby's configure probes and compatibility headers need a few additions. The
 # publisher's attested sysroot is shared read-only input, so always augment an
@@ -1110,8 +1134,6 @@ else
     exit 1
 fi
 
-ROOT_SPILL="$REPO_ROOT/scripts/run-wasm-local-root-spill.sh"
-FORK_INSTRUMENT="$REPO_ROOT/scripts/run-wasm-fork-instrument.sh"
 echo "==> Applying wasm-local-root-spill to ruby.wasm..."
 "$ROOT_SPILL" --profile ruby "$BIN_DIR/ruby.wasm" -o "$BIN_DIR/ruby.wasm.roots"
 mv "$BIN_DIR/ruby.wasm.roots" "$BIN_DIR/ruby.wasm"
