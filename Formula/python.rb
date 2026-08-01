@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Python < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   PYTHON_MAJOR_MINOR = "3.13".freeze
   GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/python".freeze
@@ -17,9 +17,17 @@ class Python < Formula
   license "Python-2.0"
   revision 1
 
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
+    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "4389c20b2d0dcd71d8111f08c5e5d54add1af0ba51e7110549bc24a3cd07bdb2"
+  end
+
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
-  depends_on "unzip" => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
+  depends_on "make" => :build
+  depends_on "python@3.13" => :build
+  depends_on "unzip" => :build
   depends_on "kandelo-dev/tap-core/zlib"
 
   skip_clean "bin"
@@ -27,11 +35,10 @@ class Python < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-    out_dir = kandelo_build_package(
-      package:    "cpython",
-      script_env: {
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "0e491156339cea0f117b79d71d13dae10e23826d40000800a5dbb3dca7e59955",
+      script_env:      {
         "WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX,
-        "WASM_POSIX_DEP_ZLIB_DIR"     => formula_opt_prefix("kandelo-dev/tap-core/zlib"),
       },
     )
     kandelo_validate_wasm_artifact(out_dir/"python.wasm", fork: :required)
@@ -105,11 +112,4 @@ class Python < Formula
       timeout_ms:         180_000,
     )
   end
-
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "4389c20b2d0dcd71d8111f08c5e5d54add1af0ba51e7110549bc24a3cd07bdb2"
-  end
-
 end
