@@ -1531,19 +1531,43 @@ begin
     check(sha.match?(/\A[0-9a-f]{40}\z/),
           "#{label} Kandelo workflow pin is not an exact SHA")
   end
-  complete_profile_shas = [
-    CURRENT_KANDELO_WORKFLOW_SHA,
-    FIRST_PUBLICATION_KANDELO_SHA,
+  historical_profile_shas = [
     RETIRED_PAT_KANDELO_WORKFLOW_SHA,
     PREVIOUS_KANDELO_WORKFLOW_SHA,
     RETIRED_KANDELO_WORKFLOW_SHA,
     SELF_TEST_KANDELO_WORKFLOW_SHA,
   ]
-  check(complete_profile_shas.uniq.length == complete_profile_shas.length,
-        "Kandelo workflow trust fixtures must use distinct SHAs")
+  current_and_historical_profile_shas = [
+    CURRENT_KANDELO_WORKFLOW_SHA,
+    *historical_profile_shas,
+  ]
+  check(
+    current_and_historical_profile_shas.uniq.length ==
+      current_and_historical_profile_shas.length,
+    "current and historical workflow trust fixtures must use " \
+      "distinct SHAs"
+  )
+  # WHY: first-publication is a live bootstrap caller, not a historical
+  # fixture. A trust rotation intentionally folds its older pin into
+  # current main. It may remain separately pinned while split, but it
+  # must never alias a historical fixture because that would weaken the
+  # fixture mutation tests.
+  check(
+    FIRST_PUBLICATION_KANDELO_SHA == CURRENT_KANDELO_WORKFLOW_SHA ||
+      !historical_profile_shas.include?(FIRST_PUBLICATION_KANDELO_SHA),
+    "first-publication pin collides with a historical workflow " \
+      "trust fixture"
+  )
+  live_and_fixture_profile_shas = (
+    current_and_historical_profile_shas + [
+      FIRST_PUBLICATION_KANDELO_SHA,
+    ]
+  ).uniq
   check(
     DRY_RUN_KANDELO_WORKFLOW_SHA == CURRENT_KANDELO_WORKFLOW_SHA ||
-      !complete_profile_shas.include?(DRY_RUN_KANDELO_WORKFLOW_SHA),
+      !live_and_fixture_profile_shas.include?(
+        DRY_RUN_KANDELO_WORKFLOW_SHA
+      ),
     "split dry-run pin collides with another workflow trust fixture"
   )
   callers = CALLER_SPECS.to_h do |key, spec|
