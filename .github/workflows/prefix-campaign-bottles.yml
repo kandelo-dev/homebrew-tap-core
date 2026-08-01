@@ -17,10 +17,6 @@ jobs:
     outputs:
       arch: ${{ steps.admit.outputs.arch }}
       arches: ${{ steps.admit.outputs.arches }}
-      browser-wasm32-generation: >-
-        ${{ steps.authority.outputs.browser-wasm32-generation }}
-      browser-wasm64-generation: >-
-        ${{ steps.authority.outputs.browser-wasm64-generation }}
       campaign-tag: ${{ steps.authority.outputs.campaign-tag }}
       dependencies: ${{ steps.admit.outputs.dependencies }}
       disposition: ${{ steps.admit.outputs.disposition }}
@@ -29,6 +25,7 @@ jobs:
       generation-wasm32: ${{ steps.admit.outputs.generation-wasm32 }}
       generation-wasm64: ${{ steps.admit.outputs.generation-wasm64 }}
       kandelo-commit: ${{ steps.authority.outputs.kandelo-commit }}
+      old-tap-commit: ${{ steps.admit.outputs.old-tap-commit }}
       release-tag: ${{ steps.authority.outputs.release-tag }}
       rootfs-wasm32-generation: >-
         ${{ steps.authority.outputs.rootfs-wasm32-generation }}
@@ -111,42 +108,8 @@ jobs:
       prefix-campaign-dependencies: >-
         ${{ needs.admit.outputs.dependencies }}
 
-  publish-browser:
-    needs: [admit]
-    if: >-
-      ${{
-        needs.admit.outputs.disposition == 'build' &&
-        needs.admit.outputs.generation-kind == 'browser-inputs'
-      }}
-    permissions:
-      actions: read
-      contents: read
-      packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@0000000000000000000000000000000000000000
-    with:
-      kandelo-repository: Automattic/kandelo
-      kandelo-ref: ${{ needs.admit.outputs.kandelo-commit }}
-      tap-repository: kandelo-dev/homebrew-tap-core
-      tap-name: kandelo-dev/tap-core
-      tap-ref: ${{ needs.admit.outputs.source-tap-commit }}
-      formulae: ${{ needs.admit.outputs.formula }}
-      arches: ${{ needs.admit.outputs.arches }}
-      release-tag: ${{ needs.admit.outputs.release-tag }}
-      expected-cache-keys: ""
-      package-generation-wasm32: >-
-        ${{ needs.admit.outputs.browser-wasm32-generation }}
-      package-generation-wasm64: >-
-        ${{ needs.admit.outputs.browser-wasm64-generation }}
-      force: true
-      dry-run: false
-      require-vfs-acceptance: false
-      defer-tap-finalization: true
-      prefix-campaign-tag: ${{ needs.admit.outputs.campaign-tag }}
-      prefix-campaign-dependencies: >-
-        ${{ needs.admit.outputs.dependencies }}
-
-  seal-build:
-    needs: [admit, publish-rootfs, publish-browser]
+  seal-handoff:
+    needs: [admit, publish-rootfs]
     if: >-
       ${{
         always() &&
@@ -154,12 +117,13 @@ jobs:
         needs.admit.result == 'success' &&
         (
           (
+            needs.admit.outputs.disposition == 'build' &&
             needs.publish-rootfs.result == 'success' &&
-            needs.publish-browser.result == 'skipped'
-          ) ||
-          (
-            needs.publish-browser.result == 'success' &&
-            needs.publish-rootfs.result == 'skipped'
+            needs.admit.outputs.generation-kind == 'rootfs-wasm32'
+          ) || (
+            needs.admit.outputs.disposition == 'reuse' &&
+            needs.publish-rootfs.result == 'skipped' &&
+            needs.admit.outputs.generation-kind == 'none'
           )
         )
       }}
@@ -192,7 +156,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Checkout exact historical tap for reuse
+        if: ${{ needs.admit.outputs.disposition == 'reuse' }}
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: kandelo-dev/homebrew-tap-core
+          ref: ${{ needs.admit.outputs.old-tap-commit }}
+          path: old-tap
+          persist-credentials: false
+
       - name: Download admitted publication handoff
+        if: ${{ needs.admit.outputs.disposition == 'build' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: >-
@@ -206,15 +180,28 @@ jobs:
         run: |
           set -euo pipefail
           cd kandelo
-          bash scripts/dev-shell.sh \
-            python3 "$GITHUB_WORKSPACE/scripts/prefix-campaign-controller.py" \
-            prepare-build \
-            --kandelo-root "$GITHUB_WORKSPACE/kandelo" \
-            --source-tap-root "$GITHUB_WORKSPACE/source-tap" \
-            --event "$GITHUB_EVENT_PATH" \
-            --publications-root "$RUNNER_TEMP/campaign-publications" \
-            --out "$RUNNER_TEMP/prepared-handoff-release" \
+          controller=(
+            python3
+            "$GITHUB_WORKSPACE/scripts/prefix-campaign-controller.py"
+          )
+          common=(
+            --kandelo-root "$GITHUB_WORKSPACE/kandelo"
+            --source-tap-root "$GITHUB_WORKSPACE/source-tap"
+            --event "$GITHUB_EVENT_PATH"
+            --out "$RUNNER_TEMP/prepared-handoff-release"
             --github-output "$GITHUB_OUTPUT"
+          )
+          if [ "${{ needs.admit.outputs.disposition }}" = reuse ]; then
+            controller+=(prepare-reuse)
+            common+=(--old-tap-root "$GITHUB_WORKSPACE/old-tap")
+          else
+            controller+=(prepare-build)
+            common+=(
+              --publications-root
+              "$RUNNER_TEMP/campaign-publications"
+            )
+          fi
+          bash scripts/dev-shell.sh "${controller[@]}" "${common[@]}"
 
       - name: Publish immutable Formula handoff
         shell: bash

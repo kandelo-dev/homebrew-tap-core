@@ -29,17 +29,10 @@ SPEC.loader.exec_module(CONTROLLER)
 
 KANDELO_COMMIT = "1" * 40
 SOURCE_TAP_COMMIT = "2" * 40
+OLD_TAP_COMMIT = "c" * 40
 DEPENDENCY_TAG = "homebrew-prefix-handoff-sha256-" + "3" * 64
 ROOTFS_GENERATION = (
     "package-generation-rootfs-wasm32-abi-v42-sha256-" + "4" * 64
-)
-BROWSER_WASM32_GENERATION = (
-    "package-generation-browser-inputs-wasm32-abi-v42-sha256-"
-    + "5" * 64
-)
-BROWSER_WASM64_GENERATION = (
-    "package-generation-browser-inputs-wasm64-abi-v42-sha256-"
-    + "6" * 64
 )
 DEPENDENCY_FORMULA_SHA256 = "a" * 64
 LEAF_FORMULA_SHA256 = "b" * 64
@@ -110,6 +103,7 @@ def campaign_document(
     return {
         "authority": {
             "kandelo_commit": KANDELO_COMMIT,
+            "old_tap_commit": OLD_TAP_COMMIT,
             "source_tap_commit": SOURCE_TAP_COMMIT,
             "tap_name": "kandelo-dev/tap-core",
             "tap_repository": "kandelo-dev/homebrew-tap-core",
@@ -137,15 +131,11 @@ def active_authority(
         "kandelo_repository": "Automattic/kandelo",
         "kind": "kandelo-homebrew-prefix-campaign-caller-authority",
         "package_generations": {
-            "browser_inputs_wasm32":
-            BROWSER_WASM32_GENERATION,
-            "browser_inputs_wasm64":
-            BROWSER_WASM64_GENERATION,
             "rootfs_wasm32": ROOTFS_GENERATION,
         },
         "release_tag": "bottles-abi-v42",
         "reusable_workflow_commit": KANDELO_COMMIT,
-        "schema": 1,
+        "schema": 2,
         "source_tap_commit": SOURCE_TAP_COMMIT,
         "source_tap_name": "kandelo-dev/tap-core",
         "source_tap_repository": "kandelo-dev/homebrew-tap-core",
@@ -188,6 +178,11 @@ def handoff_document(
 ) -> dict[str, object]:
     formula = plan.formula
     publications = []
+    expected_files = (
+        CONTROLLER.BUILD_HANDOFF_PUBLICATION_FILES
+        if plan.disposition == "build"
+        else CONTROLLER.REUSE_HANDOFF_PUBLICATION_FILES
+    )
     for arch in plan.request.arches:
         files = [
             {
@@ -199,10 +194,16 @@ def handoff_document(
                 "sha256": f"{index + 1:x}" * 64,
             }
             for index, relative in enumerate(
-                CONTROLLER.HANDOFF_PUBLICATION_FILES
+                expected_files
             )
         ]
-        publications.append({"arch": arch, "files": files})
+        publications.append(
+            {
+                "arch": arch,
+                "files": files,
+                "kind": plan.disposition,
+            }
+        )
     return {
         "campaign": {
             "sha256": hashlib.sha256(
@@ -232,7 +233,7 @@ def handoff_document(
         },
         "kind": CONTROLLER.HANDOFF_KIND,
         "publications": publications,
-        "schema": 1,
+        "schema": 2,
         "source": {
             "kandelo_commit": authority.kandelo_commit,
             "source_tap_commit": authority.source_tap_commit,
@@ -415,10 +416,6 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             self.assertEqual(
                 values,
                 {
-                    "browser-wasm32-generation":
-                    BROWSER_WASM32_GENERATION,
-                    "browser-wasm64-generation":
-                    BROWSER_WASM64_GENERATION,
                     "campaign-tag":
                     CONTROLLER.load_authority(
                         fixture.authority,
@@ -463,6 +460,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     github_output=github_output,
                 )
             self.assertEqual(document["disposition"], "build")
+            self.assertEqual(document["schema"], 2)
             self.assertEqual(
                 document["target_source"],
                 active_authority(
@@ -487,8 +485,12 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 ROOTFS_GENERATION,
             )
             self.assertEqual(values["generation-wasm64"], "")
+            self.assertEqual(
+                values["old-tap-commit"],
+                OLD_TAP_COMMIT,
+            )
 
-    def test_reuse_api_gap_fails_before_task_output(self) -> None:
+    def test_reuse_is_admitted_without_a_package_generation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = Fixture(
                 pathlib.Path(directory),
@@ -510,11 +512,8 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     "fetch_campaign",
                     return_value=fixture.campaign,
                 ),
-                self.assertRaises(
-                    CONTROLLER.ControllerError
-                ) as raised,
             ):
-                CONTROLLER.admit(
+                document = CONTROLLER.admit(
                     authority_path=fixture.authority,
                     kandelo_root=fixture.kandelo,
                     source_tap_root=fixture.source_tap,
@@ -523,14 +522,14 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     github_output=None,
                 )
             self.assertEqual(
-                raised.exception.status,
-                "reuse-admission-api-unavailable",
+                document["disposition"],
+                "reuse",
             )
             self.assertEqual(
-                raised.exception.exit_code,
-                CONTROLLER.UNAVAILABLE_EXIT,
+                document["generation_kind"],
+                "none",
             )
-            self.assertFalse(output.exists())
+            self.assertTrue(output.is_file())
 
     def test_campaign_fetch_uses_frozen_executor_cli(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -777,6 +776,107 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 ],
             )
 
+    def test_reuse_release_calls_the_frozen_kandelo_authority(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                disposition="byte-clean-reuse-candidate",
+            )
+            authority = CONTROLLER.load_authority(
+                fixture.authority,
+                require_active=True,
+            )
+            plan = fixture.plan()
+            dependency = fixture.root / "dependency-handoff"
+            dependency.mkdir()
+            old_tap = fixture.root / "old-tap"
+            old_tap.mkdir()
+            output = fixture.root / "prepared"
+            commands: list[list[str]] = []
+
+            def command_side_effect(
+                arguments: list[str],
+                **_kwargs: object,
+            ) -> mock.Mock:
+                commands.append(arguments)
+                if "prepare-release" in arguments:
+                    prepared = pathlib.Path(
+                        arguments[arguments.index("--out") + 1]
+                    )
+                    (prepared / "assets").mkdir(parents=True)
+                    write_pretty(
+                        prepared / "release-manifest.json",
+                        {
+                            "repository":
+                            "kandelo-dev/homebrew-tap-core",
+                            "tag":
+                            "homebrew-prefix-handoff-sha256-"
+                            + "7" * 64,
+                            "target_commitish": SOURCE_TAP_COMMIT,
+                        },
+                    )
+                return mock.Mock(returncode=0)
+
+            with (
+                mock.patch.object(
+                    CONTROLLER,
+                    "prepare_task",
+                    return_value=(authority, plan),
+                ),
+                mock.patch.object(
+                    CONTROLLER,
+                    "require_exact_checkout",
+                    return_value=old_tap.resolve(),
+                ) as exact_checkout,
+                mock.patch.object(
+                    CONTROLLER,
+                    "materialize_target_source",
+                    return_value=fixture.source_tap,
+                ),
+                mock.patch.object(
+                    CONTROLLER,
+                    "fetch_dependency_handoffs",
+                    return_value={"dependency": dependency},
+                ),
+                mock.patch.object(
+                    CONTROLLER,
+                    "run_command",
+                    side_effect=command_side_effect,
+                ),
+            ):
+                summary = CONTROLLER.prepare_reuse_release(
+                    authority_path=fixture.authority,
+                    kandelo_root=fixture.kandelo,
+                    source_tap_root=fixture.source_tap,
+                    old_tap_root=old_tap,
+                    event_path=fixture.event,
+                    output=output,
+                    github_output=None,
+                )
+
+            exact_checkout.assert_called_once_with(
+                old_tap,
+                OLD_TAP_COMMIT,
+                "historical tap checkout",
+            )
+            self.assertEqual(len(commands), 2)
+            derive = commands[0]
+            self.assertEqual(derive[2], "derive-reuse")
+            self.assertEqual(
+                derive[derive.index("--old-tap-root") + 1],
+                str(old_tap.resolve()),
+            )
+            self.assertEqual(
+                derive[derive.index("--arch") + 1],
+                "wasm32",
+            )
+            self.assertEqual(commands[1][2], "prepare-release")
+            self.assertEqual(summary["disposition"], "reuse")
+            self.assertEqual(summary["schema"], 2)
+            self.assertTrue(output.is_dir())
+
     def test_release_readback_is_anonymous_and_retains_receipt(
         self,
     ) -> None:
@@ -897,6 +997,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 "different dependency",
                 "different source",
                 "different architecture",
+                "different publication kind",
                 "noncanonical payload path",
                 "noncanonical asset name",
                 "malformed payload SHA-256",
@@ -925,6 +1026,8 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     value["source"]["kandelo_commit"] = "0" * 40
                 elif label == "different architecture":
                     value["publications"][0]["arch"] = "wasm64"
+                elif label == "different publication kind":
+                    value["publications"][0]["kind"] = "reuse"
                 elif label == "noncanonical payload path":
                     value["publications"][0]["files"][0][
                         "path"
@@ -986,7 +1089,45 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     ),
                 )
 
-    def test_dual_arch_formula_selects_one_sibling_and_generation_lane(
+    def test_readback_accepts_only_the_exact_reuse_inventory(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                disposition="byte-clean-reuse-candidate",
+            )
+            authority = CONTROLLER.load_authority(
+                fixture.authority,
+                require_active=True,
+            )
+            plan = fixture.plan()
+            handoff = handoff_document(authority, plan)
+            handoff_path = fixture.root / "handoff.json"
+            write_pretty(handoff_path, handoff)
+            self.assertEqual(
+                CONTROLLER.validate_readback_handoff(
+                    handoff_path,
+                    authority=authority,
+                    plan=plan,
+                    tag=tag_for_handoff(handoff),
+                ),
+                handoff,
+            )
+
+            handoff["publications"][0]["files"][0]["path"] = (
+                "payload/wasm32/build/bottle.json"
+            )
+            write_pretty(handoff_path, handoff)
+            with self.assertRaises(CONTROLLER.ControllerError):
+                CONTROLLER.validate_readback_handoff(
+                    handoff_path,
+                    authority=authority,
+                    plan=plan,
+                    tag=tag_for_handoff(handoff),
+                )
+
+    def test_dual_arch_formula_selects_one_sibling_runtime_lane(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1001,7 +1142,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             )
             plan = fixture.plan()
             self.assertEqual(plan.request.arches, ("wasm32",))
-            self.assertEqual(plan.generation_kind, "browser-inputs")
+            self.assertEqual(plan.generation_kind, "rootfs-wasm32")
             handoff = handoff_document(authority, plan)
             path = fixture.root / "handoff.json"
             write_pretty(path, handoff)
@@ -1022,11 +1163,17 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             event = json.loads(fixture.event.read_text())
             event["client_payload"]["arches"] = ["wasm64"]
             write_pretty(fixture.event, event)
-            wasm64_plan = fixture.plan()
-            self.assertEqual(wasm64_plan.request.arches, ("wasm64",))
+            with self.assertRaises(
+                CONTROLLER.ControllerError
+            ) as raised:
+                fixture.plan()
             self.assertEqual(
-                wasm64_plan.generation_kind,
-                "browser-inputs",
+                raised.exception.status,
+                "package-generation-unavailable",
+            )
+            self.assertEqual(
+                raised.exception.exit_code,
+                CONTROLLER.UNAVAILABLE_EXIT,
             )
 
     def test_sibling_dispositions_are_independent_but_all_validated(
@@ -1049,12 +1196,21 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             )
             payload = write_pretty(fixture.campaign, campaign)
             write_pretty(fixture.authority, active_authority(payload))
-            self.assertEqual(fixture.plan().disposition, "reuse")
+            reuse_plan = fixture.plan()
+            self.assertEqual(reuse_plan.disposition, "reuse")
+            self.assertEqual(reuse_plan.generation_kind, "none")
 
             event = json.loads(fixture.event.read_text())
             event["client_payload"]["arches"] = ["wasm64"]
             write_pretty(fixture.event, event)
-            self.assertEqual(fixture.plan().disposition, "build")
+            with self.assertRaises(
+                CONTROLLER.ControllerError
+            ) as raised:
+                fixture.plan()
+            self.assertEqual(
+                raised.exception.status,
+                "package-generation-unavailable",
+            )
 
             selected["variants"][0]["disposition"]["kind"] = (
                 "required-build"

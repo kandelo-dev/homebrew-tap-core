@@ -25,3 +25,25 @@ must remain `inert` until the reviewed Kandelo reusable publisher consumes this
 exact overlay, and only the campaign finalizer may replace the active files
 together with all selected Formula bottle blocks and generated catalog
 metadata in one atomic tap commit.
+
+The publication workflow handles one `(Formula, architecture)` variant
+at a time. A build selected for wasm32 uses the exact rootfs package
+generation bound by the caller authority. A reused bottle does not need
+a package generation: the reviewed Kandelo executor checks out the
+campaign's exact historical tap commit, downloads the public bottle
+again, verifies every recorded byte and dependency, and produces the
+same immutable handoff contract as a new build. The tap controller does
+not duplicate those reuse rules.
+
+New wasm64 builds are intentionally unavailable in this campaign. The
+earlier browser-input generation includes complete browser images rather
+than the smaller package build runtime, and its wasm64 closure cannot be
+produced for Formulae that do not support wasm64. Admission fails before
+dispatch instead of selecting that impossible input. An already-built
+wasm64 bottle may still be reused because byte verification does not
+execute a Formula.
+
+Each successful handoff is independently immutable and anonymously
+readable. It can be used to prepare a closed VFS selection even while
+unrelated campaign variants fail. Only the optional whole-catalog final
+tap commit waits for the complete selected campaign.
