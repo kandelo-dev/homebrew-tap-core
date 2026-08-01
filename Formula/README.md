@@ -98,6 +98,12 @@ freeze enough provenance to reject dependency drift. Keep the dependency's
 Wasm bytes authoritative: use a symlink to its declared output instead of
 copying the module into a second bottle.
 
+Runtime-tree Formulae such as `npm` own complete interpreted source and support
+trees while declaring their interpreter as an ordinary Formula dependency.
+Their bottles must not copy the interpreter's Wasm bytes. Compatibility
+launchers and patches belong to the runtime-tree owner, use stable guest opt
+paths, and fail closed when pinned upstream source no longer matches.
+
 Formula tests must execute produced Wasm through Kandelo. A support-data
 Formula with no Wasm program, such as `homebrew-bootstrap`, must instead verify
 its complete installed archive contract in `test do` and declare exactly
