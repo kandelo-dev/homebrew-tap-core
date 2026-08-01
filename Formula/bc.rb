@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Bc < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   desc "Arbitrary-precision numeric processing language for Kandelo"
   homepage "https://www.gnu.org/software/bc/"
@@ -12,17 +12,31 @@ class Bc < Formula
   sha256 "62adfca89b0a1c0164c2cdca59ca210c1d44c3ffc46daf9931cf4942664cb02a"
   license "GPL-3.0-or-later"
 
-  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 3
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b2657996570d89554214182ba1c78c23fb1129a939839fc5481b4e33b8d3f968"
+  end
+
   depends_on "bison" => :build
+
   depends_on "flex" => :build
-  depends_on "m4" => :build
+
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
+  depends_on "m4" => :build
+  depends_on "python@3.13" => :build
 
   skip_clean "bin/bc"
 
   def install
     kandelo_require_arch!("wasm32")
-    out_dir = kandelo_build_package(script_env: {})
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "afcac0643d28cec864245fe15bd2cb912f5ad551ef9f8e5d3f36105221a1a539",
+      script_env:      {
+        "BC_PYTHON" => formula_opt_libexec("python@3.13")/"bin/python3",
+      },
+    )
     kandelo_validate_wasm_artifact(out_dir/"bc.wasm", fork: :forbidden)
     kandelo_install_bin(out_dir, "bc.wasm", "bc")
   end
@@ -30,11 +44,4 @@ class Bc < Formula
   test do
     assert_equal "3.50\n", kandelo_run_wasm(bin/"bc", [], stdin: "scale=2; 7/2\n")
   end
-
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b2657996570d89554214182ba1c78c23fb1129a939839fc5481b4e33b8d3f968"
-  end
-
 end

@@ -1113,6 +1113,23 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
+  def test_tap_recipe_path_prioritizes_declared_native_kegs
+    Dir.mktmpdir("kandelo-native-build-path") do |dir|
+      base = Pathname(dir)
+      root = base/"platform"
+      native_bin = base/"Cellar/gpatch/2.8/bin"
+      native_bin.mkpath
+      harness = Harness.new
+      runtime = { "trusted_env" => {} }
+
+      entries = harness.kandelo_tap_recipe_runner_path(
+        root, [native_bin.parent], runtime
+      ).split(File::PATH_SEPARATOR)
+
+      assert_operator entries.index(native_bin.to_s), :<, entries.index("/usr/bin")
+    end
+  end
+
   def test_verified_formula_source_is_isolated_from_bridge_work_and_output_roots
     Dir.mktmpdir("kandelo-formula-source") do |dir|
       build_path = Pathname(dir)/"build"
@@ -3576,16 +3593,42 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_equal [%Q(  version "3.6.7"\n)], version_declarations
   end
 
-  def test_changed_tier2_formulae_keep_the_reviewed_abi42_bottle_identity
-    # These Formulae already consumed rebuild 1 when their Tier-2 isolation
-    # fixes were finalized. ABI 42 must use the next identity because GHCR's
-    # Homebrew references do not include the Kandelo ABI.
-    %w[bc fbdoom lsof modeset netcat posix-utils-lite].each do |name|
+  def test_closed_recipe_formulae_reserve_successor_bottle_identities
+    # WHY: These Formulae now bind sealed tap recipes, so their payload inputs
+    # differ from the registry-built bottles already published at the retained
+    # last-green identities. GHCR references are immutable; publication must
+    # use each exact successor instead of attempting to replace existing bytes.
+    {
+      "bc"               => 3,
+      "fbdoom"           => 3,
+      "lsof"             => 3,
+      "modeset"          => 3,
+      "netcat"           => 3,
+      "nethack"          => 2,
+      "posix-utils-lite" => 3,
+    }.each do |name, rebuild|
       formula = File.read(File.expand_path("../../../Formula/#{name}.rb", __dir__))
       rebuild_declarations = formula.lines.grep(/^\s*rebuild /)
 
-      assert_equal [%Q(    rebuild 2\n)], rebuild_declarations, name
+      assert_equal [%Q(    rebuild #{rebuild}\n)], rebuild_declarations, name
     end
+  end
+
+  def test_closed_recipes_do_not_request_the_complete_kandelo_checkout
+    # WHY: the privileged runner projects specific sealed tools, sources,
+    # sysroot, and glue paths. A recipe that reaches back through the broad
+    # checkout root silently defeats that closed input contract.
+    recipe_root =
+      Pathname(File.expand_path("../../../Kandelo/recipes", __dir__))
+    offenders = recipe_root.glob("**/*").filter_map do |path|
+      next unless path.file?
+      next unless path.extname == ".sh"
+      next unless path.binread.match?(/\b(?:HOMEBREW_KANDELO_ROOT|REPO_ROOT)\b/)
+
+      path.relative_path_from(recipe_root).to_s
+    end
+
+    assert_empty offenders
   end
 
   def test_sdk_activation_cannot_reintroduce_the_global_homebrew_path

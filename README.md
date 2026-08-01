@@ -100,13 +100,11 @@ Formula source currently present in this repository includes:
   built directly from the checksum-pinned upstream source; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
 
-These seven exact-shell Formulae and Ruby intentionally use the transitional
-`kandelo_build_package` bridge for their first bottle proof. Their Formulae pin
-source identity, declare native and target dependencies, retain every current
-shell output, validate final Wasm artifacts, and run through Kandelo.
-The six recipes that accept already-extracted source isolate Homebrew's
-checksum-verified tree from sibling caller-owned work and output roots; neither
-the verified source nor the reviewed Kandelo checkout is a build destination.
+The `bc`, `lsof`, `modeset`, `netcat`, `posix-utils-lite`, `nethack`, and
+`fbdoom` Formulae own closed build recipes under `Kandelo/recipes/`. Each
+Formula binds its complete recipe tree, Homebrew-verified source, direct target
+dependencies, and permitted environment keys without receiving Kandelo's
+registry resolver, package cache, or local-binary installer.
 
 `homebrew-bootstrap` owns a closed build recipe under
 `Kandelo/recipes/homebrew-bootstrap/`. The Formula binds its complete recipe
@@ -122,8 +120,12 @@ must still execute it with real Ruby before in-guest Homebrew is accepted.
 NetHack compiles and tests its data lookup against
 `/home/linuxbrew/.linuxbrew/opt/nethack/share/nethack`, so a composed image must
 link both its executable and installed share tree at the poured guest opt path.
-Decomposing their registry scripts into idiomatic Formula build steps remains
-explicit follow-up work rather than a hidden change to the proof's scope.
+
+Python, Erlang, and Ruby still use the transitional
+`kandelo_build_package` bridge. Their Formulae pin source identity, declare
+native and target dependencies, validate final Wasm artifacts, and run through
+Kandelo. Moving those remaining heavy ports into closed tap recipes is explicit
+migration work.
 
 Presence in `Formula/` means that the source recipe is tracked; it does not mean
 that a current bottle has been published. A bottle becomes available only after
