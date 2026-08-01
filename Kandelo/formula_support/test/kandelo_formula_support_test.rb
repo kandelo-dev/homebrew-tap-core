@@ -4740,6 +4740,62 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes error.message, "guest argv0 must be a nonempty normalized absolute path"
   end
 
+  def test_erlang_closed_recipe_preserves_the_complete_runtime_contract
+    tap_root = Pathname(__dir__).join("../../..").cleanpath
+    formula = (tap_root/"Formula/erlang.rb").binread
+    recipe_root = tap_root/"Kandelo/recipes/erlang"
+    recipe = (recipe_root/"build.sh").binread
+    manifest = JSON.parse((recipe_root/"recipe.json").binread)
+
+    assert_includes formula, "  KANDELO_TAP_RECIPE = true\n"
+    assert_includes formula, "kandelo_build_tap_recipe("
+    refute_includes formula, "KANDELO_REGISTRY_BRIDGE"
+    refute_includes formula, "kandelo_build_package("
+    %w[erlang@28 gnu-tar make python@3.13 zstd].each do |dependency|
+      assert_includes formula, %Q(depends_on "#{dependency}" => :build)
+    end
+    assert_includes formula, "depends_on KandeloFormulaSupport::BinaryenRequirement => :build"
+    assert_includes formula, "depends_on KandeloFormulaSupport::WabtRequirement => :build"
+
+    # WHY: a version-only emulator check would miss the relocatable OTP tree,
+    # wrapper path selection, fork/exec handoff, and browser runtime closure.
+    assert_includes formula, "assert_operator runtime_files.length, :>, 100"
+    %w[beam.smp erlexec erl_child_setup start.boot].each do |runtime_member|
+      assert_includes formula, runtime_member
+    end
+    %w[global bin-alias usr-bin-alias opt keg].each do |wrapper_case|
+      assert_includes formula, %Q("#{wrapper_case}")
+    end
+    assert_includes formula, "expected_fork_descendants: 1"
+    assert_includes formula, "kandelo_run_browser_wasm("
+    assert_includes formula, "erlang-browser-ok"
+
+    assert_equal 1, manifest.fetch("schema")
+    assert_empty manifest.fetch("dependencies")
+    assert_equal "build.sh", manifest.fetch("entrypoint")
+    assert_equal(
+      ["build.sh", "config.site-wasm32-posix", "patches/patch-global-h.py"],
+      manifest.fetch("files").map { |entry| entry.fetch("path") },
+    )
+    manifest.fetch("files").each do |entry|
+      member = recipe_root/entry.fetch("path")
+      assert_equal entry.fetch("bytes"), member.size
+      assert_equal entry.fetch("sha256"), Digest::SHA256.file(member).hexdigest
+      assert_equal entry.fetch("mode").to_i(8), member.stat.mode & 0777
+    end
+
+    assert_includes recipe, 'SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"'
+    assert_includes recipe, 'SYSROOT="${WASM_POSIX_SYSROOT:?}"'
+    assert_includes recipe, 'SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"'
+    assert_includes recipe, 'HOST_OTP_REL="$(erl -boot start_clean'
+    assert_includes recipe, "prepare_runtime_wasm"
+    assert_includes recipe, "erlang-otp.tar.zst"
+    refute_match(/\b(?:curl|wget)\b/, recipe)
+    refute_includes recipe, "build-deps resolve"
+    refute_includes recipe, "install-local-binary"
+    refute_includes recipe, "packages/registry"
+  end
+
   private
 
   def artifact_validation_harness(dir, harness_class = Harness)

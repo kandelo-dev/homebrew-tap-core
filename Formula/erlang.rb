@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Erlang < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   ERTS_VERSION = "16.1.2".freeze
   GUEST_PREFIX = "/home/linuxbrew/.linuxbrew".freeze
@@ -18,11 +18,20 @@ class Erlang < Formula
   license "Apache-2.0"
   revision 1
 
-  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    rebuild 1
+    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2"
+  end
+
   depends_on "erlang@28" => :build
+
   depends_on "gnu-tar" => :build
-  depends_on "python@3.13" => :build
+
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
+  depends_on "make" => :build
+  depends_on "python@3.13" => :build
   depends_on "zstd" => :build
   depends_on "kandelo-dev/tap-core/dash" => :test
 
@@ -32,17 +41,10 @@ class Erlang < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-
-    # OTP's package bridge runs native bootstrap Erlang and Python, and GNU tar
-    # invokes zstd when it seals the deterministic runtime closure. Put only
-    # those declared native tools on PATH; target Wasm dependencies remain
-    # excluded by the shared Formula support.
-    kandelo_prepend_path! formula_opt_bin("erlang@28")
-    kandelo_prepend_path! formula_opt_libexec("python@3.13")/"bin"
-    kandelo_prepend_path! formula_opt_bin("gnu-tar")
-    kandelo_prepend_path! formula_opt_bin("zstd")
-
-    out_dir = kandelo_build_package(script_env: {})
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "b46ad6b4c810df82cf1ea8f4f5243209504385743ed50375b8905ac6880437d9",
+      script_env:      {},
+    )
     kandelo_validate_wasm_artifact(out_dir/"erlang.wasm", fork: :required)
     libexec.install out_dir/"erlang.wasm"
 
@@ -222,11 +224,4 @@ class Erlang < Formula
       timeout_ms:         180_000,
     )
   end
-
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b0e83c048bce601d2b4552b44339c4f486f1a05d6277333e4ea45180673270e2"
-  end
-
 end
