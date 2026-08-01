@@ -165,6 +165,53 @@ dispatch the reviewed event with string-valued evidence:
 }
 ```
 
+## Prefix-campaign package bootstrap
+
+The inert prefix-campaign caller has a separate route for a reviewed new
+Formula whose package repository does not exist yet. The campaign manifest
+must use schema 2 and the Formula's `destination.admission` must use schema 1
+with kind `first-package-namespace-bootstrap-required`. That kind is valid only
+for an exact `reviewed-new-entrant` build. An anonymous authentication
+challenge alone is not enough: it can also mean that a private package already
+exists.
+
+After activation, that route has four ordered phases:
+
+1. build and test the bottle without registry credentials or writes;
+2. let the first-child reusable require authenticated absence of the whole
+   package repository, publish one content-addressed child with the repository
+   `GITHUB_TOKEN`, and read the exact digest back anonymously;
+3. run the ordinary campaign publisher, including its version-index
+   publication and public verification; and
+4. derive and publish the ordinary schema-2 per-variant handoff.
+
+The first-child phase cannot publish a version index, Formula edit, sidecar, or
+campaign handoff. Its receipt therefore is not enough to finalize a Formula.
+The following ordinary publisher owns those operations and supplies the
+normal handoff consumed by the campaign controller. Ordinary Formulae retain
+the `anonymous-absence` route and its exact missing-manifest requirement.
+
+The campaign-specific first-child phase is resumable without permitting a
+second bootstrap write. If the exact content-derived child is already public,
+it validates the anonymous digest and continues without credentials. If that
+exact child is not public, the writer must still prove authenticated absence
+of the whole package repository immediately before its sole upload. A
+different public child, an existing private package, an authentication
+challenge after authenticated inspection, or an ambiguous transport failure
+fails closed. This read-only resumption rule does not apply to the older
+one-off `libyaml` canary above, which continues to reject every replay.
+
+The dry run and both writers stay in one caller run. Kandelo's reusable bottle
+publisher must give the campaign bootstrap dry-run artifacts a distinct fixed
+name so the later ordinary publisher can emit its normal artifacts without an
+Actions artifact-name collision. Kandelo must also admit `dry-run: true` only
+for this exact protected campaign caller and bootstrap admission. The pinned
+`reusable-homebrew-prefix-first-child-publish.yml` must validate the same
+campaign, Formula, architecture, source commits, dependencies, and dry-run
+artifacts before it receives package-write authority. Until those Kandelo-side
+contracts and their trust tests are present at the authority's immutable
+workflow commit, the campaign authority must remain inert.
+
 ## Post-Publication Acceptance
 
 Treat a write run as accepted only after the centralized
