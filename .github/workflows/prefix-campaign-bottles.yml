@@ -68,6 +68,10 @@ jobs:
       - name: Admit one exact campaign task
         id: admit
         shell: bash
+        env:
+          # WHY: internal release metadata reads must not consume the shared
+          # anonymous GitHub API quota used by hosted runner addresses.
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python3 scripts/prefix-campaign-controller.py admit \
@@ -333,6 +337,10 @@ jobs:
       - name: Derive and prepare immutable Formula handoff
         id: handoff
         shell: bash
+        env:
+          # WHY: dependency handoffs are internal controller inputs. The
+          # controller forwards this token only to their release reads.
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           cd kandelo
@@ -383,6 +391,8 @@ jobs:
 
       - name: Revalidate the release without credentials
         shell: bash
+        # WHY: this is the user-visible proof that the sealed handoff and its
+        # dependency closure are publicly readable without repository access.
         run: |
           set -euo pipefail
           python3 scripts/prefix-campaign-controller.py verify-release \
