@@ -128,10 +128,12 @@ jobs:
           'first-package-namespace-bootstrap-required'
       }}
     # WHY: dry-run keeps the write jobs skipped, but GitHub still requires the
-    # caller ceiling to cover every permission declared by the reusable.
+    # caller ceiling to cover every permission declared by the reusable. The
+    # nested build job remains read-only; it does not inherit this whole cap.
     permissions:
       actions: read
       contents: write
+      packages: write
     uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@d0c70caae68dd3c69632dea9f145a3bf31b499b8
     with:
       kandelo-repository: Automattic/kandelo
