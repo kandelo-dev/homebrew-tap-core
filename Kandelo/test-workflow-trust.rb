@@ -596,7 +596,7 @@ def check_prefix_campaign_authority(authority)
   check(authority["release_tag"] == "bottles-abi-v42",
         "#{label} release tag changed")
   check(authority["state"].is_a?(String) &&
-          authority["state"].match?(/\A(?:inert|active)\z/),
+          authority["state"].match?(/\A(?:inert|armed|active)\z/),
         "#{label} state changed")
 
   target_source = authority["target_source"]
@@ -673,22 +673,28 @@ def check_prefix_campaign_authority(authority)
     "#{label} splits executor and reusable workflow commits"
   )
 
-  identities = [
-    authority["kandelo_commit"],
-    authority["source_tap_commit"],
-    campaign["tag"],
-    *generations.values,
-  ]
-  zero_identities = identities.count do |identity|
-    identity.scan(/[0-9a-f]+/).last.match?(/\A0+\z/)
-  end
-  if authority["state"] == "inert"
-    check(zero_identities == identities.length,
-          "#{label} inert placeholders are mixed with live authority")
-  else
-    check(zero_identities.zero?,
-          "#{label} active state retains inert authority")
-  end
+  identities = {
+    "campaign" => campaign["tag"],
+    "kandelo" => authority["kandelo_commit"],
+    "rootfs" => generations.fetch("rootfs_wasm32"),
+    "source" => authority["source_tap_commit"],
+    "workflow" => authority["reusable_workflow_commit"],
+  }
+  zero_identities = identities.each_with_object([]) do |(name, identity), out|
+    out << name if identity.scan(/[0-9a-f]+/).last.match?(/\A0+\z/)
+  end.sort
+  expected_zero_identities = {
+    "inert" => identities.keys.sort,
+    # WHY: armed puts final workflow bytes on protected main while keeping
+    # dispatch disabled. The later activation fills only campaign data, so
+    # immutable releases do not target historical workflow definitions.
+    "armed" => %w[campaign rootfs source],
+    "active" => [],
+  }.fetch(authority["state"])
+  check(
+    zero_identities == expected_zero_identities,
+    "#{label} #{authority['state']} state mixes identity states"
+  )
 end
 
 def check_prefix_campaign_workflow(workflow, authority)

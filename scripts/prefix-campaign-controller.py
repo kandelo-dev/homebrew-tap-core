@@ -274,20 +274,6 @@ def require_integer(
     return value
 
 
-def nonzero_match(
-    value: str,
-    pattern: re.Pattern[str],
-    label: str,
-) -> None:
-    match = pattern.fullmatch(value)
-    if match is None or set(match.group(1)) == {"0"}:
-        fail(
-            "campaign-authority-inert",
-            f"{label} is still an inert placeholder",
-            INERT_EXIT,
-        )
-
-
 def load_authority(
     path: pathlib.Path,
     *,
@@ -342,7 +328,7 @@ def load_authority(
         value["schema"] != 2
         or value["kind"]
         != "kandelo-homebrew-prefix-campaign-caller-authority"
-        or value["state"] not in ("inert", "active")
+        or value["state"] not in ("inert", "armed", "active")
     ):
         fail(
             "invalid-contract",
@@ -450,36 +436,42 @@ def load_authority(
             "campaign caller authority changes a fixed repository identity",
             2,
         )
-    if require_active:
-        if authority.state != "active":
-            fail(
-                "campaign-authority-inert",
-                "campaign caller authority is explicitly inert",
-                INERT_EXIT,
-            )
-        for value, pattern, label in (
-            (
-                authority.campaign_tag,
-                CAMPAIGN_TAG,
-                "campaign release tag",
-            ),
-            (
-                authority.rootfs_wasm32,
-                ROOTFS_GENERATION,
-                "rootfs wasm32 generation",
-            ),
-        ):
-            nonzero_match(value, pattern, label)
-        if (
-            set(authority.kandelo_commit) == {"0"}
-            or set(authority.source_tap_commit) == {"0"}
-            or set(authority.reusable_workflow_commit) == {"0"}
-        ):
-            fail(
-                "campaign-authority-inert",
-                "campaign commit authority is still an inert placeholder",
-                INERT_EXIT,
-            )
+    campaign_match = CAMPAIGN_TAG.fullmatch(authority.campaign_tag)
+    generation_match = ROOTFS_GENERATION.fullmatch(
+        authority.rootfs_wasm32
+    )
+    assert campaign_match is not None
+    assert generation_match is not None
+    zero_identities = {
+        "campaign": set(campaign_match.group(1)) == {"0"},
+        "kandelo": set(authority.kandelo_commit) == {"0"},
+        "rootfs": set(generation_match.group(1)) == {"0"},
+        "source": set(authority.source_tap_commit) == {"0"},
+        "workflow": set(authority.reusable_workflow_commit) == {"0"},
+    }
+    expected_zero_identities = {
+        "inert": set(zero_identities),
+        # WHY: an armed authority places the final workflow bytes on
+        # protected main before a campaign is sealed. Dispatch stays disabled
+        # until a later data-only activation fills the remaining identities.
+        "armed": {"campaign", "rootfs", "source"},
+        "active": set(),
+    }[authority.state]
+    actual_zero_identities = {
+        name for name, is_zero in zero_identities.items() if is_zero
+    }
+    if actual_zero_identities != expected_zero_identities:
+        fail(
+            "invalid-contract",
+            f"campaign {authority.state} authority mixes identity states",
+            2,
+        )
+    if require_active and authority.state != "active":
+        fail(
+            "campaign-authority-inert",
+            "campaign caller authority is not active",
+            INERT_EXIT,
+        )
     return authority
 
 
@@ -714,6 +706,32 @@ def require_exact_checkout(
             f"{label} uses unsafe Git index flags",
         )
     return root
+
+
+def require_matching_workflow_tree(
+    caller_root: pathlib.Path,
+    source_tap_root: pathlib.Path,
+) -> None:
+    """Require the sealed source and active caller to share workflow bytes."""
+    path = ".github/workflows"
+    caller_tree = git_output(caller_root, "rev-parse", f"HEAD:{path}")
+    source_tree = git_output(
+        source_tap_root,
+        "rev-parse",
+        f"HEAD:{path}",
+    )
+    if (
+        re.fullmatch(r"[0-9a-f]{40}", caller_tree) is None
+        or re.fullmatch(r"[0-9a-f]{40}", source_tree) is None
+        or caller_tree != source_tree
+    ):
+        # WHY: GitHub denies GITHUB_TOKEN release creation when the release
+        # target has historical workflow bytes. Reject the campaign before it
+        # builds or reuses a bottle that its handoff job cannot seal.
+        fail(
+            "invalid-checkout",
+            "active workflow tree differs from the sealed campaign source",
+        )
 
 
 def target_source_identity(authority: Authority) -> tuple[str, ...]:
@@ -1257,6 +1275,7 @@ def prepare_task(
         authority.source_tap_commit,
         "source tap checkout",
     )
+    require_matching_workflow_tree(ROOT, source_tap_root)
     require_target_source_checkout(authority, source_tap_root)
     campaign_path = fetch_campaign(
         authority,

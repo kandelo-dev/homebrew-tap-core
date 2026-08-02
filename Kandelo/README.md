@@ -140,11 +140,12 @@ run, ambiguous or expired artifact evidence, an existing public or private
 package, or non-public readback fails closed.
 
 This path publishes no marker, mutable version index, Formula edit, sidecar, or
-campaign handoff. It is serialized per Formula and must reject every replay
-after the package repository exists. A separate normal `libyaml` publication
-must later publish and verify the complete index, finalize tap state, and pass
-the acceptance procedure below. `Kandelo/prefix-campaign-authority.json`
-remains inert, and campaign selection and reuse continue to require anonymous
+campaign handoff. It is serialized per Formula and must reject every
+replay after the package repository exists. A separate normal `libyaml`
+publication must later publish and verify the complete index, finalize
+tap state, and pass the acceptance procedure below. A prefix campaign
+may be `inert` or `armed`, but it is not dispatchable until it is
+`active`; campaign selection and reuse continue to require anonymous
 public evidence.
 
 After the prerequisite Kandelo commit and this caller are both on their exact
@@ -165,9 +166,32 @@ dispatch the reviewed event with string-valued evidence:
 }
 ```
 
+## Prefix-campaign activation
+
+A campaign has three explicit authority states:
+
+- `inert` contains no live execution, campaign, generation, or source
+  commit;
+- `armed` pins the final Kandelo executor and caller workflow bytes while
+  its campaign, generation, and source identities remain zero; and
+- `active` fills those three data identities without changing any
+  workflow.
+
+Both `inert` and `armed` reject dispatch with exit status 78. The armed
+state exists because GitHub does not let a workflow's `GITHUB_TOKEN`
+create a release that targets a historical commit whose
+`.github/workflows` tree differs from the default branch. The campaign
+must therefore be derived from a protected armed commit that already
+contains its final workflow tree. Its later activation may change
+authority data, tests, and rollout records, but must not change
+`.github/workflows` until every Formula handoff is sealed. Controller
+tests compare the active checkout's workflow tree with the sealed source
+tree, and task admission repeats that comparison before doing bottle
+work.
+
 ## Prefix-campaign package bootstrap
 
-The inert prefix-campaign caller has a separate route for a reviewed new
+A non-active prefix-campaign caller has a separate route for a reviewed new
 Formula whose package repository does not exist yet. The campaign manifest
 must use schema 2 and the Formula's `destination.admission` must use schema 1
 with kind `first-package-namespace-bootstrap-required`. That kind is valid only
@@ -210,7 +234,7 @@ for this exact protected campaign caller and bootstrap admission. The pinned
 campaign, Formula, architecture, source commits, dependencies, and dry-run
 artifacts before it receives package-write authority. Until those Kandelo-side
 contracts and their trust tests are present at the authority's immutable
-workflow commit, the campaign authority must remain inert.
+workflow commit, the campaign authority must remain non-active.
 
 ## Post-Publication Acceptance
 
