@@ -85,9 +85,12 @@ jobs:
         needs.admit.outputs.generation-kind == 'rootfs-wasm32' &&
         needs.admit.outputs.admission-kind == 'anonymous-absence'
       }}
+    # WHY: the reusable publisher declares conditional tap-finalization and
+    # VFS-release jobs with `contents: write`. GitHub validates the caller's
+    # permission ceiling before it evaluates their false input conditions.
     permissions:
       actions: read
-      contents: read
+      contents: write
       packages: write
     uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@d0c70caae68dd3c69632dea9f145a3bf31b499b8
     with:
@@ -124,9 +127,11 @@ jobs:
         needs.admit.outputs.admission-kind ==
           'first-package-namespace-bootstrap-required'
       }}
+    # WHY: dry-run keeps the write jobs skipped, but GitHub still requires the
+    # caller ceiling to cover every permission declared by the reusable.
     permissions:
       actions: read
-      contents: read
+      contents: write
     uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@d0c70caae68dd3c69632dea9f145a3bf31b499b8
     with:
       kandelo-repository: Automattic/kandelo
@@ -198,9 +203,11 @@ jobs:
         needs.admit.outputs.admission-kind ==
           'first-package-namespace-bootstrap-required'
       }}
+    # WHY: this call needs the same reusable-workflow ceiling described by
+    # publish-rootfs, even though campaign inputs skip both write jobs.
     permissions:
       actions: read
-      contents: read
+      contents: write
       packages: write
     uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@d0c70caae68dd3c69632dea9f145a3bf31b499b8
     with:
