@@ -579,15 +579,44 @@ def anonymous_environment() -> dict[str, str]:
     return environment
 
 
+def internal_release_environment() -> dict[str, str]:
+    environment = anonymous_environment()
+    token = os.environ.get("GH_TOKEN")
+    if not token:
+        fail(
+            "credential-unavailable",
+            "internal GitHub release reads require GH_TOKEN",
+        )
+    # WHY: controller reads need GitHub API quota, not package publication or
+    # Actions runtime authority. Start from the anonymous environment and add
+    # back only the repository-scoped token instead of inheriting every secret.
+    environment["GH_TOKEN"] = token
+    return environment
+
+
+def redact_environment_secrets(payload: bytes) -> bytes:
+    redacted = payload
+    for name in TOKEN_ENV:
+        value = os.environ.get(name)
+        if value:
+            redacted = redacted.replace(
+                value.encode("utf-8"),
+                b"<redacted>",
+            )
+    return redacted
+
+
 def run_command(
     arguments: Sequence[str],
     *,
     cwd: pathlib.Path,
-    anonymous: bool = True,
+    inherit_github_token: bool = False,
     timeout: int = COMMAND_TIMEOUT,
 ) -> subprocess.CompletedProcess[bytes]:
     environment = (
-        anonymous_environment() if anonymous else os.environ.copy()
+        internal_release_environment()
+        if inherit_github_token
+        else anonymous_environment()
     )
     try:
         result = subprocess.run(
@@ -614,7 +643,7 @@ def run_command(
             f"reviewed command exceeded bounded output: {arguments[0]}",
         )
     if result.returncode != 0:
-        detail = result.stderr.decode(
+        detail = redact_environment_secrets(result.stderr).decode(
             "utf-8",
             errors="replace",
         )[:16_384].replace("\r", "\\r").replace("\n", "\\n")
@@ -765,6 +794,8 @@ def fetch_campaign(
     authority: Authority,
     kandelo_root: pathlib.Path,
     output: pathlib.Path,
+    *,
+    authenticated: bool,
 ) -> pathlib.Path:
     output.mkdir(mode=0o700)
     campaign = output / CAMPAIGN_ASSET
@@ -788,6 +819,7 @@ def fetch_campaign(
             str(receipt),
         ],
         cwd=kandelo_root,
+        inherit_github_token=authenticated,
     )
     return campaign
 
@@ -1211,6 +1243,7 @@ def prepare_task(
     source_tap_root: pathlib.Path,
     event_path: pathlib.Path,
     working: pathlib.Path,
+    authenticated_release_reads: bool,
 ) -> tuple[Authority, TaskPlan]:
     authority = load_authority(authority_path, require_active=True)
     request = load_task_request(event_path)
@@ -1229,6 +1262,7 @@ def prepare_task(
         authority,
         kandelo_root,
         working / "campaign",
+        authenticated=authenticated_release_reads,
     )
     plan = validate_campaign(campaign_path, authority, request)
     return authority, plan
@@ -1279,6 +1313,7 @@ def fetch_dependency_handoffs(
     kandelo_root: pathlib.Path,
     plan: TaskPlan,
     root: pathlib.Path,
+    authenticated: bool,
 ) -> dict[str, pathlib.Path]:
     if root.exists() or root.is_symlink():
         fail(
@@ -1320,7 +1355,11 @@ def fetch_dependency_handoffs(
             arguments.extend(
                 ["--dependency-handoff", str(dependency_root)]
             )
-        run_command(arguments, cwd=kandelo_root)
+        run_command(
+            arguments,
+            cwd=kandelo_root,
+            inherit_github_token=authenticated,
+        )
         materialized[name] = output
     return materialized
 
@@ -1471,6 +1510,7 @@ def prepare_build_release(
             source_tap_root=source_tap_root,
             event_path=event_path,
             working=working,
+            authenticated_release_reads=True,
         )
         if plan.disposition != "build":
             fail(
@@ -1487,6 +1527,7 @@ def prepare_build_release(
             kandelo_root=kandelo_root,
             plan=plan,
             root=working / "dependencies",
+            authenticated=True,
         )
         publications = require_publication_roots(
             publications_root,
@@ -1564,6 +1605,7 @@ def prepare_reuse_release(
             source_tap_root=source_tap_root,
             event_path=event_path,
             working=working,
+            authenticated_release_reads=True,
         )
         if plan.disposition != "reuse":
             fail(
@@ -1585,6 +1627,7 @@ def prepare_reuse_release(
             kandelo_root=kandelo_root,
             plan=plan,
             root=working / "dependencies",
+            authenticated=True,
         )
         executor = (
             kandelo_root
@@ -1848,11 +1891,13 @@ def verify_published_release(
             source_tap_root=source_tap_root,
             event_path=event_path,
             working=working,
+            authenticated_release_reads=False,
         )
         dependencies = fetch_dependency_handoffs(
             kandelo_root=kandelo_root,
             plan=plan,
             root=working / "dependencies",
+            authenticated=False,
         )
         executor = (
             kandelo_root
@@ -1875,7 +1920,11 @@ def verify_published_release(
             arguments.extend(
                 ["--dependency-handoff", str(dependencies[name])]
             )
-        run_command(arguments, cwd=kandelo_root)
+        run_command(
+            arguments,
+            cwd=kandelo_root,
+            inherit_github_token=False,
+        )
         receipt_output = output.parent / "readback-receipt.json"
         if receipt_output.exists() or receipt_output.is_symlink():
             fail(
@@ -1967,6 +2016,7 @@ def admit(
             source_tap_root=source_tap_root,
             event_path=event_path,
             working=working,
+            authenticated_release_reads=True,
         )
         document = build_plan_document(authority, plan)
         output.write_bytes(pretty_json(document))

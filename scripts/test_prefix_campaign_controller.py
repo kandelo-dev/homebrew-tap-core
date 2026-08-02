@@ -501,7 +501,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     CONTROLLER,
                     "fetch_campaign",
                     return_value=fixture.campaign,
-                ),
+                ) as fetch_campaign,
             ):
                 document = CONTROLLER.admit(
                     authority_path=fixture.authority,
@@ -511,6 +511,9 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     output=output,
                     github_output=github_output,
                 )
+            self.assertTrue(
+                fetch_campaign.call_args.kwargs["authenticated"]
+            )
             self.assertEqual(document["disposition"], "build")
             self.assertEqual(
                 document["admission"],
@@ -709,6 +712,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     authority,
                     fixture.kandelo,
                     output,
+                    authenticated=True,
                 )
             self.assertEqual(campaign, output / "campaign.json")
             command = run.call_args.args[0]
@@ -736,6 +740,9 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     "--receipt-out",
                     str(output / "campaign-receipt.json"),
                 ],
+            )
+            self.assertTrue(
+                run.call_args.kwargs["inherit_github_token"]
             )
 
     def test_target_source_uses_the_frozen_overlay_verifier(self) -> None:
@@ -831,7 +838,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     CONTROLLER,
                     "prepare_task",
                     return_value=(authority, plan),
-                ),
+                ) as prepare_task,
                 mock.patch.object(
                     CONTROLLER,
                     "materialize_target_source",
@@ -841,12 +848,12 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     CONTROLLER,
                     "fetch_dependency_handoffs",
                     return_value={"dependency": dependency},
-                ),
+                ) as fetch_dependencies,
                 mock.patch.object(
                     CONTROLLER,
                     "run_command",
                     side_effect=command_side_effect,
-                ),
+                ) as run,
             ):
                 summary = CONTROLLER.prepare_build_release(
                     authority_path=fixture.authority,
@@ -858,6 +865,19 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     github_output=github_output,
                 )
 
+            self.assertTrue(
+                prepare_task.call_args.kwargs[
+                    "authenticated_release_reads"
+                ]
+            )
+            self.assertTrue(
+                fetch_dependencies.call_args.kwargs["authenticated"]
+            )
+            self.assertTrue(run.call_args_list)
+            for call in run.call_args_list:
+                self.assertFalse(
+                    call.kwargs.get("inherit_github_token", False)
+                )
             self.assertEqual(len(commands), 2)
             derive = commands[0]
             self.assertEqual(derive[2], "derive-build")
@@ -893,7 +913,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 + "7" * 64,
             )
 
-    def test_dependency_fetch_uses_frozen_anonymous_release_cli(
+    def test_dependency_fetch_uses_bounded_authenticated_release_cli(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -907,6 +927,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     kandelo_root=fixture.kandelo,
                     plan=plan,
                     root=fixture.root / "dependencies",
+                    authenticated=True,
                 )
             output = (
                 fixture.root
@@ -936,6 +957,9 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                         / "dependencies/receipts/dependency.json"
                     ),
                 ],
+            )
+            self.assertTrue(
+                run.call_args.kwargs["inherit_github_token"]
             )
 
     def test_reuse_release_calls_the_frozen_kandelo_authority(
@@ -986,7 +1010,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     CONTROLLER,
                     "prepare_task",
                     return_value=(authority, plan),
-                ),
+                ) as prepare_task,
                 mock.patch.object(
                     CONTROLLER,
                     "require_exact_checkout",
@@ -1001,12 +1025,12 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     CONTROLLER,
                     "fetch_dependency_handoffs",
                     return_value={"dependency": dependency},
-                ),
+                ) as fetch_dependencies,
                 mock.patch.object(
                     CONTROLLER,
                     "run_command",
                     side_effect=command_side_effect,
-                ),
+                ) as run,
             ):
                 summary = CONTROLLER.prepare_reuse_release(
                     authority_path=fixture.authority,
@@ -1018,6 +1042,19 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     github_output=None,
                 )
 
+            self.assertTrue(
+                prepare_task.call_args.kwargs[
+                    "authenticated_release_reads"
+                ]
+            )
+            self.assertTrue(
+                fetch_dependencies.call_args.kwargs["authenticated"]
+            )
+            self.assertTrue(run.call_args_list)
+            for call in run.call_args_list:
+                self.assertFalse(
+                    call.kwargs.get("inherit_github_token", False)
+                )
             exact_checkout.assert_called_once_with(
                 old_tap,
                 OLD_TAP_COMMIT,
@@ -1082,17 +1119,17 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     CONTROLLER,
                     "prepare_task",
                     return_value=(authority, plan),
-                ),
+                ) as prepare_task,
                 mock.patch.object(
                     CONTROLLER,
                     "fetch_dependency_handoffs",
                     return_value={"dependency": dependency},
-                ),
+                ) as fetch_dependencies,
                 mock.patch.object(
                     CONTROLLER,
                     "run_command",
                     side_effect=command_side_effect,
-                ),
+                ) as run,
             ):
                 summary = CONTROLLER.verify_published_release(
                     authority_path=fixture.authority,
@@ -1103,6 +1140,17 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     output=output,
                 )
 
+            self.assertFalse(
+                prepare_task.call_args.kwargs[
+                    "authenticated_release_reads"
+                ]
+            )
+            self.assertFalse(
+                fetch_dependencies.call_args.kwargs["authenticated"]
+            )
+            self.assertFalse(
+                run.call_args.kwargs["inherit_github_token"]
+            )
             self.assertEqual(len(commands), 1)
             self.assertEqual(commands[0][2], "fetch-release")
             self.assertIn(tag, commands[0])
@@ -1413,6 +1461,62 @@ class PrefixCampaignControllerTests(unittest.TestCase):
         for name in CONTROLLER.TOKEN_ENV:
             self.assertNotIn(name, environment)
         self.assertEqual(environment["GIT_TERMINAL_PROMPT"], "0")
+
+    def test_internal_release_environment_forwards_only_gh_token(
+        self,
+    ) -> None:
+        values = {
+            name: f"secret-{index}"
+            for index, name in enumerate(CONTROLLER.TOKEN_ENV)
+        }
+        with mock.patch.dict(os.environ, values):
+            environment = CONTROLLER.internal_release_environment()
+        self.assertEqual(environment["GH_TOKEN"], values["GH_TOKEN"])
+        for name in CONTROLLER.TOKEN_ENV:
+            if name != "GH_TOKEN":
+                self.assertNotIn(name, environment)
+
+    def test_internal_release_environment_requires_gh_token(
+        self,
+    ) -> None:
+        environment = os.environ.copy()
+        for name in CONTROLLER.TOKEN_ENV:
+            environment.pop(name, None)
+        with (
+            mock.patch.dict(os.environ, environment, clear=True),
+            self.assertRaises(CONTROLLER.ControllerError) as raised,
+        ):
+            CONTROLLER.internal_release_environment()
+        self.assertEqual(
+            raised.exception.status,
+            "credential-unavailable",
+        )
+
+    def test_failed_internal_release_read_does_not_log_token(
+        self,
+    ) -> None:
+        token = "github-token-that-must-not-escape"
+        command = [
+            sys.executable,
+            "-c",
+            (
+                "import os, sys; "
+                "sys.stderr.write(os.environ['GH_TOKEN']); "
+                "raise SystemExit(1)"
+            ),
+        ]
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            mock.patch.dict(os.environ, {"GH_TOKEN": token}),
+            self.assertRaises(CONTROLLER.ControllerError) as raised,
+        ):
+            CONTROLLER.run_command(
+                command,
+                cwd=pathlib.Path(directory),
+                inherit_github_token=True,
+            )
+        self.assertNotIn(token, str(raised.exception))
+        self.assertIn("<redacted>", str(raised.exception))
 
     def test_publication_root_rejects_extra_architecture(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

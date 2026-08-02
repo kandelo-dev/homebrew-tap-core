@@ -904,9 +904,22 @@ def check_prefix_campaign_workflow(workflow, authority)
   )
   check(values_for_key(workflow, "secrets").empty?,
         "#{label} passes repository secrets")
+  controller_token = {
+    "GH_TOKEN" => expression("github.token"),
+  }
   check(values_for_key(workflow, "env") == [
-          { "GH_TOKEN" => expression("github.token") },
+          controller_token,
+          controller_token,
+          controller_token,
         ], "#{label} credential boundary changed")
+
+  admit_step = jobs.dig("admit", "steps").find do |step|
+    step["name"] == "Admit one exact campaign task"
+  end
+  check(
+    admit_step&.fetch("env", nil) == controller_token,
+    "#{label} internal campaign read lacks bounded GitHub authority"
+  )
 
   historical_checkout = jobs.dig("seal-handoff", "steps").find do |step|
     step["name"] == "Checkout exact historical tap for reuse"
@@ -939,6 +952,7 @@ def check_prefix_campaign_workflow(workflow, authority)
   )
   check(
     prepare_step.is_a?(Hash) &&
+      prepare_step["env"] == controller_token &&
       prepare_step["run"].is_a?(String) &&
       prepare_step["run"].include?("cd kandelo\n") &&
       prepare_step["run"].include?(
@@ -951,6 +965,16 @@ def check_prefix_campaign_workflow(workflow, authority)
         '--old-tap-root "$GITHUB_WORKSPACE/old-tap"'
       ),
     "#{label} handoff derivation bypasses the Kandelo dev shell"
+  )
+  verify_step = seal_steps.find do |step|
+    step["name"] == "Revalidate the release without credentials"
+  end
+  check(
+    verify_step.is_a?(Hash) &&
+      !verify_step.key?("env") &&
+      verify_step["run"].is_a?(String) &&
+      verify_step["run"].include?("verify-release"),
+    "#{label} public release readback can inherit credentials"
   )
   downloads = seal_steps.select do |step|
     step["uses"] == DOWNLOAD_ACTION
