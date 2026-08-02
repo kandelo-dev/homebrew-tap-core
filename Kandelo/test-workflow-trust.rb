@@ -47,6 +47,9 @@ DOWNLOAD_ACTION =
   "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
 UPLOAD_ACTION =
   "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+NIX_INSTALLER_ACTION =
+  "DeterminateSystems/nix-installer-action@" \
+  "ef8a148080ab6020fd15196c2084a2eea5ff2d25"
 RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # Write publication executes and consumes packages from one reviewed Kandelo
 # main commit. Its rootfs package generation is admitted separately by a
@@ -869,6 +872,7 @@ def check_prefix_campaign_workflow(workflow, authority)
     CHECKOUT_ACTION,
     CHECKOUT_ACTION,
     DOWNLOAD_ACTION,
+    NIX_INSTALLER_ACTION,
     UPLOAD_ACTION,
   ]
   check(values_for_key(workflow, "uses") == expected_uses,
@@ -924,6 +928,15 @@ def check_prefix_campaign_workflow(workflow, authority)
   prepare_step = seal_steps.find do |step|
     step["name"] == "Derive and prepare immutable Formula handoff"
   end
+  nix_step = seal_steps.find do |step|
+    step["name"] == "Install Nix for handoff derivation"
+  end
+  check(
+    nix_step&.fetch("uses", nil) == NIX_INSTALLER_ACTION &&
+      nix_step["with"] == { "github-token" => "" } &&
+      seal_steps.index(nix_step) < seal_steps.index(prepare_step),
+    "#{label} handoff derivation lacks its declared Nix environment"
+  )
   check(
     prepare_step.is_a?(Hash) &&
       prepare_step["run"].is_a?(String) &&

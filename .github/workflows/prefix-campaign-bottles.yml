@@ -322,6 +322,14 @@ jobs:
           path: >-
             ${{ runner.temp }}/campaign-publications/${{ needs.admit.outputs.arch }}
 
+      - name: Install Nix for handoff derivation
+        # WHY: reuse skips the reusable publisher, so this job cannot inherit
+        # its Nix installation. The controller still runs through Kandelo's
+        # declared dev shell to use the reviewed Python and tool versions.
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+        with:
+          github-token: ""
+
       - name: Derive and prepare immutable Formula handoff
         id: handoff
         shell: bash
