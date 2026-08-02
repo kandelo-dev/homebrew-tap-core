@@ -338,30 +338,39 @@ class Fixture:
 
 
 class PrefixCampaignControllerTests(unittest.TestCase):
-    def test_checked_in_authority_is_explicitly_inert(self) -> None:
-        with self.assertRaises(CONTROLLER.ControllerError) as raised:
-            CONTROLLER.load_authority(
-                AUTHORITY,
-                require_active=True,
-            )
-        self.assertEqual(
-            raised.exception.status,
-            "campaign-authority-inert",
+    def test_checked_in_authority_is_active(self) -> None:
+        authority = CONTROLLER.load_authority(
+            AUTHORITY,
+            require_active=True,
         )
-        self.assertEqual(
-            raised.exception.exit_code,
-            CONTROLLER.INERT_EXIT,
-        )
+        self.assertEqual(authority.state, "active")
 
     def test_cli_reports_inert_before_external_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            event = pathlib.Path(directory) / "event.json"
+            root = pathlib.Path(directory)
+            event = root / "event.json"
             write_pretty(event, event_document())
+            authority_path = root / "authority.json"
+            authority = json.loads(AUTHORITY.read_text())
+            authority["state"] = "inert"
+            authority["kandelo_commit"] = "0" * 40
+            authority["reusable_workflow_commit"] = "0" * 40
+            authority["source_tap_commit"] = "0" * 40
+            authority["campaign_release"]["tag"] = (
+                "homebrew-prefix-campaign-sha256-" + "0" * 64
+            )
+            authority["package_generations"]["rootfs_wasm32"] = (
+                "package-generation-rootfs-wasm32-abi-v42-sha256-"
+                + "0" * 64
+            )
+            write_pretty(authority_path, authority)
             result = subprocess.run(
                 [
                     sys.executable,
                     str(SCRIPT),
                     "preflight",
+                    "--authority",
+                    str(authority_path),
                     "--event",
                     str(event),
                 ],

@@ -51,9 +51,9 @@ LEGACY_PREPUBLICATION_GENERATION_SHA = "437fde2524ea6ad9c44933f8abbf995a46841009
 FAILED_M3_MAIN_SHA = "5f448e68ec031108de42e965f5284944861b6ea2"
 FAILED_M3_ROOTFS_GENERATION_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-d66825c03af08133538018dca0bad5732d8eaf5add3dfd513b3c1bce9210256e"
 FAILED_M3_CALLER_SHA256 = "3c6028607ad3bdbba8a814e065d602d9c1cc45c64ccd6e8e859a336d58acfeac"
-CURRENT_MAIN_SHA = "a59d77804a6b67291999636aea3aa8d291b1689d"
-CURRENT_ROOTFS_GENERATION_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-d48c640475bc9c29febed88f921243f95111d9cd91a416bab10995f74085142e"
-CURRENT_CALLER_SHA256 = "8420a0aec557aeff336e871e00f8daf5efab1d81037dde71de12278a65ca6d0b"
+CURRENT_MAIN_SHA = "d0c70caae68dd3c69632dea9f145a3bf31b499b8"
+CURRENT_ROOTFS_GENERATION_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-26696e4fe2298618477b2fa4b2e9ed9cbbaab8167a120525743a78e98972f282"
+CURRENT_CALLER_SHA256 = "28e984bbae2208f2556fa2cac98776ff55e55fa93d70620ca42285cb9ad53fd7"
 # WHY: the current write caller executes the publisher and consumes packages
 # from the same exact main commit. The selected-input admission record, rather
 # than a distinct source commit, vouches for the preserved rootfs bytes.
