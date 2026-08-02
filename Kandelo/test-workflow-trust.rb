@@ -708,7 +708,11 @@ def check_prefix_campaign_workflow(workflow, authority)
     check(job["needs"] == expected_needs,
           "#{label} #{name} dependencies changed")
     expected_permissions = if name == "build-bootstrap-rootfs"
-      { "actions" => "read", "contents" => "write" }
+      {
+        "actions" => "read",
+        "contents" => "write",
+        "packages" => "write",
+      }
     else
       publish_permissions
     end
@@ -1533,11 +1537,11 @@ def self_test(
     )
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
-  expect_rejection("bootstrap build given package write authority") do
+  expect_rejection("bootstrap caller missing package permission ceiling") do
     mutated = deep_copy(prefix_campaign)
     mutated.dig(
       "jobs", "build-bootstrap-rootfs", "permissions"
-    )["packages"] = "write"
+    ).delete("packages")
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
   expect_rejection("bootstrap build changed into a normal write") do
