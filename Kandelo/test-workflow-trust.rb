@@ -12,6 +12,8 @@ ROOT = candidate_root ? File.expand_path(candidate_root) : File.expand_path(".."
 WORKFLOW_ROOT = File.join(ROOT, ".github/workflows")
 CONTRACT_PATH = File.join(WORKFLOW_ROOT, "contract-checks.yml")
 BASE_CONTRACT_PATH = File.join(WORKFLOW_ROOT, "base-contract-checks.yml")
+CLOSED_SELECTION_PATH =
+  File.join(WORKFLOW_ROOT, "publish-closed-selection.yml")
 PREFIX_CAMPAIGN_PATH =
   File.join(WORKFLOW_ROOT, "prefix-campaign-bottles.yml")
 PREFIX_CAMPAIGN_AUTHORITY_PATH =
@@ -25,6 +27,7 @@ EXPECTED_WORKFLOW_FILES = %w[
   maintain-bottles.yml
   prefix-campaign-bottles.yml
   publish-bottles.yml
+  publish-closed-selection.yml
   publish-main-shell-mirror.yml
   repository-namespace-canary.yml
 ].freeze
@@ -42,6 +45,7 @@ MAIN_SHELL_MIRROR_PERMISSIONS = {
   "actions" => "read",
   "contents" => "write",
 }.freeze
+CLOSED_SELECTION_PERMISSIONS = MAIN_SHELL_MIRROR_PERMISSIONS
 CHECKOUT_ACTION = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
 DOWNLOAD_ACTION =
   "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
@@ -73,6 +77,11 @@ MAIN_SHELL_MIRROR_AUTHORITY_SHA =
   "08f8f32c94bee8d6fc2948e453e53ece29b1c8e1"
 MAIN_SHELL_MIRROR_CANARY_SHA = "d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc"
 PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-d098e1f6b90cdc7a214a59f7dcfb5b87c2dda077572177ed4f1a4a8eeca46a1c"
+# WHY: a closed selection writes an immutable release. The protected tap
+# caller must select exactly the Kandelo main commit that owns every executable
+# publication step; a mutable ref would let those steps change after review.
+CLOSED_SELECTION_KANDELO_SHA =
+  "662f00c44f3e1d0ebc0d1a573df101e721b73006"
 
 def check(condition, message)
   raise message unless condition
@@ -348,6 +357,7 @@ BASE_MATERIALIZE_RUN = <<~'BASH'
         {path: ".github/workflows/maintain-bottles.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/prefix-campaign-bottles.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/publish-bottles.yml", mode: "100644", type: "blob"},
+        {path: ".github/workflows/publish-closed-selection.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/publish-main-shell-mirror.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/repository-namespace-canary.yml", mode: "100644", type: "blob"}
       ] and
@@ -420,6 +430,7 @@ BASE_MATERIALIZE_RUN = <<~'BASH'
     .github/workflows/maintain-bottles.yml
     .github/workflows/prefix-campaign-bottles.yml
     .github/workflows/publish-bottles.yml
+    .github/workflows/publish-closed-selection.yml
     .github/workflows/publish-main-shell-mirror.yml
     .github/workflows/repository-namespace-canary.yml
     Kandelo/prefix-campaign-authority.json
@@ -490,6 +501,65 @@ def check_caller(workflow, spec, label)
   expected_secret_nodes = expected_secrets.empty? ? [] : [expected_secrets]
   check(values_for_key(workflow, "secrets") == expected_secret_nodes,
         "#{label} may pass only its reviewed named secrets")
+end
+
+def check_closed_selection_caller(workflow)
+  label = "closed-selection workflow"
+  check(normalized_keys(workflow, label).sort == %w[jobs name on],
+        "#{label} has unexpected top-level configuration")
+  check(workflow["name"] == "Publish Homebrew closed selection",
+        "#{label} name changed")
+  check(
+    workflow_events(workflow) == {
+      "workflow_dispatch" => {
+        "inputs" => {
+          "selection_plan" => {
+            "description" =>
+              "Canonical compact JSON selecting one complete closure",
+            "required" => true,
+            "type" => "string",
+          },
+          "selection_plan_sha256" => {
+            "description" => "SHA-256 of the canonical selection plan",
+            "required" => true,
+            "type" => "string",
+          },
+        },
+      },
+    },
+    "#{label} dispatch inputs changed"
+  )
+
+  jobs = workflow["jobs"]
+  check(jobs.is_a?(Hash) && jobs.keys == ["publish"],
+        "#{label} has an unexpected job set")
+  job = jobs.fetch("publish")
+  check(normalized_keys(job, "#{label} job").sort ==
+          %w[permissions uses with],
+        "#{label} job is not data-only")
+  check(exact_permissions?(job["permissions"], CLOSED_SELECTION_PERMISSIONS),
+        "#{label} permission ceiling changed")
+  reusable =
+    "Automattic/kandelo/.github/workflows/" \
+    "reusable-homebrew-closed-selection-publish.yml@" \
+    "#{CLOSED_SELECTION_KANDELO_SHA}"
+  check(job["uses"] == reusable,
+        "#{label} reusable workflow target changed")
+  check(
+    job["with"] == {
+      "kandelo-ref" => CLOSED_SELECTION_KANDELO_SHA,
+      "selection-plan" => expression("inputs.selection_plan"),
+      "selection-plan-sha256" =>
+        expression("inputs.selection_plan_sha256"),
+    },
+    "#{label} forwarding contract changed"
+  )
+  check(values_for_key(workflow, "uses") == [reusable],
+        "#{label} executable workflow set changed")
+  %w[run steps env defaults secrets].each do |key|
+    check(values_for_key(workflow, key).empty?,
+          "#{label} contains caller-local #{key}")
+  end
 end
 
 def check_prefix_campaign_authority(authority)
@@ -1195,6 +1265,7 @@ end
 
 def self_test(
   callers,
+  closed_selection,
   contract,
   base_contract,
   prefix_campaign,
@@ -1214,6 +1285,43 @@ def self_test(
   arbitrary_callers = callers_for_specs(callers, arbitrary_specs)
   check(check_caller_profile(current_callers, test_profiles) == "current",
         "current caller profile was not selected")
+  check_closed_selection_caller(closed_selection)
+
+  expect_rejection("a mutable closed-selection publisher") do
+    mutated = deep_copy(closed_selection)
+    mutated.dig("jobs", "publish")["uses"] =
+      "Automattic/kandelo/.github/workflows/" \
+      "reusable-homebrew-closed-selection-publish.yml@main"
+    check_closed_selection_caller(mutated)
+  end
+  expect_rejection("split closed-selection publisher authority") do
+    mutated = deep_copy(closed_selection)
+    mutated.dig("jobs", "publish", "with")["kandelo-ref"] =
+      "1" * 40
+    check_closed_selection_caller(mutated)
+  end
+  expect_rejection("caller-local closed-selection code") do
+    mutated = deep_copy(closed_selection)
+    mutated.dig("jobs", "publish")["steps"] = [{ "run" => "true" }]
+    check_closed_selection_caller(mutated)
+  end
+  expect_rejection("package authority on closed-selection publication") do
+    mutated = deep_copy(closed_selection)
+    mutated.dig("jobs", "publish", "permissions")["packages"] = "write"
+    check_closed_selection_caller(mutated)
+  end
+  expect_rejection("a closed-selection secret") do
+    mutated = deep_copy(closed_selection)
+    mutated.dig("jobs", "publish")["secrets"] = "inherit"
+    check_closed_selection_caller(mutated)
+  end
+  expect_rejection("an unbound closed-selection plan digest") do
+    mutated = deep_copy(closed_selection)
+    mutated.dig("jobs", "publish", "with")[
+      "selection-plan-sha256"
+    ] = "0" * 64
+    check_closed_selection_caller(mutated)
+  end
 
   if DRY_RUN_KANDELO_WORKFLOW_SHA != CURRENT_KANDELO_WORKFLOW_SHA
     expect_rejection("the fail-closed write publisher as the dry-run proof") do
@@ -1772,6 +1880,8 @@ begin
           /\Apackage-generation-rootfs-wasm32-abi-v42-sha256-[0-9a-f]{64}\z/
         ),
         "rootfs package generation is not an exact ABI 42 content tag")
+  check(CLOSED_SELECTION_KANDELO_SHA.match?(/\A[0-9a-f]{40}\z/),
+        "closed-selection Kandelo pin is not an exact SHA")
   {
     "main-shell lifecycle Kandelo M" => MAIN_SHELL_MIRROR_KANDELO_SHA,
     "main-shell mirror tap catalog TF" => MAIN_SHELL_MIRROR_TAP_CATALOG_SHA,
@@ -1831,6 +1941,7 @@ begin
   callers = CALLER_SPECS.to_h do |key, spec|
     [key, load_workflow(spec.fetch(:path))]
   end
+  closed_selection = load_workflow(CLOSED_SELECTION_PATH)
   contract = load_workflow(CONTRACT_PATH)
   base_contract = load_workflow(BASE_CONTRACT_PATH)
   prefix_authority = load_json(PREFIX_CAMPAIGN_AUTHORITY_PATH)
@@ -1843,12 +1954,14 @@ begin
 
   self_test(
     callers,
+    closed_selection,
     contract,
     base_contract,
     prefix_campaign,
     prefix_authority
   )
   check_caller_profile(callers)
+  check_closed_selection_caller(closed_selection)
   check_prefix_campaign_authority(prefix_authority)
   check_prefix_campaign_workflow(prefix_campaign, prefix_authority)
   check_contract_workflow(contract)
