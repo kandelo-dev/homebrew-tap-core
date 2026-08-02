@@ -653,9 +653,12 @@ def check_prefix_campaign_workflow(workflow, authority)
       expression("steps.admit.outputs.arch"),
     "#{label} does not expose the admitted architecture"
   )
+  # WHY: reusable-workflow validation checks the caller ceiling before job
+  # conditions. The reusable declares skipped finalization/release writers,
+  # so every call to it must permit their declared contents scope.
   publish_permissions = {
     "actions" => "read",
-    "contents" => "read",
+    "contents" => "write",
     "packages" => "write",
   }
   publisher_conditions = {
@@ -705,7 +708,7 @@ def check_prefix_campaign_workflow(workflow, authority)
     check(job["needs"] == expected_needs,
           "#{label} #{name} dependencies changed")
     expected_permissions = if name == "build-bootstrap-rootfs"
-      { "actions" => "read", "contents" => "read" }
+      { "actions" => "read", "contents" => "write" }
     else
       publish_permissions
     end
@@ -766,7 +769,11 @@ def check_prefix_campaign_workflow(workflow, authority)
   )
   check(
     exact_permissions?(
-      first_child["permissions"], publish_permissions
+      first_child["permissions"], {
+        "actions" => "read",
+        "contents" => "read",
+        "packages" => "write",
+      }
     ),
     "#{label} first-child permissions changed"
   )
