@@ -931,9 +931,10 @@ def check_prefix_campaign_workflow(workflow, authority)
         "repository" => "kandelo-dev/homebrew-tap-core",
         "ref" => expression("needs.admit.outputs.old-tap-commit"),
         "path" => "old-tap",
+        "fetch-depth" => 0,
         "persist-credentials" => false,
       },
-    "#{label} historical reuse checkout changed"
+    "#{label} historical reuse checkout does not retain Formula history"
   )
 
   seal_steps = jobs.dig("seal-handoff", "steps")

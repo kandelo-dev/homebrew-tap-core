@@ -315,6 +315,9 @@ jobs:
           repository: kandelo-dev/homebrew-tap-core
           ref: ${{ needs.admit.outputs.old-tap-commit }}
           path: old-tap
+          # WHY: a bottle may record Formula bytes from an older commit.
+          # Keep history so the executor can verify that exact source.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Download admitted publication handoff
