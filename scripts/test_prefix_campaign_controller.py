@@ -192,6 +192,20 @@ def active_authority(
     }
 
 
+def armed_authority() -> dict[str, object]:
+    authority = active_authority(b"unused while armed")
+    authority["state"] = "armed"
+    authority["source_tap_commit"] = "0" * 40
+    authority["campaign_release"]["tag"] = (
+        "homebrew-prefix-campaign-sha256-" + "0" * 64
+    )
+    authority["package_generations"]["rootfs_wasm32"] = (
+        "package-generation-rootfs-wasm32-abi-v42-sha256-"
+        + "0" * 64
+    )
+    return authority
+
+
 def event_document(
     *,
     formula: str = "leaf",
@@ -338,12 +352,96 @@ class Fixture:
 
 
 class PrefixCampaignControllerTests(unittest.TestCase):
-    def test_checked_in_authority_is_active(self) -> None:
+    def test_checked_in_authority_has_safe_rollout_state(self) -> None:
         authority = CONTROLLER.load_authority(
             AUTHORITY,
-            require_active=True,
+            require_active=False,
         )
-        self.assertEqual(authority.state, "active")
+        self.assertIn(authority.state, ("armed", "active"))
+        if authority.state == "armed":
+            self.assertEqual(
+                authority.source_tap_commit,
+                "0" * 40,
+            )
+            return
+
+        # WHY: GitHub's GITHUB_TOKEN cannot create a release that targets a
+        # historical commit with different workflow bytes. Activation may
+        # fill campaign data, but it must preserve the armed source's exact
+        # workflow tree until every handoff release has been sealed.
+        self.assertEqual(
+            CONTROLLER.git_output(
+                ROOT,
+                "rev-parse",
+                "HEAD:.github/workflows",
+            ),
+            CONTROLLER.git_output(
+                ROOT,
+                "rev-parse",
+                f"{authority.source_tap_commit}:.github/workflows",
+            ),
+        )
+
+    def test_armed_authority_is_valid_but_cannot_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            authority_path = pathlib.Path(directory) / "authority.json"
+            write_pretty(authority_path, armed_authority())
+            authority = CONTROLLER.load_authority(
+                authority_path,
+                require_active=False,
+            )
+            self.assertEqual(authority.state, "armed")
+            with self.assertRaises(CONTROLLER.ControllerError) as raised:
+                CONTROLLER.load_authority(
+                    authority_path,
+                    require_active=True,
+                )
+            self.assertEqual(
+                raised.exception.status,
+                "campaign-authority-inert",
+            )
+            self.assertEqual(
+                raised.exception.exit_code,
+                CONTROLLER.INERT_EXIT,
+            )
+
+            mixed = armed_authority()
+            mixed["source_tap_commit"] = SOURCE_TAP_COMMIT
+            write_pretty(authority_path, mixed)
+            with self.assertRaises(CONTROLLER.ControllerError) as raised:
+                CONTROLLER.load_authority(
+                    authority_path,
+                    require_active=False,
+                )
+            self.assertEqual(
+                raised.exception.status,
+                "invalid-contract",
+            )
+
+    def test_campaign_source_must_share_active_workflow_tree(self) -> None:
+        with mock.patch.object(
+            CONTROLLER,
+            "git_output",
+            side_effect=("1" * 40, "1" * 40),
+        ):
+            CONTROLLER.require_matching_workflow_tree(
+                ROOT,
+                ROOT,
+            )
+        with mock.patch.object(
+            CONTROLLER,
+            "git_output",
+            side_effect=("1" * 40, "2" * 40),
+        ):
+            with self.assertRaises(CONTROLLER.ControllerError) as raised:
+                CONTROLLER.require_matching_workflow_tree(
+                    ROOT,
+                    ROOT,
+                )
+        self.assertEqual(
+            raised.exception.status,
+            "invalid-checkout",
+        )
 
     def test_cli_reports_inert_before_external_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -499,6 +597,10 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 ),
                 mock.patch.object(
                     CONTROLLER,
+                    "require_matching_workflow_tree",
+                ),
+                mock.patch.object(
+                    CONTROLLER,
                     "fetch_campaign",
                     return_value=fixture.campaign,
                 ) as fetch_campaign,
@@ -569,6 +671,10 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 mock.patch.object(
                     CONTROLLER,
                     "require_target_source_checkout",
+                ),
+                mock.patch.object(
+                    CONTROLLER,
+                    "require_matching_workflow_tree",
                 ),
                 mock.patch.object(
                     CONTROLLER,
