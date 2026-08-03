@@ -117,6 +117,27 @@ class PublisherTrustRotationTests(unittest.TestCase):
         mutation(authority)
         path.write_text(json.dumps(authority, indent=2) + "\n")
 
+    def arm_rotation_authority_fixture(
+        self,
+        root: pathlib.Path | None = None,
+    ) -> None:
+        path = (root or self.root) / rotation.PREFIX_AUTHORITY_PATH
+        authority = json.loads(path.read_text())
+        if authority.get("state") == "armed":
+            return
+        self.assertEqual("active", authority.get("state"))
+        # WHY: this suite exercises the executable-trust rotation helper,
+        # which intentionally accepts only an inactive, armed campaign. The
+        # repository's live authority may be active while that campaign runs,
+        # so give each isolated test the armed input it is designed to mutate.
+        authority["campaign_release"]["tag"] = rotation.ZERO_CAMPAIGN_TAG
+        authority["package_generations"]["rootfs_wasm32"] = (
+            rotation.ZERO_GENERATION_TAG
+        )
+        authority["source_tap_commit"] = rotation.ZERO_SHA
+        authority["state"] = "armed"
+        path.write_text(json.dumps(authority, indent=2) + "\n")
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = pathlib.Path(self.temporary.name)
@@ -124,6 +145,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
             destination = self.root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / relative, destination)
+        self.arm_rotation_authority_fixture()
 
         self.predecessor_sha = self.scalar_value(
             rotation.TRUST_PATH,
@@ -1032,6 +1054,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
             full_root,
             ignore=shutil.ignore_patterns(".git", "__pycache__"),
         )
+        self.arm_rotation_authority_fixture(full_root)
         candidate = rotation.build_rotation(
             full_root,
             predecessor_kandelo_sha=self.predecessor_sha,
