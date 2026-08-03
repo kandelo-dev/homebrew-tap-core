@@ -585,20 +585,33 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             output = fixture.root / "task.json"
             github_output = fixture.root / "github-output"
             github_output.touch()
+            raw_kandelo_root = pathlib.Path("kandelo")
+            raw_source_tap_root = pathlib.Path("source-tap")
+
+            def exact_checkout(
+                root: pathlib.Path,
+                *_args: object,
+            ) -> pathlib.Path:
+                if root == raw_kandelo_root:
+                    return fixture.kandelo.resolve()
+                if root == raw_source_tap_root:
+                    return fixture.source_tap.resolve()
+                raise AssertionError(f"unexpected checkout root: {root}")
+
             with (
                 mock.patch.object(
                     CONTROLLER,
                     "require_exact_checkout",
-                    side_effect=lambda root, *_args: root.resolve(),
+                    side_effect=exact_checkout,
                 ),
                 mock.patch.object(
                     CONTROLLER,
                     "require_target_source_checkout",
-                ),
+                ) as target_source,
                 mock.patch.object(
                     CONTROLLER,
                     "require_matching_workflow_tree",
-                ),
+                ) as matching_workflows,
                 mock.patch.object(
                     CONTROLLER,
                     "fetch_campaign",
@@ -607,14 +620,29 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             ):
                 document = CONTROLLER.admit(
                     authority_path=fixture.authority,
-                    kandelo_root=fixture.kandelo,
-                    source_tap_root=fixture.source_tap,
+                    kandelo_root=raw_kandelo_root,
+                    source_tap_root=raw_source_tap_root,
                     event_path=fixture.event,
                     output=output,
                     github_output=github_output,
                 )
             self.assertTrue(
                 fetch_campaign.call_args.kwargs["authenticated"]
+            )
+            self.assertEqual(
+                fetch_campaign.call_args.args[1],
+                fixture.kandelo.resolve(),
+            )
+            matching_workflows.assert_called_once_with(
+                ROOT,
+                fixture.source_tap.resolve(),
+            )
+            target_source.assert_called_once_with(
+                CONTROLLER.load_authority(
+                    fixture.authority,
+                    require_active=True,
+                ),
+                fixture.source_tap.resolve(),
             )
             self.assertEqual(document["disposition"], "build")
             self.assertEqual(
@@ -915,6 +943,8 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             github_output = fixture.root / "github-output"
             github_output.touch()
             commands: list[list[str]] = []
+            raw_kandelo_root = pathlib.Path("kandelo")
+            raw_source_tap_root = pathlib.Path("source-tap")
 
             def command_side_effect(
                 arguments: list[str],
@@ -943,13 +973,18 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 mock.patch.object(
                     CONTROLLER,
                     "prepare_task",
-                    return_value=(authority, plan),
+                    return_value=(
+                        authority,
+                        plan,
+                        fixture.kandelo.resolve(),
+                        fixture.source_tap.resolve(),
+                    ),
                 ) as prepare_task,
                 mock.patch.object(
                     CONTROLLER,
                     "materialize_target_source",
                     return_value=fixture.source_tap,
-                ),
+                ) as materialize_source,
                 mock.patch.object(
                     CONTROLLER,
                     "fetch_dependency_handoffs",
@@ -963,8 +998,8 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             ):
                 summary = CONTROLLER.prepare_build_release(
                     authority_path=fixture.authority,
-                    kandelo_root=fixture.kandelo,
-                    source_tap_root=fixture.source_tap,
+                    kandelo_root=raw_kandelo_root,
+                    source_tap_root=raw_source_tap_root,
                     event_path=fixture.event,
                     publications_root=publications,
                     output=output,
@@ -979,13 +1014,32 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             self.assertTrue(
                 fetch_dependencies.call_args.kwargs["authenticated"]
             )
+            self.assertEqual(
+                fetch_dependencies.call_args.kwargs["kandelo_root"],
+                fixture.kandelo.resolve(),
+            )
+            self.assertEqual(
+                materialize_source.call_args.args[1],
+                fixture.source_tap.resolve(),
+            )
             self.assertTrue(run.call_args_list)
             for call in run.call_args_list:
                 self.assertFalse(
                     call.kwargs.get("inherit_github_token", False)
                 )
+                self.assertEqual(
+                    call.kwargs["cwd"],
+                    fixture.kandelo.resolve(),
+                )
             self.assertEqual(len(commands), 2)
             derive = commands[0]
+            self.assertEqual(
+                derive[1],
+                str(
+                    fixture.kandelo.resolve()
+                    / "scripts/homebrew-prefix-campaign-executor.py"
+                ),
+            )
             self.assertEqual(derive[2], "derive-build")
             self.assertEqual(
                 derive[
@@ -1087,6 +1141,8 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             old_tap.mkdir()
             output = fixture.root / "prepared"
             commands: list[list[str]] = []
+            raw_kandelo_root = pathlib.Path("kandelo")
+            raw_source_tap_root = pathlib.Path("source-tap")
 
             def command_side_effect(
                 arguments: list[str],
@@ -1115,7 +1171,12 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 mock.patch.object(
                     CONTROLLER,
                     "prepare_task",
-                    return_value=(authority, plan),
+                    return_value=(
+                        authority,
+                        plan,
+                        fixture.kandelo.resolve(),
+                        fixture.source_tap.resolve(),
+                    ),
                 ) as prepare_task,
                 mock.patch.object(
                     CONTROLLER,
@@ -1126,7 +1187,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     CONTROLLER,
                     "materialize_target_source",
                     return_value=fixture.source_tap,
-                ),
+                ) as materialize_source,
                 mock.patch.object(
                     CONTROLLER,
                     "fetch_dependency_handoffs",
@@ -1140,8 +1201,8 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             ):
                 summary = CONTROLLER.prepare_reuse_release(
                     authority_path=fixture.authority,
-                    kandelo_root=fixture.kandelo,
-                    source_tap_root=fixture.source_tap,
+                    kandelo_root=raw_kandelo_root,
+                    source_tap_root=raw_source_tap_root,
                     old_tap_root=old_tap,
                     event_path=fixture.event,
                     output=output,
@@ -1156,10 +1217,22 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             self.assertTrue(
                 fetch_dependencies.call_args.kwargs["authenticated"]
             )
+            self.assertEqual(
+                fetch_dependencies.call_args.kwargs["kandelo_root"],
+                fixture.kandelo.resolve(),
+            )
+            self.assertEqual(
+                materialize_source.call_args.args[1],
+                fixture.source_tap.resolve(),
+            )
             self.assertTrue(run.call_args_list)
             for call in run.call_args_list:
                 self.assertFalse(
                     call.kwargs.get("inherit_github_token", False)
+                )
+                self.assertEqual(
+                    call.kwargs["cwd"],
+                    fixture.kandelo.resolve(),
                 )
             exact_checkout.assert_called_once_with(
                 old_tap,
@@ -1168,6 +1241,13 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             )
             self.assertEqual(len(commands), 2)
             derive = commands[0]
+            self.assertEqual(
+                derive[1],
+                str(
+                    fixture.kandelo.resolve()
+                    / "scripts/homebrew-prefix-campaign-executor.py"
+                ),
+            )
             self.assertEqual(derive[2], "derive-reuse")
             self.assertEqual(
                 derive[derive.index("--old-tap-root") + 1],
@@ -1198,6 +1278,12 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             handoff = handoff_document(authority, plan)
             tag = tag_for_handoff(handoff)
             commands: list[list[str]] = []
+            validated_kandelo_root = fixture.root / "validated-kandelo"
+            validated_source_tap_root = (
+                fixture.root / "validated-source-tap"
+            )
+            raw_kandelo_root = pathlib.Path("kandelo")
+            raw_source_tap_root = pathlib.Path("source-tap")
 
             def command_side_effect(
                 arguments: list[str],
@@ -1224,7 +1310,12 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 mock.patch.object(
                     CONTROLLER,
                     "prepare_task",
-                    return_value=(authority, plan),
+                    return_value=(
+                        authority,
+                        plan,
+                        validated_kandelo_root,
+                        validated_source_tap_root,
+                    ),
                 ) as prepare_task,
                 mock.patch.object(
                     CONTROLLER,
@@ -1239,8 +1330,8 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             ):
                 summary = CONTROLLER.verify_published_release(
                     authority_path=fixture.authority,
-                    kandelo_root=fixture.kandelo,
-                    source_tap_root=fixture.source_tap,
+                    kandelo_root=raw_kandelo_root,
+                    source_tap_root=raw_source_tap_root,
                     event_path=fixture.event,
                     tag=tag,
                     output=output,
@@ -1251,13 +1342,36 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     "authenticated_release_reads"
                 ]
             )
+            self.assertEqual(
+                prepare_task.call_args.kwargs["kandelo_root"],
+                raw_kandelo_root,
+            )
+            self.assertEqual(
+                prepare_task.call_args.kwargs["source_tap_root"],
+                raw_source_tap_root,
+            )
             self.assertFalse(
                 fetch_dependencies.call_args.kwargs["authenticated"]
+            )
+            self.assertEqual(
+                fetch_dependencies.call_args.kwargs["kandelo_root"],
+                validated_kandelo_root,
             )
             self.assertFalse(
                 run.call_args.kwargs["inherit_github_token"]
             )
+            self.assertEqual(
+                run.call_args.kwargs["cwd"],
+                validated_kandelo_root,
+            )
             self.assertEqual(len(commands), 1)
+            self.assertEqual(
+                commands[0][1],
+                str(
+                    validated_kandelo_root
+                    / "scripts/homebrew-prefix-campaign-executor.py"
+                ),
+            )
             self.assertEqual(commands[0][2], "fetch-release")
             self.assertIn(tag, commands[0])
             self.assertEqual(
