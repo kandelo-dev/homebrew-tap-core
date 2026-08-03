@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
@@ -18,6 +19,11 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts/prefix-campaign-controller.py"
 AUTHORITY = ROOT / "Kandelo/prefix-campaign-authority.json"
+ABANDONED_CAMPAIGN = (
+    ROOT
+    / "Kandelo/campaigns/prefix-v1/aborted-campaigns/"
+    "ab0290a46e54e67efbb0da2ac0e4b1f7176236e7877012b4872498798ce293ad.json"
+)
 SPEC = importlib.util.spec_from_file_location(
     "prefix_campaign_controller",
     SCRIPT,
@@ -352,6 +358,130 @@ class Fixture:
 
 
 class PrefixCampaignControllerTests(unittest.TestCase):
+    def test_abandoned_campaign_is_auditable_but_not_admissible(
+        self,
+    ) -> None:
+        record, _payload = CONTROLLER.load_json_bytes(
+            ABANDONED_CAMPAIGN,
+            "abandoned campaign record",
+            canonical=True,
+        )
+        self.assertEqual(record["schema"], 1)
+        self.assertEqual(
+            record["kind"],
+            "kandelo-homebrew-prefix-abandoned-campaign",
+        )
+        campaign_tag = record["authority"]["campaign_release"]["tag"]
+        campaign_sha256 = campaign_tag.removeprefix(
+            "homebrew-prefix-campaign-sha256-"
+        )
+        self.assertEqual(campaign_sha256, ABANDONED_CAMPAIGN.stem)
+        self.assertEqual(
+            len({item["run_id"] for item in record["dispatches"]}),
+            len(record["dispatches"]),
+        )
+        self.assertEqual(
+            {
+                (item["formula"], item["run_id"])
+                for item in record["dispatches"]
+            },
+            {
+                ("bzip2", 30780592137),
+                ("zlib", 30780595122),
+                ("libcxx", 30780597862),
+                ("openssl", 30780600596),
+                ("libyaml", 30780603037),
+                ("homebrew-bootstrap", 30780606060),
+                ("coreutils", 30780609955),
+                ("posix-utils-lite", 30780612168),
+            },
+        )
+        self.assertEqual(
+            {
+                item["handoff_release"]["id"]
+                for item in record["dispatches"]
+                if "handoff_release" in item
+            },
+            {363965880, 363965882, 363965943, 363966055, 363966067},
+        )
+
+        armed_value, _armed_payload = CONTROLLER.load_json_bytes(
+            AUTHORITY,
+            "checked-in campaign authority",
+            canonical=True,
+        )
+        self.assertEqual(armed_value["state"], "armed")
+        self.assertEqual(
+            armed_value["kandelo_commit"],
+            record["authority"]["kandelo_commit"],
+        )
+        active_value = copy.deepcopy(armed_value)
+        active_value["campaign_release"] = record["authority"][
+            "campaign_release"
+        ].copy()
+        active_value["campaign_release"].pop("id")
+        active_value["package_generations"]["rootfs_wasm32"] = record[
+            "authority"
+        ]["rootfs_wasm32"]
+        active_value["source_tap_commit"] = record["authority"][
+            "source_tap_commit"
+        ]
+        active_value["state"] = "active"
+        self.assertEqual(
+            hashlib.sha256(
+                CONTROLLER.pretty_json(active_value)
+            ).hexdigest(),
+            record["authority"]["payload_sha256"],
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            abandoned_event = pathlib.Path(directory) / "event.json"
+            write_pretty(
+                abandoned_event,
+                {
+                    "action": CONTROLLER.EVENT_TYPE,
+                    "client_payload": {
+                        "arches": ["wasm32"],
+                        "dependency_handoffs": [],
+                        "formula": "bzip2",
+                    },
+                },
+            )
+            with self.assertRaises(
+                CONTROLLER.ControllerError
+            ) as raised:
+                CONTROLLER.preflight(
+                    AUTHORITY,
+                    abandoned_event,
+                    None,
+                )
+            self.assertEqual(
+                raised.exception.status,
+                "campaign-authority-inert",
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(pathlib.Path(directory))
+            authority = CONTROLLER.load_authority(
+                fixture.authority,
+                require_active=True,
+            )
+            plan = fixture.plan()
+            handoff = handoff_document(authority, plan)
+            handoff["campaign"]["sha256"] = campaign_sha256
+            handoff_path = fixture.root / "abandoned-handoff.json"
+            write_pretty(handoff_path, handoff)
+            # WHY: public handoff evidence remains truthful after an abort,
+            # but a later campaign must explicitly rebind it after proving
+            # unchanged inputs. It cannot pass as the successor handoff.
+            with self.assertRaises(CONTROLLER.ControllerError):
+                CONTROLLER.validate_readback_handoff(
+                    handoff_path,
+                    authority=authority,
+                    plan=plan,
+                    tag=tag_for_handoff(handoff),
+                )
+
     def test_checked_in_authority_has_safe_rollout_state(self) -> None:
         authority = CONTROLLER.load_authority(
             AUTHORITY,
