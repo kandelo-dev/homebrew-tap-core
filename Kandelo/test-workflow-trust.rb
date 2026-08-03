@@ -895,8 +895,21 @@ def check_prefix_campaign_workflow(workflow, authority)
   )
   check(exact_permissions?(
           jobs.dig("seal-handoff", "permissions"),
-          { "actions" => "read", "contents" => "write" }
+          {
+            "actions" => "read",
+            "contents" => "write",
+            "packages" => "write",
+          }
         ), "#{label} release permissions changed")
+  check(
+    jobs.dig("seal-handoff", "concurrency") == {
+      "group" =>
+        "kandelo-homebrew-ghcr-" \
+        "#{expression('needs.admit.outputs.formula')}",
+      "cancel-in-progress" => false,
+    },
+    "#{label} reuse publication does not share the Formula lock"
+  )
   check(
     jobs.dig("seal-handoff", "needs") == [
       "admit",
@@ -987,9 +1000,36 @@ def check_prefix_campaign_workflow(workflow, authority)
   controller_token = {
     "GH_TOKEN" => expression("github.token"),
   }
+  formula_env = {
+    "FORMULA" => expression("needs.admit.outputs.formula"),
+  }
+  publish_env = formula_env.merge(
+    "GH_TOKEN" => expression("github.token"),
+    "KANDELO_COMMIT" =>
+      expression("needs.admit.outputs.kandelo-commit"),
+    "TAP_COMMIT" =>
+      expression("needs.admit.outputs.source-tap-commit")
+  )
   check(values_for_key(workflow, "env") == [
           controller_token,
           controller_token,
+          formula_env.merge(
+            "ARCH" => expression("needs.admit.outputs.arch"),
+            "KANDELO_COMMIT" =>
+              expression("needs.admit.outputs.kandelo-commit"),
+            "RELEASE_TAG" =>
+              expression("needs.admit.outputs.release-tag"),
+            "TAP_COMMIT" =>
+              expression("needs.admit.outputs.source-tap-commit")
+          ),
+          publish_env,
+          formula_env,
+          formula_env.merge(
+            "TAP_COMMIT" =>
+              expression("needs.admit.outputs.source-tap-commit")
+          ),
+          publish_env,
+          formula_env,
           controller_token,
         ], "#{label} credential boundary changed")
 
@@ -1020,7 +1060,8 @@ def check_prefix_campaign_workflow(workflow, authority)
   seal_steps = jobs.dig("seal-handoff", "steps")
   check(seal_steps.is_a?(Array), "#{label} release steps changed")
   prepare_step = seal_steps.find do |step|
-    step["name"] == "Derive and prepare immutable Formula handoff"
+    step["name"] ==
+      "Derive immutable Formula handoff and reused OCI child"
   end
   nix_step = seal_steps.find do |step|
     step["name"] == "Install Nix for handoff derivation"
@@ -1046,6 +1087,78 @@ def check_prefix_campaign_workflow(workflow, authority)
         '--old-tap-root "$GITHUB_WORKSPACE/old-tap"'
       ),
     "#{label} handoff derivation bypasses the Kandelo dev shell"
+  )
+  reuse_condition =
+    expression("needs.admit.outputs.disposition == 'reuse'")
+  reuse_steps = [
+    "Validate the reused OCI child without credentials",
+    "Publish or resume the exact reused OCI child",
+    "Revalidate public reused child evidence without credentials",
+    "Compose the public Homebrew version index without credentials",
+    "Publish the reused bottle version index",
+    "Revalidate public version-index evidence without credentials",
+  ].map do |name|
+    step = seal_steps.find { |candidate| candidate["name"] == name }
+    check(
+      step.is_a?(Hash) && step["if"] == reuse_condition &&
+        step["run"].is_a?(String),
+      "#{label} #{name} route changed"
+    )
+    step
+  end
+  child_validate, child_publish, child_readback,
+    index_compose, index_publish, index_readback = reuse_steps
+  publish_step = seal_steps.find do |step|
+    step["name"] == "Publish immutable Formula handoff"
+  end
+  check(
+    ([prepare_step] + reuse_steps + [publish_step]).each_cons(2).all? do |a, b|
+      seal_steps.index(a) < seal_steps.index(b)
+    end,
+    "#{label} can seal a reuse handoff before public OCI readback"
+  )
+  check(
+    child_validate["run"].include?("validate-child") &&
+      child_validate["run"].include?(
+        'child="$RUNNER_TEMP/prepared-handoff-release/reuse-oci"'
+      ) &&
+      !child_validate.fetch("env", {}).key?("GH_TOKEN"),
+    "#{label} reused child is not independently validated"
+  )
+  check(
+    child_publish["env"] == publish_env &&
+      child_publish["run"].include?("homebrew-ghcr-upload.sh") &&
+      child_publish["run"].include?("--kandelo-main-contains-sha") &&
+      child_publish["run"].include?("--target-main-contains-sha") &&
+      child_publish["run"].include?("--destination-mode repository"),
+    "#{label} reused child publisher authority changed"
+  )
+  check(
+    child_readback["env"] == formula_env &&
+      child_readback["run"].include?("validate-publication-receipt") &&
+      child_readback["run"].include?("--kind child"),
+    "#{label} reused child lacks anonymous publication evidence"
+  )
+  check(
+    index_compose["run"].include?("import-public-index") &&
+      index_compose["run"].include?("merge-index") &&
+      index_compose["run"].include?('printf \'{"auths":{}}\\n\'') &&
+      !index_compose.fetch("env", {}).key?("GH_TOKEN"),
+    "#{label} reused index is not composed from anonymous state"
+  )
+  check(
+    index_publish["env"] == publish_env &&
+      index_publish["run"].include?("homebrew-ghcr-upload.sh") &&
+      index_publish["run"].include?("--kandelo-main-contains-sha") &&
+      index_publish["run"].include?("--target-main-contains-sha") &&
+      index_publish["run"].include?("--destination-mode repository"),
+    "#{label} reused index publisher authority changed"
+  )
+  check(
+    index_readback["env"] == formula_env &&
+      index_readback["run"].include?("validate-publication-receipt") &&
+      index_readback["run"].include?("--kind index"),
+    "#{label} reused index lacks anonymous publication evidence"
   )
   verify_step = seal_steps.find do |step|
     step["name"] == "Revalidate the release without credentials"
@@ -1081,9 +1194,6 @@ def check_prefix_campaign_workflow(workflow, authority)
       "attempt-#{expression('github.run_attempt')}",
     "#{label} controller evidence is not architecture-scoped"
   )
-  publish_step = seal_steps.find do |step|
-    step["name"] == "Publish immutable Formula handoff"
-  end
   check(publish_step.is_a?(Hash),
         "#{label} immutable release step changed")
   publish_run = publish_step["run"]
@@ -1091,10 +1201,10 @@ def check_prefix_campaign_workflow(workflow, authority)
         "#{label} immutable release command changed")
   expected_publish_run = [
     "set -euo pipefail",
-    "# WHY: credentials enter only after all task data is sealed.",
-    "# A campaign may outlive later Kandelo merges. Each release",
-    "# therefore re-proves that its sealed source remains on",
-    "# protected main.",
+    "# WHY: handoff-release credentials enter only after the child and",
+    "# index are publicly readable. A campaign may outlive later Kandelo",
+    "# merges, so each release also re-proves that its sealed source",
+    "# remains on protected main.",
     "bash kandelo/scripts/publish-immutable-github-release.sh \\",
     "  --manifest \\",
     "    \"$RUNNER_TEMP/prepared-handoff-release/" \
@@ -1826,12 +1936,66 @@ def self_test(
     mutated = deep_copy(prefix_campaign)
     step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
       item["name"] ==
-        "Derive and prepare immutable Formula handoff"
+        "Derive immutable Formula handoff and reused OCI child"
     end
     step["run"] = step["run"].sub(
       'bash scripts/dev-shell.sh "${controller[@]}" ',
       ""
     )
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("reuse publication without the Formula lock") do
+    mutated = deep_copy(prefix_campaign)
+    mutated.dig("jobs", "seal-handoff").delete("concurrency")
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("reuse publication without package authority") do
+    mutated = deep_copy(prefix_campaign)
+    mutated.dig(
+      "jobs", "seal-handoff", "permissions"
+    ).delete("packages")
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("reuse child publication enabled for builds") do
+    mutated = deep_copy(prefix_campaign)
+    step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
+      item["name"] == "Publish or resume the exact reused OCI child"
+    end
+    step["if"] = expression("needs.admit.result == 'success'")
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("reuse child publication without source ancestry") do
+    mutated = deep_copy(prefix_campaign)
+    step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
+      item["name"] == "Publish or resume the exact reused OCI child"
+    end
+    step["run"] = step["run"].sub(
+      /[ \t]*--target-main-contains-sha "\$TAP_COMMIT" \\\n/,
+      ""
+    )
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("credential inherited by reuse index composition") do
+    mutated = deep_copy(prefix_campaign)
+    step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
+      item["name"] ==
+        "Compose the public Homebrew version index without credentials"
+    end
+    step["env"]["GH_TOKEN"] = expression("github.token")
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("reuse handoff sealed before public index readback") do
+    mutated = deep_copy(prefix_campaign)
+    steps = mutated.dig("jobs", "seal-handoff", "steps")
+    release_index = steps.index do |item|
+      item["name"] == "Publish immutable Formula handoff"
+    end
+    readback_index = steps.index do |item|
+      item["name"] ==
+        "Revalidate public version-index evidence without credentials"
+    end
+    release = steps.delete_at(release_index)
+    steps.insert(readback_index, release)
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
   expect_rejection("workflow SHA as campaign source ancestry") do

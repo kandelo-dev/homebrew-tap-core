@@ -236,6 +236,41 @@ artifacts before it receives package-write authority. Until those Kandelo-side
 contracts and their trust tests are present at the authority's immutable
 workflow commit, the campaign authority must remain non-active.
 
+## Prefix-campaign bottle reuse
+
+Reusing bottle bytes avoids a rebuild, but it is not permission to skip normal
+Homebrew publication. A campaign reuse handoff is safe to consume only after
+the selected archive also exists as a public OCI child in the current tap
+namespace and the Formula's public version index names that exact child.
+
+The reuse route performs these operations in order:
+
+1. Kandelo's frozen campaign executor downloads and validates the historical
+   bottle and derives the immutable Formula handoff.
+2. The same executor composes a normal OCI child from those validated bytes and
+   the sealed target Formula source. It does not rebuild the software or change
+   the bottle layer.
+3. The tap publishes that content-addressed child, or resumes only when the
+   exact digest is already public, and validates an anonymous readback receipt.
+4. While holding the ordinary per-Formula GHCR lock, the tap anonymously reads
+   the existing version index, merges the new child without dropping a wasm32
+   or wasm64 sibling, publishes the index, and validates its anonymous readback
+   receipt.
+5. Only then may the tap publish the immutable Formula handoff release.
+
+The child stands on its own once step 3 succeeds. If index publication or
+handoff sealing later fails, a retry revalidates and reuses the already-public
+child rather than rebuilding or hiding it. The mutable index is serialized
+only to prevent two successful architectures from overwriting one another;
+campaign-wide completion is not required for either bottle to remain useful.
+
+Package-write credentials are exercised only by the child and index transport
+steps. The controller's token is forwarded only to its internal release reads,
+and the final handoff step uses separate GitHub release authority. Child
+validation, public-index import and composition, and both publication-receipt
+validations run without package credentials. The workflow retains the child,
+index, and anonymous-readback receipts as bounded run evidence.
+
 ## Post-Publication Acceptance
 
 Treat a write run as accepted only after the centralized

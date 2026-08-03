@@ -1422,6 +1422,93 @@ def require_publication_roots(
     return output
 
 
+def require_reuse_oci_tree(root: pathlib.Path) -> pathlib.Path:
+    try:
+        root_metadata = root.lstat()
+    except OSError as error:
+        fail(
+            "invalid-release",
+            f"cannot inspect prepared reuse OCI child: {error}",
+        )
+    if not stat.S_ISDIR(root_metadata.st_mode) or root.is_symlink():
+        fail(
+            "invalid-release",
+            "prepared reuse OCI child must be a real directory",
+        )
+    layout = root / "layout"
+    try:
+        root_names = {path.name for path in root.iterdir()}
+        layout_metadata = layout.lstat()
+        layout_names = {path.name for path in layout.iterdir()}
+        blobs_metadata = (layout / "blobs").lstat()
+        blobs_names = {
+            path.name for path in (layout / "blobs").iterdir()
+        }
+        sha_root = layout / "blobs/sha256"
+        sha_metadata = sha_root.lstat()
+        blob_paths = list(sha_root.iterdir())
+    except OSError as error:
+        fail(
+            "invalid-release",
+            f"cannot walk prepared reuse OCI child: {error}",
+        )
+    if (
+        root_names != {"layout", "receipt.json"}
+        or layout_names != {"blobs", "index.json", "oci-layout"}
+        or blobs_names != {"sha256"}
+        or not stat.S_ISDIR(layout_metadata.st_mode)
+        or not stat.S_ISDIR(blobs_metadata.st_mode)
+        or not stat.S_ISDIR(sha_metadata.st_mode)
+        or layout.is_symlink()
+        or (layout / "blobs").is_symlink()
+        or sha_root.is_symlink()
+        or len(blob_paths) != 3
+        or any(SHA256.fullmatch(path.name) is None for path in blob_paths)
+    ):
+        fail(
+            "invalid-release",
+            "prepared reuse OCI child has an unexpected layout shape",
+        )
+    files = [
+        root / "receipt.json",
+        layout / "index.json",
+        layout / "oci-layout",
+        *blob_paths,
+    ]
+    total_bytes = 0
+    for path in files:
+        try:
+            metadata = path.lstat()
+        except OSError as error:
+            fail(
+                "invalid-release",
+                f"cannot inspect prepared reuse OCI file: {error}",
+            )
+        limit = (
+            MAX_HANDOFF_ASSET_BYTES
+            if path.parent == sha_root
+            else MAX_JSON_BYTES
+        )
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or path.is_symlink()
+            or metadata.st_nlink != 1
+            or metadata.st_size < 1
+            or metadata.st_size > limit
+        ):
+            fail(
+                "invalid-release",
+                "prepared reuse OCI child contains an unsafe file",
+            )
+        total_bytes += metadata.st_size
+        if total_bytes > MAX_HANDOFF_TOTAL_BYTES:
+            fail(
+                "invalid-release",
+                "prepared reuse OCI child exceeds its total byte limit",
+            )
+    return root
+
+
 def prepare_handoff_release(
     *,
     authority: Authority,
@@ -1432,6 +1519,7 @@ def prepare_handoff_release(
     working: pathlib.Path,
     output: pathlib.Path,
     github_output: pathlib.Path | None,
+    reuse_oci: pathlib.Path | None = None,
 ) -> dict[str, Any]:
     executor = (
         kandelo_root
@@ -1475,6 +1563,18 @@ def prepare_handoff_release(
         "prepared handoff release tag",
         HANDOFF_TAG,
     )
+    if reuse_oci is not None:
+        reuse_oci = require_reuse_oci_tree(reuse_oci)
+        reuse_destination = prepared / "reuse-oci"
+        if reuse_destination.exists() or reuse_destination.is_symlink():
+            fail(
+                "invalid-release",
+                "prepared release already contains a reuse OCI child",
+            )
+        # WHY: keep the immutable child and Formula handoff in one atomic
+        # controller output. The workflow must publish and publicly read back
+        # this exact child before it is allowed to seal the handoff release.
+        os.rename(reuse_oci, reuse_destination)
     summary = {
         "arches": list(plan.request.arches),
         "authority_sha256": authority.sha256,
@@ -1683,6 +1783,37 @@ def prepare_reuse_release(
         # owns every reuse provenance, layout, dependency, and archive
         # validation rule.
         run_command(derive, cwd=kandelo_root)
+        reuse_oci = working / "reuse-oci"
+        compose = [
+            "python3",
+            str(executor),
+            "compose-reuse-child",
+            "--campaign",
+            str(plan.campaign_path),
+            "--source-tap-root",
+            str(target_source_root),
+            "--handoff",
+            str(handoff),
+            "--formula",
+            plan.request.formula,
+            "--arch",
+            plan.request.arches[0],
+            "--out",
+            str(reuse_oci),
+        ]
+        run_command(compose, cwd=kandelo_root)
+        run_command(
+            [
+                "python3",
+                str(kandelo_root / "scripts/homebrew-oci-layout.py"),
+                "validate-child",
+                "--layout",
+                str(reuse_oci / "layout"),
+                "--receipt",
+                str(reuse_oci / "receipt.json"),
+            ],
+            cwd=kandelo_root,
+        )
         return prepare_handoff_release(
             authority=authority,
             plan=plan,
@@ -1692,6 +1823,7 @@ def prepare_reuse_release(
             working=working,
             output=output,
             github_output=github_output,
+            reuse_oci=reuse_oci,
         )
     finally:
         shutil.rmtree(working, ignore_errors=True)
