@@ -28,6 +28,8 @@ jobs:
       generation-wasm64: ${{ steps.admit.outputs.generation-wasm64 }}
       kandelo-commit: ${{ steps.authority.outputs.kandelo-commit }}
       old-tap-commit: ${{ steps.admit.outputs.old-tap-commit }}
+      recovery-tap-commit: >-
+        ${{ steps.admit.outputs.recovery-tap-commit }}
       release-tag: ${{ steps.authority.outputs.release-tag }}
       rootfs-wasm32-generation: >-
         ${{ steps.authority.outputs.rootfs-wasm32-generation }}
@@ -615,6 +617,141 @@ jobs:
             ${{ runner.temp }}/reuse-child-publication.json
             ${{ runner.temp }}/reuse-complete-index/layout-receipt.json
             ${{ runner.temp }}/reuse-complete-index/transport-receipt.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+
+  reseal-predecessor-handoff:
+    # WHY: predecessor bottles and their version indexes are already public.
+    # A separate contents-only job makes it impossible for this path to write
+    # GHCR while it binds the existing bytes to the current campaign.
+    needs:
+      - admit
+      - publish-rootfs
+      - build-bootstrap-rootfs
+      - publish-first-child
+      - publish-bootstrap-rootfs
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.admit.result == 'success' &&
+        needs.admit.outputs.disposition == 'predecessor-reuse' &&
+        needs.admit.outputs.generation-kind == 'none' &&
+        needs.admit.outputs.admission-kind ==
+          'archived-predecessor-exact-presence' &&
+        needs.publish-rootfs.result == 'skipped' &&
+        needs.build-bootstrap-rootfs.result == 'skipped' &&
+        needs.publish-first-child.result == 'skipped' &&
+        needs.publish-bootstrap-rootfs.result == 'skipped'
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout protected caller
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - name: Checkout exact Kandelo executor
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: Automattic/kandelo
+          ref: ${{ needs.admit.outputs.kandelo-commit }}
+          path: kandelo
+          persist-credentials: false
+          submodules: false
+
+      - name: Checkout exact campaign source tap
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: kandelo-dev/homebrew-tap-core
+          ref: ${{ needs.admit.outputs.source-tap-commit }}
+          path: source-tap
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout exact predecessor recovery archive
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: kandelo-dev/homebrew-tap-core
+          ref: ${{ needs.admit.outputs.recovery-tap-commit }}
+          path: recovery-tap
+          persist-credentials: false
+
+      - name: Install Nix for handoff derivation
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+        with:
+          github-token: ""
+
+      - name: Reseal exact predecessor bottle handoff
+        id: handoff
+        shell: bash
+        env:
+          # WHY: predecessor and dependency handoffs are internal controller
+          # inputs. The controller forwards this token only to release reads.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd kandelo
+          bash scripts/dev-shell.sh python3 \
+            "$GITHUB_WORKSPACE/scripts/prefix-campaign-controller.py" \
+            prepare-predecessor-reuse \
+            --kandelo-root "$GITHUB_WORKSPACE/kandelo" \
+            --source-tap-root "$GITHUB_WORKSPACE/source-tap" \
+            --recovery-tap-root "$GITHUB_WORKSPACE/recovery-tap" \
+            --event "$GITHUB_EVENT_PATH" \
+            --out "$RUNNER_TEMP/prepared-handoff-release" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Publish immutable Formula handoff
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # WHY: the bottle and index were verified in place. This is the
+          # only mutation in the job, and it publishes current campaign
+          # evidence rather than rewriting package bytes.
+          bash kandelo/scripts/publish-immutable-github-release.sh \
+            --manifest \
+              "$RUNNER_TEMP/prepared-handoff-release/release-manifest.json" \
+            --asset-root \
+              "$RUNNER_TEMP/prepared-handoff-release/assets" \
+            --lock-root source-tap \
+            --receipt "$RUNNER_TEMP/publish-receipt.json" \
+            --kandelo-main-contains-sha \
+              "${{ needs.admit.outputs.kandelo-commit }}" \
+            --target-main-contains-sha \
+              "${{ needs.admit.outputs.source-tap-commit }}"
+
+      - name: Revalidate public release assets
+        shell: bash
+        env:
+          # WHY: authenticate GitHub release metadata only. Asset downloads
+          # remain credential-free so the handoff must be publicly readable.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prefix-campaign-controller.py verify-release \
+            --kandelo-root kandelo \
+            --source-tap-root source-tap \
+            --event "$GITHUB_EVENT_PATH" \
+            --tag "${{ steps.handoff.outputs.handoff-tag }}" \
+            --out "$RUNNER_TEMP/readback-handoff"
+
+      - name: Retain bounded controller evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: >-
+            prefix-campaign-controller-${{ needs.admit.outputs.formula }}-${{ needs.admit.outputs.arch }}-attempt-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/controller-summary.json
+            ${{ runner.temp }}/publish-receipt.json
+            ${{ runner.temp }}/readback-receipt.json
+            ${{ runner.temp }}/readback-summary.json
           compression-level: 0
           if-no-files-found: error
           retention-days: 14
