@@ -65,9 +65,9 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # While split, credentialed callers retain their complete older tuple and
 # fail the publisher's current-main check. A full rotation converges both
 # pins only after a fresh generation is admitted.
-CURRENT_KANDELO_WORKFLOW_SHA = "9f9a03970637c28af7b3faacb329597bbc733291"
+CURRENT_KANDELO_WORKFLOW_SHA = "214cfb2d656383655d083b7ada0771bfb2fd05e6"
 CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
-DRY_RUN_KANDELO_WORKFLOW_SHA = "9f9a03970637c28af7b3faacb329597bbc733291"
+DRY_RUN_KANDELO_WORKFLOW_SHA = "214cfb2d656383655d083b7ada0771bfb2fd05e6"
 # WHY: the lifecycle caller must remain pinned to reviewed Kandelo main. TA0,
 # the catalog, and the canary are separate final immutable authorities.
 MAIN_SHELL_MIRROR_KANDELO_SHA =
@@ -76,12 +76,12 @@ MAIN_SHELL_MIRROR_TAP_CATALOG_SHA = "6ad0e3dbc60e5572c4288c86919238f71c1bc110"
 MAIN_SHELL_MIRROR_AUTHORITY_SHA =
   "08f8f32c94bee8d6fc2948e453e53ece29b1c8e1"
 MAIN_SHELL_MIRROR_CANARY_SHA = "d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc"
-PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-1f79e4963c916904514adcd177d399161ec2745f171a0c82714a9ba02fb7f9d8"
+PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-b2c97f4ac44b978b1a46bae90073bf3a0d0973e7f9fbf700f057315bd1853129"
 # WHY: a closed selection writes an immutable release. The protected tap
 # caller must select exactly the Kandelo main commit that owns every executable
 # publication step; a mutable ref would let those steps change after review.
 CLOSED_SELECTION_KANDELO_SHA =
-  "9f9a03970637c28af7b3faacb329597bbc733291"
+  "214cfb2d656383655d083b7ada0771bfb2fd05e6"
 
 def check(condition, message)
   raise message unless condition
@@ -208,7 +208,7 @@ PAT_PUBLISH_SECRETS = {
     expression("secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN"),
 }.freeze
 
-FIRST_PUBLICATION_KANDELO_SHA = "9f9a03970637c28af7b3faacb329597bbc733291"
+FIRST_PUBLICATION_KANDELO_SHA = "214cfb2d656383655d083b7ada0771bfb2fd05e6"
 RETIRED_PAT_KANDELO_WORKFLOW_SHA = "acc54b0d0fb5ffc1e742d437081a58bfd163e785"
 PREVIOUS_KANDELO_WORKFLOW_SHA = "a71ab7a03cef9cb456e24c7b5f46bbc42122d9c4"
 RETIRED_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
