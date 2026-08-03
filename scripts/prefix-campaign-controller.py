@@ -1262,7 +1262,7 @@ def prepare_task(
     event_path: pathlib.Path,
     working: pathlib.Path,
     authenticated_release_reads: bool,
-) -> tuple[Authority, TaskPlan]:
+) -> tuple[Authority, TaskPlan, pathlib.Path, pathlib.Path]:
     authority = load_authority(authority_path, require_active=True)
     request = load_task_request(event_path)
     kandelo_root = require_exact_checkout(
@@ -1284,7 +1284,11 @@ def prepare_task(
         authenticated=authenticated_release_reads,
     )
     plan = validate_campaign(campaign_path, authority, request)
-    return authority, plan
+    # WHY: later commands run with a checkout as their working directory. A
+    # relative input such as `kandelo` would otherwise be interpreted again as
+    # `kandelo/kandelo` after validation. Return the exact canonical roots that
+    # require_exact_checkout already validated instead of reusing raw inputs.
+    return authority, plan, kandelo_root, source_tap_root
 
 
 def dependency_order(
@@ -1523,7 +1527,7 @@ def prepare_build_release(
         )
     )
     try:
-        authority, plan = prepare_task(
+        authority, plan, kandelo_root, source_tap_root = prepare_task(
             authority_path=authority_path,
             kandelo_root=kandelo_root,
             source_tap_root=source_tap_root,
@@ -1618,7 +1622,7 @@ def prepare_reuse_release(
         )
     )
     try:
-        authority, plan = prepare_task(
+        authority, plan, kandelo_root, source_tap_root = prepare_task(
             authority_path=authority_path,
             kandelo_root=kandelo_root,
             source_tap_root=source_tap_root,
@@ -1904,7 +1908,7 @@ def verify_published_release(
         )
     )
     try:
-        authority, plan = prepare_task(
+        authority, plan, kandelo_root, source_tap_root = prepare_task(
             authority_path=authority_path,
             kandelo_root=kandelo_root,
             source_tap_root=source_tap_root,
@@ -2029,7 +2033,7 @@ def admit(
         )
     )
     try:
-        authority, plan = prepare_task(
+        authority, plan, _kandelo_root, _source_tap_root = prepare_task(
             authority_path=authority_path,
             kandelo_root=kandelo_root,
             source_tap_root=source_tap_root,
