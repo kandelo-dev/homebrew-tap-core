@@ -6,6 +6,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -13,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FORMULA = ROOT / "Formula" / "homebrew-bootstrap.rb"
 RECIPE_ROOT = ROOT / "Kandelo" / "recipes" / "homebrew-bootstrap"
 LOCK = RECIPE_ROOT / "source-lock.json"
+VERIFY = RECIPE_ROOT / "verify-source-lock.rb"
 EXPECTED_RECIPE_FILES = [
     "PATCH-LICENSE.md",
     "build.sh",
@@ -183,6 +186,7 @@ def assert_recipe_contract() -> None:
             'RECIPE_DIR="${WASM_POSIX_DEP_RECIPE_DIR:-}"',
             'WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:-}"',
             'OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:-}"',
+            'PACKAGE_VERSION="${WASM_POSIX_DEP_PKG_VERSION:-}"',
             'RUBY="${HOMEBREW_BOOTSTRAP_RUBY:-}"',
             "GIT_CONFIG_GLOBAL=/dev/null",
             "GIT_CONFIG_NOSYSTEM=1",
@@ -206,6 +210,7 @@ def assert_recipe_contract() -> None:
         ),
         entrypoint_path,
     )
+    assert 'PACKAGE_VERSION="${WASM_POSIX_DEP_VERSION:-}"' not in entrypoint
 
     zipper = (RECIPE_ROOT / "create-deterministic-zip.sh").read_text()
     require_all(
@@ -267,10 +272,60 @@ def assert_source_lock_contract() -> None:
     }
 
 
+def run_lock_verifier(
+    lock: dict,
+    package_version: str,
+) -> subprocess.CompletedProcess[str]:
+    with tempfile.TemporaryDirectory() as directory:
+        candidate = Path(directory) / "source-lock.json"
+        candidate.write_text(json.dumps(lock, indent=2) + "\n")
+        return subprocess.run(
+            [
+                "ruby",
+                str(VERIFY),
+                "--lock",
+                str(candidate),
+                "--package-version",
+                package_version,
+            ],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+
+def assert_package_version_contract() -> None:
+    original = json.loads(LOCK.read_text())
+    base = "6.0.12-153-gcf5bc21"
+    for package_version in (base, f"{base}_1", f"{base}_27"):
+        candidate = json.loads(json.dumps(original))
+        candidate["package"]["version"] = package_version
+        result = run_lock_verifier(candidate, package_version)
+        assert result.returncode == 0, result.stdout
+
+    for package_version in (
+        f"{base}_0",
+        f"{base}_01",
+        f"{base}_1_2",
+        f"{base}_",
+    ):
+        candidate = json.loads(json.dumps(original))
+        candidate["package"]["version"] = package_version
+        result = run_lock_verifier(candidate, package_version)
+        assert result.returncode != 0, package_version
+        assert "package.version is invalid" in result.stdout
+
+    result = run_lock_verifier(original, base)
+    assert result.returncode != 0
+    assert "package-version mismatch" in result.stdout
+
+
 def main() -> None:
     assert_formula_contract()
     assert_recipe_contract()
     assert_source_lock_contract()
+    assert_package_version_contract()
     print("Homebrew bootstrap Formula migration contract: ok")
 
 

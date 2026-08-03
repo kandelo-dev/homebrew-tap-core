@@ -158,7 +158,8 @@ class KandeloFormulaSupportTest < Minitest::Test
     include KandeloFormulaSupport
 
     attr_accessor :build_path, :dependency_formulae, :formula_full_name, :formula_name, :formula_path,
-                  :formula_version, :formula_binary_cache_root, :formula_checker_path,
+                  :formula_pkg_version, :formula_version, :formula_binary_cache_root,
+                  :formula_checker_path,
                   :formula_resolver_repo_root, :homebrew_prefix_path, :nix_path, :prefix_path,
                   :root_path, :runtime_formulae, :shell_result, :stable_spec, :test_path,
                   :tier2_runtime, :resources
@@ -183,6 +184,10 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     def version
       formula_version || "1.0"
+    end
+
+    def pkg_version
+      formula_pkg_version || version
     end
 
     def full_name
@@ -1271,6 +1276,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         Pathname("/bin"),
       ].join(File::PATH_SEPARATOR), environment.fetch("PATH")
       assert_equal "hello", environment.fetch("WASM_POSIX_DEP_NAME")
+      assert_equal "1.0", environment.fetch("WASM_POSIX_DEP_PKG_VERSION")
       assert_equal "attested-value", environment.fetch("HELLO_VALUE")
       assert_equal fixture.fetch(:recipe_root).to_s,
                    environment.fetch("WASM_POSIX_DEP_RECIPE_DIR")
@@ -1341,6 +1347,30 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_equal "/ambient/fork-instrument", ENV.fetch("WASM_POSIX_FORK_INSTRUMENT")
       assert_equal "/ambient/local-root-spill", ENV.fetch("WASM_POSIX_LOCAL_ROOT_SPILL")
       assert_equal "/ambient/xtask", ENV.fetch("WASM_POSIX_XTASK_BIN")
+    end
+  end
+
+  def test_tap_recipe_helper_exposes_formula_and_package_versions
+    with_tap_recipe_build_fixture do |fixture|
+      fixture.fetch(:harness).formula_pkg_version = "1.0_7"
+
+      run_tap_recipe(fixture)
+
+      request = fixture.fetch(:runner_requests).fetch(0)
+      environment = request.fetch("environment")
+      assert_equal "1.0", environment.fetch("WASM_POSIX_DEP_VERSION")
+      assert_equal "1.0_7", environment.fetch("WASM_POSIX_DEP_PKG_VERSION")
+      assert_equal "1.0", request.fetch("version")
+    end
+  end
+
+  def test_tap_recipe_helper_owns_the_package_version_environment
+    with_tap_recipe_build_fixture(
+      script_env: { "WASM_POSIX_DEP_PKG_VERSION" => "1.0_7" },
+    ) do |fixture|
+      error = assert_tap_recipe_rejected_before_activation(fixture)
+
+      assert_includes error.message, "helper-owned key"
     end
   end
 

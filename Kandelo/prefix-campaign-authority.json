@@ -18,9 +18,9 @@
   "state": "armed",
   "target_source": {
     "manifest_path": "Kandelo/campaigns/prefix-v1/manifest.json",
-    "manifest_sha256": "8397cf12e3771edbb3d7331d399e1358a42249b47a42860120c8d7d7707f9237",
+    "manifest_sha256": "2ba830168855b2b7a745efd9f59810608681dd76f08cb74022ba9fe5a6f171be",
     "source_root": "Kandelo/campaigns/prefix-v1/source",
-    "source_tree_git_oid": "e2bc3c214765a9db72fd68c54b35948bb9581abb",
-    "target_tree_git_oid": "9bb26b28ada1e84cb79ebc36a7836450f8e56f95"
+    "source_tree_git_oid": "b08a8bee4365cd187ec6fd843787e3ad593ea311",
+    "target_tree_git_oid": "534fba46229fc95cebc8ee4afabee8bb59b34b82"
   }
 }
