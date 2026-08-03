@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import hashlib
+import json
 import os
 import pathlib
 import re
@@ -29,19 +30,37 @@ CALLER_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 DRY_RUN_PATH = pathlib.Path(".github/workflows/dry-run-bottles.yml")
 MAINTENANCE_PATH = pathlib.Path(".github/workflows/maintain-bottles.yml")
+PREFIX_CAMPAIGN_PATH = pathlib.Path(
+    ".github/workflows/prefix-campaign-bottles.yml"
+)
 PUBLISH_PATH = pathlib.Path(".github/workflows/publish-bottles.yml")
+CLOSED_SELECTION_PATH = pathlib.Path(
+    ".github/workflows/publish-closed-selection.yml"
+)
 FIRST_PUBLICATION_PATH = pathlib.Path(
     ".github/workflows/repository-namespace-canary.yml"
+)
+PREFIX_AUTHORITY_PATH = pathlib.Path(
+    "Kandelo/prefix-campaign-authority.json"
 )
 TRUST_PATH = pathlib.Path("Kandelo/test-workflow-trust.rb")
 CONTROLLER_PATH = pathlib.Path("scripts/abi42-rollout.py")
 ROTATION_PATHS = (
     DRY_RUN_PATH,
     MAINTENANCE_PATH,
+    PREFIX_CAMPAIGN_PATH,
     PUBLISH_PATH,
+    CLOSED_SELECTION_PATH,
     FIRST_PUBLICATION_PATH,
+    PREFIX_AUTHORITY_PATH,
     TRUST_PATH,
     CONTROLLER_PATH,
+)
+
+ZERO_SHA = "0" * 40
+ZERO_CAMPAIGN_TAG = "homebrew-prefix-campaign-sha256-" + "0" * 64
+ZERO_GENERATION_TAG = (
+    "package-generation-rootfs-wasm32-abi-v42-sha256-" + "0" * 64
 )
 
 
@@ -72,6 +91,18 @@ MAINTENANCE_USES = scalar_pattern(
     r"reusable-homebrew-bottle-maintenance\.yml@"
 )
 PUBLISH_USES = DRY_RUN_USES
+PREFIX_BOTTLE_USES = scalar_pattern(
+    r"\s+uses:\s+Automattic/kandelo/\.github/workflows/"
+    r"reusable-homebrew-bottle-publish\.yml@"
+)
+PREFIX_FIRST_CHILD_USES = scalar_pattern(
+    r"\s+uses:\s+Automattic/kandelo/\.github/workflows/"
+    r"reusable-homebrew-prefix-first-child-publish\.yml@"
+)
+CLOSED_SELECTION_USES = scalar_pattern(
+    r"\s+uses:\s+Automattic/kandelo/\.github/workflows/"
+    r"reusable-homebrew-closed-selection-publish\.yml@"
+)
 FIRST_PUBLICATION_USES = scalar_pattern(
     r"\s+uses:\s+Automattic/kandelo/\.github/workflows/"
     r"reusable-homebrew-repository-namespace-canary\.yml@"
@@ -87,8 +118,23 @@ TRUST_DRY_RUN_KANDELO_SHA = scalar_pattern(
 TRUST_FIRST_PUBLICATION_KANDELO_SHA = scalar_pattern(
     r'FIRST_PUBLICATION_KANDELO_SHA\s*=\s*"'
 )
+TRUST_CLOSED_SELECTION_KANDELO_SHA = re.compile(
+    r"^(?P<prefix>CLOSED_SELECTION_KANDELO_SHA\s*=\s*\n\s*\")"
+    r"(?P<value>[^\s\"]+\")(?P<suffix>\s*)$",
+    flags=re.MULTILINE,
+)
 TRUST_GENERATION = scalar_pattern(
     r'PACKAGE_GENERATION_WASM32_TAG\s*=\s*"'
+)
+AUTHORITY_KANDELO_SHA = re.compile(
+    r'^(?P<prefix>\s+"kandelo_commit":\s+")'
+    r'(?P<value>[^"\s]+)(?P<suffix>",\s*)$',
+    flags=re.MULTILINE,
+)
+AUTHORITY_WORKFLOW_SHA = re.compile(
+    r'^(?P<prefix>\s+"reusable_workflow_commit":\s+")'
+    r'(?P<value>[^"\s]+)(?P<suffix>",\s*)$',
+    flags=re.MULTILINE,
 )
 CONTROLLER_MAIN_SHA = scalar_pattern(r'CURRENT_MAIN_SHA\s*=\s*"')
 CONTROLLER_GENERATION = scalar_pattern(
@@ -123,6 +169,42 @@ def replace_scalar(
     )
 
 
+def replace_repeated_scalars(
+    source: str,
+    pattern: re.Pattern[str],
+    *,
+    expected_count: int,
+    allowed: frozenset[str],
+    replacement: str,
+    label: str,
+) -> str:
+    matches = tuple(pattern.finditer(source))
+    if len(matches) != expected_count:
+        occurrence = "time" if expected_count == 1 else "times"
+        raise RotationError(
+            f"{label} must occur exactly {expected_count} {occurrence}; "
+            f"found {len(matches)}"
+        )
+    rendered = source
+    # WHY: replace from the end so each earlier match retains the offsets
+    # captured from the original bytes. This keeps mixed partial rotations
+    # recoverable without broad token replacement.
+    for match in reversed(matches):
+        value = match.group("value").removesuffix('"')
+        quoted = match.group("value").endswith('"')
+        if value not in allowed:
+            raise RotationError(
+                f"{label} has unexpected value {value!r}"
+            )
+        value_bytes = replacement + ('"' if quoted else "")
+        rendered = (
+            rendered[: match.start("value")]
+            + value_bytes
+            + rendered[match.end("value") :]
+        )
+    return rendered
+
+
 def validate_kandelo_sha(value: str, label: str) -> None:
     if SHA.fullmatch(value) is None:
         raise RotationError(
@@ -147,6 +229,148 @@ def validate_caller_sha256(value: str, label: str) -> None:
         raise RotationError(
             f"{label} must be exactly 64 lowercase hex characters"
         )
+
+
+def reject_duplicate_pairs(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise RotationError(
+                f"prefix campaign authority duplicates {key!r}"
+            )
+        result[key] = value
+    return result
+
+
+def validate_armed_authority(
+    source: str,
+    *,
+    allowed_kandelo_shas: frozenset[str],
+) -> None:
+    try:
+        authority = json.loads(
+            source,
+            object_pairs_hook=reject_duplicate_pairs,
+        )
+    except (json.JSONDecodeError, UnicodeError) as error:
+        raise RotationError(
+            "prefix campaign authority is not valid JSON"
+        ) from error
+    if not isinstance(authority, dict):
+        raise RotationError("prefix campaign authority must be an object")
+    if source != json.dumps(authority, indent=2) + "\n":
+        raise RotationError(
+            "prefix campaign authority is not canonical pretty JSON"
+        )
+
+    expected_keys = [
+        "campaign_release",
+        "kandelo_commit",
+        "kandelo_repository",
+        "kind",
+        "package_generations",
+        "release_tag",
+        "reusable_workflow_commit",
+        "schema",
+        "source_tap_commit",
+        "source_tap_name",
+        "source_tap_repository",
+        "state",
+        "target_source",
+    ]
+    if list(authority) != expected_keys:
+        raise RotationError(
+            "prefix campaign authority field set or order changed"
+        )
+
+    # WHY: this helper rotates executable trust, not campaign data. Requiring
+    # the complete armed non-executable record prevents a trust rotation from
+    # silently activating a campaign or blessing a changed source contract.
+    expected_unchanged = {
+        "campaign_release": {
+            "repository": "kandelo-dev/homebrew-tap-core",
+            "tag": ZERO_CAMPAIGN_TAG,
+        },
+        "kandelo_repository": "Automattic/kandelo",
+        "kind": "kandelo-homebrew-prefix-campaign-caller-authority",
+        "package_generations": {
+            "rootfs_wasm32": ZERO_GENERATION_TAG,
+        },
+        "release_tag": "bottles-abi-v42",
+        "schema": 2,
+        "source_tap_commit": ZERO_SHA,
+        "source_tap_name": "kandelo-dev/tap-core",
+        "source_tap_repository": "kandelo-dev/homebrew-tap-core",
+        "state": "armed",
+        "target_source": {
+            "manifest_path": "Kandelo/campaigns/prefix-v1/manifest.json",
+            "manifest_sha256": (
+                "5ce90e0ca91d8d570dd2261da11ce039693260ea96c5419d"
+                "02487bf90464b58f"
+            ),
+            "source_root": "Kandelo/campaigns/prefix-v1/source",
+            "source_tree_git_oid": (
+                "8b8b5b12d687b26d071718eebdddb689d4f17fd5"
+            ),
+            "target_tree_git_oid": (
+                "77f06a124c2693031d84220cff57f8e351ddcf63"
+            ),
+        },
+    }
+    observed_unchanged = {
+        key: value
+        for key, value in authority.items()
+        if key not in {"kandelo_commit", "reusable_workflow_commit"}
+    }
+    if observed_unchanged != expected_unchanged:
+        raise RotationError(
+            "prefix campaign authority changed outside its two Kandelo pins"
+        )
+
+    kandelo_sha = authority.get("kandelo_commit")
+    workflow_sha = authority.get("reusable_workflow_commit")
+    if (
+        kandelo_sha not in allowed_kandelo_shas
+        or workflow_sha not in allowed_kandelo_shas
+        or kandelo_sha != workflow_sha
+    ):
+        raise RotationError(
+            "armed prefix campaign authority has a split or unexpected "
+            "Kandelo pin"
+        )
+
+
+def rotate_armed_authority(
+    source: str,
+    *,
+    allowed_kandelo_shas: frozenset[str],
+    new_sha: str,
+) -> str:
+    validate_armed_authority(
+        source,
+        allowed_kandelo_shas=allowed_kandelo_shas,
+    )
+    source = replace_scalar(
+        source,
+        AUTHORITY_KANDELO_SHA,
+        allowed=allowed_kandelo_shas,
+        replacement=new_sha,
+        label="prefix authority Kandelo SHA",
+    )
+    source = replace_scalar(
+        source,
+        AUTHORITY_WORKFLOW_SHA,
+        allowed=allowed_kandelo_shas,
+        replacement=new_sha,
+        label="prefix authority reusable workflow SHA",
+    )
+    validate_armed_authority(
+        source,
+        allowed_kandelo_shas=frozenset((new_sha,)),
+    )
+    return source
 
 
 def read_rotation_files(root: pathlib.Path) -> dict[pathlib.Path, bytes]:
@@ -233,6 +457,7 @@ def build_rotation(
     predecessor_kandelo_sha: str,
     predecessor_dry_run_kandelo_sha: str,
     predecessor_first_publication_kandelo_sha: str,
+    predecessor_campaign_kandelo_sha: str,
     predecessor_generation_tag: str,
     predecessor_caller_sha256: str,
     kandelo_sha: str,
@@ -248,6 +473,10 @@ def build_rotation(
     validate_kandelo_sha(
         predecessor_first_publication_kandelo_sha,
         "predecessor first-publication Kandelo SHA",
+    )
+    validate_kandelo_sha(
+        predecessor_campaign_kandelo_sha,
+        "predecessor campaign Kandelo SHA",
     )
     validate_generation_tag(
         predecessor_generation_tag, "predecessor generation tag"
@@ -272,6 +501,9 @@ def build_rotation(
     )
     allowed_first_publication_kandelo_shas = frozenset(
         (predecessor_first_publication_kandelo_sha, kandelo_sha)
+    )
+    allowed_campaign_kandelo_shas = frozenset(
+        (predecessor_campaign_kandelo_sha, kandelo_sha)
     )
     allowed_generation_tags = frozenset(
         (predecessor_generation_tag, generation_tag)
@@ -322,10 +554,48 @@ def build_rotation(
         new_generation=None,
         label="first-publication",
     )
+    prefix_campaign = replace_repeated_scalars(
+        original[PREFIX_CAMPAIGN_PATH].decode(),
+        PREFIX_BOTTLE_USES,
+        expected_count=3,
+        allowed=allowed_campaign_kandelo_shas,
+        replacement=kandelo_sha,
+        label="prefix-campaign bottle reusable workflow SHA",
+    )
+    prefix_campaign = replace_repeated_scalars(
+        prefix_campaign,
+        PREFIX_FIRST_CHILD_USES,
+        expected_count=1,
+        allowed=allowed_campaign_kandelo_shas,
+        replacement=kandelo_sha,
+        label="prefix-campaign first-child reusable workflow SHA",
+    )
+    closed_selection = replace_scalar(
+        original[CLOSED_SELECTION_PATH].decode(),
+        CLOSED_SELECTION_USES,
+        allowed=allowed_campaign_kandelo_shas,
+        replacement=kandelo_sha,
+        label="closed-selection reusable workflow SHA",
+    )
+    closed_selection = replace_scalar(
+        closed_selection,
+        EXACT_KANDELO_REF,
+        allowed=allowed_campaign_kandelo_shas,
+        replacement=kandelo_sha,
+        label="closed-selection kandelo-ref",
+    )
+    authority = rotate_armed_authority(
+        original[PREFIX_AUTHORITY_PATH].decode(),
+        allowed_kandelo_shas=allowed_campaign_kandelo_shas,
+        new_sha=kandelo_sha,
+    )
     rendered[DRY_RUN_PATH] = dry_run.encode()
     rendered[MAINTENANCE_PATH] = maintenance.encode()
+    rendered[PREFIX_CAMPAIGN_PATH] = prefix_campaign.encode()
     rendered[PUBLISH_PATH] = publish.encode()
+    rendered[CLOSED_SELECTION_PATH] = closed_selection.encode()
     rendered[FIRST_PUBLICATION_PATH] = first_publication.encode()
+    rendered[PREFIX_AUTHORITY_PATH] = authority.encode()
 
     trust = original[TRUST_PATH].decode()
     trust = replace_scalar(
@@ -348,6 +618,13 @@ def build_rotation(
         allowed=allowed_first_publication_kandelo_shas,
         replacement=kandelo_sha,
         label="trust-test first-publication Kandelo SHA",
+    )
+    trust = replace_scalar(
+        trust,
+        TRUST_CLOSED_SELECTION_KANDELO_SHA,
+        allowed=allowed_campaign_kandelo_shas,
+        replacement=kandelo_sha,
+        label="trust-test closed-selection Kandelo SHA",
     )
     trust = replace_scalar(
         trust,
@@ -475,6 +752,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--predecessor-campaign-kandelo-sha",
+        required=True,
+        help=(
+            "exact Kandelo SHA selected by the armed campaign, prefix "
+            "caller, and closed-selection caller now"
+        ),
+    )
+    parser.add_argument(
         "--predecessor-generation-tag",
         required=True,
         help="exact rootfs generation selected by the write callers now",
@@ -515,6 +800,9 @@ def main(argv: list[str]) -> int:
             predecessor_first_publication_kandelo_sha=(
                 args.predecessor_first_publication_kandelo_sha
             ),
+            predecessor_campaign_kandelo_sha=(
+                args.predecessor_campaign_kandelo_sha
+            ),
             predecessor_generation_tag=args.predecessor_generation_tag,
             predecessor_caller_sha256=args.predecessor_caller_sha256,
             kandelo_sha=args.kandelo_sha,
@@ -532,7 +820,7 @@ def main(argv: list[str]) -> int:
         if not args.apply:
             print(
                 "preview only; rerun with --apply after reviewing "
-                "P_M/P_D/P_F/P_G/P_C -> M/G/C"
+                "P_M/P_D/P_F/P_A/P_G/P_C -> M/G/C"
             )
         return 0
     except (OSError, RotationError) as error:

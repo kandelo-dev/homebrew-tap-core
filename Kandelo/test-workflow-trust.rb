@@ -562,7 +562,7 @@ def check_closed_selection_caller(workflow)
   end
 end
 
-def check_prefix_campaign_authority(authority)
+def check_prefix_campaign_authority(authority, expected_kandelo_sha)
   label = "prefix-campaign authority"
   check(authority.keys.sort == %w[
           campaign_release
@@ -671,6 +671,10 @@ def check_prefix_campaign_authority(authority)
     authority["reusable_workflow_commit"] ==
       authority["kandelo_commit"],
     "#{label} splits executor and reusable workflow commits"
+  )
+  check(
+    authority["kandelo_commit"] == expected_kandelo_sha,
+    "#{label} splits campaign and closed-selection Kandelo authority"
   )
 
   identities = {
@@ -1292,6 +1296,20 @@ def self_test(
   check(check_caller_profile(current_callers, test_profiles) == "current",
         "current caller profile was not selected")
   check_closed_selection_caller(closed_selection)
+  check_prefix_campaign_authority(
+    prefix_authority,
+    CLOSED_SELECTION_KANDELO_SHA
+  )
+
+  expect_rejection("split campaign and closed-selection authority") do
+    mutated = deep_copy(prefix_authority)
+    mutated["kandelo_commit"] = "1" * 40
+    mutated["reusable_workflow_commit"] = "1" * 40
+    check_prefix_campaign_authority(
+      mutated,
+      CLOSED_SELECTION_KANDELO_SHA
+    )
+  end
 
   expect_rejection("a mutable closed-selection publisher") do
     mutated = deep_copy(closed_selection)
@@ -1968,7 +1986,10 @@ begin
   )
   check_caller_profile(callers)
   check_closed_selection_caller(closed_selection)
-  check_prefix_campaign_authority(prefix_authority)
+  check_prefix_campaign_authority(
+    prefix_authority,
+    CLOSED_SELECTION_KANDELO_SHA
+  )
   check_prefix_campaign_workflow(prefix_campaign, prefix_authority)
   check_contract_workflow(contract)
   check_base_contract_workflow(base_contract)
