@@ -13,9 +13,9 @@ jobs:
       actions: read
       contents: read
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@214cfb2d656383655d083b7ada0771bfb2fd05e6
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-repository-namespace-canary.yml@afc60f6b18aafb0cd17c48a35e28ab687f168553
     with:
-      kandelo-ref: 214cfb2d656383655d083b7ada0771bfb2fd05e6
+      kandelo-ref: afc60f6b18aafb0cd17c48a35e28ab687f168553
       tap-ref: ${{ github.sha }}
       formula: libyaml
       arch: wasm32
