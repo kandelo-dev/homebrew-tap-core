@@ -2372,7 +2372,7 @@ def main() -> int:
                 output=args.out,
             )
             print(
-                "prefix-campaign-controller: anonymously verified "
+                "prefix-campaign-controller: verified public assets for "
                 f"{document['release_tag']}"
             )
         else:
