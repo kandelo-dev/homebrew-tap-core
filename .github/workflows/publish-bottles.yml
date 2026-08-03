@@ -11,13 +11,13 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@afc60f6b18aafb0cd17c48a35e28ab687f168553
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@d7540878bcb4946126daaa53e3d8d783e41a6102
     with:
       kandelo-repository: Automattic/kandelo
       # WHY: publication authority and package generation are admitted together
       # on Kandelo main. Pinning both inputs prevents a later mutable ref from
       # changing either the publisher implementation or its package closure.
-      kandelo-ref: afc60f6b18aafb0cd17c48a35e28ab687f168553
+      kandelo-ref: d7540878bcb4946126daaa53e3d8d783e41a6102
       tap-repository: kandelo-dev/homebrew-tap-core
       tap-name: kandelo-dev/tap-core
       # WHY: repository_dispatch loads this caller from main, but Formula
@@ -33,4 +33,4 @@ jobs:
       # WHY: this content-addressed, main-admitted generation is the immutable
       # package input for the bounded wasm32 rootfs lane. A preserved staging
       # tag is promotion evidence, not publication authority.
-      package-generation-wasm32: package-generation-rootfs-wasm32-abi-v42-sha256-5873b61ed51d8bfd2466be977bf5aaf8d47b80ac2debc7da892955c0d48fd55e
+      package-generation-wasm32: package-generation-rootfs-wasm32-abi-v42-sha256-13dced6db0817af37eeb7e9ed696b5d8896ce93f1034454b0fa017266364e7a4
