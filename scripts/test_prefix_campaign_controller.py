@@ -405,11 +405,24 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             {363965880, 363965882, 363965943, 363966055, 363966067},
         )
 
-        armed_value, _armed_payload = CONTROLLER.load_json_bytes(
+        live_value, _live_payload = CONTROLLER.load_json_bytes(
             AUTHORITY,
             "checked-in campaign authority",
             canonical=True,
         )
+        # WHY: the abandoned C1 record must remain reproducible whether the
+        # current caller is between campaigns or has activated a successor.
+        # Normalize only the live campaign slots before reconstructing C1.
+        armed_value = copy.deepcopy(live_value)
+        armed_value["campaign_release"]["tag"] = (
+            "homebrew-prefix-campaign-sha256-" + "0" * 64
+        )
+        armed_value["package_generations"]["rootfs_wasm32"] = (
+            "package-generation-rootfs-wasm32-abi-v42-sha256-"
+            + "0" * 64
+        )
+        armed_value["source_tap_commit"] = "0" * 40
+        armed_value["state"] = "armed"
         self.assertEqual(armed_value["state"], "armed")
         self.assertEqual(
             armed_value["campaign_release"]["tag"],
@@ -441,6 +454,10 @@ class PrefixCampaignControllerTests(unittest.TestCase):
         )
 
         with tempfile.TemporaryDirectory() as directory:
+            abandoned_authority = (
+                pathlib.Path(directory) / "authority.json"
+            )
+            write_pretty(abandoned_authority, armed_value)
             abandoned_event = pathlib.Path(directory) / "event.json"
             write_pretty(
                 abandoned_event,
@@ -457,7 +474,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 CONTROLLER.ControllerError
             ) as raised:
                 CONTROLLER.preflight(
-                    AUTHORITY,
+                    abandoned_authority,
                     abandoned_event,
                     None,
                 )
