@@ -1168,8 +1168,10 @@ def check_contract_workflow(workflow)
     "Kandelo/prefix-campaign-authority.json",
     "Kandelo/test-workflow-trust.sh",
     "Kandelo/test-workflow-trust.rb",
+    "scripts/rotate-publisher-trust.py",
     "scripts/prefix-campaign-controller.py",
     "scripts/prefix-campaign-source.py",
+    "scripts/test_rotate_publisher_trust.py",
     "scripts/test_prefix_campaign_controller.py",
     "scripts/test_prefix_campaign_source.py",
   ]
@@ -1198,6 +1200,10 @@ def check_contract_workflow(workflow)
     {
       "name" => "Validate publisher trust boundaries",
       "run" => "bash Kandelo/test-workflow-trust.sh",
+    },
+    {
+      "name" => "Exercise complete publisher trust rotation",
+      "run" => "python3 -B scripts/test_rotate_publisher_trust.py",
     },
     {
       "name" => "Exercise prefix-campaign controller",
