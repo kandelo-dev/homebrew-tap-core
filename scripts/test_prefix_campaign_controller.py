@@ -29,6 +29,11 @@ ABANDONED_C2 = (
     / "Kandelo/campaigns/prefix-v1/aborted-campaigns/"
     "ced456302ccb3cc7198f20ac43afb2d54ba2b990afa7b02f86e48670be12f9b8.json"
 )
+ABANDONED_C3 = (
+    ROOT
+    / "Kandelo/campaigns/prefix-v1/aborted-campaigns/"
+    "2a0376c07f8c74fae0e3e867dfce3e39cbce280635ede2e519b2b5cffdf0b720.json"
+)
 SPEC = importlib.util.spec_from_file_location(
     "prefix_campaign_controller",
     SCRIPT,
@@ -636,6 +641,250 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             ).hexdigest(),
             record["authority"]["payload_sha256"],
         )
+
+    def test_abandoned_c3_preserves_every_terminal_dispatch(self) -> None:
+        record, _payload = CONTROLLER.load_json_bytes(
+            ABANDONED_C3,
+            "abandoned C3 campaign record",
+            canonical=True,
+        )
+        self.assertEqual(record["schema"], 1)
+        self.assertEqual(
+            record["kind"],
+            "kandelo-homebrew-prefix-abandoned-campaign",
+        )
+        campaign_tag = record["authority"]["campaign_release"]["tag"]
+        campaign_sha256 = campaign_tag.removeprefix(
+            "homebrew-prefix-campaign-sha256-"
+        )
+        self.assertEqual(campaign_sha256, ABANDONED_C3.stem)
+
+        dispatches = record["dispatches"]
+        self.assertEqual(len(dispatches), 45)
+        self.assertEqual(
+            len({item["run_id"] for item in dispatches}),
+            45,
+        )
+        expected_tasks = {
+            30803309534: ("bzip2", "wasm32"),
+            30803529638: ("homebrew-bootstrap", "wasm32"),
+            30803549893: ("libyaml", "wasm32"),
+            30803558686: ("gawk", "wasm32"),
+            30803566995: ("openssl", "wasm32"),
+            30803577092: ("zlib", "wasm32"),
+            30803587892: ("libcxx", "wasm32"),
+            30803596202: ("dash", "wasm32"),
+            30803605593: ("coreutils", "wasm32"),
+            30803780657: ("dinit", "wasm32"),
+            30803790304: ("ncurses", "wasm32"),
+            30803829044: ("findutils", "wasm32"),
+            30803900578: ("ed", "wasm32"),
+            30804111432: ("diffutils", "wasm32"),
+            30805015468: ("grep", "wasm32"),
+            30805016494: ("gzip", "wasm32"),
+            30805016563: ("sed", "wasm32"),
+            30805397656: ("xz", "wasm32"),
+            30805397891: ("posix-utils-lite", "wasm32"),
+            30805399083: ("musl-fts", "wasm32"),
+            30805399146: ("pcre2", "wasm32"),
+            30805399244: ("m4", "wasm32"),
+            30805583498: ("lsof", "wasm32"),
+            30805583919: ("libzip", "wasm32"),
+            30805599861: ("unzip", "wasm32"),
+            30805684901: ("netcat", "wasm32"),
+            30805685918: ("modeset", "wasm32"),
+            30805969853: ("asa", "wasm32"),
+            30805970076: ("fbdoom", "wasm32"),
+            30805970593: ("ctags", "wasm32"),
+            30805970621: ("bc", "wasm32"),
+            30805970926: ("gencat", "wasm32"),
+            30805971062: ("ncompress", "wasm32"),
+            30805971377: ("getconf", "wasm32"),
+            30806189592: ("zip", "wasm32"),
+            30806189928: ("zstd", "wasm32"),
+            30806190047: ("libiconv", "wasm32"),
+            30806190304: ("binutils", "wasm32"),
+            30806190956: ("procps", "wasm32"),
+            30806191253: ("sqlite", "wasm32"),
+            30806191415: ("perl", "wasm32"),
+            30806191455: ("what", "wasm32"),
+            30806295152: ("libcxx", "wasm64"),
+            30806295344: ("musl-fts", "wasm64"),
+            30806295597: ("zlib", "wasm64"),
+        }
+        self.assertEqual(
+            {
+                item["run_id"]: (item["formula"], item["arch"])
+                for item in dispatches
+            },
+            expected_tasks,
+        )
+        # WHY: one digest pins the complete run-to-outcome and release
+        # evidence without copying 33 long immutable handoff tags into the
+        # test. The semantic checks below still explain what each group means.
+        self.assertEqual(
+            hashlib.sha256(
+                CONTROLLER.pretty_json(dispatches)
+            ).hexdigest(),
+            "09362c8281699648ec5867b6981fae1356179a3653d948a334b0f65d0ddb2752",
+        )
+
+        handoffs = [
+            item for item in dispatches
+            if "handoff_release" in item
+        ]
+        self.assertEqual(len(handoffs), 33)
+        self.assertEqual(
+            len({item["handoff_release"]["id"] for item in handoffs}),
+            33,
+        )
+        self.assertEqual(
+            len({item["handoff_release"]["tag"] for item in handoffs}),
+            33,
+        )
+        self.assertEqual(
+            {item["result"] for item in handoffs},
+            {"handoff-published-and-publicly-verified"},
+        )
+
+        failed = {
+            item["formula"]: item["result"]
+            for item in dispatches
+            if "refused" in item["result"]
+        }
+        self.assertEqual(
+            failed,
+            {
+                "diffutils": (
+                    "fresh-build-refused-noncanonical-homebrew-cache-path"
+                ),
+                "dinit": "fresh-build-refused-unsupported-formula-cellar",
+                "findutils": (
+                    "oci-child-published-version-index-recovery-refused-"
+                    "finalized-sidecar"
+                ),
+                "gawk": (
+                    "oci-child-published-version-index-recovery-refused-"
+                    "finalized-sidecar"
+                ),
+                "ncurses": (
+                    "fresh-build-refused-unsupported-formula-cellar"
+                ),
+                "openssl": (
+                    "oci-child-published-version-index-recovery-refused-"
+                    "finalized-sidecar"
+                ),
+            },
+        )
+        cancelled = {
+            item["formula"]
+            for item in dispatches
+            if item["result"]
+            == "cancelled-before-formula-compilation-or-publication"
+        }
+        self.assertEqual(
+            cancelled,
+            {"binutils", "libiconv", "perl", "procps", "sqlite", "what"},
+        )
+        partial = {
+            item["formula"]: item["partial_publication"]
+            for item in dispatches
+            if "partial_publication" in item
+        }
+        self.assertEqual(set(partial), {"findutils", "gawk", "openssl"})
+        self.assertEqual(
+            {
+                name: value["bottle"]["sha256"]
+                for name, value in partial.items()
+            },
+            {
+                "findutils": (
+                    "5cff7d5570e53518a811dcbad8bf63b3dbab7e04022b5008b078b21eef2d1bb3"
+                ),
+                "gawk": (
+                    "ec501486caf105f60a8309f3996feaf96c2e06495ed1076cb838d8fab48ee75b"
+                ),
+                "openssl": (
+                    "90b2edcc0db4d327c4632fb33dfbb4683dac5ae25c493d64be23375b74d7a4dc"
+                ),
+            },
+        )
+
+        live_value, _live_payload = CONTROLLER.load_json_bytes(
+            AUTHORITY,
+            "checked-in campaign authority",
+            canonical=True,
+        )
+        self.assertEqual(live_value["state"], "armed")
+        armed_value = copy.deepcopy(live_value)
+        active_value = copy.deepcopy(armed_value)
+        active_value["campaign_release"] = record["authority"][
+            "campaign_release"
+        ].copy()
+        active_value["campaign_release"].pop("id")
+        active_value["kandelo_commit"] = record["authority"][
+            "kandelo_commit"
+        ]
+        active_value["package_generations"]["rootfs_wasm32"] = record[
+            "authority"
+        ]["rootfs_wasm32"]
+        active_value["reusable_workflow_commit"] = record["authority"][
+            "kandelo_commit"
+        ]
+        active_value["source_tap_commit"] = record["authority"][
+            "source_tap_commit"
+        ]
+        active_value["state"] = "active"
+        active_value["target_source"] = record["authority"][
+            "target_source"
+        ]
+        self.assertEqual(
+            hashlib.sha256(
+                CONTROLLER.pretty_json(active_value)
+            ).hexdigest(),
+            record["authority"]["payload_sha256"],
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            event = pathlib.Path(directory) / "event.json"
+            write_pretty(
+                event,
+                {
+                    "action": CONTROLLER.EVENT_TYPE,
+                    "client_payload": {
+                        "arches": ["wasm32"],
+                        "dependency_handoffs": [],
+                        "formula": "bzip2",
+                    },
+                },
+            )
+            with self.assertRaises(
+                CONTROLLER.ControllerError
+            ) as raised:
+                CONTROLLER.preflight(AUTHORITY, event, None)
+            self.assertEqual(
+                raised.exception.status,
+                "campaign-authority-inert",
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(pathlib.Path(directory))
+            authority = CONTROLLER.load_authority(
+                fixture.authority,
+                require_active=True,
+            )
+            plan = fixture.plan()
+            handoff = handoff_document(authority, plan)
+            handoff["campaign"]["sha256"] = campaign_sha256
+            handoff_path = fixture.root / "abandoned-c3-handoff.json"
+            write_pretty(handoff_path, handoff)
+            with self.assertRaises(CONTROLLER.ControllerError):
+                CONTROLLER.validate_readback_handoff(
+                    handoff_path,
+                    authority=authority,
+                    plan=plan,
+                    tag=tag_for_handoff(handoff),
+                )
 
     def test_checked_in_authority_has_safe_rollout_state(self) -> None:
         authority = CONTROLLER.load_authority(
