@@ -39,18 +39,18 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             manifest_path=MANIFEST,
             require_live_base=True,
         )
-        self.assertEqual(summary["files"], 42)
+        self.assertEqual(summary["files"], 44)
         self.assertEqual(
             summary["base_commit"],
             "2e192c8cf318044078e5426d39717636131cec60",
         )
         self.assertEqual(
             summary["source_tree_git_oid"],
-            "e2bc3c214765a9db72fd68c54b35948bb9581abb",
+            "b08a8bee4365cd187ec6fd843787e3ad593ea311",
         )
         self.assertEqual(
             summary["target_tree_git_oid"],
-            "9bb26b28ada1e84cb79ebc36a7836450f8e56f95",
+            "534fba46229fc95cebc8ee4afabee8bb59b34b82",
         )
 
         active_helper = (
@@ -80,7 +80,7 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
             self.assertEqual(
                 SOURCE.source_tree_oid(output),
-                "9bb26b28ada1e84cb79ebc36a7836450f8e56f95",
+                "534fba46229fc95cebc8ee4afabee8bb59b34b82",
             )
             for formula in ("homebrew-bootstrap", "libyaml"):
                 source = (output / "Formula" / f"{formula}.rb").read_text()
@@ -123,7 +123,9 @@ class PrefixCampaignSourceTests(unittest.TestCase):
                     ),
                     "--name",
                     "/guest_homebrew_paths_use_kandelo_identity|"
-                    "formula_sources_use_the_shared_guest_homebrew_prefix/",
+                    "formula_sources_use_the_shared_guest_homebrew_prefix|"
+                    "tap_recipe_helper_exposes_formula_and_package_versions|"
+                    "tap_recipe_helper_owns_the_package_version_environment/",
                 ],
             ]
             for command in commands:

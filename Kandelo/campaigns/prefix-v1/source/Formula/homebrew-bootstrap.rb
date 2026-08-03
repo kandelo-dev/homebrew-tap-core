@@ -36,7 +36,7 @@ class HomebrewBootstrap < Formula
     kandelo_require_arch!("wasm32")
 
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "a0cd90da7701966a214c2bd5153a8d8312c1891c9e3c3cd68427e68c7899484e",
+      manifest_sha256: "fea6b73e01b5344f45bce8c60cc96d85380d42c807bbab12446d4533aa396b96",
       script_env:      {
         # WHY: the sealed recipe root does not expose Homebrew's own portable
         # Ruby. Bind this declared native keg explicitly so the lock verifier

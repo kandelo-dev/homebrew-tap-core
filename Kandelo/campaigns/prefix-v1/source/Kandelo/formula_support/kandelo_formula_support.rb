@@ -1839,6 +1839,7 @@ module KandeloFormulaSupport
       end
       if %w[
         WASM_POSIX_DEP_NAME WASM_POSIX_DEP_OUT_DIR WASM_POSIX_DEP_RECIPE_DIR
+        WASM_POSIX_DEP_PKG_VERSION
         WASM_POSIX_DEP_SOURCE_DIR WASM_POSIX_DEP_SOURCE_SHA256
         WASM_POSIX_DEP_SOURCE_URL WASM_POSIX_DEP_TARGET_ARCH
         WASM_POSIX_DEP_VERSION WASM_POSIX_DEP_WORK_DIR
@@ -2636,12 +2637,16 @@ module KandeloFormulaSupport
     helper_env = {
       "WASM_POSIX_DEP_NAME"             => formula_name,
       "WASM_POSIX_DEP_OUT_DIR"          => out_dir,
+      # WHY: Formula#version omits Homebrew's revision suffix, while
+      # Formula#pkg_version includes it. Recipes that bind published bytes
+      # must receive both identities instead of reconstructing `_N`.
+      "WASM_POSIX_DEP_PKG_VERSION"      => pkg_version.to_s,
       "WASM_POSIX_DEP_RECIPE_DIR"       => recipe_root,
       "WASM_POSIX_DEP_SOURCE_DIR"       => source_dir,
       "WASM_POSIX_DEP_SOURCE_SHA256"    => recipe.fetch("source_sha256"),
       "WASM_POSIX_DEP_SOURCE_URL"       => recipe.fetch("source_url"),
       "WASM_POSIX_DEP_TARGET_ARCH"      => arch,
-      "WASM_POSIX_DEP_VERSION"          => recipe.fetch("version"),
+      "WASM_POSIX_DEP_VERSION"          => version.to_s,
       "WASM_POSIX_DEP_WORK_DIR"         => work_dir,
       "WASM_POSIX_INSTALL_LOCAL_MIRROR" => "0",
     }.merge(dependency_env).merge(resource_env)
