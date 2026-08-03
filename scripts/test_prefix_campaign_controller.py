@@ -412,10 +412,16 @@ class PrefixCampaignControllerTests(unittest.TestCase):
         )
         self.assertEqual(armed_value["state"], "armed")
         self.assertEqual(
-            armed_value["kandelo_commit"],
-            record["authority"]["kandelo_commit"],
+            armed_value["campaign_release"]["tag"],
+            "homebrew-prefix-campaign-sha256-" + "0" * 64,
         )
         active_value = copy.deepcopy(armed_value)
+        active_value["kandelo_commit"] = record["authority"][
+            "kandelo_commit"
+        ]
+        active_value["reusable_workflow_commit"] = record["authority"][
+            "kandelo_commit"
+        ]
         active_value["campaign_release"] = record["authority"][
             "campaign_release"
         ].copy()
