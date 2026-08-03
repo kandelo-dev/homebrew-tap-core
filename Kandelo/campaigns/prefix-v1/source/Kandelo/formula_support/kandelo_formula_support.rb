@@ -95,8 +95,8 @@ module KandeloFormulaSupport
     script_sha256 source_mode source_sha256 source_url version
   ].freeze
   KANDELO_TAP_RECIPE_KEYS = %w[
-    dependencies entrypoint file_count manifest_sha256 resources script_env_keys
-    source_sha256 source_url total_bytes version
+    dependencies entrypoint file_count manifest_sha256 pkg_version resources
+    script_env_keys source_sha256 source_url total_bytes version
   ].freeze
   KANDELO_TIER2_TRUSTED_ENV_KEYS = %w[
     HOMEBREW_KANDELO_ARCH HOMEBREW_KANDELO_FORK_INSTRUMENT
@@ -610,6 +610,10 @@ module KandeloFormulaSupport
                      recipe["file_count"].between?(1, KANDELO_TAP_RECIPE_MAX_FILES) &&
                      recipe["total_bytes"].is_a?(Integer) &&
                      recipe["total_bytes"].between?(0, KANDELO_TAP_RECIPE_MAX_BYTES) &&
+                     recipe["pkg_version"].is_a?(String) &&
+                     recipe["pkg_version"].match?(
+                       /\A[A-Za-z0-9][A-Za-z0-9._+,-]{0,254}\z/
+                     ) &&
                      recipe["version"].is_a?(String) &&
                      recipe["version"].match?(/\A[A-Za-z0-9][A-Za-z0-9._+,-]{0,254}\z/) &&
                      recipe["source_url"].is_a?(String) &&
@@ -2555,6 +2559,7 @@ module KandeloFormulaSupport
     formula_full_name = respond_to?(:full_name) ? full_name.to_s : "kandelo-dev/tap-core/#{formula_name}"
     unless formula_name == attestation.fetch("formula") &&
            formula_full_name == attestation.fetch("full_name") &&
+           pkg_version.to_s == recipe.fetch("pkg_version") &&
            version.to_s == recipe.fetch("version") &&
            stable.url.to_s == recipe.fetch("source_url") &&
            stable.checksum.hexdigest == recipe.fetch("source_sha256")
@@ -2640,7 +2645,7 @@ module KandeloFormulaSupport
       # WHY: Formula#version omits Homebrew's revision suffix, while
       # Formula#pkg_version includes it. Recipes that bind published bytes
       # must receive both identities instead of reconstructing `_N`.
-      "WASM_POSIX_DEP_PKG_VERSION"      => pkg_version.to_s,
+      "WASM_POSIX_DEP_PKG_VERSION"      => recipe.fetch("pkg_version"),
       "WASM_POSIX_DEP_RECIPE_DIR"       => recipe_root,
       "WASM_POSIX_DEP_SOURCE_DIR"       => source_dir,
       "WASM_POSIX_DEP_SOURCE_SHA256"    => recipe.fetch("source_sha256"),

@@ -467,6 +467,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         "entrypoint"        => "build.sh",
         "file_count"        => 1,
         "manifest_sha256"   => "b" * 64,
+        "pkg_version"       => "1.0",
         "resources"         => [],
         "script_env_keys"   => ["HELLO_VALUE"],
         "source_sha256"     => "e" * 64,
@@ -781,6 +782,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         "entrypoint"        => manifest.fetch("entrypoint"),
         "file_count"        => records.length,
         "manifest_sha256"   => Digest::SHA256.file(manifest_path).hexdigest,
+        "pkg_version"       => "1.0",
         "resources"         => resource_records,
         "script_env_keys"   => script_env.keys.sort,
         "source_sha256"     => "a" * 64,
@@ -1352,7 +1354,12 @@ class KandeloFormulaSupportTest < Minitest::Test
 
   def test_tap_recipe_helper_exposes_formula_and_package_versions
     with_tap_recipe_build_fixture do |fixture|
+      # Model a publisher process whose ambient environment is already
+      # polluted. The sealed recipe attestation, not that process state, owns
+      # the package identity handed to the privileged runner.
+      ENV["WASM_POSIX_DEP_PKG_VERSION"] = "ambient-poison"
       fixture.fetch(:harness).formula_pkg_version = "1.0_7"
+      fixture.fetch(:recipe)["pkg_version"] = "1.0_7"
 
       run_tap_recipe(fixture)
 
@@ -1361,6 +1368,17 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_equal "1.0", environment.fetch("WASM_POSIX_DEP_VERSION")
       assert_equal "1.0_7", environment.fetch("WASM_POSIX_DEP_PKG_VERSION")
       assert_equal "1.0", request.fetch("version")
+      assert_equal "ambient-poison", ENV.fetch("WASM_POSIX_DEP_PKG_VERSION")
+    end
+  end
+
+  def test_tap_recipe_helper_rejects_package_version_attestation_drift
+    with_tap_recipe_build_fixture do |fixture|
+      fixture.fetch(:harness).formula_pkg_version = "1.0_7"
+
+      error = assert_tap_recipe_rejected_before_activation(fixture)
+
+      assert_includes error.message, "Formula identity differs"
     end
   end
 
