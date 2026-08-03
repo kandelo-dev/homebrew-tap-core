@@ -3,14 +3,14 @@
     "repository": "kandelo-dev/homebrew-tap-core",
     "tag": "homebrew-prefix-campaign-sha256-0000000000000000000000000000000000000000000000000000000000000000"
   },
-  "kandelo_commit": "89c18589c848f3f3e017080a3ea8ba5cf68d105f",
+  "kandelo_commit": "208236d4525dbe06204aee7015c0da07703885d8",
   "kandelo_repository": "Automattic/kandelo",
   "kind": "kandelo-homebrew-prefix-campaign-caller-authority",
   "package_generations": {
     "rootfs_wasm32": "package-generation-rootfs-wasm32-abi-v42-sha256-0000000000000000000000000000000000000000000000000000000000000000"
   },
   "release_tag": "bottles-abi-v42",
-  "reusable_workflow_commit": "89c18589c848f3f3e017080a3ea8ba5cf68d105f",
+  "reusable_workflow_commit": "208236d4525dbe06204aee7015c0da07703885d8",
   "schema": 2,
   "source_tap_commit": "0000000000000000000000000000000000000000",
   "source_tap_name": "kandelo-dev/tap-core",
