@@ -71,6 +71,13 @@ The exact 2026-07-31 inventory contains:
 The final catalog therefore contains 65 Formulae and 72 variants if no
 Formula changes before cutover.
 
+These inventory counts describe the dated source audit. The exact
+derived campaign manifest is the scheduling authority for the live
+cutover. In particular, a bottle that passed the byte-clean reuse audit
+can still require a rebuild when its target dependency closure changes.
+The current cutover manifest classifies `findutils/wasm32` that way, so
+schedule it as a build, not as a reuse task.
+
 The source snapshot is intentionally not a partially migrated catalog.
 Before the atomic final wave, the retired prefix remains in all 63 Formula
 sidecars and their 70 variants, all 139 live link manifests, 12 Formula
@@ -247,9 +254,9 @@ Neither is a final wave after Git.
 After all reuse handoffs exist, the remaining replacement graph is:
 
 1. `binutils`, `diffutils`, `dinit`, `erlang`, `gawk`, `icu`,
-   `libiconv`, `libmagic`, `libpng`, `libyaml`, `make`, `ncurses`,
-   `openssl`, `patch`, `pax`, `perl`, `procps`, `python`, `sqlite`, `tar`,
-   `tcl`, and `what`;
+   `findutils`, `libiconv`, `libmagic`, `libpng`, `libyaml`, `make`,
+   `ncurses`, `openssl`, `patch`, `pax`, `perl`, `procps`, `python`,
+   `sqlite`, `tar`, `tcl`, and `what`;
 2. `bash`, `curl`, `file-formula`, `less`, `libxml2`, `nano`,
    `nethack`, `ruby`, `texlive`, `vim`, and `wget`;
 3. `git`.
@@ -290,9 +297,11 @@ tar
 posix-utils-lite
 ```
 
-In addition to the bootstrap-critical reuse set, admit `findutils`,
-`gzip`, and `posix-utils-lite`; build `gawk`, `tar`, and `curl`. That
-completes the runtime support needed for the first live guest proof.
+In addition to the bootstrap-critical reuse set, admit `gzip` and
+`posix-utils-lite`; build `findutils`, `gawk`, `tar`, and `curl`. The
+exact derived manifest requires the Findutils rebuild because its
+dependency closure changed. That completes the runtime support needed
+for the first live guest proof.
 
 ## Trusted Execution Sequence
 

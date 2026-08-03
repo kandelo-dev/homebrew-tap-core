@@ -46,11 +46,11 @@ class PrefixCampaignSourceTests(unittest.TestCase):
         )
         self.assertEqual(
             summary["source_tree_git_oid"],
-            "b08a8bee4365cd187ec6fd843787e3ad593ea311",
+            "610b1bd63ea12f9c279b1f26213508da4decebe2",
         )
         self.assertEqual(
             summary["target_tree_git_oid"],
-            "534fba46229fc95cebc8ee4afabee8bb59b34b82",
+            "c7ba24b3c3b79c3b0d63f255b7dd3fc8e99829ac",
         )
 
         active_helper = (
@@ -80,7 +80,7 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
             self.assertEqual(
                 SOURCE.source_tree_oid(output),
-                "534fba46229fc95cebc8ee4afabee8bb59b34b82",
+                "c7ba24b3c3b79c3b0d63f255b7dd3fc8e99829ac",
             )
             for formula in ("homebrew-bootstrap", "libyaml"):
                 source = (output / "Formula" / f"{formula}.rb").read_text()
