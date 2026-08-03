@@ -4,7 +4,7 @@ This directory stages the reviewed `/opt/kandelo/homebrew` cutover without
 changing the tap's active Formulae, helper, bootstrap recipe, metadata, or
 bottle selections.
 
-`source/` mirrors the 41 files that differ between the protected base recorded
+`source/` mirrors the 42 files that differ between the protected base recorded
 in `manifest.json` and the reviewed target tree. The manifest binds every base
 preimage and target file by mode, byte length, Git blob ID, and SHA-256. The
 caller authority additionally binds the canonical manifest bytes, the complete

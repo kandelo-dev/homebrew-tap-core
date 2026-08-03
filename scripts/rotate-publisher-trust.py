@@ -307,15 +307,15 @@ def validate_armed_authority(
         "target_source": {
             "manifest_path": "Kandelo/campaigns/prefix-v1/manifest.json",
             "manifest_sha256": (
-                "5ce90e0ca91d8d570dd2261da11ce039693260ea96c5419d"
-                "02487bf90464b58f"
+                "8397cf12e3771edbb3d7331d399e1358a42249b47a428601"
+                "20c8d7d7707f9237"
             ),
             "source_root": "Kandelo/campaigns/prefix-v1/source",
             "source_tree_git_oid": (
-                "8b8b5b12d687b26d071718eebdddb689d4f17fd5"
+                "e2bc3c214765a9db72fd68c54b35948bb9581abb"
             ),
             "target_tree_git_oid": (
-                "77f06a124c2693031d84220cff57f8e351ddcf63"
+                "9bb26b28ada1e84cb79ebc36a7836450f8e56f95"
             ),
         },
     }

@@ -69,6 +69,7 @@ def assert_formula_contract() -> None:
             'url "https://github.com/Homebrew/brew/archive/'
             'cf5bc21c6b127e168ef7cfa982ba7db62874690e.tar.gz"',
             'version "6.0.12-153-gcf5bc21"',
+            "revision 1",
             'sha256 "18d3c5384b1a90e0dca3c044b31d8a2b61b500bc5b880a14b1e52a590088de40"',
             'license all_of: ["BSD-2-Clause", "GPL-2.0-or-later"]',
             'depends_on "git" => :build',
@@ -238,7 +239,7 @@ def assert_source_lock_contract() -> None:
     assert lock["kind"] == "kandelo-homebrew-bootstrap-tap-recipe-lock"
     assert lock["package"] == {
         "name": "homebrew-bootstrap",
-        "version": "6.0.12-153-gcf5bc21",
+        "version": "6.0.12-153-gcf5bc21_1",
         "arch": "wasm32",
     }
     assert lock["source"]["revision"] == "cf5bc21c6b127e168ef7cfa982ba7db62874690e"

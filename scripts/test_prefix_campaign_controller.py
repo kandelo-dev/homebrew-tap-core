@@ -24,6 +24,11 @@ ABANDONED_CAMPAIGN = (
     / "Kandelo/campaigns/prefix-v1/aborted-campaigns/"
     "ab0290a46e54e67efbb0da2ac0e4b1f7176236e7877012b4872498798ce293ad.json"
 )
+ABANDONED_C2 = (
+    ROOT
+    / "Kandelo/campaigns/prefix-v1/aborted-campaigns/"
+    "ced456302ccb3cc7198f20ac43afb2d54ba2b990afa7b02f86e48670be12f9b8.json"
+)
 SPEC = importlib.util.spec_from_file_location(
     "prefix_campaign_controller",
     SCRIPT,
@@ -456,6 +461,9 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             "source_tap_commit"
         ]
         active_value["state"] = "active"
+        active_value["target_source"] = record["authority"][
+            "target_source"
+        ]
         self.assertEqual(
             hashlib.sha256(
                 CONTROLLER.pretty_json(active_value)
@@ -514,6 +522,107 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     plan=plan,
                     tag=tag_for_handoff(handoff),
                 )
+
+    def test_abandoned_c2_preserves_every_valid_dispatch(self) -> None:
+        record, _payload = CONTROLLER.load_json_bytes(
+            ABANDONED_C2,
+            "abandoned C2 campaign record",
+            canonical=True,
+        )
+        self.assertEqual(record["schema"], 1)
+        self.assertEqual(
+            record["kind"],
+            "kandelo-homebrew-prefix-abandoned-campaign",
+        )
+        campaign_tag = record["authority"]["campaign_release"]["tag"]
+        self.assertEqual(
+            campaign_tag.removeprefix(
+                "homebrew-prefix-campaign-sha256-"
+            ),
+            ABANDONED_C2.stem,
+        )
+        dispatches = record["dispatches"]
+        run_ids = {item["run_id"] for item in dispatches}
+        self.assertEqual(len(dispatches), 40)
+        self.assertEqual(len(run_ids), 40)
+        self.assertEqual(
+            {item["run_id"] for item in record["invalid_events"]},
+            {30783368233, 30783371138, 30783375101},
+        )
+        self.assertEqual(
+            run_ids,
+            {
+                30782329550, 30782332723, 30782335537,
+                30782338293, 30782340976, 30782342970,
+                30782346529, 30782349527, 30782435588,
+                30782439020, 30782473341, 30782477037,
+                30782479871, 30782553770, 30782556280,
+                30782574156, 30782627856, 30782631394,
+                30782689328, 30782691852, 30782695219,
+                30782844794, 30782847771, 30782850088,
+                30783013274, 30783016134, 30783019135,
+                30783174020, 30783176305, 30783179381,
+                30783482573, 30783492949, 30783495916,
+                30783517793, 30783521665, 30783737597,
+                30783741445, 30783746354, 30783750879,
+                30783754333,
+            },
+        )
+        handoff_ids = {
+            item["handoff_release"]["id"]
+            for item in dispatches
+            if "handoff_release" in item
+        }
+        self.assertEqual(len(handoff_ids), 31)
+        self.assertEqual(
+            record["recovery"]["reserved_successor_versions"],
+            [
+                {
+                    "arch": "wasm32",
+                    "formula": "homebrew-bootstrap",
+                    "version": "6.0.12-153-gcf5bc21_1",
+                },
+                {
+                    "arch": "wasm32",
+                    "formula": "libyaml",
+                    "version": "0.2.5_1",
+                },
+            ],
+        )
+
+        armed_value, _armed_payload = CONTROLLER.load_json_bytes(
+            AUTHORITY,
+            "checked-in campaign authority",
+            canonical=True,
+        )
+        self.assertEqual(armed_value["state"], "armed")
+        active_value = copy.deepcopy(armed_value)
+        active_value["campaign_release"] = record["authority"][
+            "campaign_release"
+        ].copy()
+        active_value["campaign_release"].pop("id")
+        active_value["kandelo_commit"] = record["authority"][
+            "kandelo_commit"
+        ]
+        active_value["package_generations"]["rootfs_wasm32"] = record[
+            "authority"
+        ]["rootfs_wasm32"]
+        active_value["reusable_workflow_commit"] = record["authority"][
+            "kandelo_commit"
+        ]
+        active_value["source_tap_commit"] = record["authority"][
+            "source_tap_commit"
+        ]
+        active_value["state"] = "active"
+        active_value["target_source"] = record["authority"][
+            "target_source"
+        ]
+        self.assertEqual(
+            hashlib.sha256(
+                CONTROLLER.pretty_json(active_value)
+            ).hexdigest(),
+            record["authority"]["payload_sha256"],
+        )
 
     def test_checked_in_authority_has_safe_rollout_state(self) -> None:
         authority = CONTROLLER.load_authority(
