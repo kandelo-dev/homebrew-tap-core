@@ -35,20 +35,18 @@ reports/<name>-<version>-rebuild<N>-<arch>.provenance.json
 The `examples/` directory contains fixture data for schema and semantic
 validator development. It is not published metadata.
 
-`vfs-acceptance.json` and its referenced Brewfile are reviewed tap policy, not
-generated sidecars. The publisher reads them from the exact tap commit and
-never rewrites them.
+When present, `vfs-acceptance.json` and its referenced files are reviewed tap
+policy, not generated sidecars. The publisher reads them from the exact tap
+commit and never rewrites them.
 
-Schema 2 also references `vfs-acceptance-shell.json`. The accepted Brewfile
-includes the published Dash bottle as an explicit root, and the exact composed
-image must start that VFS-owned shell in Chromium without downloading Kandelo's
-legacy shell assets. The selected `python` command imports its keg-owned standard
-library and zlib module, reads the dependency bottle's header through its
-canonical `opt/zlib` link, and round-trips compressed bytes. It therefore proves
-the real Python-to-zlib bottle edge in the same composed image independently in
-Node and Chromium. Erlang's OTP tree is complete but keg-internal, so it remains
-covered by the Formula runtime tests rather than being misrepresented as the
-dependency-bearing root required by this VFS gate.
+The tap currently has no checked-in VFS acceptance selection. The previous
+selection described the retired `/home/linuxbrew/.linuxbrew` guest prefix and
+Python 3.13.3, so retaining it would test a product Kandelo no longer ships.
+The normal publisher treats the policy as optional unless its caller requests
+the legacy dependency-closure acceptance rung. A future policy must describe
+the current `/opt/kandelo/homebrew` layout and be reviewed and proven before it
+is checked in. The mostly-lazy shell cutover instead proves its closed
+selection through the shell's Node and Chromium lifecycle tests.
 
 ## Generation
 
