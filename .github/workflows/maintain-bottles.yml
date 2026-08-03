@@ -10,13 +10,13 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@d7540878bcb4946126daaa53e3d8d783e41a6102
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-maintenance.yml@bb064154b6089cb7b0172156ec42fd752092352a
     with:
       mode: ${{ github.event.client_payload.mode || 'rebuild' }}
       # WHY: rebuild maintenance must use the same main-admitted publisher and
       # package closure as first publication. Rollback ignores these build
       # inputs inside the reusable workflow.
-      kandelo-ref: d7540878bcb4946126daaa53e3d8d783e41a6102
+      kandelo-ref: bb064154b6089cb7b0172156ec42fd752092352a
       # WHY: maintenance must rebuild or roll back the exact reviewed Formula
       # source, even though repository_dispatch loads this caller from main.
       tap-ref: ${{ github.event.client_payload.tap_sha }}
@@ -24,7 +24,7 @@ jobs:
       arches: ${{ github.event.client_payload.arches || 'wasm32' }}
       release-tag: ${{ github.event.client_payload.release_tag || '' }}
       expected-cache-keys: ${{ github.event.client_payload.expected_cache_keys || '' }}
-      package-generation-wasm32: package-generation-rootfs-wasm32-abi-v42-sha256-13dced6db0817af37eeb7e9ed696b5d8896ce93f1034454b0fa017266364e7a4
+      package-generation-wasm32: package-generation-rootfs-wasm32-abi-v42-sha256-ba70b53b49a1ec09aa4fc020f1f5c571d00e329996b0eb543f6c93769a634e3c
       force: ${{ github.event.client_payload.force || false }}
       rollback-reason: ${{ github.event.client_payload.rollback_reason || '' }}
       rollback-ref: ${{ github.event.client_payload.rollback_ref || '' }}
