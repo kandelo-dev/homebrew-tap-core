@@ -186,16 +186,16 @@ The new bootstrap identity is:
 
 ```text
 package:   homebrew-tap-core/homebrew-bootstrap
-version:   6.0.12-153-gcf5bc21
+version:   6.0.12-153-gcf5bc21_1
 arch:      wasm32
 rebuild:   0
-top tag:   6.0.12-153-gcf5bc21
+top tag:   6.0.12-153-gcf5bc21_1
 ```
 
-The exact top reference was anonymously absent during the 2026-07-29
-audit. A failed older bootstrap attempt created an unrelated older version
-in the same public package. It does not authorize or collide with this
-identity. Recheck absence during the campaign.
+C2 published revision-zero bytes before its final handoff failed. Revision
+one reserves a fresh Homebrew identity instead of overwriting or relabeling
+those public bytes. Prove the exact revision-one reference absent again
+immediately before publication.
 
 ## Earliest Bootstrap-Critical Wave
 

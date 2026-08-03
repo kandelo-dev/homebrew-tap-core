@@ -3,7 +3,7 @@
   "kind": "kandelo-homebrew-bootstrap-tap-recipe-lock",
   "package": {
     "name": "homebrew-bootstrap",
-    "version": "6.0.12-153-gcf5bc21",
+    "version": "6.0.12-153-gcf5bc21_1",
     "arch": "wasm32"
   },
   "source": {

@@ -19,6 +19,11 @@ class HomebrewBootstrap < Formula
   sha256 "18d3c5384b1a90e0dca3c044b31d8a2b61b500bc5b880a14b1e52a590088de40"
   license all_of: ["BSD-2-Clause", "GPL-2.0-or-later"]
 
+  # WHY: C2 published revision-zero OCI bytes before its final handoff failed.
+  # Reserve a new Homebrew identity so recovery never overwrites or relabels
+  # those public bytes.
+  revision 1
+
   depends_on "git" => :build
   depends_on "ruby" => :build
   depends_on "unzip" => [:build, :test]
@@ -31,7 +36,7 @@ class HomebrewBootstrap < Formula
     kandelo_require_arch!("wasm32")
 
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "32e9b764bf4724c890e2a46ec83a7c615ea75c0c2dc40a89e2cc4fe7814663fb",
+      manifest_sha256: "a0cd90da7701966a214c2bd5153a8d8312c1891c9e3c3cd68427e68c7899484e",
       script_env:      {
         # WHY: the sealed recipe root does not expose Homebrew's own portable
         # Ruby. Bind this declared native keg explicitly so the lock verifier

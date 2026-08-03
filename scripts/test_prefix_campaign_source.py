@@ -39,18 +39,18 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             manifest_path=MANIFEST,
             require_live_base=True,
         )
-        self.assertEqual(summary["files"], 41)
+        self.assertEqual(summary["files"], 42)
         self.assertEqual(
             summary["base_commit"],
             "2e192c8cf318044078e5426d39717636131cec60",
         )
         self.assertEqual(
             summary["source_tree_git_oid"],
-            "8b8b5b12d687b26d071718eebdddb689d4f17fd5",
+            "e2bc3c214765a9db72fd68c54b35948bb9581abb",
         )
         self.assertEqual(
             summary["target_tree_git_oid"],
-            "77f06a124c2693031d84220cff57f8e351ddcf63",
+            "9bb26b28ada1e84cb79ebc36a7836450f8e56f95",
         )
 
         active_helper = (
@@ -80,8 +80,11 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
             self.assertEqual(
                 SOURCE.source_tree_oid(output),
-                "77f06a124c2693031d84220cff57f8e351ddcf63",
+                "9bb26b28ada1e84cb79ebc36a7836450f8e56f95",
             )
+            for formula in ("homebrew-bootstrap", "libyaml"):
+                source = (output / "Formula" / f"{formula}.rb").read_text()
+                self.assertEqual(source.count("\n  revision 1\n"), 1)
 
     def test_materialized_prefix_contracts_are_mutually_green(
         self,
