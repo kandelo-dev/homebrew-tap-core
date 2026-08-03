@@ -7,6 +7,7 @@ import contextlib
 import hashlib
 import importlib.util
 import io
+import json
 import pathlib
 import shutil
 import subprocess
@@ -57,6 +58,65 @@ class PublisherTrustRotationTests(unittest.TestCase):
             + source[match.end("value") :]
         )
 
+    def force_repeated_scalar(
+        self,
+        relative: pathlib.Path,
+        pattern,
+        index: int,
+        replacement: str,
+    ) -> None:
+        path = self.root / relative
+        source = path.read_text()
+        matches = tuple(pattern.finditer(source))
+        self.assertGreater(len(matches), index, relative)
+        match = matches[index]
+        quoted = match.group("value").endswith('"')
+        rendered = replacement + ('"' if quoted else "")
+        path.write_text(
+            source[: match.start("value")]
+            + rendered
+            + source[match.end("value") :]
+        )
+
+    def remove_scalar_occurrence(
+        self,
+        relative: pathlib.Path,
+        pattern,
+        index: int = 0,
+    ) -> None:
+        path = self.root / relative
+        source = path.read_text()
+        matches = tuple(pattern.finditer(source))
+        self.assertGreater(len(matches), index, relative)
+        match = matches[index]
+        path.write_text(
+            source[: match.start()] + source[match.end() + 1 :]
+        )
+
+    def duplicate_scalar_occurrence(
+        self,
+        relative: pathlib.Path,
+        pattern,
+        index: int = 0,
+    ) -> None:
+        path = self.root / relative
+        source = path.read_text()
+        matches = tuple(pattern.finditer(source))
+        self.assertGreater(len(matches), index, relative)
+        match = matches[index]
+        path.write_text(
+            source[: match.end()]
+            + "\n"
+            + match.group(0)
+            + source[match.end() :]
+        )
+
+    def mutate_authority(self, mutation) -> None:
+        path = self.root / rotation.PREFIX_AUTHORITY_PATH
+        authority = json.loads(path.read_text())
+        mutation(authority)
+        path.write_text(json.dumps(authority, indent=2) + "\n")
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = pathlib.Path(self.temporary.name)
@@ -76,6 +136,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
         self.predecessor_first_publication_sha = self.scalar_value(
             rotation.TRUST_PATH,
             rotation.TRUST_FIRST_PUBLICATION_KANDELO_SHA,
+        )
+        self.predecessor_campaign_sha = self.scalar_value(
+            rotation.TRUST_PATH,
+            rotation.TRUST_CLOSED_SELECTION_KANDELO_SHA,
         )
         self.predecessor_generation = self.scalar_value(
             rotation.TRUST_PATH,
@@ -108,6 +172,9 @@ class PublisherTrustRotationTests(unittest.TestCase):
             "predecessor_first_publication_kandelo_sha": (
                 self.predecessor_first_publication_sha
             ),
+            "predecessor_campaign_kandelo_sha": (
+                self.predecessor_campaign_sha
+            ),
             "predecessor_generation_tag": self.predecessor_generation,
             "predecessor_caller_sha256": self.predecessor_caller,
             "kandelo_sha": NEW_SHA,
@@ -126,6 +193,8 @@ class PublisherTrustRotationTests(unittest.TestCase):
             self.predecessor_dry_run_sha,
             "--predecessor-first-publication-kandelo-sha",
             self.predecessor_first_publication_sha,
+            "--predecessor-campaign-kandelo-sha",
+            self.predecessor_campaign_sha,
             "--predecessor-generation-tag",
             self.predecessor_generation,
             "--predecessor-caller-sha256",
@@ -143,6 +212,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
                 self.predecessor_sha,
                 self.predecessor_dry_run_sha,
                 self.predecessor_first_publication_sha,
+                self.predecessor_campaign_sha,
                 NEW_SHA,
             ):
                 return candidate
@@ -185,6 +255,274 @@ class PublisherTrustRotationTests(unittest.TestCase):
         self.assertEqual((), after.changed)
         self.assertEqual(preview.caller_sha256, after.caller_sha256)
 
+    def test_rotation_owns_exactly_nine_live_authority_files(self) -> None:
+        self.assertEqual(
+            (
+                rotation.DRY_RUN_PATH,
+                rotation.MAINTENANCE_PATH,
+                rotation.PREFIX_CAMPAIGN_PATH,
+                rotation.PUBLISH_PATH,
+                rotation.CLOSED_SELECTION_PATH,
+                rotation.FIRST_PUBLICATION_PATH,
+                rotation.PREFIX_AUTHORITY_PATH,
+                rotation.TRUST_PATH,
+                rotation.CONTROLLER_PATH,
+            ),
+            rotation.ROTATION_PATHS,
+        )
+        prefix_campaign = (
+            self.root / rotation.PREFIX_CAMPAIGN_PATH
+        ).read_text()
+        self.assertEqual(
+            3,
+            len(tuple(rotation.PREFIX_BOTTLE_USES.finditer(prefix_campaign))),
+        )
+        self.assertEqual(
+            1,
+            len(
+                tuple(
+                    rotation.PREFIX_FIRST_CHILD_USES.finditer(prefix_campaign)
+                )
+            ),
+        )
+        for relative, pattern in (
+            (rotation.CLOSED_SELECTION_PATH, rotation.CLOSED_SELECTION_USES),
+            (rotation.PREFIX_AUTHORITY_PATH, rotation.AUTHORITY_KANDELO_SHA),
+            (rotation.PREFIX_AUTHORITY_PATH, rotation.AUTHORITY_WORKFLOW_SHA),
+            (
+                rotation.TRUST_PATH,
+                rotation.TRUST_CLOSED_SELECTION_KANDELO_SHA,
+            ),
+        ):
+            self.assertEqual(
+                1,
+                len(tuple(pattern.finditer((self.root / relative).read_text()))),
+                relative,
+            )
+
+    def test_unknown_prefix_campaign_pin_is_rejected(self) -> None:
+        self.force_repeated_scalar(
+            rotation.PREFIX_CAMPAIGN_PATH,
+            rotation.PREFIX_BOTTLE_USES,
+            1,
+            self.unknown_kandelo_sha(),
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "prefix-campaign bottle reusable workflow SHA has "
+            "unexpected value",
+        ):
+            self.build()
+
+    def test_missing_prefix_campaign_bottle_caller_is_rejected(self) -> None:
+        self.remove_scalar_occurrence(
+            rotation.PREFIX_CAMPAIGN_PATH,
+            rotation.PREFIX_BOTTLE_USES,
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "prefix-campaign bottle reusable workflow SHA must occur "
+            "exactly 3 times; found 2",
+        ):
+            self.build()
+
+    def test_extra_prefix_campaign_bottle_caller_is_rejected(self) -> None:
+        self.duplicate_scalar_occurrence(
+            rotation.PREFIX_CAMPAIGN_PATH,
+            rotation.PREFIX_BOTTLE_USES,
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "prefix-campaign bottle reusable workflow SHA must occur "
+            "exactly 3 times; found 4",
+        ):
+            self.build()
+
+    def test_missing_prefix_first_child_caller_is_rejected(self) -> None:
+        self.remove_scalar_occurrence(
+            rotation.PREFIX_CAMPAIGN_PATH,
+            rotation.PREFIX_FIRST_CHILD_USES,
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "prefix-campaign first-child reusable workflow SHA must "
+            "occur exactly 1 time; found 0",
+        ):
+            self.build()
+
+    def test_extra_prefix_first_child_caller_is_rejected(self) -> None:
+        self.duplicate_scalar_occurrence(
+            rotation.PREFIX_CAMPAIGN_PATH,
+            rotation.PREFIX_FIRST_CHILD_USES,
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "prefix-campaign first-child reusable workflow SHA must "
+            "occur exactly 1 time; found 2",
+        ):
+            self.build()
+
+    def test_unknown_closed_selection_slots_are_rejected(self) -> None:
+        unknown = self.unknown_kandelo_sha()
+        for pattern, message in (
+            (
+                rotation.CLOSED_SELECTION_USES,
+                "closed-selection reusable workflow SHA has unexpected "
+                "value",
+            ),
+            (
+                rotation.EXACT_KANDELO_REF,
+                "closed-selection kandelo-ref has unexpected value",
+            ),
+        ):
+            with self.subTest(pattern=pattern.pattern):
+                path = self.root / rotation.CLOSED_SELECTION_PATH
+                original = path.read_text()
+                self.force_scalar(
+                    rotation.CLOSED_SELECTION_PATH,
+                    pattern,
+                    unknown,
+                )
+                with self.assertRaisesRegex(rotation.RotationError, message):
+                    self.build()
+                path.write_text(original)
+
+    def test_closed_selection_slot_counts_are_exact(self) -> None:
+        for operation, pattern, message in (
+            (
+                self.remove_scalar_occurrence,
+                rotation.CLOSED_SELECTION_USES,
+                "closed-selection reusable workflow SHA must occur "
+                "exactly once; found 0",
+            ),
+            (
+                self.duplicate_scalar_occurrence,
+                rotation.EXACT_KANDELO_REF,
+                "closed-selection kandelo-ref must occur exactly once; "
+                "found 2",
+            ),
+        ):
+            with self.subTest(pattern=pattern.pattern):
+                path = self.root / rotation.CLOSED_SELECTION_PATH
+                original = path.read_text()
+                operation(rotation.CLOSED_SELECTION_PATH, pattern)
+                with self.assertRaisesRegex(rotation.RotationError, message):
+                    self.build()
+                path.write_text(original)
+
+    def test_split_armed_authority_is_rejected(self) -> None:
+        self.force_scalar(
+            rotation.PREFIX_AUTHORITY_PATH,
+            rotation.AUTHORITY_KANDELO_SHA,
+            NEW_SHA,
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "armed prefix campaign authority has a split or unexpected "
+            "Kandelo pin",
+        ):
+            self.build()
+
+    def test_unknown_armed_authority_pin_is_rejected(self) -> None:
+        unknown = self.unknown_kandelo_sha()
+        for pattern in (
+            rotation.AUTHORITY_KANDELO_SHA,
+            rotation.AUTHORITY_WORKFLOW_SHA,
+        ):
+            self.force_scalar(
+                rotation.PREFIX_AUTHORITY_PATH,
+                pattern,
+                unknown,
+            )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "armed prefix campaign authority has a split or unexpected "
+            "Kandelo pin",
+        ):
+            self.build()
+
+    def test_unknown_closed_selection_trust_root_is_rejected(self) -> None:
+        self.force_scalar(
+            rotation.TRUST_PATH,
+            rotation.TRUST_CLOSED_SELECTION_KANDELO_SHA,
+            self.unknown_kandelo_sha(),
+        )
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "trust-test closed-selection Kandelo SHA has unexpected value",
+        ):
+            self.build()
+
+    def test_armed_authority_rejects_campaign_data_mutations(self) -> None:
+        mutations = (
+            ("active state", lambda value: value.update(state="active")),
+            (
+                "campaign release",
+                lambda value: value["campaign_release"].update(
+                    tag="homebrew-prefix-campaign-sha256-" + "4" * 64
+                ),
+            ),
+            (
+                "rootfs generation",
+                lambda value: value["package_generations"].update(
+                    rootfs_wasm32=(
+                        "package-generation-rootfs-wasm32-abi-v42-"
+                        "sha256-" + "5" * 64
+                    )
+                ),
+            ),
+            (
+                "source commit",
+                lambda value: value.update(source_tap_commit="6" * 39 + "a"),
+            ),
+            (
+                "source repository",
+                lambda value: value.update(
+                    source_tap_repository="other/homebrew-tap"
+                ),
+            ),
+            (
+                "target source",
+                lambda value: value["target_source"].update(
+                    manifest_path="other/manifest.json"
+                ),
+            ),
+        )
+        path = self.root / rotation.PREFIX_AUTHORITY_PATH
+        for label, mutation in mutations:
+            with self.subTest(label=label):
+                original = path.read_text()
+                self.mutate_authority(mutation)
+                with self.assertRaisesRegex(
+                    rotation.RotationError,
+                    "prefix campaign authority changed outside its two "
+                    "Kandelo pins",
+                ):
+                    self.build()
+                path.write_text(original)
+
+    def test_noncanonical_armed_authority_is_rejected(self) -> None:
+        path = self.root / rotation.PREFIX_AUTHORITY_PATH
+        authority = json.loads(path.read_text())
+        path.write_text(json.dumps(authority, indent=4) + "\n")
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "prefix campaign authority is not canonical pretty JSON",
+        ):
+            self.build()
+
+    def test_duplicate_armed_authority_field_is_rejected(self) -> None:
+        path = self.root / rotation.PREFIX_AUTHORITY_PATH
+        source = path.read_text()
+        marker = '  "state": "armed",\n'
+        self.assertEqual(1, source.count(marker))
+        path.write_text(source.replace(marker, marker + marker))
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "prefix campaign authority duplicates 'state'",
+        ):
+            self.build()
+
     def test_complete_tuple_and_raw_caller_hash_are_derived_together(self) -> None:
         candidate = self.build()
 
@@ -213,6 +551,48 @@ class PublisherTrustRotationTests(unittest.TestCase):
         self.assertIn(f"kandelo-ref: {NEW_SHA}", first_publication)
         self.assertNotIn("package-generation-", first_publication)
 
+        prefix_campaign = candidate.contents[
+            rotation.PREFIX_CAMPAIGN_PATH
+        ].decode()
+        self.assertEqual(
+            3,
+            prefix_campaign.count(
+                "reusable-homebrew-bottle-publish.yml@" + NEW_SHA
+            ),
+        )
+        self.assertEqual(
+            1,
+            prefix_campaign.count(
+                "reusable-homebrew-prefix-first-child-publish.yml@"
+                + NEW_SHA
+            ),
+        )
+
+        closed_selection = candidate.contents[
+            rotation.CLOSED_SELECTION_PATH
+        ].decode()
+        self.assertIn(
+            "reusable-homebrew-closed-selection-publish.yml@" + NEW_SHA,
+            closed_selection,
+        )
+        self.assertIn(f"kandelo-ref: {NEW_SHA}", closed_selection)
+
+        authority = json.loads(
+            candidate.contents[rotation.PREFIX_AUTHORITY_PATH]
+        )
+        self.assertEqual(NEW_SHA, authority["kandelo_commit"])
+        self.assertEqual(NEW_SHA, authority["reusable_workflow_commit"])
+        self.assertEqual("armed", authority["state"])
+        self.assertEqual(rotation.ZERO_SHA, authority["source_tap_commit"])
+        self.assertEqual(
+            rotation.ZERO_CAMPAIGN_TAG,
+            authority["campaign_release"]["tag"],
+        )
+        self.assertEqual(
+            rotation.ZERO_GENERATION_TAG,
+            authority["package_generations"]["rootfs_wasm32"],
+        )
+
         trust = candidate.contents[rotation.TRUST_PATH].decode()
         self.assertIn(f'CURRENT_KANDELO_WORKFLOW_SHA = "{NEW_SHA}"', trust)
         self.assertIn(
@@ -221,6 +601,11 @@ class PublisherTrustRotationTests(unittest.TestCase):
         )
         self.assertIn(
             f'FIRST_PUBLICATION_KANDELO_SHA = "{NEW_SHA}"',
+            trust,
+        )
+        self.assertIn(
+            "CLOSED_SELECTION_KANDELO_SHA =\n"
+            f'  "{NEW_SHA}"',
             trust,
         )
         self.assertIn(
@@ -242,19 +627,14 @@ class PublisherTrustRotationTests(unittest.TestCase):
             controller,
         )
 
-        for relative in (
-            rotation.DRY_RUN_PATH,
-            rotation.MAINTENANCE_PATH,
-            rotation.PUBLISH_PATH,
-            rotation.FIRST_PUBLICATION_PATH,
-            rotation.TRUST_PATH,
-        ):
+        for relative in rotation.ROTATION_PATHS:
             source = candidate.contents[relative].decode()
             self.assertNotIn(self.predecessor_sha, source)
             self.assertNotIn(
                 self.predecessor_first_publication_sha,
                 source,
             )
+            self.assertNotIn(self.predecessor_campaign_sha, source)
             self.assertNotIn(self.predecessor_generation, source)
             self.assertNotIn(self.predecessor_caller, source)
 
@@ -283,7 +663,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
         for relative in (
             rotation.DRY_RUN_PATH,
             rotation.MAINTENANCE_PATH,
+            rotation.PREFIX_CAMPAIGN_PATH,
+            rotation.CLOSED_SELECTION_PATH,
             rotation.FIRST_PUBLICATION_PATH,
+            rotation.PREFIX_AUTHORITY_PATH,
             rotation.TRUST_PATH,
         ):
             (self.root / relative).write_bytes(candidate.contents[relative])
@@ -291,10 +674,13 @@ class PublisherTrustRotationTests(unittest.TestCase):
         resumed = self.build()
         self.assertNotIn(rotation.DRY_RUN_PATH, resumed.changed)
         self.assertNotIn(rotation.MAINTENANCE_PATH, resumed.changed)
+        self.assertNotIn(rotation.PREFIX_CAMPAIGN_PATH, resumed.changed)
+        self.assertNotIn(rotation.CLOSED_SELECTION_PATH, resumed.changed)
         self.assertNotIn(
             rotation.FIRST_PUBLICATION_PATH,
             resumed.changed,
         )
+        self.assertNotIn(rotation.PREFIX_AUTHORITY_PATH, resumed.changed)
         self.assertNotIn(rotation.TRUST_PATH, resumed.changed)
         self.assertIn(rotation.PUBLISH_PATH, resumed.changed)
         self.assertIn(rotation.CONTROLLER_PATH, resumed.changed)
@@ -369,6 +755,18 @@ class PublisherTrustRotationTests(unittest.TestCase):
         ):
             self.build(
                 predecessor_first_publication_kandelo_sha=(
+                    self.unknown_kandelo_sha()
+                )
+            )
+
+    def test_wrong_predecessor_campaign_sha_is_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "prefix-campaign bottle reusable workflow SHA has unexpected "
+            "value",
+        ):
+            self.build(
+                predecessor_campaign_kandelo_sha=(
                     self.unknown_kandelo_sha()
                 )
             )
@@ -497,6 +895,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
                 "predecessor first-publication Kandelo SHA must be exactly",
             ),
             (
+                {"predecessor_campaign_kandelo_sha": "main"},
+                "predecessor campaign Kandelo SHA must be exactly",
+            ),
+            (
                 {"predecessor_generation_tag": "generation"},
                 "predecessor generation tag must be an exact ABI 42",
             ),
@@ -557,6 +959,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
             arguments.predecessor_first_publication_kandelo_sha,
         )
         self.assertEqual(
+            self.predecessor_campaign_sha,
+            arguments.predecessor_campaign_kandelo_sha,
+        )
+        self.assertEqual(
             self.predecessor_generation,
             arguments.predecessor_generation_tag,
         )
@@ -572,6 +978,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
             "--predecessor-kandelo-sha",
             "--predecessor-dry-run-kandelo-sha",
             "--predecessor-first-publication-kandelo-sha",
+            "--predecessor-campaign-kandelo-sha",
             "--predecessor-generation-tag",
             "--predecessor-caller-sha256",
         ):
@@ -595,7 +1002,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
         with contextlib.redirect_stdout(preview_output):
             self.assertEqual(0, rotation.main(self.cli_arguments()))
         self.assertIn(
-            "would update 6 file(s)",
+            "would update 9 file(s)",
             preview_output.getvalue(),
         )
         self.assertIn("caller-sha256=", preview_output.getvalue())
@@ -613,7 +1020,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
                 0,
                 rotation.main(self.cli_arguments() + ["--apply"]),
             )
-        self.assertIn("updated 6 file(s)", apply_output.getvalue())
+        self.assertIn("updated 9 file(s)", apply_output.getvalue())
         self.assertEqual((), self.build().changed)
 
     def test_fully_applied_rotation_passes_ruby_trust_contract(
@@ -633,6 +1040,9 @@ class PublisherTrustRotationTests(unittest.TestCase):
             ),
             predecessor_first_publication_kandelo_sha=(
                 self.predecessor_first_publication_sha
+            ),
+            predecessor_campaign_kandelo_sha=(
+                self.predecessor_campaign_sha
             ),
             predecessor_generation_tag=self.predecessor_generation,
             predecessor_caller_sha256=self.predecessor_caller,
@@ -698,6 +1108,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
         self.assertNotIn(self.predecessor_sha, source)
         self.assertNotIn(self.predecessor_dry_run_sha, source)
         self.assertNotIn(self.predecessor_first_publication_sha, source)
+        self.assertNotIn(self.predecessor_campaign_sha, source)
         self.assertNotIn(self.predecessor_generation, source)
         self.assertNotIn(self.predecessor_caller, source)
 

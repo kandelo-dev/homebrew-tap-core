@@ -1,13 +1,15 @@
 # Publisher Trust Rotation
 
-This runbook rotates the four protected tap callers and their
-in-repository trust roots from one complete authority tuple to another:
+This runbook rotates every live protected tap caller and its in-repository
+trust roots from one complete authority tuple to another:
 
 - `P_M`: the exact predecessor Kandelo main commit selected by write callers;
 - `P_D`: the exact predecessor Kandelo main commit selected by the dry-run
   caller;
 - `P_F`: the exact predecessor Kandelo commit selected by the
   first-publication namespace canary;
+- `P_A`: the exact predecessor Kandelo commit selected by the prefix-campaign
+  callers, closed-selection caller, and armed campaign authority;
 - `P_G`: the predecessor content-addressed rootfs-wasm32 generation;
 - `P_C`: the SHA-256 of the predecessor raw production caller bytes;
 - `M`: the exact new Kandelo main commit;
@@ -34,9 +36,16 @@ P_C=eea191a190495a0b760df906122d3de55f61d2281b7e360d855feaa3a200e094
 export P_M P_D P_F P_G P_C
 ```
 
+This is historical evidence, not an executable input tuple for the expanded
+helper: the pre-#1160 record predates `P_A`. Query the current protected tree
+and record `P_A` before any new rotation. Do not infer it from this section.
+
 Re-query protected tap `main` immediately before preparing the live rotation.
 If any current caller or trust-root slot differs, stop and review the new
 predecessor instead of editing these values until the helper accepts the tree.
+The prefix workflow's three bottle-publisher pins and one first-child pin, the
+closed-selection workflow's publisher and `kandelo-ref`, the armed authority's
+two Kandelo fields, and `CLOSED_SELECTION_KANDELO_SHA` must all name `P_A`.
 Formula sidecars and aggregate metadata also contain historical
 `kandelo_commit` values. They are artifact provenance and are intentionally not
 rotation-owned; never globally replace `P_M`.
@@ -120,12 +129,12 @@ authority early:
    succeeds.
 6. Once the rootfs generation yields `G`, run the complete helper below
    with `P_D="$M"` and `P_F="$M"`, while retaining the recorded
-   predecessor values for `P_M`, `P_G`, and `P_C`.
+   predecessor values for `P_M`, `P_A`, `P_G`, and `P_C`.
 
 The split state is intentional: dry-run cannot publish, and
 first-publication can create only the exact absent Libyaml child proved
 by that dry run. Normal Formula publication remains pinned to
-`P_M/P_G/P_C` until the complete rotation lands.
+`P_M/P_A/P_G/P_C` until the complete rotation lands.
 `Kandelo/test-workflow-trust.rb` permits these two live callers to
 converge on current authority but still rejects collisions with
 historical test fixtures.
@@ -134,7 +143,7 @@ historical test fixtures.
 
 Start from a clean checkout containing the final tap changes that the rotation
 will accompany. If the closed-recipe work from PR #129 lands first, stack the
-rotation helper commit onto that exact result. PR #129 did not change the six
+rotation helper commit onto that exact result. PR #129 did not change the nine
 rotation-owned files when this runbook was prepared.
 
 Confirm the complete predecessor production caller, not only its visible pins:
@@ -210,6 +219,7 @@ python3 -B scripts/rotate-publisher-trust.py \
   --predecessor-kandelo-sha "$P_M" \
   --predecessor-dry-run-kandelo-sha "$P_D" \
   --predecessor-first-publication-kandelo-sha "$P_F" \
+  --predecessor-campaign-kandelo-sha "$P_A" \
   --predecessor-generation-tag "$P_G" \
   --predecessor-caller-sha256 "$P_C" \
   --kandelo-sha "$M" \
@@ -219,6 +229,7 @@ python3 -B scripts/rotate-publisher-trust.py \
   --predecessor-kandelo-sha "$P_M" \
   --predecessor-dry-run-kandelo-sha "$P_D" \
   --predecessor-first-publication-kandelo-sha "$P_F" \
+  --predecessor-campaign-kandelo-sha "$P_A" \
   --predecessor-generation-tag "$P_G" \
   --predecessor-caller-sha256 "$P_C" \
   --kandelo-sha "$M" \
@@ -235,8 +246,14 @@ Apply changes only these reviewed slots:
   `M`; it receives no package-generation input;
 - maintenance reusable publisher and `kandelo-ref`: `M`; generation: `G`;
 - production reusable publisher and `kandelo-ref`: `M`; generation: `G`;
-- Ruby caller trust constants, including first-publication trust: `M` and
-  `G`; and
+- the prefix campaign's three bottle publishers and one first-child
+  publisher: `M`;
+- the closed-selection publisher and exact `kandelo-ref`: `M`;
+- the armed prefix-campaign authority's Kandelo commit and reusable-workflow
+  commit: `M`; its campaign tag, generation tag, source commit, state, and
+  target-source contract remain unchanged and non-executable;
+- Ruby caller trust constants, including first-publication and
+  closed-selection trust: `M` and `G`; and
 - rollout-controller current authority: `M`, `G`, and derived `C`.
 
 The helper accepts only predecessor or successor values in each owned slot. It
@@ -244,7 +261,7 @@ also requires the raw production caller to hash to either `P_C` or the rendered
 successor `C`; this prevents scalar-only validation from approving extra jobs,
 permissions, secrets, or other unreviewed caller bytes. Files are replaced
 atomically one at a time. If the host stops between files, rerun with the same
-seven inputs to converge the partial application. A complete second invocation
+eight inputs to converge the partial application. A complete second invocation
 is a no-op.
 
 Review exactly the owned diff and the derived caller digest:
@@ -253,8 +270,11 @@ Review exactly the owned diff and the derived caller digest:
 git diff -- \
   .github/workflows/dry-run-bottles.yml \
   .github/workflows/maintain-bottles.yml \
+  .github/workflows/prefix-campaign-bottles.yml \
   .github/workflows/publish-bottles.yml \
+  .github/workflows/publish-closed-selection.yml \
   .github/workflows/repository-namespace-canary.yml \
+  Kandelo/prefix-campaign-authority.json \
   Kandelo/test-workflow-trust.rb \
   scripts/abi42-rollout.py
 
@@ -312,7 +332,8 @@ The base-owned `publisher-trust-base` pull-request-target job intentionally
 requires protected trust-root bytes to equal the current base. It therefore
 cannot pass a legitimate authority rotation. Require the candidate-owned
 `publisher-trust` job and the local validations above. Review the exact
-convergence of `P_M`, `P_D`, and `P_F` to `M`, and of `P_G/P_C` to `G/C`.
+convergence of `P_M`, `P_D`, `P_F`, and `P_A` to `M`, and of `P_G/P_C` to
+`G/C`.
 Use only the explicitly authorized branch-protection/admin path for this
 trust-root change.
 
