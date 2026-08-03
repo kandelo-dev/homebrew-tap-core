@@ -1,0 +1,96 @@
+{
+  "abandoned_at": "2026-08-03T03:13:43Z",
+  "authority": {
+    "activation_commit": "67e2f1399f0e25c366eb76df59dd7d5fff704529",
+    "campaign_release": {
+      "id": 363963698,
+      "repository": "kandelo-dev/homebrew-tap-core",
+      "tag": "homebrew-prefix-campaign-sha256-ab0290a46e54e67efbb0da2ac0e4b1f7176236e7877012b4872498798ce293ad"
+    },
+    "kandelo_commit": "0d068ef3f3cce1fe3fc3118b33f38f3edd720f07",
+    "payload_sha256": "114edf588808d059576a950d83eac05e47ad43c726ab219343bdce77c6e26e8b",
+    "rootfs_wasm32": "package-generation-rootfs-wasm32-abi-v42-sha256-838a82261095c4be6f497cc4c9fa4b80599019b1951db78876b5e8cc9a54df0e",
+    "source_tap_commit": "33633e1b06004d409c9c1671612e3b25b6d95ea7"
+  },
+  "cause": {
+    "corrective_pull_request": "https://github.com/Automattic/kandelo/pull/1197",
+    "kind": "host-prefix-anchor-incompatible",
+    "summary": "The frozen publisher rejected GitHub's group- and world-writable /opt before any fresh Formula build could begin."
+  },
+  "dispatches": [
+    {
+      "formula": "bzip2",
+      "handoff_release": {
+        "id": 363965880,
+        "tag": "homebrew-prefix-handoff-sha256-9150f4573f8cfebafe12b0eba81225d4ebd77d33a77098ff2de20c1871e814f9"
+      },
+      "result": "reuse-handoff-published-readback-path-failed",
+      "run_id": 30780592137
+    },
+    {
+      "formula": "zlib",
+      "handoff_release": {
+        "id": 363965882,
+        "tag": "homebrew-prefix-handoff-sha256-2bd5ee1bec411bd375bd230f07ae9e7895908d5c4e8c44ffadfab351225e728e"
+      },
+      "result": "reuse-handoff-published-readback-path-failed",
+      "run_id": 30780595122
+    },
+    {
+      "formula": "libcxx",
+      "handoff_release": {
+        "id": 363965943,
+        "tag": "homebrew-prefix-handoff-sha256-1b3b86ea5ed15297c809baf846d5e901727ecd8d2238b3c985e7d72024f1220b"
+      },
+      "result": "reuse-handoff-published-readback-path-failed",
+      "run_id": 30780597862
+    },
+    {
+      "formula": "openssl",
+      "result": "fresh-build-refused-host-prefix",
+      "run_id": 30780600596
+    },
+    {
+      "formula": "libyaml",
+      "result": "fresh-build-refused-host-prefix",
+      "run_id": 30780603037
+    },
+    {
+      "formula": "homebrew-bootstrap",
+      "result": "fresh-build-refused-host-prefix",
+      "run_id": 30780606060
+    },
+    {
+      "formula": "coreutils",
+      "handoff_release": {
+        "id": 363966055,
+        "tag": "homebrew-prefix-handoff-sha256-c179b39756fcb0624c37f54cb7ce337fc6050c7013b8d32d6f968ab6c36aaa54"
+      },
+      "result": "reuse-handoff-published-readback-path-failed",
+      "run_id": 30780609955
+    },
+    {
+      "formula": "posix-utils-lite",
+      "handoff_release": {
+        "id": 363966067,
+        "tag": "homebrew-prefix-handoff-sha256-43299088d4231fb7591fe30911090339aa01377788fe5f167367de322d14ce8a"
+      },
+      "result": "reuse-handoff-published-readback-path-failed",
+      "run_id": 30780612168
+    }
+  ],
+  "kind": "kandelo-homebrew-prefix-abandoned-campaign",
+  "recovery": {
+    "authority_state": "armed",
+    "fresh_builds_require_successor_campaign": true,
+    "planned_reuse_handoff_rebinding_requires": [
+      "abi",
+      "bottle-digest-and-size",
+      "formula-source",
+      "guest-layout",
+      "validation-contract",
+      "dependency-digests"
+    ]
+  },
+  "schema": 1
+}

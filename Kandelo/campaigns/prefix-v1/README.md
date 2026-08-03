@@ -47,3 +47,19 @@ Each successful handoff is independently immutable and anonymously
 readable. It can be used to prepare a closed VFS selection even while
 unrelated campaign variants fail. Only the optional whole-catalog final
 tap commit waits for the complete selected campaign.
+
+## Abandoned campaigns
+
+An active campaign can be returned to its fail-closed `armed` state when its
+frozen publisher cannot build the reviewed source. That transition clears the
+campaign release, package generation, and source-tap commit together. It does
+not delete public evidence or make an old handoff valid for a later campaign.
+
+`aborted-campaigns/` retains the exact abandoned authority, dispatches, and
+public handoffs. The planned bounded recovery may rebind a prior reuse handoff
+without rebuilding or reinspecting its bottle only when the ABI, bottle bytes,
+Formula source, guest layout, validation contract, and dependency digests are
+all unchanged. That support is not active until its controller path and tests
+land. Its successor receipt must name both campaigns and the immutable
+predecessor handoff. A fresh build or any changed input must use the normal
+successor task instead.
