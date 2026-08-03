@@ -2046,13 +2046,13 @@ def verify_published_release(
             source_tap_root=source_tap_root,
             event_path=event_path,
             working=working,
-            authenticated_release_reads=False,
+            authenticated_release_reads=True,
         )
         dependencies = fetch_dependency_handoffs(
             kandelo_root=kandelo_root,
             plan=plan,
             root=working / "dependencies",
-            authenticated=False,
+            authenticated=True,
         )
         executor = (
             kandelo_root
@@ -2078,7 +2078,10 @@ def verify_published_release(
         run_command(
             arguments,
             cwd=kandelo_root,
-            inherit_github_token=False,
+            # WHY: the frozen executor uses this token only for exact GitHub
+            # release-metadata requests. It deliberately omits credentials
+            # from every asset download, preserving the public-byte proof.
+            inherit_github_token=True,
         )
         receipt_output = output.parent / "readback-receipt.json"
         if receipt_output.exists() or receipt_output.is_symlink():
