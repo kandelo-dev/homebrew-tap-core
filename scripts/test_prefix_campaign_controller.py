@@ -590,11 +590,24 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             ],
         )
 
-        armed_value, _armed_payload = CONTROLLER.load_json_bytes(
+        live_value, _live_payload = CONTROLLER.load_json_bytes(
             AUTHORITY,
             "checked-in campaign authority",
             canonical=True,
         )
+        # WHY: the abandoned C2 record must remain reproducible after a
+        # successor campaign activates. Reconstruct the inert template instead
+        # of assuming that the checked-in caller remains armed forever.
+        armed_value = copy.deepcopy(live_value)
+        armed_value["campaign_release"]["tag"] = (
+            "homebrew-prefix-campaign-sha256-" + "0" * 64
+        )
+        armed_value["package_generations"]["rootfs_wasm32"] = (
+            "package-generation-rootfs-wasm32-abi-v42-sha256-"
+            + "0" * 64
+        )
+        armed_value["source_tap_commit"] = "0" * 40
+        armed_value["state"] = "armed"
         self.assertEqual(armed_value["state"], "armed")
         active_value = copy.deepcopy(armed_value)
         active_value["campaign_release"] = record["authority"][
