@@ -721,6 +721,7 @@ def check_prefix_campaign_workflow(workflow, authority)
           publish-first-child
           publish-bootstrap-rootfs
           seal-handoff
+          reseal-predecessor-handoff
         ], "#{label} job set changed")
   check(exact_permissions?(
           jobs.dig("admit", "permissions"),
@@ -735,6 +736,11 @@ def check_prefix_campaign_workflow(workflow, authority)
     jobs.dig("admit", "outputs", "arch") ==
       expression("steps.admit.outputs.arch"),
     "#{label} does not expose the admitted architecture"
+  )
+  check(
+    jobs.dig("admit", "outputs", "recovery-tap-commit") ==
+      expression("steps.admit.outputs.recovery-tap-commit"),
+    "#{label} does not expose the recovery archive authority"
   )
   # WHY: reusable-workflow validation checks the caller ceiling before job
   # conditions. The reusable declares skipped finalization/release writers,
@@ -947,6 +953,46 @@ def check_prefix_campaign_workflow(workflow, authority)
     "#{label} release route changed"
   )
 
+  predecessor_job = jobs["reseal-predecessor-handoff"]
+  check(
+    predecessor_job.is_a?(Hash) &&
+      exact_permissions?(
+        predecessor_job["permissions"],
+        { "contents" => "write" }
+      ),
+    "#{label} predecessor reseal has package authority"
+  )
+  check(
+    predecessor_job["needs"] == [
+      "admit",
+      "publish-rootfs",
+      "build-bootstrap-rootfs",
+      "publish-first-child",
+      "publish-bootstrap-rootfs",
+    ],
+    "#{label} predecessor reseal dependencies changed"
+  )
+  check(
+    compact_expression(predecessor_job["if"]) == expression([
+      "always() && !cancelled()",
+      "&& needs.admit.result == 'success'",
+      "&& needs.admit.outputs.disposition == 'predecessor-reuse'",
+      "&& needs.admit.outputs.generation-kind == 'none'",
+      "&& needs.admit.outputs.admission-kind ==",
+      "'archived-predecessor-exact-presence'",
+      "&& needs.publish-rootfs.result == 'skipped'",
+      "&& needs.build-bootstrap-rootfs.result == 'skipped'",
+      "&& needs.publish-first-child.result == 'skipped'",
+      "&& needs.publish-bootstrap-rootfs.result == 'skipped'",
+    ].join(" ")),
+    "#{label} predecessor reseal route changed"
+  )
+  check(
+    predecessor_job["timeout-minutes"] == 30 &&
+      !predecessor_job.key?("concurrency"),
+    "#{label} predecessor reseal execution bound changed"
+  )
+
   reusable = [
     "Automattic/kandelo/.github/workflows/",
     "reusable-homebrew-bottle-publish.yml@",
@@ -967,6 +1013,12 @@ def check_prefix_campaign_workflow(workflow, authority)
     DOWNLOAD_ACTION,
     NIX_INSTALLER_ACTION,
     UPLOAD_ACTION,
+    CHECKOUT_ACTION,
+    CHECKOUT_ACTION,
+    CHECKOUT_ACTION,
+    CHECKOUT_ACTION,
+    NIX_INSTALLER_ACTION,
+    UPLOAD_ACTION,
   ]
   check(values_for_key(workflow, "uses") == expected_uses,
         "#{label} executable dependency set changed")
@@ -980,6 +1032,14 @@ def check_prefix_campaign_workflow(workflow, authority)
       {
         "repository" => "kandelo-dev/homebrew-tap-core",
         "ref" => expression("steps.authority.outputs.source-tap-commit"),
+        "path" => "source-tap",
+        "fetch-depth" => 0,
+        "persist-credentials" => false,
+      },
+      {
+        "repository" => "kandelo-dev/homebrew-tap-core",
+        "ref" =>
+          expression("needs.admit.outputs.source-tap-commit"),
         "path" => "source-tap",
         "fetch-depth" => 0,
         "persist-credentials" => false,
@@ -1030,6 +1090,9 @@ def check_prefix_campaign_workflow(workflow, authority)
           ),
           publish_env,
           formula_env,
+          controller_token,
+          controller_token,
+          controller_token,
           controller_token,
           controller_token,
         ], "#{label} credential boundary changed")
@@ -1228,6 +1291,95 @@ def check_prefix_campaign_workflow(workflow, authority)
   check(
     publish_run == expected_publish_run,
     "#{label} immutable release authority changed"
+  )
+
+  predecessor_steps = predecessor_job["steps"]
+  check(
+    predecessor_steps.is_a?(Array) &&
+      predecessor_steps.map { |step| step["name"] } == [
+        "Checkout protected caller",
+        "Checkout exact Kandelo executor",
+        "Checkout exact campaign source tap",
+        "Checkout exact predecessor recovery archive",
+        "Install Nix for handoff derivation",
+        "Reseal exact predecessor bottle handoff",
+        "Publish immutable Formula handoff",
+        "Revalidate public release assets",
+        "Retain bounded controller evidence",
+      ],
+    "#{label} predecessor reseal step order changed"
+  )
+  recovery_checkout = predecessor_steps.find do |step|
+    step["name"] == "Checkout exact predecessor recovery archive"
+  end
+  check(
+    recovery_checkout&.dig("with") == {
+      "repository" => "kandelo-dev/homebrew-tap-core",
+      "ref" => expression("needs.admit.outputs.recovery-tap-commit"),
+      "path" => "recovery-tap",
+      "persist-credentials" => false,
+    },
+    "#{label} predecessor archive checkout is not exact"
+  )
+  predecessor_nix = predecessor_steps.find do |step|
+    step["name"] == "Install Nix for handoff derivation"
+  end
+  predecessor_derive = predecessor_steps.find do |step|
+    step["name"] == "Reseal exact predecessor bottle handoff"
+  end
+  check(
+    predecessor_nix&.fetch("uses", nil) == NIX_INSTALLER_ACTION &&
+      predecessor_nix["with"] == { "github-token" => "" } &&
+      predecessor_derive&.fetch("env", nil) == controller_token,
+    "#{label} predecessor derivation environment changed"
+  )
+  predecessor_run = predecessor_derive&.fetch("run", nil)
+  check(
+    predecessor_run.is_a?(String) &&
+      predecessor_run.include?("cd kandelo\n") &&
+      predecessor_run.include?(
+        "bash scripts/dev-shell.sh python3 \\\n"
+      ) &&
+      predecessor_run.include?("prepare-predecessor-reuse") &&
+      predecessor_run.include?(
+        '--source-tap-root "$GITHUB_WORKSPACE/source-tap"'
+      ) &&
+      predecessor_run.include?(
+        '--recovery-tap-root "$GITHUB_WORKSPACE/recovery-tap"'
+      ) &&
+      !predecessor_run.include?("derive-reuse") &&
+      !predecessor_run.include?("compose-reuse-child"),
+    "#{label} predecessor derivation bypasses its exact authorities"
+  )
+  predecessor_publish = predecessor_steps.find do |step|
+    step["name"] == "Publish immutable Formula handoff"
+  end
+  predecessor_verify = predecessor_steps.find do |step|
+    step["name"] == "Revalidate public release assets"
+  end
+  check(
+    predecessor_publish&.fetch("env", nil) == controller_token &&
+      predecessor_publish["run"].include?(
+        "publish-immutable-github-release.sh"
+      ) &&
+      predecessor_publish["run"].include?(
+        "--kandelo-main-contains-sha"
+      ) &&
+      predecessor_publish["run"].include?(
+        "--target-main-contains-sha"
+      ) &&
+      predecessor_verify&.fetch("env", nil) == controller_token &&
+      predecessor_verify["run"].include?("verify-release"),
+    "#{label} predecessor handoff publication/readback changed"
+  )
+  predecessor_text = predecessor_job.to_s
+  check(
+    !predecessor_text.include?("packages") &&
+      !predecessor_text.include?("homebrew-ghcr-upload.sh") &&
+      !predecessor_text.include?("compose-reuse-child") &&
+      !predecessor_text.include?("download-artifact") &&
+      !predecessor_text.include?("old-tap"),
+    "#{label} predecessor handoff can reach package publication"
   )
 end
 

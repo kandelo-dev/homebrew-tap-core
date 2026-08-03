@@ -28,6 +28,7 @@ EVENT_TYPE = "publish-prefix-campaign-bottle"
 FORMULA = re.compile(r"^[a-z0-9][a-z0-9._-]{0,254}$")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+OCI_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 REPOSITORY = re.compile(
     r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
 )
@@ -50,6 +51,7 @@ MAX_HANDOFF_TOTAL_BYTES = 8 * 1024 * 1024 * 1024
 MAX_COMMAND_OUTPUT = 16 * 1024 * 1024
 MAX_DEPENDENCIES = 256
 MAX_FORMULAE = 256
+MAX_PREDECESSOR_DISPATCHES = MAX_FORMULAE * 2
 COMMAND_TIMEOUT = 1800
 INERT_EXIT = 78
 UNAVAILABLE_EXIT = 69
@@ -136,6 +138,19 @@ class TaskRequest:
 
 
 @dataclasses.dataclass(frozen=True)
+class PredecessorReuse:
+    activation_commit: str
+    recovery_tap_commit: str
+    archive_path: str
+    archive_sha256: str
+    campaign_tag: str
+    handoff_tag: str
+    kandelo_commit: str
+    source_tap_commit: str
+    target_tree_git_oid: str
+
+
+@dataclasses.dataclass(frozen=True)
 class TaskPlan:
     request: TaskRequest
     admission_kind: str
@@ -146,6 +161,11 @@ class TaskPlan:
     campaign_payload: bytes
     campaign: dict[str, Any]
     formula: dict[str, Any]
+    predecessor_reuse: PredecessorReuse | None
+
+    @property
+    def publication_kind(self) -> str:
+        return "build" if self.disposition == "build" else "reuse"
 
 
 def fail(
@@ -983,7 +1003,9 @@ def destination_admission_kind(formula: dict[str, Any]) -> str:
     expected_status = {
         "anonymous-absence": "missing",
         "first-package-namespace-bootstrap-required": "auth-required",
+        "archived-predecessor-exact-presence": "present",
     }.get(kind)
+    digest = probe["digest"]
     if (
         admission["schema"] != 1
         or admission["method"] != "anonymous-oras-manifest-probe"
@@ -991,13 +1013,181 @@ def destination_admission_kind(formula: dict[str, Any]) -> str:
         or probe["schema"] != 1
         or probe["kind"] != "manifest"
         or probe["status"] != expected_status
-        or probe["digest"] is not None
+        or (
+            kind == "archived-predecessor-exact-presence"
+            and (
+                not isinstance(digest, str)
+                or OCI_DIGEST.fullmatch(digest) is None
+            )
+        )
+        or (
+            kind != "archived-predecessor-exact-presence"
+            and digest is not None
+        )
     ):
         fail(
             "invalid-campaign",
             f"{name} destination admission is invalid",
         )
     return kind
+
+
+def predecessor_reuse_for_variant(
+    campaign: dict[str, Any],
+    formula: dict[str, Any],
+    arch: str,
+) -> PredecessorReuse | None:
+    variants = formula.get("variants")
+    if not isinstance(variants, list):
+        fail("invalid-campaign", "campaign Formula variants are invalid")
+    matching = [
+        variant
+        for variant in variants
+        if isinstance(variant, dict) and variant.get("arch") == arch
+    ]
+    if len(matching) != 1:
+        fail(
+            "invalid-campaign",
+            f"{formula.get('name')} lacks one exact {arch} variant",
+        )
+    source = matching[0].get("reuse_source")
+    if source is None:
+        return None
+    source = exact_keys(
+        source,
+        {"arch", "campaign_tag", "handoff_tag", "kind"},
+        f"{formula.get('name')}/{arch} predecessor source",
+    )
+    campaign_tag = require_string(
+        source["campaign_tag"],
+        f"{formula.get('name')}/{arch} predecessor campaign tag",
+        CAMPAIGN_TAG,
+    )
+    handoff_tag = require_string(
+        source["handoff_tag"],
+        f"{formula.get('name')}/{arch} predecessor handoff tag",
+        HANDOFF_TAG,
+    )
+    if source["kind"] != "predecessor-handoff" or source["arch"] != arch:
+        fail(
+            "invalid-campaign",
+            f"{formula.get('name')}/{arch} predecessor source is invalid",
+        )
+    authority = campaign.get("authority")
+    if not isinstance(authority, dict):
+        fail("invalid-campaign", "campaign lacks authority")
+    recovery_source = exact_keys(
+        authority.get("predecessor_recovery_source"),
+        {"commit", "repository"},
+        "predecessor recovery source",
+    )
+    recovery_commit = require_string(
+        recovery_source["commit"],
+        "predecessor recovery source commit",
+        SHA,
+    )
+    repository = require_string(
+        recovery_source["repository"],
+        "predecessor recovery source repository",
+        REPOSITORY,
+    )
+    if repository.lower() != str(authority.get("tap_repository", "")).lower():
+        fail(
+            "invalid-campaign",
+            "predecessor recovery repository differs from the source tap",
+        )
+    records = authority.get("predecessor_recovery")
+    if not isinstance(records, list) or not records:
+        fail("invalid-campaign", "campaign lacks predecessor recovery")
+    matches = [
+        record
+        for record in records
+        if isinstance(record, dict)
+        and isinstance(record.get("campaign"), dict)
+        and record["campaign"].get("tag") == campaign_tag
+    ]
+    if len(matches) != 1:
+        fail(
+            "invalid-campaign",
+            "predecessor campaign has no unique recovery record",
+        )
+    record = exact_keys(
+        matches[0],
+        {
+            "activation_commit",
+            "archive",
+            "campaign",
+            "kandelo_commit",
+            "source_tap_commit",
+            "target_tree_git_oid",
+        },
+        "predecessor recovery record",
+    )
+    archived_campaign = exact_keys(
+        record["campaign"],
+        {"sha256", "tag"},
+        "predecessor archived campaign",
+    )
+    campaign_sha256 = require_string(
+        archived_campaign["sha256"],
+        "predecessor archived campaign SHA-256",
+        SHA256,
+    )
+    tag_match = CAMPAIGN_TAG.fullmatch(campaign_tag)
+    assert tag_match is not None
+    archive = exact_keys(
+        record["archive"],
+        {"path", "sha256"},
+        "predecessor campaign archive",
+    )
+    archive_path = require_string(
+        archive["path"],
+        "predecessor campaign archive path",
+    )
+    if (
+        archived_campaign["tag"] != campaign_tag
+        or campaign_sha256 != tag_match.group(1)
+        or archive_path
+        != (
+            "Kandelo/campaigns/prefix-v1/aborted-campaigns/"
+            f"{campaign_sha256}.json"
+        )
+    ):
+        fail(
+            "invalid-campaign",
+            "predecessor recovery record is not content-addressed",
+        )
+    return PredecessorReuse(
+        activation_commit=require_string(
+            record["activation_commit"],
+            "predecessor activation commit",
+            SHA,
+        ),
+        recovery_tap_commit=recovery_commit,
+        archive_path=archive_path,
+        archive_sha256=require_string(
+            archive["sha256"],
+            "predecessor campaign archive SHA-256",
+            SHA256,
+        ),
+        campaign_tag=campaign_tag,
+        handoff_tag=handoff_tag,
+        kandelo_commit=require_string(
+            record["kandelo_commit"],
+            "predecessor Kandelo commit",
+            SHA,
+        ),
+        source_tap_commit=require_string(
+            record["source_tap_commit"],
+            "predecessor source tap commit",
+            SHA,
+        ),
+        target_tree_git_oid=require_string(
+            record["target_tree_git_oid"],
+            "predecessor target tree Git object id",
+            SHA,
+        ),
+    )
 
 
 def validate_campaign(
@@ -1012,8 +1202,9 @@ def validate_campaign(
     )
     if not isinstance(campaign, dict):
         fail("invalid-campaign", "campaign manifest must be an object")
+    campaign_schema = campaign.get("schema")
     if (
-        campaign.get("schema") != 2
+        campaign_schema not in (2, 3)
         or campaign.get("kind")
         != "kandelo-homebrew-guest-prefix-campaign"
     ):
@@ -1031,6 +1222,42 @@ def validate_campaign(
     campaign_authority = campaign.get("authority")
     if not isinstance(campaign_authority, dict):
         fail("invalid-campaign", "campaign lacks authority")
+    if campaign_schema == 2:
+        if (
+            "predecessor_recovery" in campaign_authority
+            or "predecessor_recovery_source" in campaign_authority
+        ):
+            fail(
+                "invalid-campaign",
+                "schema-2 campaign cannot name predecessor recovery",
+            )
+    else:
+        recovery_source = exact_keys(
+            campaign_authority.get("predecessor_recovery_source"),
+            {"commit", "repository"},
+            "predecessor recovery source",
+        )
+        require_string(
+            recovery_source["commit"],
+            "predecessor recovery source commit",
+            SHA,
+        )
+        recovery_repository = require_string(
+            recovery_source["repository"],
+            "predecessor recovery source repository",
+            REPOSITORY,
+        )
+        records = campaign_authority.get("predecessor_recovery")
+        if (
+            recovery_repository.lower()
+            != str(campaign_authority.get("tap_repository", "")).lower()
+            or not isinstance(records, list)
+            or not records
+        ):
+            fail(
+                "invalid-campaign",
+                "schema-3 campaign recovery authority is invalid",
+            )
     if (
         campaign_authority.get("kandelo_commit")
         != authority.kandelo_commit
@@ -1131,10 +1358,29 @@ def validate_campaign(
             "requested architecture is not declared by the campaign task",
             2,
         )
+    predecessor_reuse = predecessor_reuse_for_variant(
+        campaign,
+        formula,
+        request.arches[0],
+    )
+    if campaign_schema == 2 and predecessor_reuse is not None:
+        fail(
+            "invalid-campaign",
+            "schema-2 campaign cannot select a predecessor handoff",
+        )
+    if (
+        admission_kind == "archived-predecessor-exact-presence"
+    ) != (predecessor_reuse is not None):
+        fail(
+            "invalid-campaign",
+            "predecessor destination and handoff authority disagree",
+        )
     # WHY: sibling architectures are independent publication units. One may
     # already have reusable bytes while the other still needs a build, so the
     # selected architecture alone determines this task's disposition.
-    if selected_kind == "byte-clean-reuse-candidate":
+    if predecessor_reuse is not None:
+        disposition = "predecessor-reuse"
+    elif selected_kind == "byte-clean-reuse-candidate":
         disposition = "reuse"
     else:
         assert selected_kind in ("required-build", "required-rebuild")
@@ -1161,7 +1407,7 @@ def validate_campaign(
             "dependency handoff tags differ from the exact transitive closure",
             2,
         )
-    if disposition == "reuse":
+    if disposition in ("reuse", "predecessor-reuse"):
         # Reuse reads and verifies already-built public bytes. It does
         # not execute a Formula and therefore needs no package runtime.
         generation_kind = "none"
@@ -1188,6 +1434,7 @@ def validate_campaign(
         campaign_payload=payload,
         campaign=campaign,
         formula=formula,
+        predecessor_reuse=predecessor_reuse,
     )
 
 
@@ -1195,7 +1442,7 @@ def build_plan_document(
     authority: Authority,
     plan: TaskPlan,
 ) -> dict[str, Any]:
-    return {
+    document = {
         "admission": {
             "kind": plan.admission_kind,
             "schema": 1,
@@ -1214,7 +1461,7 @@ def build_plan_document(
         "formula": plan.request.formula,
         "generation_kind": plan.generation_kind,
         "kind": "kandelo-homebrew-prefix-campaign-task-plan",
-        "schema": 2,
+        "schema": 3 if plan.predecessor_reuse is not None else 2,
         "old_tap_commit": plan.old_tap_commit,
         "source_tap_commit": authority.source_tap_commit,
         "target_source": {
@@ -1225,6 +1472,11 @@ def build_plan_document(
             "target_tree_git_oid": authority.target_tree,
         },
     }
+    if plan.predecessor_reuse is not None:
+        document["predecessor_reuse"] = dataclasses.asdict(
+            plan.predecessor_reuse
+        )
+    return document
 
 
 def append_github_output(path: pathlib.Path, values: Mapping[str, str]) -> None:
@@ -1385,6 +1637,501 @@ def fetch_dependency_handoffs(
         )
         materialized[name] = output
     return materialized
+
+
+def parse_predecessor_archive(
+    payload: bytes,
+    *,
+    plan: TaskPlan,
+) -> tuple[str, dict[tuple[str, str], str]]:
+    predecessor = plan.predecessor_reuse
+    if predecessor is None:
+        fail(
+            "invalid-task-selection",
+            "task has no predecessor recovery authority",
+            2,
+        )
+    try:
+        document = json.loads(
+            payload.decode("utf-8"),
+            object_pairs_hook=duplicate_rejecting_object,
+            parse_constant=lambda item: fail(
+                "invalid-json",
+                f"predecessor archive contains {item}",
+                2,
+            ),
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        fail(
+            "invalid-json",
+            f"predecessor archive is not strict UTF-8 JSON: {error}",
+            2,
+        )
+    if payload != pretty_json(document):
+        fail(
+            "invalid-campaign",
+            "predecessor archive is not canonical pretty JSON",
+        )
+    document = exact_keys(
+        document,
+        {
+            "abandoned_at",
+            "authority",
+            "cause",
+            "dispatches",
+            "kind",
+            "recovery",
+            "schema",
+        },
+        "predecessor archive",
+    )
+    if (
+        document["schema"] != 1
+        or document["kind"]
+        != "kandelo-homebrew-prefix-abandoned-campaign"
+    ):
+        fail(
+            "invalid-campaign",
+            "predecessor archive has an unsupported contract",
+        )
+    require_string(
+        document["abandoned_at"],
+        "predecessor archive abandoned_at",
+    )
+    cause = exact_keys(
+        document["cause"],
+        {"corrective_workstream", "kind", "summary"},
+        "predecessor archive cause",
+    )
+    for key in ("corrective_workstream", "kind", "summary"):
+        require_string(cause[key], f"predecessor archive cause {key}")
+    recovery = exact_keys(
+        document["recovery"],
+        {
+            "authority_state",
+            "fresh_builds_require_successor_campaign",
+            "partial_publications_require_successor_revalidation",
+            "predecessor_handoffs_are_not_successor_authority",
+            "published_handoffs_remain_independently_usable",
+        },
+        "predecessor archive recovery policy",
+    )
+    if recovery != {
+        "authority_state": "armed",
+        "fresh_builds_require_successor_campaign": True,
+        "partial_publications_require_successor_revalidation": True,
+        "predecessor_handoffs_are_not_successor_authority": True,
+        "published_handoffs_remain_independently_usable": True,
+    }:
+        fail(
+            "invalid-campaign",
+            "predecessor archive does not permit successor revalidation",
+        )
+
+    authority = exact_keys(
+        document["authority"],
+        {
+            "activation_commit",
+            "campaign_release",
+            "kandelo_commit",
+            "payload_sha256",
+            "rootfs_wasm32",
+            "source_tap_commit",
+            "target_source",
+        },
+        "predecessor archive authority",
+    )
+    release = exact_keys(
+        authority["campaign_release"],
+        {"id", "repository", "tag"},
+        "predecessor archive campaign release",
+    )
+    require_integer(
+        release["id"],
+        "predecessor archive campaign release id",
+        1,
+        2**63 - 1,
+    )
+    repository = require_string(
+        release["repository"],
+        "predecessor archive campaign repository",
+        REPOSITORY,
+    ).lower()
+    campaign_authority = plan.campaign.get("authority")
+    if not isinstance(campaign_authority, dict):
+        fail("invalid-campaign", "campaign lacks authority")
+    if (
+        repository
+        != str(campaign_authority.get("tap_repository", "")).lower()
+        or release["tag"] != predecessor.campaign_tag
+        or authority["activation_commit"]
+        != predecessor.activation_commit
+        or authority["kandelo_commit"] != predecessor.kandelo_commit
+        or authority["source_tap_commit"]
+        != predecessor.source_tap_commit
+    ):
+        fail(
+            "invalid-campaign",
+            "predecessor archive differs from recovery authority",
+        )
+    require_string(
+        authority["payload_sha256"],
+        "predecessor archive authority SHA-256",
+        SHA256,
+    )
+    require_string(
+        authority["rootfs_wasm32"],
+        "predecessor archive rootfs generation",
+        ROOTFS_GENERATION,
+    )
+    target = exact_keys(
+        authority["target_source"],
+        {
+            "manifest_path",
+            "manifest_sha256",
+            "source_root",
+            "source_tree_git_oid",
+            "target_tree_git_oid",
+        },
+        "predecessor archive target source",
+    )
+    if (
+        target["manifest_path"]
+        != "Kandelo/campaigns/prefix-v1/manifest.json"
+        or target["source_root"]
+        != "Kandelo/campaigns/prefix-v1/source"
+        or target["target_tree_git_oid"]
+        != predecessor.target_tree_git_oid
+    ):
+        fail(
+            "invalid-campaign",
+            "predecessor archive target source differs from authority",
+        )
+    require_string(
+        target["manifest_sha256"],
+        "predecessor archive target manifest SHA-256",
+        SHA256,
+    )
+    require_string(
+        target["source_tree_git_oid"],
+        "predecessor archive source tree Git object id",
+        SHA,
+    )
+
+    dispatches = document["dispatches"]
+    if (
+        not isinstance(dispatches, list)
+        or len(dispatches) > MAX_PREDECESSOR_DISPATCHES
+    ):
+        fail(
+            "invalid-campaign",
+            "predecessor archive dispatches are not a bounded array",
+        )
+    completed: dict[tuple[str, str], str] = {}
+    run_ids: set[int] = set()
+    handoff_tags: set[str] = set()
+    required_keys = {"arch", "formula", "result", "run_id"}
+    allowed_keys = required_keys | {
+        "failure",
+        "handoff_release",
+        "partial_publication",
+    }
+    for index, item in enumerate(dispatches):
+        label = f"predecessor archive dispatch #{index}"
+        if (
+            not isinstance(item, dict)
+            or not required_keys <= set(item)
+            or not set(item) <= allowed_keys
+        ):
+            fail("invalid-campaign", f"{label} has an invalid shape")
+        formula = require_string(
+            item["formula"], f"{label} Formula", FORMULA
+        )
+        arch = require_string(item["arch"], f"{label} architecture")
+        if arch not in ("wasm32", "wasm64"):
+            fail("invalid-campaign", f"{label} architecture is invalid")
+        result = require_string(item["result"], f"{label} result")
+        run_id = require_integer(
+            item["run_id"], f"{label} run id", 1, 2**63 - 1
+        )
+        if run_id in run_ids:
+            fail("invalid-campaign", f"{label} repeats a run id")
+        run_ids.add(run_id)
+        if result != "handoff-published-and-publicly-verified":
+            if "handoff_release" in item:
+                fail(
+                    "invalid-campaign",
+                    f"{label} names an unverified handoff",
+                )
+            continue
+        item = exact_keys(
+            item,
+            {
+                "arch",
+                "formula",
+                "handoff_release",
+                "result",
+                "run_id",
+            },
+            label,
+        )
+        handoff = exact_keys(
+            item["handoff_release"],
+            {"id", "tag"},
+            f"{label} handoff release",
+        )
+        require_integer(
+            handoff["id"],
+            f"{label} handoff release id",
+            1,
+            2**63 - 1,
+        )
+        tag = require_string(
+            handoff["tag"],
+            f"{label} handoff release tag",
+            HANDOFF_TAG,
+        )
+        key = (formula, arch)
+        if key in completed or tag in handoff_tags:
+            fail(
+                "invalid-campaign",
+                f"{label} repeats completed handoff authority",
+            )
+        completed[key] = tag
+        handoff_tags.add(tag)
+    return repository, completed
+
+
+def materialize_predecessor_campaign(
+    *,
+    plan: TaskPlan,
+    kandelo_root: pathlib.Path,
+    recovery_tap_root: pathlib.Path,
+    output: pathlib.Path,
+    authenticated: bool,
+) -> tuple[
+    pathlib.Path,
+    dict[str, Any],
+    dict[tuple[str, str], str],
+]:
+    predecessor = plan.predecessor_reuse
+    if predecessor is None:
+        fail(
+            "invalid-task-selection",
+            "task has no predecessor recovery authority",
+            2,
+        )
+    if output.exists() or output.is_symlink():
+        fail(
+            "invalid-output",
+            "predecessor campaign output already exists",
+            2,
+        )
+    recovery_tap_root = require_exact_checkout(
+        recovery_tap_root,
+        predecessor.recovery_tap_commit,
+        "predecessor recovery tap checkout",
+    )
+    # WHY: read the committed blob through Git rather than following the
+    # checkout path. A tracked parent symlink must not redirect recovery to
+    # bytes outside the exact commit named by the campaign.
+    payload = run_command(
+        [
+            "git",
+            "-C",
+            str(recovery_tap_root),
+            "show",
+            (
+                f"{predecessor.recovery_tap_commit}:"
+                f"{predecessor.archive_path}"
+            ),
+        ],
+        cwd=recovery_tap_root,
+    ).stdout
+    if not payload or len(payload) > MAX_JSON_BYTES:
+        fail(
+            "invalid-campaign",
+            "predecessor archive must be one bounded JSON document",
+        )
+    archive_sha256 = hashlib.sha256(payload).hexdigest()
+    if archive_sha256 != predecessor.archive_sha256:
+        fail(
+            "invalid-campaign",
+            "predecessor archive differs from its recovery authority",
+        )
+    # WHY: the Git blob is a recovery ledger, not campaign.json. It authorizes
+    # only the handoffs recorded as publicly verified, while the immutable
+    # campaign release remains the authority for their original build inputs.
+    repository, archived_handoffs = parse_predecessor_archive(
+        payload,
+        plan=plan,
+    )
+    receipt = output.parent / "predecessor-campaign-receipt.json"
+    run_command(
+        [
+            "python3",
+            str(
+                kandelo_root
+                / "scripts/homebrew-prefix-campaign-executor.py"
+            ),
+            "fetch-campaign-release",
+            "--repository",
+            repository,
+            "--tag",
+            predecessor.campaign_tag,
+            "--out",
+            str(output),
+            "--receipt-out",
+            str(receipt),
+        ],
+        cwd=kandelo_root,
+        inherit_github_token=authenticated,
+    )
+    value, campaign_payload = load_json_bytes(
+        output,
+        "predecessor campaign readback",
+        canonical=True,
+    )
+    campaign_match = CAMPAIGN_TAG.fullmatch(predecessor.campaign_tag)
+    assert campaign_match is not None
+    if (
+        not isinstance(value, dict)
+        or hashlib.sha256(campaign_payload).hexdigest()
+        != campaign_match.group(1)
+    ):
+        fail(
+            "invalid-campaign",
+            "predecessor campaign readback differs from its release tag",
+        )
+    return output, value, archived_handoffs
+
+
+def fetch_predecessor_handoffs(
+    *,
+    kandelo_root: pathlib.Path,
+    plan: TaskPlan,
+    predecessor_campaign_path: pathlib.Path,
+    predecessor_campaign: dict[str, Any],
+    archived_handoffs: Mapping[tuple[str, str], str],
+    root: pathlib.Path,
+    authenticated: bool,
+) -> tuple[dict[str, pathlib.Path], pathlib.Path]:
+    predecessor = plan.predecessor_reuse
+    if predecessor is None:
+        fail(
+            "invalid-task-selection",
+            "task has no predecessor handoff authority",
+            2,
+        )
+    if root.exists() or root.is_symlink():
+        fail(
+            "invalid-output",
+            "predecessor readback root already exists",
+            2,
+        )
+    root.mkdir(mode=0o700)
+    formulae = formula_index(plan.campaign)
+    predecessor_formulae = formula_index(predecessor_campaign)
+    dependency_names = dependency_order(plan)
+    if plan.request.formula not in predecessor_formulae:
+        fail(
+            "invalid-campaign",
+            "selected Formula is absent from predecessor campaign",
+        )
+    expected_names = dependency_closure(
+        predecessor_campaign,
+        predecessor_formulae[plan.request.formula],
+    )
+    if tuple(sorted(dependency_names)) != expected_names:
+        fail(
+            "invalid-campaign",
+            "predecessor and current dependency closures differ",
+        )
+    tags: dict[str, str] = {}
+    arch = plan.request.arches[0]
+    for name in dependency_names:
+        source = predecessor_reuse_for_variant(
+            plan.campaign,
+            formulae[name],
+            arch,
+        )
+        if (
+            source is None
+            or source.campaign_tag != predecessor.campaign_tag
+            or archived_handoffs.get((name, arch))
+            != source.handoff_tag
+        ):
+            fail(
+                "invalid-campaign",
+                f"dependency {name}/{arch} lacks an archived predecessor",
+            )
+        tags[name] = source.handoff_tag
+    if (
+        archived_handoffs.get((plan.request.formula, arch))
+        != predecessor.handoff_tag
+    ):
+        fail(
+            "invalid-campaign",
+            f"{plan.request.formula}/{arch} lacks its archived predecessor",
+        )
+
+    executor = (
+        kandelo_root
+        / "scripts/homebrew-prefix-campaign-executor.py"
+    )
+    receipts = root / "receipts"
+    receipts.mkdir(mode=0o700)
+    handoffs = root / "handoffs"
+    handoffs.mkdir(mode=0o700)
+    materialized: dict[str, pathlib.Path] = {}
+
+    def fetch(name: str, tag: str, output: pathlib.Path) -> None:
+        arguments = [
+            "python3",
+            str(executor),
+            "fetch-release",
+            "--campaign",
+            str(predecessor_campaign_path),
+            "--tag",
+            tag,
+            "--out",
+            str(output),
+            "--receipt-out",
+            str(receipts / f"{name}.json"),
+        ]
+        closure = dependency_closure(
+            predecessor_campaign,
+            predecessor_formulae[name],
+        )
+        for dependency in closure:
+            if dependency not in materialized:
+                fail(
+                    "invalid-campaign",
+                    f"predecessor dependency {dependency} is not ordered",
+                )
+            arguments.extend(
+                [
+                    "--dependency-handoff",
+                    str(materialized[dependency]),
+                ]
+            )
+        run_command(
+            arguments,
+            cwd=kandelo_root,
+            inherit_github_token=authenticated,
+        )
+
+    for name in dependency_names:
+        output = handoffs / name
+        fetch(name, tags[name], output)
+        materialized[name] = output
+    formula_handoff = handoffs / plan.request.formula
+    fetch(
+        plan.request.formula,
+        predecessor.handoff_tag,
+        formula_handoff,
+    )
+    return materialized, formula_handoff
 
 
 def require_publication_roots(
@@ -1583,9 +2330,13 @@ def prepare_handoff_release(
         "formula": plan.request.formula,
         "kind": "kandelo-homebrew-prefix-release-preparation",
         "release_tag": tag,
-        "schema": 2,
+        "schema": 3 if plan.predecessor_reuse is not None else 2,
         "target_commitish": authority.source_tap_commit,
     }
+    if plan.predecessor_reuse is not None:
+        summary["predecessor_reuse"] = dataclasses.asdict(
+            plan.predecessor_reuse
+        )
     summary_path = output.parent / "controller-summary.json"
     if summary_path.exists() or summary_path.is_symlink():
         fail(
@@ -1829,6 +2580,132 @@ def prepare_reuse_release(
         shutil.rmtree(working, ignore_errors=True)
 
 
+def prepare_predecessor_reuse_release(
+    *,
+    authority_path: pathlib.Path,
+    kandelo_root: pathlib.Path,
+    source_tap_root: pathlib.Path,
+    recovery_tap_root: pathlib.Path,
+    event_path: pathlib.Path,
+    output: pathlib.Path,
+    github_output: pathlib.Path | None,
+) -> dict[str, Any]:
+    if output.exists() or output.is_symlink():
+        fail(
+            "invalid-output",
+            "predecessor reuse output must not already exist",
+            2,
+        )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    working = pathlib.Path(
+        tempfile.mkdtemp(
+            prefix=f".{output.name}.",
+            dir=output.parent,
+        )
+    )
+    try:
+        authority, plan, kandelo_root, source_tap_root = prepare_task(
+            authority_path=authority_path,
+            kandelo_root=kandelo_root,
+            source_tap_root=source_tap_root,
+            event_path=event_path,
+            working=working,
+            authenticated_release_reads=True,
+        )
+        if plan.disposition != "predecessor-reuse":
+            fail(
+                "invalid-task-selection",
+                "predecessor preparation requires a recovered task",
+                2,
+            )
+        target_source_root = materialize_target_source(
+            authority,
+            source_tap_root.resolve(),
+            working / "target-source",
+        )
+        dependencies = fetch_dependency_handoffs(
+            kandelo_root=kandelo_root,
+            plan=plan,
+            root=working / "dependencies",
+            authenticated=True,
+        )
+        (
+            predecessor_campaign_path,
+            predecessor_campaign,
+            archived_handoffs,
+        ) = (
+            materialize_predecessor_campaign(
+                plan=plan,
+                kandelo_root=kandelo_root,
+                recovery_tap_root=recovery_tap_root,
+                output=working / "predecessor-campaign.json",
+                authenticated=True,
+            )
+        )
+        predecessor_dependencies, predecessor_handoff = (
+            fetch_predecessor_handoffs(
+                kandelo_root=kandelo_root,
+                plan=plan,
+                predecessor_campaign_path=predecessor_campaign_path,
+                predecessor_campaign=predecessor_campaign,
+                archived_handoffs=archived_handoffs,
+                root=working / "predecessor-handoffs",
+                authenticated=True,
+            )
+        )
+        executor = (
+            kandelo_root
+            / "scripts/homebrew-prefix-campaign-executor.py"
+        )
+        handoff = working / "formula-handoff"
+        derive = [
+            "python3",
+            str(executor),
+            "derive-predecessor-reuse",
+            "--campaign",
+            str(plan.campaign_path),
+            "--source-tap-root",
+            str(target_source_root),
+            "--predecessor-campaign",
+            str(predecessor_campaign_path),
+            "--predecessor-handoff",
+            str(predecessor_handoff),
+            "--formula",
+            plan.request.formula,
+            "--arch",
+            plan.request.arches[0],
+            "--out",
+            str(handoff),
+        ]
+        for name in sorted(predecessor_dependencies):
+            derive.extend(
+                [
+                    "--predecessor-dependency-handoff",
+                    str(predecessor_dependencies[name]),
+                ]
+            )
+        for name in sorted(dependencies):
+            derive.extend(
+                ["--dependency-handoff", str(dependencies[name])]
+            )
+        # WHY: the destination probe and executor verify that these exact OCI
+        # bytes are already public. Publishing only a new campaign handoff
+        # avoids rewriting a valid child or its mutable version index.
+        run_command(derive, cwd=kandelo_root)
+        return prepare_handoff_release(
+            authority=authority,
+            plan=plan,
+            kandelo_root=kandelo_root,
+            dependencies=dependencies,
+            handoff=handoff,
+            working=working,
+            output=output,
+            github_output=github_output,
+        )
+    finally:
+        shutil.rmtree(working, ignore_errors=True)
+
+
 def validate_readback_handoff(
     path: pathlib.Path,
     *,
@@ -1956,7 +2833,7 @@ def validate_readback_handoff(
         )
     expected_files = (
         BUILD_HANDOFF_PUBLICATION_FILES
-        if plan.disposition == "build"
+        if plan.publication_kind == "build"
         else REUSE_HANDOFF_PUBLICATION_FILES
     )
     total_bytes = len(payload)
@@ -1969,7 +2846,7 @@ def validate_readback_handoff(
         files = publication["files"]
         if (
             publication["arch"] != arch
-            or publication["kind"] != plan.disposition
+            or publication["kind"] != plan.publication_kind
             or not isinstance(files, list)
             or len(files) != len(expected_files)
         ):
@@ -2203,6 +3080,11 @@ def admit(
                     "formula": plan.request.formula,
                     "generation-kind": plan.generation_kind,
                     "old-tap-commit": plan.old_tap_commit,
+                    "recovery-tap-commit": (
+                        plan.predecessor_reuse.recovery_tap_commit
+                        if plan.predecessor_reuse is not None
+                        else ""
+                    ),
                     **generations,
                 },
             )
@@ -2300,6 +3182,25 @@ def parse_args() -> argparse.Namespace:
         type=pathlib.Path,
     )
 
+    predecessor_parser = commands.add_parser(
+        "prepare-predecessor-reuse"
+    )
+    add_common_task_arguments(predecessor_parser)
+    predecessor_parser.add_argument(
+        "--recovery-tap-root",
+        type=pathlib.Path,
+        required=True,
+    )
+    predecessor_parser.add_argument(
+        "--out",
+        type=pathlib.Path,
+        required=True,
+    )
+    predecessor_parser.add_argument(
+        "--github-output",
+        type=pathlib.Path,
+    )
+
     verify_parser = commands.add_parser("verify-release")
     add_common_task_arguments(verify_parser)
     verify_parser.add_argument("--tag", required=True)
@@ -2354,6 +3255,20 @@ def main() -> int:
                 kandelo_root=args.kandelo_root,
                 source_tap_root=args.source_tap_root,
                 old_tap_root=args.old_tap_root,
+                event_path=args.event,
+                output=args.out,
+                github_output=args.github_output,
+            )
+            print(
+                "prefix-campaign-controller: prepared immutable handoff "
+                f"{document['release_tag']}"
+            )
+        elif args.command == "prepare-predecessor-reuse":
+            document = prepare_predecessor_reuse_release(
+                authority_path=args.authority,
+                kandelo_root=args.kandelo_root,
+                source_tap_root=args.source_tap_root,
+                recovery_tap_root=args.recovery_tap_root,
                 event_path=args.event,
                 output=args.out,
                 github_output=args.github_output,

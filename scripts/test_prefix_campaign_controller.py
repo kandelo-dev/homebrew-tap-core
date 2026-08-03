@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import hashlib
 import importlib.util
 import json
@@ -46,7 +47,18 @@ SPEC.loader.exec_module(CONTROLLER)
 KANDELO_COMMIT = "1" * 40
 SOURCE_TAP_COMMIT = "2" * 40
 OLD_TAP_COMMIT = "c" * 40
+RECOVERY_TAP_COMMIT = "d" * 40
 DEPENDENCY_TAG = "homebrew-prefix-handoff-sha256-" + "3" * 64
+PREDECESSOR_CAMPAIGN_SHA256 = "e" * 64
+PREDECESSOR_CAMPAIGN_TAG = (
+    "homebrew-prefix-campaign-sha256-" + PREDECESSOR_CAMPAIGN_SHA256
+)
+PREDECESSOR_DEPENDENCY_TAG = (
+    "homebrew-prefix-handoff-sha256-" + "5" * 64
+)
+PREDECESSOR_LEAF_TAG = (
+    "homebrew-prefix-handoff-sha256-" + "6" * 64
+)
 ROOTFS_GENERATION = (
     "package-generation-rootfs-wasm32-abi-v42-sha256-" + "4" * 64
 )
@@ -74,6 +86,8 @@ def formula_document(
         "auth-required"
         if admission_kind
         == "first-package-namespace-bootstrap-required"
+        else "present"
+        if admission_kind == "archived-predecessor-exact-presence"
         else "missing"
     )
     variants = [variant(arch, disposition) for arch in arches]
@@ -97,7 +111,12 @@ def formula_document(
                 "kind": admission_kind,
                 "method": "anonymous-oras-manifest-probe",
                 "probe": {
-                    "digest": None,
+                    "digest": (
+                        "sha256:" + "f" * 64
+                        if admission_kind
+                        == "archived-predecessor-exact-presence"
+                        else None
+                    ),
                     "kind": "manifest",
                     "schema": 1,
                     "status": probe_status,
@@ -166,6 +185,132 @@ def campaign_document(
             "tap_repository": "kandelo-dev/homebrew-tap-core",
         },
         "formulae": sorted(formulae, key=lambda item: item["name"]),
+    }
+
+
+def predecessor_reuse_campaign_document() -> dict[str, object]:
+    campaign = campaign_document(
+        admission_kind="archived-predecessor-exact-presence"
+    )
+    campaign["schema"] = 3
+    authority = campaign["authority"]
+    assert isinstance(authority, dict)
+    archive_path = (
+        "Kandelo/campaigns/prefix-v1/aborted-campaigns/"
+        f"{PREDECESSOR_CAMPAIGN_SHA256}.json"
+    )
+    authority["predecessor_recovery_source"] = {
+        "commit": RECOVERY_TAP_COMMIT,
+        "repository": "kandelo-dev/homebrew-tap-core",
+    }
+    authority["predecessor_recovery"] = [
+        {
+            "activation_commit": "7" * 40,
+            "archive": {
+                "path": archive_path,
+                "sha256": "8" * 64,
+            },
+            "campaign": {
+                "sha256": PREDECESSOR_CAMPAIGN_SHA256,
+                "tag": PREDECESSOR_CAMPAIGN_TAG,
+            },
+            "kandelo_commit": "9" * 40,
+            "source_tap_commit": SOURCE_TAP_COMMIT,
+            "target_tree_git_oid": "a" * 40,
+        }
+    ]
+    formulae = campaign["formulae"]
+    assert isinstance(formulae, list)
+    for formula in formulae:
+        assert isinstance(formula, dict)
+        destination = formula["destination"]
+        assert isinstance(destination, dict)
+        admission = destination["admission"]
+        assert isinstance(admission, dict)
+        probe = admission["probe"]
+        assert isinstance(probe, dict)
+        admission["kind"] = "archived-predecessor-exact-presence"
+        probe["digest"] = "sha256:" + "f" * 64
+        probe["status"] = "present"
+        variants = formula["variants"]
+        assert isinstance(variants, list)
+        for item in variants:
+            assert isinstance(item, dict)
+            item["reuse_source"] = {
+                "arch": item["arch"],
+                "campaign_tag": PREDECESSOR_CAMPAIGN_TAG,
+                "handoff_tag": (
+                    PREDECESSOR_DEPENDENCY_TAG
+                    if formula["name"] == "dependency"
+                    else PREDECESSOR_LEAF_TAG
+                ),
+                "kind": "predecessor-handoff",
+            }
+    return campaign
+
+
+def predecessor_archive_document(
+    *,
+    campaign_tag: str = PREDECESSOR_CAMPAIGN_TAG,
+    dependency_tag: str = PREDECESSOR_DEPENDENCY_TAG,
+    leaf_tag: str = PREDECESSOR_LEAF_TAG,
+) -> dict[str, object]:
+    return {
+        "abandoned_at": "2026-08-03T12:00:00Z",
+        "authority": {
+            "activation_commit": "7" * 40,
+            "campaign_release": {
+                "id": 1,
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "tag": campaign_tag,
+            },
+            "kandelo_commit": "9" * 40,
+            "payload_sha256": "c" * 64,
+            "rootfs_wasm32": ROOTFS_GENERATION,
+            "source_tap_commit": SOURCE_TAP_COMMIT,
+            "target_source": {
+                "manifest_path": (
+                    "Kandelo/campaigns/prefix-v1/manifest.json"
+                ),
+                "manifest_sha256": "d" * 64,
+                "source_root": "Kandelo/campaigns/prefix-v1/source",
+                "source_tree_git_oid": "e" * 40,
+                "target_tree_git_oid": "a" * 40,
+            },
+        },
+        "cause": {
+            "corrective_workstream": "M5",
+            "kind": "campaign-publisher-recovery-incomplete",
+            "summary": "Synthetic predecessor recovery fixture.",
+        },
+        "dispatches": [
+            {
+                "arch": "wasm32",
+                "formula": "dependency",
+                "handoff_release": {
+                    "id": 2,
+                    "tag": dependency_tag,
+                },
+                "result": "handoff-published-and-publicly-verified",
+                "run_id": 11,
+            },
+            {
+                "arch": "wasm32",
+                "formula": "leaf",
+                "handoff_release": {"id": 3, "tag": leaf_tag},
+                "result": "handoff-published-and-publicly-verified",
+                "run_id": 12,
+            },
+        ],
+        "kind": "kandelo-homebrew-prefix-abandoned-campaign",
+        "recovery": {
+            "authority_state": "armed",
+            "fresh_builds_require_successor_campaign": True,
+            "partial_publications_require_successor_revalidation": True,
+            "predecessor_handoffs_are_not_successor_authority": True,
+            "published_handoffs_remain_independently_usable": True,
+        },
+        "schema": 1,
     }
 
 
@@ -261,7 +406,7 @@ def handoff_document(
     publications = []
     expected_files = (
         CONTROLLER.BUILD_HANDOFF_PUBLICATION_FILES
-        if plan.disposition == "build"
+        if plan.publication_kind == "build"
         else CONTROLLER.REUSE_HANDOFF_PUBLICATION_FILES
     )
     for arch in plan.request.arches:
@@ -282,7 +427,7 @@ def handoff_document(
             {
                 "arch": arch,
                 "files": files,
-                "kind": plan.disposition,
+                "kind": plan.publication_kind,
             }
         )
     return {
@@ -341,13 +486,18 @@ class Fixture:
         arches: tuple[str, ...] = ("wasm32",),
         request_arch: str | None = None,
         admission_kind: str = "anonymous-absence",
+        predecessor_reuse: bool = False,
     ) -> None:
         self.root = root
         self.campaign = root / "campaign.json"
-        campaign = campaign_document(
-            disposition=disposition,
-            arches=arches,
-            admission_kind=admission_kind,
+        campaign = (
+            predecessor_reuse_campaign_document()
+            if predecessor_reuse
+            else campaign_document(
+                disposition=disposition,
+                arches=arches,
+                admission_kind=admission_kind,
+            )
         )
         payload = write_pretty(self.campaign, campaign)
         self.authority = root / "authority.json"
@@ -1083,6 +1233,124 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             with self.assertRaises(CONTROLLER.ControllerError):
                 fixture.plan()
 
+    def test_predecessor_reuse_is_a_distinct_handoff_only_task(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                predecessor_reuse=True,
+            )
+            plan = fixture.plan()
+            self.assertEqual(plan.disposition, "predecessor-reuse")
+            self.assertEqual(plan.publication_kind, "reuse")
+            self.assertEqual(plan.generation_kind, "none")
+            self.assertEqual(
+                plan.predecessor_reuse,
+                CONTROLLER.PredecessorReuse(
+                    activation_commit="7" * 40,
+                    recovery_tap_commit=RECOVERY_TAP_COMMIT,
+                    archive_path=(
+                        "Kandelo/campaigns/prefix-v1/"
+                        "aborted-campaigns/"
+                        f"{PREDECESSOR_CAMPAIGN_SHA256}.json"
+                    ),
+                    archive_sha256="8" * 64,
+                    campaign_tag=PREDECESSOR_CAMPAIGN_TAG,
+                    handoff_tag=PREDECESSOR_LEAF_TAG,
+                    kandelo_commit="9" * 40,
+                    source_tap_commit=SOURCE_TAP_COMMIT,
+                    target_tree_git_oid="a" * 40,
+                ),
+            )
+            authority = CONTROLLER.load_authority(
+                fixture.authority,
+                require_active=True,
+            )
+            document = CONTROLLER.build_plan_document(authority, plan)
+            self.assertEqual(
+                document["predecessor_reuse"]["recovery_tap_commit"],
+                RECOVERY_TAP_COMMIT,
+            )
+            handoff = handoff_document(authority, plan)
+            handoff_path = fixture.root / "handoff.json"
+            write_pretty(handoff_path, handoff)
+            CONTROLLER.validate_readback_handoff(
+                handoff_path,
+                authority=authority,
+                plan=plan,
+                tag=tag_for_handoff(handoff),
+            )
+            self.assertEqual(
+                handoff["publications"][0]["kind"],
+                "reuse",
+            )
+
+    def test_predecessor_reuse_authority_fails_closed(self) -> None:
+        def schema_two(campaign: dict[str, object]) -> None:
+            campaign["schema"] = 2
+
+        def missing_recovery_source(campaign: dict[str, object]) -> None:
+            authority = campaign["authority"]
+            assert isinstance(authority, dict)
+            del authority["predecessor_recovery_source"]
+
+        def wrong_destination(campaign: dict[str, object]) -> None:
+            formulae = campaign["formulae"]
+            assert isinstance(formulae, list)
+            leaf = next(
+                item
+                for item in formulae
+                if isinstance(item, dict) and item["name"] == "leaf"
+            )
+            destination = leaf["destination"]
+            assert isinstance(destination, dict)
+            admission = destination["admission"]
+            assert isinstance(admission, dict)
+            admission["kind"] = "anonymous-absence"
+            probe = admission["probe"]
+            assert isinstance(probe, dict)
+            probe["digest"] = None
+            probe["status"] = "missing"
+
+        def wrong_source_arch(campaign: dict[str, object]) -> None:
+            formulae = campaign["formulae"]
+            assert isinstance(formulae, list)
+            leaf = next(
+                item
+                for item in formulae
+                if isinstance(item, dict) and item["name"] == "leaf"
+            )
+            variants = leaf["variants"]
+            assert isinstance(variants, list)
+            source = variants[0]["reuse_source"]
+            assert isinstance(source, dict)
+            source["arch"] = "wasm64"
+
+        for label, mutate in (
+            ("schema-two", schema_two),
+            ("missing-recovery-source", missing_recovery_source),
+            ("wrong-destination", wrong_destination),
+            ("wrong-source-arch", wrong_source_arch),
+        ):
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as directory:
+                    fixture = Fixture(
+                        pathlib.Path(directory),
+                        predecessor_reuse=True,
+                    )
+                    campaign = json.loads(fixture.campaign.read_text())
+                    mutate(campaign)
+                    payload = write_pretty(fixture.campaign, campaign)
+                    write_pretty(
+                        fixture.authority,
+                        active_authority(payload),
+                    )
+                    with self.assertRaises(
+                        CONTROLLER.ControllerError
+                    ):
+                        fixture.plan()
+
     def test_preflight_exports_only_fixed_authority(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = Fixture(pathlib.Path(directory))
@@ -1656,6 +1924,86 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 run.call_args.kwargs["inherit_github_token"]
             )
 
+    def test_predecessor_handoffs_are_fetched_in_dependency_order(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                predecessor_reuse=True,
+            )
+            plan = fixture.plan()
+            predecessor_campaign = campaign_document()
+            predecessor_path = fixture.root / "predecessor.json"
+            write_pretty(predecessor_path, predecessor_campaign)
+            with mock.patch.object(
+                CONTROLLER,
+                "run_command",
+            ) as run:
+                dependencies, formula = (
+                    CONTROLLER.fetch_predecessor_handoffs(
+                        kandelo_root=fixture.kandelo,
+                        plan=plan,
+                        predecessor_campaign_path=predecessor_path,
+                        predecessor_campaign=predecessor_campaign,
+                        archived_handoffs={
+                            ("dependency", "wasm32"):
+                            PREDECESSOR_DEPENDENCY_TAG,
+                            ("leaf", "wasm32"):
+                            PREDECESSOR_LEAF_TAG,
+                        },
+                        root=fixture.root / "predecessor-handoffs",
+                        authenticated=True,
+                    )
+                )
+            dependency = (
+                fixture.root
+                / "predecessor-handoffs/handoffs/dependency"
+            )
+            leaf = (
+                fixture.root / "predecessor-handoffs/handoffs/leaf"
+            )
+            self.assertEqual(dependencies, {"dependency": dependency})
+            self.assertEqual(formula, leaf)
+            self.assertEqual(len(run.call_args_list), 2)
+            dependency_command = run.call_args_list[0].args[0]
+            leaf_command = run.call_args_list[1].args[0]
+            self.assertIn(PREDECESSOR_DEPENDENCY_TAG, dependency_command)
+            self.assertNotIn("--dependency-handoff", dependency_command)
+            self.assertIn(PREDECESSOR_LEAF_TAG, leaf_command)
+            self.assertEqual(
+                leaf_command[
+                    leaf_command.index("--dependency-handoff") + 1
+                ],
+                str(dependency),
+            )
+            self.assertTrue(
+                all(
+                    call.kwargs["inherit_github_token"]
+                    for call in run.call_args_list
+                )
+            )
+            with self.assertRaisesRegex(
+                CONTROLLER.ControllerError,
+                "lacks its archived predecessor",
+            ):
+                CONTROLLER.fetch_predecessor_handoffs(
+                    kandelo_root=fixture.kandelo,
+                    plan=plan,
+                    predecessor_campaign_path=predecessor_path,
+                    predecessor_campaign=predecessor_campaign,
+                    archived_handoffs={
+                        ("dependency", "wasm32"):
+                        PREDECESSOR_DEPENDENCY_TAG,
+                        ("leaf", "wasm32"):
+                        ("homebrew-prefix-handoff-sha256-" + "0" * 64),
+                    },
+                    root=(
+                        fixture.root / "wrong-predecessor-handoffs"
+                    ),
+                    authenticated=True,
+                )
+
     def test_reuse_release_calls_the_frozen_kandelo_authority(
         self,
     ) -> None:
@@ -1829,6 +2177,365 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             self.assertTrue(output.is_dir())
             self.assertTrue((output / "reuse-oci/layout").is_dir())
             self.assertTrue((output / "reuse-oci/receipt.json").is_file())
+
+    def test_predecessor_archive_is_read_from_its_exact_git_commit(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                predecessor_reuse=True,
+            )
+            campaign_payload = CONTROLLER.pretty_json(
+                campaign_document()
+            )
+            campaign_digest = hashlib.sha256(
+                campaign_payload
+            ).hexdigest()
+            campaign_tag = (
+                "homebrew-prefix-campaign-sha256-" + campaign_digest
+            )
+            archive_payload = CONTROLLER.pretty_json(
+                predecessor_archive_document(campaign_tag=campaign_tag)
+            )
+            archive_digest = hashlib.sha256(
+                archive_payload
+            ).hexdigest()
+            plan = dataclasses.replace(
+                fixture.plan(),
+                predecessor_reuse=CONTROLLER.PredecessorReuse(
+                    activation_commit="7" * 40,
+                    recovery_tap_commit=RECOVERY_TAP_COMMIT,
+                    archive_path=(
+                        "Kandelo/campaigns/prefix-v1/"
+                        f"aborted-campaigns/{campaign_digest}.json"
+                    ),
+                    archive_sha256=archive_digest,
+                    campaign_tag=campaign_tag,
+                    handoff_tag=PREDECESSOR_LEAF_TAG,
+                    kandelo_commit="9" * 40,
+                    source_tap_commit=SOURCE_TAP_COMMIT,
+                    target_tree_git_oid="a" * 40,
+                ),
+            )
+            recovery = fixture.root / "recovery"
+            recovery.mkdir()
+            output = fixture.root / "predecessor.json"
+            commands: list[list[str]] = []
+
+            def command_side_effect(
+                arguments: list[str],
+                **_kwargs: object,
+            ) -> mock.Mock:
+                commands.append(arguments)
+                if arguments[0] == "git":
+                    return mock.Mock(stdout=archive_payload)
+                self.assertEqual(
+                    arguments[2], "fetch-campaign-release"
+                )
+                campaign_output = pathlib.Path(
+                    arguments[arguments.index("--out") + 1]
+                )
+                receipt_output = pathlib.Path(
+                    arguments[
+                        arguments.index("--receipt-out") + 1
+                    ]
+                )
+                campaign_output.write_bytes(campaign_payload)
+                write_pretty(receipt_output, {"schema": 1})
+                return mock.Mock(stdout=b"")
+
+            with (
+                mock.patch.object(
+                    CONTROLLER,
+                    "require_exact_checkout",
+                    return_value=recovery.resolve(),
+                ) as exact_checkout,
+                mock.patch.object(
+                    CONTROLLER,
+                    "run_command",
+                    side_effect=command_side_effect,
+                ) as run,
+            ):
+                path, campaign, archived_handoffs = (
+                    CONTROLLER.materialize_predecessor_campaign(
+                        plan=plan,
+                        kandelo_root=fixture.kandelo,
+                        recovery_tap_root=recovery,
+                        output=output,
+                        authenticated=True,
+                    )
+                )
+            exact_checkout.assert_called_once_with(
+                recovery,
+                RECOVERY_TAP_COMMIT,
+                "predecessor recovery tap checkout",
+            )
+            self.assertEqual(run.call_count, 2)
+            command = commands[0]
+            self.assertEqual(
+                command[:4],
+                ["git", "-C", str(recovery.resolve()), "show"],
+            )
+            self.assertEqual(
+                command[4],
+                f"{RECOVERY_TAP_COMMIT}:"
+                f"{plan.predecessor_reuse.archive_path}",
+            )
+            fetch = commands[1]
+            self.assertEqual(fetch[2], "fetch-campaign-release")
+            self.assertEqual(
+                fetch[fetch.index("--repository") + 1],
+                "kandelo-dev/homebrew-tap-core",
+            )
+            self.assertEqual(
+                fetch[fetch.index("--tag") + 1], campaign_tag
+            )
+            self.assertEqual(path, output)
+            self.assertEqual(output.read_bytes(), campaign_payload)
+            self.assertEqual(campaign, campaign_document())
+            self.assertEqual(
+                archived_handoffs,
+                {
+                    ("dependency", "wasm32"):
+                    PREDECESSOR_DEPENDENCY_TAG,
+                    ("leaf", "wasm32"): PREDECESSOR_LEAF_TAG,
+                },
+            )
+
+    def test_live_c3_archive_authorizes_only_verified_handoffs(
+        self,
+    ) -> None:
+        record, payload = CONTROLLER.load_json_bytes(
+            ABANDONED_C3,
+            "abandoned C3 campaign record",
+            canonical=True,
+        )
+        release = record["authority"]["campaign_release"]
+        first = next(
+            item
+            for item in record["dispatches"]
+            if item["result"]
+            == "handoff-published-and-publicly-verified"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                predecessor_reuse=True,
+            )
+            plan = dataclasses.replace(
+                fixture.plan(),
+                predecessor_reuse=CONTROLLER.PredecessorReuse(
+                    activation_commit=record["authority"][
+                        "activation_commit"
+                    ],
+                    recovery_tap_commit=RECOVERY_TAP_COMMIT,
+                    archive_path=(
+                        "Kandelo/campaigns/prefix-v1/"
+                        f"aborted-campaigns/{ABANDONED_C3.stem}.json"
+                    ),
+                    archive_sha256=hashlib.sha256(payload).hexdigest(),
+                    campaign_tag=release["tag"],
+                    handoff_tag=first["handoff_release"]["tag"],
+                    kandelo_commit=record["authority"][
+                        "kandelo_commit"
+                    ],
+                    source_tap_commit=record["authority"][
+                        "source_tap_commit"
+                    ],
+                    target_tree_git_oid=record["authority"][
+                        "target_source"
+                    ]["target_tree_git_oid"],
+                ),
+            )
+            repository, handoffs = (
+                CONTROLLER.parse_predecessor_archive(
+                    payload,
+                    plan=plan,
+                )
+            )
+        self.assertEqual(
+            repository, "kandelo-dev/homebrew-tap-core"
+        )
+        self.assertEqual(len(handoffs), 33)
+        self.assertEqual(
+            handoffs[(first["formula"], first["arch"])],
+            first["handoff_release"]["tag"],
+        )
+        self.assertNotIn(("gawk", "wasm32"), handoffs)
+
+    def test_predecessor_archive_tampering_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                predecessor_reuse=True,
+            )
+            plan = fixture.plan()
+            baseline = predecessor_archive_document()
+
+            def disallow_recovery(value: dict[str, object]) -> None:
+                value["recovery"][
+                    "published_handoffs_remain_independently_usable"
+                ] = False
+
+            def substitute_campaign(value: dict[str, object]) -> None:
+                value["authority"]["campaign_release"]["tag"] = (
+                    "homebrew-prefix-campaign-sha256-" + "0" * 64
+                )
+
+            def repeat_handoff(value: dict[str, object]) -> None:
+                duplicate = copy.deepcopy(value["dispatches"][0])
+                duplicate["run_id"] = 13
+                value["dispatches"].append(duplicate)
+
+            def mark_handoff_unverified(value: dict[str, object]) -> None:
+                value["dispatches"][0]["result"] = "failed"
+
+            for label, mutate in (
+                ("recovery-policy", disallow_recovery),
+                ("campaign-release", substitute_campaign),
+                ("duplicate-handoff", repeat_handoff),
+                ("unverified-handoff", mark_handoff_unverified),
+            ):
+                with self.subTest(label=label):
+                    candidate = copy.deepcopy(baseline)
+                    mutate(candidate)
+                    with self.assertRaises(
+                        CONTROLLER.ControllerError
+                    ):
+                        CONTROLLER.parse_predecessor_archive(
+                            CONTROLLER.pretty_json(candidate),
+                            plan=plan,
+                        )
+
+    def test_predecessor_reuse_reseals_without_oci_publication(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                predecessor_reuse=True,
+            )
+            authority = CONTROLLER.load_authority(
+                fixture.authority,
+                require_active=True,
+            )
+            plan = fixture.plan()
+            recovery = fixture.root / "recovery"
+            recovery.mkdir()
+            current_dependency = fixture.root / "current-dependency"
+            current_dependency.mkdir()
+            predecessor_dependency = (
+                fixture.root / "predecessor-dependency"
+            )
+            predecessor_dependency.mkdir()
+            predecessor_handoff = fixture.root / "predecessor-leaf"
+            predecessor_handoff.mkdir()
+            predecessor_campaign = fixture.root / "predecessor.json"
+            write_pretty(predecessor_campaign, campaign_document())
+            output = fixture.root / "prepared"
+            commands: list[list[str]] = []
+
+            def command_side_effect(
+                arguments: list[str],
+                **_kwargs: object,
+            ) -> mock.Mock:
+                commands.append(arguments)
+                if "prepare-release" in arguments:
+                    prepared = pathlib.Path(
+                        arguments[arguments.index("--out") + 1]
+                    )
+                    (prepared / "assets").mkdir(parents=True)
+                    write_pretty(
+                        prepared / "release-manifest.json",
+                        {
+                            "repository":
+                            "kandelo-dev/homebrew-tap-core",
+                            "tag":
+                            "homebrew-prefix-handoff-sha256-"
+                            + "7" * 64,
+                            "target_commitish": SOURCE_TAP_COMMIT,
+                        },
+                    )
+                return mock.Mock(returncode=0)
+
+            with (
+                mock.patch.object(
+                    CONTROLLER,
+                    "prepare_task",
+                    return_value=(
+                        authority,
+                        plan,
+                        fixture.kandelo.resolve(),
+                        fixture.source_tap.resolve(),
+                    ),
+                ),
+                mock.patch.object(
+                    CONTROLLER,
+                    "materialize_target_source",
+                    return_value=fixture.source_tap,
+                ),
+                mock.patch.object(
+                    CONTROLLER,
+                    "fetch_dependency_handoffs",
+                    return_value={"dependency": current_dependency},
+                ),
+                mock.patch.object(
+                    CONTROLLER,
+                    "materialize_predecessor_campaign",
+                    return_value=(
+                        predecessor_campaign,
+                        campaign_document(),
+                        {
+                            ("dependency", "wasm32"):
+                            PREDECESSOR_DEPENDENCY_TAG,
+                            ("leaf", "wasm32"):
+                            PREDECESSOR_LEAF_TAG,
+                        },
+                    ),
+                ) as materialize_predecessor,
+                mock.patch.object(
+                    CONTROLLER,
+                    "fetch_predecessor_handoffs",
+                    return_value=(
+                        {"dependency": predecessor_dependency},
+                        predecessor_handoff,
+                    ),
+                ),
+                mock.patch.object(
+                    CONTROLLER,
+                    "run_command",
+                    side_effect=command_side_effect,
+                ),
+            ):
+                summary = (
+                    CONTROLLER.prepare_predecessor_reuse_release(
+                        authority_path=fixture.authority,
+                        kandelo_root=fixture.kandelo,
+                        source_tap_root=fixture.source_tap,
+                        recovery_tap_root=recovery,
+                        event_path=fixture.event,
+                        output=output,
+                        github_output=None,
+                    )
+                )
+            self.assertEqual(
+                materialize_predecessor.call_args.kwargs[
+                    "recovery_tap_root"
+                ],
+                recovery,
+            )
+            self.assertEqual(len(commands), 2)
+            derive = commands[0]
+            self.assertEqual(derive[2], "derive-predecessor-reuse")
+            self.assertIn(str(predecessor_campaign), derive)
+            self.assertIn(str(predecessor_handoff), derive)
+            self.assertIn(str(predecessor_dependency), derive)
+            self.assertIn(str(current_dependency), derive)
+            self.assertFalse(any("compose-reuse-child" in item for item in commands))
+            self.assertFalse((output / "reuse-oci").exists())
+            self.assertEqual(summary["disposition"], "predecessor-reuse")
+            self.assertEqual(commands[1][2], "prepare-release")
 
     def test_reuse_oci_tree_rejects_extra_and_special_entries(
         self,
