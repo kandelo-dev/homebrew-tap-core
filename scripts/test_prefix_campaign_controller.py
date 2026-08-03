@@ -1672,7 +1672,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 )
             self.assertFalse(output.exists())
 
-    def test_release_readback_is_anonymous_and_retains_receipt(
+    def test_release_readback_authenticates_only_metadata_and_keeps_receipt(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1747,7 +1747,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                     output=output,
                 )
 
-            self.assertFalse(
+            self.assertTrue(
                 prepare_task.call_args.kwargs[
                     "authenticated_release_reads"
                 ]
@@ -1760,14 +1760,14 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 prepare_task.call_args.kwargs["source_tap_root"],
                 raw_source_tap_root,
             )
-            self.assertFalse(
+            self.assertTrue(
                 fetch_dependencies.call_args.kwargs["authenticated"]
             )
             self.assertEqual(
                 fetch_dependencies.call_args.kwargs["kandelo_root"],
                 validated_kandelo_root,
             )
-            self.assertFalse(
+            self.assertTrue(
                 run.call_args.kwargs["inherit_github_token"]
             )
             self.assertEqual(

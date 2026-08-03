@@ -584,10 +584,14 @@ jobs:
             --target-main-contains-sha \
               "${{ needs.admit.outputs.source-tap-commit }}"
 
-      - name: Revalidate the release without credentials
+      - name: Revalidate public release assets
         shell: bash
-        # WHY: this is the user-visible proof that the sealed handoff and its
-        # dependency closure are publicly readable without repository access.
+        env:
+          # WHY: authenticate only GitHub's release-metadata request so a
+          # shared hosted runner cannot exhaust the small anonymous API quota.
+          # The verifier never sends this token when it downloads release
+          # assets, so the handoff bytes must still be publicly readable.
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python3 scripts/prefix-campaign-controller.py verify-release \

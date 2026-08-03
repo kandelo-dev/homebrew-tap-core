@@ -1031,6 +1031,7 @@ def check_prefix_campaign_workflow(workflow, authority)
           publish_env,
           formula_env,
           controller_token,
+          controller_token,
         ], "#{label} credential boundary changed")
 
   admit_step = jobs.dig("admit", "steps").find do |step|
@@ -1161,14 +1162,16 @@ def check_prefix_campaign_workflow(workflow, authority)
     "#{label} reused index lacks anonymous publication evidence"
   )
   verify_step = seal_steps.find do |step|
-    step["name"] == "Revalidate the release without credentials"
+    step["name"] == "Revalidate public release assets"
   end
   check(
     verify_step.is_a?(Hash) &&
-      !verify_step.key?("env") &&
+      verify_step["env"] == {
+        "GH_TOKEN" => expression("github.token"),
+      } &&
       verify_step["run"].is_a?(String) &&
       verify_step["run"].include?("verify-release"),
-    "#{label} public release readback can inherit credentials"
+    "#{label} release metadata authentication changed"
   )
   downloads = seal_steps.select do |step|
     step["uses"] == DOWNLOAD_ACTION
@@ -1982,6 +1985,22 @@ def self_test(
         "Compose the public Homebrew version index without credentials"
     end
     step["env"]["GH_TOKEN"] = expression("github.token")
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("release metadata readback without bounded token") do
+    mutated = deep_copy(prefix_campaign)
+    step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
+      item["name"] == "Revalidate public release assets"
+    end
+    step.delete("env")
+    check_prefix_campaign_workflow(mutated, prefix_authority)
+  end
+  expect_rejection("release metadata readback with broader credentials") do
+    mutated = deep_copy(prefix_campaign)
+    step = mutated.dig("jobs", "seal-handoff", "steps").find do |item|
+      item["name"] == "Revalidate public release assets"
+    end
+    step["env"]["GH_TOKEN"] = expression("secrets.HOMEBREW_GITHUB_TOKEN")
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
   expect_rejection("reuse handoff sealed before public index readback") do
