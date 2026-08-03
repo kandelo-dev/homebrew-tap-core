@@ -1,7 +1,8 @@
-# Publish one content-addressed prefix-campaign Formula handoff.
+# Publish one content-addressed prefix-campaign bottle identity and handoff.
 #
-# WHY: one reviewed task keeps dependency order explicit. A partial
-# campaign can never become tap Git authority.
+# WHY: one reviewed task keeps dependency order explicit. Each successful
+# bottle remains independently usable, while a partial campaign can never
+# become tap Git authority.
 name: Publish prefix-campaign bottle
 
 on:
@@ -281,9 +282,16 @@ jobs:
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      # WHY: reuse writes the same Formula repository and mutable version
+      # index as an ordinary build. Sharing its lock prevents lost sibling
+      # descriptors when two independently valid children finish together.
+      group: kandelo-homebrew-ghcr-${{ needs.admit.outputs.formula }}
+      cancel-in-progress: false
     permissions:
       actions: read
       contents: write
+      packages: write
     steps:
       - name: Checkout protected caller
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -337,7 +345,7 @@ jobs:
         with:
           github-token: ""
 
-      - name: Derive and prepare immutable Formula handoff
+      - name: Derive immutable Formula handoff and reused OCI child
         id: handoff
         shell: bash
         env:
@@ -370,16 +378,200 @@ jobs:
           fi
           bash scripts/dev-shell.sh "${controller[@]}" "${common[@]}"
 
+      - name: Validate the reused OCI child without credentials
+        if: ${{ needs.admit.outputs.disposition == 'reuse' }}
+        shell: bash
+        env:
+          ARCH: ${{ needs.admit.outputs.arch }}
+          FORMULA: ${{ needs.admit.outputs.formula }}
+          KANDELO_COMMIT: ${{ needs.admit.outputs.kandelo-commit }}
+          RELEASE_TAG: ${{ needs.admit.outputs.release-tag }}
+          TAP_COMMIT: ${{ needs.admit.outputs.source-tap-commit }}
+        run: |
+          set -euo pipefail
+          for secret_name in GH_TOKEN GITHUB_TOKEN \
+            HOMEBREW_GITHUB_API_TOKEN HOMEBREW_GITHUB_PACKAGES_TOKEN \
+            HOMEBREW_DOCKER_REGISTRY_TOKEN; do
+            [ -z "${!secret_name:-}" ] || {
+              echo "::error::reuse child validator received $secret_name"
+              exit 2
+            }
+          done
+          child="$RUNNER_TEMP/prepared-handoff-release/reuse-oci"
+          cd kandelo
+          bash scripts/dev-shell.sh python3 \
+            scripts/homebrew-oci-layout.py validate-child \
+            --layout "$child/layout" \
+            --receipt "$child/receipt.json"
+          jq -e \
+            --arg arch "$ARCH" \
+            --arg formula "$FORMULA" \
+            --arg abi "${RELEASE_TAG#bottles-abi-v}" \
+            --arg kandelo_commit "$KANDELO_COMMIT" \
+            --arg tap_commit "$TAP_COMMIT" '
+              .schema == 2 and .kind == "child" and
+              .arch == $arch and .formula == $formula and
+              .abi == ($abi | tonumber) and
+              .kandelo_commit == $kandelo_commit and
+              .tap_commit == $tap_commit and
+              (.tap_repository | ascii_downcase) ==
+                "kandelo-dev/homebrew-tap-core" and
+              (.tap_name | ascii_downcase) == "kandelo-dev/tap-core"
+            ' "$child/receipt.json" >/dev/null
+
+      - name: Publish or resume the exact reused OCI child
+        if: ${{ needs.admit.outputs.disposition == 'reuse' }}
+        shell: bash
+        env:
+          FORMULA: ${{ needs.admit.outputs.formula }}
+          GH_TOKEN: ${{ github.token }}
+          KANDELO_COMMIT: ${{ needs.admit.outputs.kandelo-commit }}
+          TAP_COMMIT: ${{ needs.admit.outputs.source-tap-commit }}
+        run: |
+          set -euo pipefail
+          child="$RUNNER_TEMP/prepared-handoff-release/reuse-oci"
+          cd kandelo
+          bash .github/scripts/require-repository-main-contains.sh \
+            --repository Automattic/kandelo \
+            --source-sha "$KANDELO_COMMIT"
+          bash scripts/dev-shell.sh bash scripts/homebrew-ghcr-upload.sh \
+            --layout "$child/layout" \
+            --layout-receipt "$child/receipt.json" \
+            --tap-repository kandelo-dev/homebrew-tap-core \
+            --tap-name kandelo-dev/tap-core \
+            --formula "$FORMULA" \
+            --kandelo-main-contains-sha "$KANDELO_COMMIT" \
+            --target-main-contains-sha "$TAP_COMMIT" \
+            --auth-mode github-token \
+            --require-pat false \
+            --destination-mode repository \
+            --out-json "$RUNNER_TEMP/reuse-child-publication.json"
+
+      - name: Revalidate public reused child evidence without credentials
+        if: ${{ needs.admit.outputs.disposition == 'reuse' }}
+        shell: bash
+        env:
+          FORMULA: ${{ needs.admit.outputs.formula }}
+        run: |
+          set -euo pipefail
+          child="$RUNNER_TEMP/prepared-handoff-release/reuse-oci"
+          cd kandelo
+          bash scripts/dev-shell.sh python3 \
+            scripts/homebrew-oci-layout.py validate-publication-receipt \
+            --receipt "$RUNNER_TEMP/reuse-child-publication.json" \
+            --layout-receipt "$child/receipt.json" \
+            --kind child \
+            --formula "$FORMULA" \
+            --tap-repository kandelo-dev/homebrew-tap-core \
+            --tap-name kandelo-dev/tap-core
+
+      - name: Compose the public Homebrew version index without credentials
+        if: ${{ needs.admit.outputs.disposition == 'reuse' }}
+        shell: bash
+        env:
+          FORMULA: ${{ needs.admit.outputs.formula }}
+          TAP_COMMIT: ${{ needs.admit.outputs.source-tap-commit }}
+        run: |
+          set -euo pipefail
+          for secret_name in GH_TOKEN GITHUB_TOKEN \
+            HOMEBREW_GITHUB_API_TOKEN HOMEBREW_GITHUB_PACKAGES_TOKEN \
+            HOMEBREW_DOCKER_REGISTRY_TOKEN; do
+            [ -z "${!secret_name:-}" ] || {
+              echo "::error::reuse index composer received $secret_name"
+              exit 2
+            }
+          done
+          child="$RUNNER_TEMP/prepared-handoff-release/reuse-oci"
+          existing="$RUNNER_TEMP/reuse-existing-index"
+          result="$RUNNER_TEMP/reuse-existing-index-result.json"
+          config="$RUNNER_TEMP/reuse-anonymous-oras.json"
+          top_ref="$(jq -er .top_ref "$child/receipt.json")"
+          printf '{"auths":{}}\n' >"$config"
+          cd kandelo
+          bash scripts/dev-shell.sh env -u GH_TOKEN -u GITHUB_TOKEN \
+            -u HOMEBREW_GITHUB_API_TOKEN \
+            -u HOMEBREW_GITHUB_PACKAGES_TOKEN \
+            -u HOMEBREW_DOCKER_REGISTRY_TOKEN python3 \
+            scripts/homebrew-oci-layout.py import-public-index \
+            --remote \
+              "ghcr.io/kandelo-dev/homebrew-tap-core/$FORMULA" \
+            --reference "$top_ref" \
+            --registry-config "$config" \
+            --out-layout "$existing" \
+            --out-result "$result"
+          merge_args=(
+            --child-layout "$child/layout"
+            --child-receipt "$child/receipt.json"
+          )
+          case "$(jq -er .status "$result")" in
+            present) merge_args+=(--existing-layout "$existing") ;;
+            missing) ;;
+            *) echo "::error::invalid anonymous version-index import"; exit 1 ;;
+          esac
+          bash scripts/dev-shell.sh python3 \
+            scripts/homebrew-oci-layout.py merge-index \
+            "${merge_args[@]}" \
+            --tap-commit "$TAP_COMMIT" \
+            --out-layout "$RUNNER_TEMP/reuse-complete-index/layout" \
+            --out-receipt \
+              "$RUNNER_TEMP/reuse-complete-index/layout-receipt.json"
+
+      - name: Publish the reused bottle version index
+        if: ${{ needs.admit.outputs.disposition == 'reuse' }}
+        shell: bash
+        env:
+          FORMULA: ${{ needs.admit.outputs.formula }}
+          GH_TOKEN: ${{ github.token }}
+          KANDELO_COMMIT: ${{ needs.admit.outputs.kandelo-commit }}
+          TAP_COMMIT: ${{ needs.admit.outputs.source-tap-commit }}
+        run: |
+          set -euo pipefail
+          index="$RUNNER_TEMP/reuse-complete-index"
+          cd kandelo
+          # WHY: the child is independently public before this mutable
+          # version index changes. An index race can therefore never discard
+          # the successfully reused bottle bytes.
+          bash scripts/dev-shell.sh bash scripts/homebrew-ghcr-upload.sh \
+            --layout "$index/layout" \
+            --layout-receipt "$index/layout-receipt.json" \
+            --tap-repository kandelo-dev/homebrew-tap-core \
+            --tap-name kandelo-dev/tap-core \
+            --formula "$FORMULA" \
+            --kandelo-main-contains-sha "$KANDELO_COMMIT" \
+            --target-main-contains-sha "$TAP_COMMIT" \
+            --auth-mode github-token \
+            --require-pat false \
+            --destination-mode repository \
+            --out-json "$index/transport-receipt.json"
+
+      - name: Revalidate public version-index evidence without credentials
+        if: ${{ needs.admit.outputs.disposition == 'reuse' }}
+        shell: bash
+        env:
+          FORMULA: ${{ needs.admit.outputs.formula }}
+        run: |
+          set -euo pipefail
+          index="$RUNNER_TEMP/reuse-complete-index"
+          cd kandelo
+          bash scripts/dev-shell.sh python3 \
+            scripts/homebrew-oci-layout.py validate-publication-receipt \
+            --receipt "$index/transport-receipt.json" \
+            --layout-receipt "$index/layout-receipt.json" \
+            --kind index \
+            --formula "$FORMULA" \
+            --tap-repository kandelo-dev/homebrew-tap-core \
+            --tap-name kandelo-dev/tap-core
+
       - name: Publish immutable Formula handoff
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # WHY: credentials enter only after all task data is sealed.
-          # A campaign may outlive later Kandelo merges. Each release
-          # therefore re-proves that its sealed source remains on
-          # protected main.
+          # WHY: handoff-release credentials enter only after the child and
+          # index are publicly readable. A campaign may outlive later Kandelo
+          # merges, so each release also re-proves that its sealed source
+          # remains on protected main.
           bash kandelo/scripts/publish-immutable-github-release.sh \
             --manifest \
               "$RUNNER_TEMP/prepared-handoff-release/release-manifest.json" \
@@ -415,6 +607,10 @@ jobs:
             ${{ runner.temp }}/publish-receipt.json
             ${{ runner.temp }}/readback-receipt.json
             ${{ runner.temp }}/readback-summary.json
+            ${{ runner.temp }}/prepared-handoff-release/reuse-oci/receipt.json
+            ${{ runner.temp }}/reuse-child-publication.json
+            ${{ runner.temp }}/reuse-complete-index/layout-receipt.json
+            ${{ runner.temp }}/reuse-complete-index/transport-receipt.json
           compression-level: 0
           if-no-files-found: error
           retention-days: 14

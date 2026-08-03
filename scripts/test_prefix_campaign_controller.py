@@ -165,6 +165,16 @@ def write_pretty(path: pathlib.Path, value: object) -> bytes:
     return payload
 
 
+def write_reuse_oci_shape(root: pathlib.Path) -> None:
+    sha_root = root / "layout/blobs/sha256"
+    sha_root.mkdir(parents=True)
+    (root / "receipt.json").write_text("{}\n")
+    (root / "layout/oci-layout").write_text("{}\n")
+    (root / "layout/index.json").write_text("{}\n")
+    for character in "abc":
+        (sha_root / (character * 64)).write_text(character)
+
+
 def active_authority(
     campaign_payload: bytes,
 ) -> dict[str, object]:
@@ -1302,6 +1312,11 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 **_kwargs: object,
             ) -> mock.Mock:
                 commands.append(arguments)
+                if "compose-reuse-child" in arguments:
+                    reuse_oci = pathlib.Path(
+                        arguments[arguments.index("--out") + 1]
+                    )
+                    write_reuse_oci_shape(reuse_oci)
                 if "prepare-release" in arguments:
                     prepared = pathlib.Path(
                         arguments[arguments.index("--out") + 1]
@@ -1392,7 +1407,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 OLD_TAP_COMMIT,
                 "historical tap checkout",
             )
-            self.assertEqual(len(commands), 2)
+            self.assertEqual(len(commands), 4)
             derive = commands[0]
             self.assertEqual(
                 derive[1],
@@ -1410,10 +1425,130 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 derive[derive.index("--arch") + 1],
                 "wasm32",
             )
-            self.assertEqual(commands[1][2], "prepare-release")
+            compose = commands[1]
+            self.assertEqual(compose[2], "compose-reuse-child")
+            self.assertEqual(
+                compose[compose.index("--handoff") + 1],
+                derive[derive.index("--out") + 1],
+            )
+            self.assertEqual(
+                compose[compose.index("--source-tap-root") + 1],
+                str(fixture.source_tap),
+            )
+            self.assertEqual(
+                compose[compose.index("--arch") + 1],
+                "wasm32",
+            )
+            validate = commands[2]
+            self.assertEqual(validate[2], "validate-child")
+            compose_output = pathlib.Path(
+                compose[compose.index("--out") + 1]
+            )
+            self.assertEqual(
+                validate[validate.index("--layout") + 1],
+                str(compose_output / "layout"),
+            )
+            self.assertEqual(
+                validate[validate.index("--receipt") + 1],
+                str(compose_output / "receipt.json"),
+            )
+            self.assertEqual(commands[3][2], "prepare-release")
             self.assertEqual(summary["disposition"], "reuse")
             self.assertEqual(summary["schema"], 2)
             self.assertTrue(output.is_dir())
+            self.assertTrue((output / "reuse-oci/layout").is_dir())
+            self.assertTrue((output / "reuse-oci/receipt.json").is_file())
+
+    def test_reuse_oci_tree_rejects_extra_and_special_entries(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory) / "reuse-oci"
+            write_reuse_oci_shape(root)
+            self.assertEqual(
+                CONTROLLER.require_reuse_oci_tree(root),
+                root,
+            )
+            (root / "extra").write_text("not sealed\n")
+            with self.assertRaisesRegex(
+                CONTROLLER.ControllerError,
+                "unexpected layout shape",
+            ):
+                CONTROLLER.require_reuse_oci_tree(root)
+            (root / "extra").unlink()
+            receipt = root / "receipt.json"
+            receipt.unlink()
+            receipt.symlink_to(root / "layout/index.json")
+            with self.assertRaisesRegex(
+                CONTROLLER.ControllerError,
+                "unsafe file",
+            ):
+                CONTROLLER.require_reuse_oci_tree(root)
+
+    def test_handoff_rejects_a_preexisting_reuse_oci_destination(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(
+                pathlib.Path(directory),
+                disposition="byte-clean-reuse-candidate",
+            )
+            authority = CONTROLLER.load_authority(
+                fixture.authority,
+                require_active=True,
+            )
+            working = fixture.root / "working"
+            working.mkdir()
+            handoff = working / "handoff"
+            handoff.mkdir()
+            reuse_oci = working / "reuse-oci"
+            write_reuse_oci_shape(reuse_oci)
+            output = fixture.root / "prepared"
+
+            def prepare_with_collision(
+                arguments: list[str],
+                **_kwargs: object,
+            ) -> mock.Mock:
+                prepared = pathlib.Path(
+                    arguments[arguments.index("--out") + 1]
+                )
+                (prepared / "assets").mkdir(parents=True)
+                (prepared / "reuse-oci").mkdir()
+                write_pretty(
+                    prepared / "release-manifest.json",
+                    {
+                        "repository": "kandelo-dev/homebrew-tap-core",
+                        "tag": (
+                            "homebrew-prefix-handoff-sha256-" + "7" * 64
+                        ),
+                        "target_commitish": SOURCE_TAP_COMMIT,
+                    },
+                )
+                return mock.Mock(returncode=0)
+
+            with (
+                mock.patch.object(
+                    CONTROLLER,
+                    "run_command",
+                    side_effect=prepare_with_collision,
+                ),
+                self.assertRaisesRegex(
+                    CONTROLLER.ControllerError,
+                    "already contains a reuse OCI child",
+                ),
+            ):
+                CONTROLLER.prepare_handoff_release(
+                    authority=authority,
+                    plan=fixture.plan(),
+                    kandelo_root=fixture.kandelo,
+                    dependencies={},
+                    handoff=handoff,
+                    working=working,
+                    output=output,
+                    github_output=None,
+                    reuse_oci=reuse_oci,
+                )
+            self.assertFalse(output.exists())
 
     def test_release_readback_is_anonymous_and_retains_receipt(
         self,
