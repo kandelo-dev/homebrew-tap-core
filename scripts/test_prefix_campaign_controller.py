@@ -73,6 +73,66 @@ def variant(arch: str, kind: str) -> dict[str, object]:
     }
 
 
+def public_index_child(arch: str) -> dict[str, object]:
+    return {
+        "arch": arch,
+        "bottle_sha256": "c" * 64,
+        "bottle_size": 1024,
+        "homebrew_ref": f"2.0.{arch}_kandelo.1",
+        "manifest_digest": "sha256:" + "d" * 64,
+        "manifest_size": 2048,
+    }
+
+
+def use_public_index_admission(
+    formula: dict[str, object],
+    *,
+    children_arches: tuple[str, ...] | None = None,
+) -> None:
+    destination = formula["destination"]
+    assert isinstance(destination, dict)
+    admission = destination["admission"]
+    assert isinstance(admission, dict)
+    kind = admission["kind"]
+    assert isinstance(kind, str)
+    status = {
+        "anonymous-absence": "missing",
+        "first-package-namespace-bootstrap-required": "auth-required",
+        "archived-predecessor-exact-presence": "present",
+    }[kind]
+    if children_arches is None:
+        variants = formula["variants"]
+        assert isinstance(variants, list)
+        children_arches = tuple(
+            item["arch"]
+            for item in variants
+            if isinstance(item, dict) and "reuse_source" in item
+        )
+    children = (
+        [public_index_child(arch) for arch in children_arches]
+        if status == "present"
+        else []
+    )
+    admission.update(
+        {
+            "method": "anonymous-oras-public-index-probe",
+            "probe": {
+                "children": children,
+                "digest": (
+                    "sha256:" + "f" * 64
+                    if status == "present"
+                    else None
+                ),
+                "kind": "public-index",
+                "schema": 1,
+                "size": 4096 if status == "present" else None,
+                "status": status,
+            },
+            "schema": 2,
+        }
+    )
+
+
 def formula_document(
     name: str,
     version: str,
@@ -1526,6 +1586,199 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                 "none",
             )
             self.assertTrue(output.is_file())
+
+    def test_public_index_admission_routes_exact_probe_states(self) -> None:
+        cases = (
+            (
+                "absent",
+                {"predecessor_reuse": False},
+                "anonymous-absence",
+                "build",
+            ),
+            (
+                "present",
+                {"predecessor_reuse": True},
+                "archived-predecessor-exact-presence",
+                "predecessor-reuse",
+            ),
+            (
+                "namespace-bootstrap",
+                {
+                    "predecessor_reuse": False,
+                    "admission_kind": (
+                        "first-package-namespace-bootstrap-required"
+                    ),
+                },
+                "first-package-namespace-bootstrap-required",
+                "build",
+            ),
+        )
+        for label, options, expected_admission, expected_disposition in cases:
+            with (
+                self.subTest(label=label),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                fixture = Fixture(pathlib.Path(directory), **options)
+                campaign = json.loads(fixture.campaign.read_text())
+                selected = next(
+                    value
+                    for value in campaign["formulae"]
+                    if value["name"] == "leaf"
+                )
+                use_public_index_admission(selected)
+                payload = write_pretty(fixture.campaign, campaign)
+                write_pretty(
+                    fixture.authority,
+                    active_authority(payload),
+                )
+                plan = fixture.plan()
+                self.assertEqual(plan.admission_kind, expected_admission)
+                self.assertEqual(plan.disposition, expected_disposition)
+
+    def test_public_index_presence_is_architecture_specific(self) -> None:
+        formula = formula_document(
+            "leaf",
+            "2.0",
+            [],
+            "required-build",
+            ("wasm32", "wasm64"),
+            LEAF_FORMULA_SHA256,
+            "archived-predecessor-exact-presence",
+        )
+        use_public_index_admission(
+            formula,
+            children_arches=("wasm64",),
+        )
+        self.assertEqual(
+            CONTROLLER.destination_admission_kind(formula, "wasm64"),
+            "archived-predecessor-exact-presence",
+        )
+        self.assertEqual(
+            CONTROLLER.destination_admission_kind(formula, "wasm32"),
+            "anonymous-absence",
+        )
+
+    def test_public_index_admission_fails_closed_on_malformed_probe(
+        self,
+    ) -> None:
+        def probe(formula: dict[str, object]) -> dict[str, object]:
+            destination = formula["destination"]
+            assert isinstance(destination, dict)
+            admission = destination["admission"]
+            assert isinstance(admission, dict)
+            value = admission["probe"]
+            assert isinstance(value, dict)
+            return value
+
+        mutations = (
+            (
+                "cross-paired method",
+                False,
+                lambda formula: formula["destination"]["admission"].update(
+                    method="anonymous-oras-manifest-probe"
+                ),
+            ),
+            (
+                "extra probe field",
+                False,
+                lambda formula: probe(formula).update(unexpected=True),
+            ),
+            (
+                "missing children field",
+                False,
+                lambda formula: probe(formula).pop("children"),
+            ),
+            (
+                "non-list children",
+                False,
+                lambda formula: probe(formula).update(children={}),
+            ),
+            (
+                "child on missing index",
+                False,
+                lambda formula: probe(formula).update(
+                    children=[public_index_child("wasm32")]
+                ),
+            ),
+            (
+                "size on missing index",
+                False,
+                lambda formula: probe(formula).update(size=1),
+            ),
+            (
+                "empty present index",
+                True,
+                lambda formula: probe(formula).update(children=[]),
+            ),
+            (
+                "missing present digest",
+                True,
+                lambda formula: probe(formula).update(digest=None),
+            ),
+            (
+                "missing present size",
+                True,
+                lambda formula: probe(formula).update(size=None),
+            ),
+            (
+                "extra child field",
+                True,
+                lambda formula: probe(formula)["children"][0].update(
+                    unexpected=True
+                ),
+            ),
+            (
+                "invalid child digest",
+                True,
+                lambda formula: probe(formula)["children"][0].update(
+                    manifest_digest="sha256:bad"
+                ),
+            ),
+            (
+                "boolean child size",
+                True,
+                lambda formula: probe(formula)["children"][0].update(
+                    bottle_size=True
+                ),
+            ),
+            (
+                "duplicate child architecture",
+                True,
+                lambda formula: probe(formula)["children"].append(
+                    public_index_child("wasm32")
+                ),
+            ),
+        )
+        for label, predecessor_reuse, mutate in mutations:
+            with (
+                self.subTest(label=label),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                fixture = Fixture(
+                    pathlib.Path(directory),
+                    predecessor_reuse=predecessor_reuse,
+                )
+                campaign = json.loads(fixture.campaign.read_text())
+                selected = next(
+                    value
+                    for value in campaign["formulae"]
+                    if value["name"] == "leaf"
+                )
+                use_public_index_admission(selected)
+                mutate(selected)
+                payload = write_pretty(fixture.campaign, campaign)
+                write_pretty(
+                    fixture.authority,
+                    active_authority(payload),
+                )
+                with self.assertRaises(
+                    CONTROLLER.ControllerError
+                ) as raised:
+                    fixture.plan()
+                self.assertIn(
+                    raised.exception.status,
+                    ("invalid-campaign", "invalid-contract"),
+                )
 
     def test_first_package_namespace_bootstrap_routes_only_a_build(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

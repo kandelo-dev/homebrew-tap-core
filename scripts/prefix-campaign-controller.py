@@ -29,6 +29,7 @@ FORMULA = re.compile(r"^[a-z0-9][a-z0-9._-]{0,254}$")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 OCI_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+OCI_TAG = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$")
 REPOSITORY = re.compile(
     r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
 )
@@ -968,7 +969,10 @@ def dependency_closure(
     return tuple(sorted(reached))
 
 
-def destination_admission_kind(formula: dict[str, Any]) -> str:
+def destination_admission_kind(
+    formula: dict[str, Any],
+    selected_arch: str,
+) -> str:
     name = formula.get("name", "Formula")
     destination = exact_keys(
         formula.get("destination"),
@@ -994,11 +998,100 @@ def destination_admission_kind(formula: dict[str, Any]) -> str:
         {"kind", "method", "probe", "schema"},
         f"{name} destination admission",
     )
-    probe = exact_keys(
-        admission["probe"],
-        {"digest", "kind", "schema", "status"},
-        f"{name} destination admission probe",
+    legacy_admission = (
+        admission["schema"] == 1
+        and admission["method"] == "anonymous-oras-manifest-probe"
     )
+    public_index_admission = (
+        admission["schema"] == 2
+        and admission["method"]
+        == "anonymous-oras-public-index-probe"
+    )
+    if not legacy_admission and not public_index_admission:
+        fail(
+            "invalid-campaign",
+            f"{name} destination admission is invalid",
+        )
+    if legacy_admission:
+        probe = exact_keys(
+            admission["probe"],
+            {"digest", "kind", "schema", "status"},
+            f"{name} destination admission probe",
+        )
+        if probe["schema"] != 1 or probe["kind"] != "manifest":
+            fail(
+                "invalid-campaign",
+                f"{name} destination admission probe is invalid",
+            )
+        observed_arches: frozenset[str] | None = None
+    else:
+        probe = exact_keys(
+            admission["probe"],
+            {
+                "children",
+                "digest",
+                "kind",
+                "schema",
+                "size",
+                "status",
+            },
+            f"{name} destination admission probe",
+        )
+        children = probe["children"]
+        if (
+            probe["schema"] != 1
+            or probe["kind"] != "public-index"
+            or not isinstance(children, list)
+        ):
+            fail(
+                "invalid-campaign",
+                f"{name} destination admission probe is invalid",
+            )
+        child_arches: list[str] = []
+        for position, child in enumerate(children):
+            child = exact_keys(
+                child,
+                {
+                    "arch",
+                    "bottle_sha256",
+                    "bottle_size",
+                    "homebrew_ref",
+                    "manifest_digest",
+                    "manifest_size",
+                },
+                f"{name} destination admission child {position}",
+            )
+            arch = child["arch"]
+            if (
+                arch not in ("wasm32", "wasm64")
+                or not isinstance(child["bottle_sha256"], str)
+                or SHA256.fullmatch(child["bottle_sha256"]) is None
+                or not isinstance(child["bottle_size"], int)
+                or isinstance(child["bottle_size"], bool)
+                or not 1
+                <= child["bottle_size"]
+                <= MAX_HANDOFF_ASSET_BYTES
+                or not isinstance(child["homebrew_ref"], str)
+                or OCI_TAG.fullmatch(child["homebrew_ref"]) is None
+                or not isinstance(child["manifest_digest"], str)
+                or OCI_DIGEST.fullmatch(child["manifest_digest"]) is None
+                or not isinstance(child["manifest_size"], int)
+                or isinstance(child["manifest_size"], bool)
+                or not 1 <= child["manifest_size"] <= MAX_JSON_BYTES
+            ):
+                fail(
+                    "invalid-campaign",
+                    f"{name} destination admission child {position} "
+                    "is invalid",
+                )
+            child_arches.append(arch)
+        if child_arches != sorted(set(child_arches)):
+            fail(
+                "invalid-campaign",
+                f"{name} destination admission children are not a "
+                "canonical architecture set",
+            )
+        observed_arches = frozenset(child_arches)
     kind = admission["kind"]
     expected_status = {
         "anonymous-absence": "missing",
@@ -1007,28 +1100,52 @@ def destination_admission_kind(formula: dict[str, Any]) -> str:
     }.get(kind)
     digest = probe["digest"]
     if (
-        admission["schema"] != 1
-        or admission["method"] != "anonymous-oras-manifest-probe"
-        or expected_status is None
+        expected_status is None
         or probe["schema"] != 1
-        or probe["kind"] != "manifest"
         or probe["status"] != expected_status
         or (
             kind == "archived-predecessor-exact-presence"
             and (
                 not isinstance(digest, str)
                 or OCI_DIGEST.fullmatch(digest) is None
+                or (
+                    public_index_admission
+                    and (
+                        not isinstance(probe["size"], int)
+                        or isinstance(probe["size"], bool)
+                        or not 1 <= probe["size"] <= MAX_JSON_BYTES
+                        or not observed_arches
+                    )
+                )
             )
         )
         or (
             kind != "archived-predecessor-exact-presence"
-            and digest is not None
+            and (
+                digest is not None
+                or (
+                    public_index_admission
+                    and (
+                        probe["size"] is not None
+                        or probe["children"] != []
+                    )
+                )
+            )
         )
     ):
         fail(
             "invalid-campaign",
             f"{name} destination admission is invalid",
         )
+    if (
+        public_index_admission
+        and kind == "archived-predecessor-exact-presence"
+        and selected_arch not in (observed_arches or ())
+    ):
+        # WHY: a public version index is an aggregate of independent
+        # architecture children. An absent sibling keeps its ordinary
+        # build/reuse route even when another child is already present.
+        return "anonymous-absence"
     return kind
 
 
@@ -1285,7 +1402,10 @@ def validate_campaign(
             f"campaign does not contain Formula {request.formula}",
             2,
         )
-    admission_kind = destination_admission_kind(formula)
+    admission_kind = destination_admission_kind(
+        formula,
+        request.arches[0],
+    )
     variants = formula.get("variants")
     if not isinstance(variants, list) or not variants:
         fail(
