@@ -16,6 +16,8 @@ CLOSED_SELECTION_PATH =
   File.join(WORKFLOW_ROOT, "publish-closed-selection.yml")
 PREFIX_CAMPAIGN_PATH =
   File.join(WORKFLOW_ROOT, "prefix-campaign-bottles.yml")
+PREFIX_CAMPAIGN_RELEASE_PATH =
+  File.join(WORKFLOW_ROOT, "publish-prefix-campaign-release.yml")
 PREFIX_CAMPAIGN_AUTHORITY_PATH =
   File.join(ROOT, "Kandelo/prefix-campaign-authority.json")
 PREFIX_CAMPAIGN_CONTROLLER_PATH =
@@ -29,6 +31,7 @@ EXPECTED_WORKFLOW_FILES = %w[
   publish-bottles.yml
   publish-closed-selection.yml
   publish-main-shell-mirror.yml
+  publish-prefix-campaign-release.yml
   repository-namespace-canary.yml
 ].freeze
 CALLER_PERMISSIONS = {
@@ -99,8 +102,17 @@ def load_workflow(path)
   workflow
 end
 
+def parse_canonical_json(source, label)
+  value = JSON.parse(source, create_additions: false)
+  check(
+    source == JSON.pretty_generate(value) + "\n",
+    "#{label} is not canonical pretty JSON"
+  )
+  value
+end
+
 def load_json(path)
-  value = JSON.parse(File.read(path), create_additions: false)
+  value = parse_canonical_json(File.read(path), File.basename(path))
   check(value.is_a?(Hash), "#{File.basename(path)} is not a JSON mapping")
   value
 end
@@ -365,6 +377,7 @@ BASE_MATERIALIZE_RUN = <<~'BASH'
         {path: ".github/workflows/publish-bottles.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/publish-closed-selection.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/publish-main-shell-mirror.yml", mode: "100644", type: "blob"},
+        {path: ".github/workflows/publish-prefix-campaign-release.yml", mode: "100644", type: "blob"},
         {path: ".github/workflows/repository-namespace-canary.yml", mode: "100644", type: "blob"}
       ] and
     ([.tree[] |
@@ -438,6 +451,7 @@ BASE_MATERIALIZE_RUN = <<~'BASH'
     .github/workflows/publish-bottles.yml
     .github/workflows/publish-closed-selection.yml
     .github/workflows/publish-main-shell-mirror.yml
+    .github/workflows/publish-prefix-campaign-release.yml
     .github/workflows/repository-namespace-canary.yml
     Kandelo/prefix-campaign-authority.json
     Kandelo/test-workflow-trust.rb
@@ -1403,6 +1417,399 @@ def check_prefix_campaign_workflow(workflow, authority)
   )
 end
 
+def check_prefix_campaign_release_workflow(workflow)
+  label = "prefix-campaign release workflow"
+  check(
+    normalized_keys(workflow, label).sort ==
+      %w[concurrency jobs name on permissions],
+    "#{label} has unexpected top-level configuration"
+  )
+  check(
+    workflow["name"] == "Publish Homebrew prefix campaign release",
+    "#{label} name changed"
+  )
+  check(
+    workflow_events(workflow) == {
+      "workflow_dispatch" => {
+        "inputs" => {
+          "expected_caller_sha" => {
+            "description" =>
+              "Exact protected tap main commit that owns this run",
+            "required" => true,
+            "type" => "string",
+          },
+          "expected_campaign_sha256" => {
+            "description" =>
+              "SHA-256 of the independently derived campaign.json",
+            "required" => true,
+            "type" => "string",
+          },
+        },
+      },
+    },
+    "#{label} event or digest inputs changed"
+  )
+  check(
+    exact_permissions?(workflow["permissions"], { "contents" => "read" }),
+    "#{label} top-level permissions changed"
+  )
+  check(
+    workflow["concurrency"] == {
+      "group" => "kandelo-homebrew-prefix-campaign-release",
+      "cancel-in-progress" => false,
+    },
+    "#{label} concurrency changed"
+  )
+
+  jobs = workflow["jobs"]
+  check(
+    jobs.is_a?(Hash) && jobs.keys == %w[admit derive publish],
+    "#{label} job set changed"
+  )
+  admit = jobs.fetch("admit")
+  derivation = jobs.fetch("derive")
+  publish = jobs.fetch("publish")
+  check(
+    exact_permissions?(admit["permissions"], { "contents" => "read" }) &&
+      exact_permissions?(
+        derivation["permissions"], { "contents" => "read" }
+      ) &&
+      exact_permissions?(publish["permissions"], {
+        "actions" => "read", "contents" => "write",
+      }) &&
+      derivation["needs"] == ["admit"] &&
+      publish["needs"] == %w[admit derive],
+    "#{label} privilege split changed"
+  )
+  check(
+    admit.keys.sort ==
+      %w[outputs permissions runs-on steps timeout-minutes] &&
+      derivation.keys.sort ==
+        %w[needs outputs permissions runs-on steps timeout-minutes] &&
+      publish.keys.sort ==
+        %w[needs permissions runs-on steps timeout-minutes],
+    "#{label} job configuration changed"
+  )
+  check(
+    admit["outputs"] == {
+      "caller-sha" => expression("steps.authority.outputs.caller-sha"),
+      "campaign-sha256" =>
+        expression("steps.authority.outputs.campaign-sha256"),
+      "kandelo-commit" =>
+        expression("steps.authority.outputs.kandelo-commit"),
+    },
+    "#{label} admitted outputs changed"
+  )
+  check(
+    derivation["outputs"] == {
+      "artifact-digest" =>
+        expression("steps.handoff.outputs.artifact-digest"),
+    },
+    "#{label} derivation output changed"
+  )
+
+  expected_uses = [
+    CHECKOUT_ACTION,
+    RUBY_ACTION,
+    CHECKOUT_ACTION,
+    CHECKOUT_ACTION,
+    CHECKOUT_ACTION,
+    CHECKOUT_ACTION,
+    CHECKOUT_ACTION,
+    NIX_INSTALLER_ACTION,
+    UPLOAD_ACTION,
+    CHECKOUT_ACTION,
+    CHECKOUT_ACTION,
+    DOWNLOAD_ACTION,
+    UPLOAD_ACTION,
+  ]
+  check(
+    values_for_key(workflow, "uses") == expected_uses,
+    "#{label} executable dependency set changed"
+  )
+  check(values_for_key(workflow, "secrets").empty?,
+        "#{label} passes repository secrets")
+  check(
+    values_for_key(workflow, "run").all? do |run|
+      run.is_a?(String) && !run.include?("${{")
+    end,
+    "#{label} interpolates event data into shell syntax"
+  )
+
+  admit_steps = admit["steps"]
+  derive_steps = derivation["steps"]
+  publish_steps = publish["steps"]
+  check(
+    admit_steps.map { |step| step["name"] } == [
+      "Checkout protected caller",
+      "Select reviewed Ruby for protected contract validation",
+      "Validate canonical protected tap contracts",
+      "Admit exact armed authority on protected main",
+    ],
+    "#{label} admission steps changed"
+  )
+  check(
+    derive_steps.map { |step| step["name"] } == [
+      "Checkout exact Kandelo campaign tool",
+      "Checkout exact campaign source tap",
+      "Checkout independent predecessor recovery tap",
+      "Checkout exact historical bottle tap",
+      "Checkout reviewed native Homebrew",
+      "Require independent clean exact inputs",
+      "Install Nix for deterministic campaign derivation",
+      "Derive and independently recheck exact campaign",
+      "Upload inert content-addressed campaign handoff",
+    ],
+    "#{label} derivation steps changed"
+  )
+  check(
+    publish_steps.map { |step| step["name"] } == [
+      "Checkout exact Kandelo release helper",
+      "Checkout exact protected campaign source",
+      "Download inert campaign handoff",
+      "Revalidate inert campaign handoff without credentials",
+      "Publish through the immutable release lifecycle",
+      "Prove anonymous content-addressed readback",
+      "Retain bounded publication evidence",
+    ],
+    "#{label} publication steps changed"
+  )
+
+  check(
+    admit_steps.fetch(1)["uses"] == RUBY_ACTION &&
+      admit_steps.fetch(1)["with"] == { "ruby-version" => "3.4" } &&
+      admit_steps.fetch(2) == {
+        "name" => "Validate canonical protected tap contracts",
+        "run" => "ruby Kandelo/test-workflow-trust.rb",
+      },
+    "#{label} does not run the canonical protected validator"
+  )
+  admission = admit_steps.fetch(3)
+  check(
+    admission["id"] == "authority" &&
+      admission["env"] == {
+        "EXPECTED_CALLER_SHA" => expression("inputs.expected_caller_sha"),
+        "EXPECTED_CAMPAIGN_SHA256" =>
+          expression("inputs.expected_campaign_sha256"),
+        "GH_TOKEN" => expression("github.token"),
+      } &&
+      admission["run"].include?(
+        'test "$GITHUB_REF" = refs/heads/main'
+      ) &&
+      admission["run"].include?(
+        'test "$main_sha" = "$GITHUB_SHA"'
+      ) &&
+      admission["run"].include?('keys == [') &&
+      admission["run"].include?('.state == "armed"') &&
+      admission["run"].include?(
+        '.kandelo_commit == .reusable_workflow_commit'
+      ),
+    "#{label} protected-main or armed-authority admission changed"
+  )
+
+  kandelo_checkout = derive_steps.fetch(0)
+  source_checkout = derive_steps.fetch(1)
+  recovery_checkout = derive_steps.fetch(2)
+  check(
+    kandelo_checkout["with"] == {
+      "repository" => "Automattic/kandelo",
+      "ref" => expression("needs.admit.outputs.kandelo-commit"),
+      "path" => "kandelo",
+      "persist-credentials" => false,
+      "submodules" => false,
+    },
+    "#{label} Kandelo helper is not selected by armed authority"
+  )
+  expected_tap_checkout = {
+    "repository" => "kandelo-dev/homebrew-tap-core",
+    "ref" => expression("needs.admit.outputs.caller-sha"),
+    "fetch-depth" => 0,
+    "persist-credentials" => false,
+  }
+  check(
+    source_checkout["with"] ==
+      expected_tap_checkout.merge("path" => "source-tap") &&
+      recovery_checkout["with"] ==
+        expected_tap_checkout.merge("path" => "recovery-tap"),
+    "#{label} source and recovery checkouts are not exact and independent"
+  )
+
+  clean_inputs = derive_steps.fetch(5)
+  derive = derive_steps.fetch(7)
+  handoff = derive_steps.fetch(8)
+  check(
+    clean_inputs["run"].include?("rev-parse --absolute-git-dir") &&
+      clean_inputs["run"].include?('test -z "$(git -C "$root" status --short)"'),
+    "#{label} does not prove independent clean Git inputs"
+  )
+  check(
+    derive["env"] == {
+      "EXPECTED_CAMPAIGN_SHA256" =>
+        expression("needs.admit.outputs.campaign-sha256"),
+      "KANDELO_COMMIT" =>
+        expression("needs.admit.outputs.kandelo-commit"),
+      "SOURCE_COMMIT" => expression("needs.admit.outputs.caller-sha"),
+    } &&
+      derive["run"].scan("bash scripts/dev-shell.sh").length == 2 &&
+      derive["run"].include?("homebrew-prefix-campaign.py") &&
+      derive["run"].include?(" derive ") &&
+      derive["run"].include?(" check ") &&
+      derive["run"].include?(
+        '--recovery-tap-commit "$SOURCE_COMMIT"'
+      ) &&
+      derive["run"].include?(
+        'test "$observed_sha" = "$EXPECTED_CAMPAIGN_SHA256"'
+      ) &&
+      derive["run"].include?(
+        '.reuse_source.campaign_tag == $f901'
+      ) &&
+      derive["run"].include?(
+        '.disposition.kind == "required-rebuild"'
+      ) &&
+      !derive.fetch("env", {}).key?("GH_TOKEN"),
+    "#{label} deterministic derivation contract changed"
+  )
+  check(
+    handoff["id"] == "handoff" &&
+      handoff["uses"] == UPLOAD_ACTION &&
+      handoff["with"] == {
+        "name" =>
+          "prefix-campaign-release-input-" \
+          "#{expression('github.run_id')}-attempt-" \
+          "#{expression('github.run_attempt')}",
+        "path" => [
+          "#{expression('runner.temp')}/prefix-campaign-release/campaign.json",
+          "#{expression('runner.temp')}/prefix-campaign-release/assets/campaign.json",
+          "#{expression('runner.temp')}/prefix-campaign-release/release-manifest.json",
+        ].join("\n") + "\n",
+        "compression-level" => 0,
+        "if-no-files-found" => "error",
+        "retention-days" => 14,
+      },
+    "#{label} inert derivation handoff changed"
+  )
+
+  publish_kandelo = publish_steps.fetch(0)
+  publish_source = publish_steps.fetch(1)
+  download = publish_steps.fetch(2)
+  revalidate = publish_steps.fetch(3)
+  release = publish_steps.fetch(4)
+  readback = publish_steps.fetch(5)
+  evidence = publish_steps.fetch(6)
+  check(
+    publish_kandelo["with"] == {
+      "repository" => "Automattic/kandelo",
+      "ref" => expression("needs.admit.outputs.kandelo-commit"),
+      "path" => "kandelo",
+      "persist-credentials" => false,
+      "submodules" => false,
+    } &&
+      publish_source["with"] ==
+        expected_tap_checkout.merge("path" => "source-tap"),
+    "#{label} write job source authority changed"
+  )
+  check(
+    download["uses"] == DOWNLOAD_ACTION &&
+      download["with"] == {
+        "name" =>
+          "prefix-campaign-release-input-" \
+          "#{expression('github.run_id')}-attempt-" \
+          "#{expression('github.run_attempt')}",
+        "path" =>
+          "#{expression('runner.temp')}/prefix-campaign-release",
+      },
+    "#{label} inert handoff download changed"
+  )
+  check(
+    revalidate["env"] == {
+      "DERIVATION_ARTIFACT_DIGEST" =>
+        expression("needs.derive.outputs.artifact-digest"),
+      "EXPECTED_CAMPAIGN_SHA256" =>
+        expression("needs.admit.outputs.campaign-sha256"),
+      "KANDELO_COMMIT" =>
+        expression("needs.admit.outputs.kandelo-commit"),
+      "SOURCE_COMMIT" => expression("needs.admit.outputs.caller-sha"),
+    } &&
+      revalidate["run"].include?(
+        "validate-immutable-github-release-manifest.py"
+      ) &&
+      revalidate["run"].include?("env -u GH_TOKEN -u GITHUB_TOKEN") &&
+      revalidate["run"].include?(
+        'test "$observed_sha" = "$EXPECTED_CAMPAIGN_SHA256"'
+      ) &&
+      revalidate["run"].include?(
+        '.authority.kandelo_commit == $kandelo'
+      ) &&
+      !revalidate.fetch("env", {}).key?("GH_TOKEN"),
+    "#{label} credential-free write handoff validation changed"
+  )
+  check(
+    release["env"] == {
+      "GH_TOKEN" => expression("github.token"),
+      "KANDELO_COMMIT" =>
+        expression("needs.admit.outputs.kandelo-commit"),
+      "SOURCE_COMMIT" => expression("needs.admit.outputs.caller-sha"),
+    } &&
+      release["run"].include?(
+        "kandelo/scripts/publish-immutable-github-release.sh"
+      ) &&
+      %w[
+        --kandelo-main-contains-sha
+        --target-main-contains-sha
+        --exact-execution-kandelo-main-sha
+        --exact-execution-target-main-sha
+      ].all? { |flag| release["run"].include?(flag) },
+    "#{label} immutable publication authority changed"
+  )
+  check(
+    !readback.fetch("env", {}).key?("GH_TOKEN") &&
+      readback["env"]["DERIVATION_ARTIFACT_DIGEST"] ==
+        expression("needs.derive.outputs.artifact-digest") &&
+      readback["run"].scan("env -u GH_TOKEN -u GITHUB_TOKEN").length == 2 &&
+      readback["run"].include?(
+        "kandelo/scripts/homebrew-prefix-campaign-executor.py"
+      ) &&
+      readback["run"].include?("fetch-campaign-release") &&
+      readback["run"].include?(
+        "--repository kandelo-dev/homebrew-tap-core"
+      ) &&
+      readback["run"].include?(
+        '--receipt-out "$out/anonymous-release-receipt.json"'
+      ) &&
+      %w[
+        HOMEBREW_GITHUB_API_TOKEN
+        HOMEBREW_GITHUB_PACKAGES_TOKEN
+        HOMEBREW_DOCKER_REGISTRY_TOKEN
+      ].all? { |name| readback["run"].include?("-u #{name}") } &&
+      readback["run"].include?(
+        '.kind == "kandelo-homebrew-prefix-campaign-readback"'
+      ) &&
+      readback["run"].include?('cmp "$out/campaign.json"') &&
+      readback["run"].include?("git ls-remote"),
+    "#{label} anonymous readback changed"
+  )
+  check(
+    evidence["uses"] == UPLOAD_ACTION &&
+      evidence["with"] == {
+        "name" =>
+          "prefix-campaign-release-" \
+          "#{expression('github.run_id')}-attempt-" \
+          "#{expression('github.run_attempt')}",
+        "path" => [
+          "#{expression('runner.temp')}/prefix-campaign-release/campaign.json",
+          "#{expression('runner.temp')}/prefix-campaign-release/release-manifest.json",
+          "#{expression('runner.temp')}/prefix-campaign-release/publish-receipt.json",
+          "#{expression('runner.temp')}/prefix-campaign-release/anonymous-release-receipt.json",
+          "#{expression('runner.temp')}/prefix-campaign-release/anonymous-tag-proof.json",
+        ].join("\n") + "\n",
+        "compression-level" => 0,
+        "if-no-files-found" => "error",
+        "retention-days" => 14,
+      },
+    "#{label} bounded evidence upload changed"
+  )
+end
+
 def caller_profile_errors(callers, specs)
   errors = []
   specs.each do |key, spec|
@@ -1578,6 +1985,7 @@ def self_test(
   contract,
   base_contract,
   prefix_campaign,
+  prefix_campaign_release,
   prefix_authority
 )
   retired_pat_specs = pat_caller_specs_for_sha(RETIRED_PAT_KANDELO_WORKFLOW_SHA)
@@ -1599,6 +2007,59 @@ def self_test(
     prefix_authority,
     PREFIX_CAMPAIGN_KANDELO_SHA
   )
+  check_prefix_campaign_release_workflow(prefix_campaign_release)
+
+  expect_rejection("an extra campaign authority field") do
+    mutated = deep_copy(prefix_authority)
+    mutated["unexpected"] = true
+    check_prefix_campaign_authority(
+      mutated,
+      PREFIX_CAMPAIGN_KANDELO_SHA
+    )
+  end
+  expect_rejection("zero campaign execution authority") do
+    mutated = deep_copy(prefix_authority)
+    mutated["kandelo_commit"] = "0" * 40
+    mutated["reusable_workflow_commit"] = "0" * 40
+    check_prefix_campaign_authority(
+      mutated,
+      PREFIX_CAMPAIGN_KANDELO_SHA
+    )
+  end
+  expect_rejection("noncanonical campaign authority bytes") do
+    parse_canonical_json(
+      " " + JSON.pretty_generate(prefix_authority) + "\n",
+      "mutated authority"
+    )
+  end
+  expect_rejection("duplicate campaign authority keys") do
+    canonical = JSON.pretty_generate(prefix_authority) + "\n"
+    duplicate = canonical.sub("{\n", "{\n  \"schema\": 2,\n")
+    parse_canonical_json(duplicate, "mutated authority")
+  end
+
+  expect_rejection("a non-manual campaign release event") do
+    mutated = deep_copy(prefix_campaign_release)
+    workflow_events(mutated)["repository_dispatch"] = {
+      "types" => ["publish-prefix-campaign-release"],
+    }
+    check_prefix_campaign_release_workflow(mutated)
+  end
+  expect_rejection("a literal campaign release Kandelo helper") do
+    mutated = deep_copy(prefix_campaign_release)
+    mutated.dig("jobs", "publish", "steps", 0, "with")["ref"] =
+      PREFIX_CAMPAIGN_KANDELO_SHA
+    check_prefix_campaign_release_workflow(mutated)
+  end
+  expect_rejection("campaign release without exact execution authority") do
+    mutated = deep_copy(prefix_campaign_release)
+    release = mutated.dig("jobs", "publish", "steps", 4)
+    release["run"] = release["run"].sub(
+      /[ \t]*--exact-execution-target-main-sha[^\n]*\n?/,
+      ""
+    )
+    check_prefix_campaign_release_workflow(mutated)
+  end
 
   expect_rejection("split campaign authority") do
     mutated = deep_copy(prefix_authority)
@@ -2359,6 +2820,7 @@ begin
   base_contract = load_workflow(BASE_CONTRACT_PATH)
   prefix_authority = load_json(PREFIX_CAMPAIGN_AUTHORITY_PATH)
   prefix_campaign = load_workflow(PREFIX_CAMPAIGN_PATH)
+  prefix_campaign_release = load_workflow(PREFIX_CAMPAIGN_RELEASE_PATH)
   check(
     File.read(PREFIX_CAMPAIGN_AUTHORITY_PATH) ==
       JSON.pretty_generate(prefix_authority) + "\n",
@@ -2371,6 +2833,7 @@ begin
     contract,
     base_contract,
     prefix_campaign,
+    prefix_campaign_release,
     prefix_authority
   )
   check_caller_profile(callers)
@@ -2380,6 +2843,7 @@ begin
     PREFIX_CAMPAIGN_KANDELO_SHA
   )
   check_prefix_campaign_workflow(prefix_campaign, prefix_authority)
+  check_prefix_campaign_release_workflow(prefix_campaign_release)
   check_contract_workflow(contract)
   check_base_contract_workflow(base_contract)
   puts "test-workflow-trust.rb: ok"

@@ -1,0 +1,550 @@
+# Publish the exact content-addressed campaign descriptor before activation.
+#
+# WHY: campaign derivation is public and deterministic, but release mutation
+# needs a real protected Actions identity. The only operator-selected content
+# value is the digest the independently derived campaign must equal.
+name: Publish Homebrew prefix campaign release
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_caller_sha:
+        description: Exact protected tap main commit that owns this run
+        required: true
+        type: string
+      expected_campaign_sha256:
+        description: SHA-256 of the independently derived campaign.json
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kandelo-homebrew-prefix-campaign-release
+  cancel-in-progress: false
+
+jobs:
+  admit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      caller-sha: ${{ steps.authority.outputs.caller-sha }}
+      campaign-sha256: ${{ steps.authority.outputs.campaign-sha256 }}
+      kandelo-commit: ${{ steps.authority.outputs.kandelo-commit }}
+    steps:
+      - name: Checkout protected caller
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select reviewed Ruby for protected contract validation
+        uses: ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9 # v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Validate canonical protected tap contracts
+        run: ruby Kandelo/test-workflow-trust.rb
+
+      - name: Admit exact armed authority on protected main
+        id: authority
+        shell: bash
+        env:
+          EXPECTED_CALLER_SHA: ${{ inputs.expected_caller_sha }}
+          EXPECTED_CAMPAIGN_SHA256: ${{ inputs.expected_campaign_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REPOSITORY" = kandelo-dev/homebrew-tap-core
+          test "$GITHUB_REF" = refs/heads/main
+          [[ "$EXPECTED_CALLER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_CAMPAIGN_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_SHA" = "$EXPECTED_CALLER_SHA"
+          test -z "$(git status --short)"
+
+          main_sha="$(
+            gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/main" \
+              --jq .object.sha
+          )"
+          test "$main_sha" = "$GITHUB_SHA"
+
+          authority=Kandelo/prefix-campaign-authority.json
+          jq -e '
+            keys == [
+              "campaign_release",
+              "kandelo_commit",
+              "kandelo_repository",
+              "kind",
+              "package_generations",
+              "release_tag",
+              "reusable_workflow_commit",
+              "schema",
+              "source_tap_commit",
+              "source_tap_name",
+              "source_tap_repository",
+              "state",
+              "target_source"
+            ] and
+            .schema == 2 and
+            .kind == "kandelo-homebrew-prefix-campaign-caller-authority" and
+            .state == "armed" and
+            .kandelo_repository == "Automattic/kandelo" and
+            (.kandelo_commit | test("^[0-9a-f]{40}$")) and
+            .kandelo_commit == .reusable_workflow_commit and
+            .campaign_release == {
+              repository: "kandelo-dev/homebrew-tap-core",
+              tag: ("homebrew-prefix-campaign-sha256-" + ("0" * 64))
+            } and
+            .source_tap_commit == ("0" * 40) and
+            .package_generations == {
+              rootfs_wasm32:
+                ("package-generation-rootfs-wasm32-abi-v42-sha256-" +
+                 ("0" * 64))
+            } and
+            .source_tap_repository == "kandelo-dev/homebrew-tap-core" and
+            .source_tap_name == "kandelo-dev/tap-core" and
+            .release_tag == "bottles-abi-v42" and
+            .target_source == {
+              manifest_path: "Kandelo/campaigns/prefix-v1/manifest.json",
+              manifest_sha256:
+                "cc651c02f62f7a0190f077e720a62d352d103001c7789bf061b3a7c8707cbfb1",
+              source_root: "Kandelo/campaigns/prefix-v1/source",
+              source_tree_git_oid: "64567fa4d0c5eb08c5f02a9bb6db12eeb3b11886",
+              target_tree_git_oid: "fda31a22cbb81f08c190081cc7b0df7a96ffc03f"
+            }
+          ' "$authority" >/dev/null
+          test "$(sha256sum \
+            Kandelo/campaigns/prefix-v1/successor/f901-successor-scope.json \
+            | awk '{print $1}')" = \
+            a2781de5f9d2f029a59aa6ce8ac11283b56fbf892135267a5c30be841021830d
+          test "$(sha256sum \
+            Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json \
+            | awk '{print $1}')" = \
+            40a651d2ebe3a3aaab4bf9b65d91cf34db9908cb764a518437ac850747c4b139
+
+          {
+            printf 'caller-sha=%s\n' "$GITHUB_SHA"
+            printf 'campaign-sha256=%s\n' "$EXPECTED_CAMPAIGN_SHA256"
+            printf 'kandelo-commit=%s\n' \
+              "$(jq -er .kandelo_commit "$authority")"
+          } >>"$GITHUB_OUTPUT"
+
+  derive:
+    needs: [admit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    outputs:
+      artifact-digest: ${{ steps.handoff.outputs.artifact-digest }}
+    steps:
+      - name: Checkout exact Kandelo campaign tool
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: Automattic/kandelo
+          ref: ${{ needs.admit.outputs.kandelo-commit }}
+          path: kandelo
+          persist-credentials: false
+          submodules: false
+
+      - name: Checkout exact campaign source tap
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: kandelo-dev/homebrew-tap-core
+          ref: ${{ needs.admit.outputs.caller-sha }}
+          path: source-tap
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout independent predecessor recovery tap
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: kandelo-dev/homebrew-tap-core
+          ref: ${{ needs.admit.outputs.caller-sha }}
+          path: recovery-tap
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout exact historical bottle tap
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: kandelo-dev/homebrew-tap-core
+          ref: 6ad0e3dbc60e5572c4288c86919238f71c1bc110
+          path: old-tap
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout reviewed native Homebrew
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: Homebrew/brew
+          ref: cf5bc21c6b127e168ef7cfa982ba7db62874690e
+          path: native-brew
+          persist-credentials: false
+
+      - name: Require independent clean exact inputs
+        shell: bash
+        env:
+          KANDELO_COMMIT: ${{ needs.admit.outputs.kandelo-commit }}
+          SOURCE_COMMIT: ${{ needs.admit.outputs.caller-sha }}
+        run: |
+          set -euo pipefail
+          roots=(kandelo source-tap recovery-tap old-tap native-brew)
+          expected=(
+            "$KANDELO_COMMIT"
+            "$SOURCE_COMMIT"
+            "$SOURCE_COMMIT"
+            6ad0e3dbc60e5572c4288c86919238f71c1bc110
+            cf5bc21c6b127e168ef7cfa982ba7db62874690e
+          )
+          declare -A git_dirs=()
+          for index in "${!roots[@]}"; do
+            root="${roots[$index]}"
+            test "$(git -C "$root" rev-parse HEAD)" = "${expected[$index]}"
+            test -z "$(git -C "$root" status --short)"
+            git_dir="$(git -C "$root" rev-parse --absolute-git-dir)"
+            test -z "${git_dirs[$git_dir]:-}"
+            git_dirs[$git_dir]=1
+          done
+
+      - name: Install Nix for deterministic campaign derivation
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+        with:
+          github-token: ""
+
+      - name: Derive and independently recheck exact campaign
+        shell: bash
+        env:
+          EXPECTED_CAMPAIGN_SHA256: ${{ needs.admit.outputs.campaign-sha256 }}
+          KANDELO_COMMIT: ${{ needs.admit.outputs.kandelo-commit }}
+          SOURCE_COMMIT: ${{ needs.admit.outputs.caller-sha }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/prefix-campaign-release"
+          mkdir -p "$out/assets"
+          tool=(
+            python3 -B scripts/homebrew-prefix-campaign.py
+          )
+          arguments=(
+            --kandelo-root "$GITHUB_WORKSPACE/kandelo"
+            --kandelo-commit "$KANDELO_COMMIT"
+            --old-tap-root "$GITHUB_WORKSPACE/old-tap"
+            --old-tap-commit 6ad0e3dbc60e5572c4288c86919238f71c1bc110
+            --source-tap-root "$GITHUB_WORKSPACE/source-tap"
+            --source-tap-commit "$SOURCE_COMMIT"
+            --recovery-tap-root "$GITHUB_WORKSPACE/recovery-tap"
+            --recovery-tap-commit "$SOURCE_COMMIT"
+            --native-brew-root "$GITHUB_WORKSPACE/native-brew"
+            --native-brew-commit cf5bc21c6b127e168ef7cfa982ba7db62874690e
+            --metadata-sha256 34f1cb2454ff6d9c134195302a5c5fcac85b9502f2522d3e584bf55d539c9a7d
+            --guest-layout-sha256 03cbe2ef439d1c274a5b43cc86fb877da3b4942cc6489fba9df99d8e3968f857
+            --successor-scope-path Kandelo/campaigns/prefix-v1/successor/f901-successor-scope.json
+            --successor-scope-sha256 a2781de5f9d2f029a59aa6ce8ac11283b56fbf892135267a5c30be841021830d
+            --jobs 8
+          )
+          (
+            cd kandelo
+            bash scripts/dev-shell.sh \
+              "${tool[@]}" derive "${arguments[@]}" \
+              --out "$out/campaign.json"
+          )
+
+          (
+            cd kandelo
+            bash scripts/dev-shell.sh \
+              "${tool[@]}" check "${arguments[@]}" \
+              --manifest "$out/campaign.json"
+          )
+
+          observed_sha="$(sha256sum "$out/campaign.json" | awk '{print $1}')"
+          observed_bytes="$(wc -c <"$out/campaign.json" | tr -d '[:space:]')"
+          test "$observed_sha" = "$EXPECTED_CAMPAIGN_SHA256"
+          test "$observed_bytes" -gt 0
+
+          scope="$GITHUB_WORKSPACE/source-tap/Kandelo/campaigns/prefix-v1/successor/f901-successor-scope.json"
+          graph="$GITHUB_WORKSPACE/source-tap/Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json"
+          jq -e \
+            --arg source "$SOURCE_COMMIT" \
+            --arg b703 "homebrew-prefix-campaign-sha256-b70354153423d107838c82d899adad0455858d5b713f2259ae53c2ae2915a205" \
+            --arg f901 "homebrew-prefix-campaign-sha256-f90144f439caa3806cbd145fc0d5f34ddbf6905d43a15b023106389696376de0" \
+            --slurpfile scope "$scope" \
+            --slurpfile graph "$graph" '
+              def variant($task):
+                .formulae[] | select(.name == $task.formula) |
+                .variants[] | select(.arch == $task.arch);
+              .schema == 3 and
+              .kind == "kandelo-homebrew-guest-prefix-campaign" and
+              .authority.source_tap_commit == $source and
+              .authority.predecessor_recovery_source.commit == $source and
+              .authority.successor_scope == {
+                path: "Kandelo/campaigns/prefix-v1/successor/f901-successor-scope.json",
+                sha256: "a2781de5f9d2f029a59aa6ce8ac11283b56fbf892135267a5c30be841021830d"
+              } and
+              ($graph[0].tasks | length) == 41 and
+              ($scope[0].reuse_tasks | length) == 35 and
+              ($scope[0].build_tasks | length) == 6 and
+              (($scope[0].reuse_tasks + $scope[0].build_tasks) |
+                sort_by([.formula, .arch])) ==
+                ($graph[0].tasks | sort_by([.formula, .arch])) and
+              ([$scope[0].reuse_tasks[] as $task |
+                variant($task) |
+                select(
+                  .reuse_source.kind == "predecessor-handoff" and
+                  .reuse_source.campaign_tag == $f901
+                )] |
+                length) == 35 and
+              ([$scope[0].build_tasks[] as $task |
+                variant($task) |
+                select(
+                  (has("reuse_source") | not) and
+                  .disposition.kind == "required-rebuild"
+                )] | length) == 6 and
+              all(.formulae[].variants[];
+                (.reuse_source.campaign_tag? // "") != $b703) and
+              all(.authority.predecessor_recovery[];
+                .campaign.tag != $b703)
+            ' "$out/campaign.json" >/dev/null
+
+          cp "$out/campaign.json" "$out/assets/campaign.json"
+          tag="homebrew-prefix-campaign-sha256-$observed_sha"
+          title="Kandelo Homebrew guest-prefix campaign ${observed_sha:0:12}"
+          body=$'Seals the exact Homebrew guest-prefix campaign for Kandelo ABI 42.\n\nThe campaign is content-addressed by campaign.json and targets the exact protected tap source commit recorded inside that asset. Each bottle result remains independently publishable and consumable.'
+          jq -n \
+            --arg repository kandelo-dev/homebrew-tap-core \
+            --arg tag "$tag" \
+            --arg target "$SOURCE_COMMIT" \
+            --arg title "$title" \
+            --arg body "$body" \
+            --arg sha "$observed_sha" \
+            --argjson bytes "$observed_bytes" '
+              {
+                schema: 1,
+                repository: $repository,
+                tag: $tag,
+                target_commitish: $target,
+                title: $title,
+                body: $body,
+                assets: [{
+                  name: "campaign.json",
+                  sha256: $sha,
+                  bytes: $bytes
+                }],
+                preferred_asset_names: ["campaign.json"],
+                accepted_existing_asset_sets: []
+              }
+            ' >"$out/release-manifest.json"
+
+      - name: Upload inert content-addressed campaign handoff
+        id: handoff
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: prefix-campaign-release-input-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/prefix-campaign-release/campaign.json
+            ${{ runner.temp }}/prefix-campaign-release/assets/campaign.json
+            ${{ runner.temp }}/prefix-campaign-release/release-manifest.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: [admit, derive]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Checkout exact Kandelo release helper
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: Automattic/kandelo
+          ref: ${{ needs.admit.outputs.kandelo-commit }}
+          path: kandelo
+          persist-credentials: false
+          submodules: false
+
+      - name: Checkout exact protected campaign source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: kandelo-dev/homebrew-tap-core
+          ref: ${{ needs.admit.outputs.caller-sha }}
+          path: source-tap
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download inert campaign handoff
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: prefix-campaign-release-input-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/prefix-campaign-release
+
+      - name: Revalidate inert campaign handoff without credentials
+        shell: bash
+        env:
+          DERIVATION_ARTIFACT_DIGEST: ${{ needs.derive.outputs.artifact-digest }}
+          EXPECTED_CAMPAIGN_SHA256: ${{ needs.admit.outputs.campaign-sha256 }}
+          KANDELO_COMMIT: ${{ needs.admit.outputs.kandelo-commit }}
+          SOURCE_COMMIT: ${{ needs.admit.outputs.caller-sha }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/prefix-campaign-release"
+          test -n "$DERIVATION_ARTIFACT_DIGEST"
+          test "$(git -C kandelo rev-parse HEAD)" = "$KANDELO_COMMIT"
+          test "$(git -C source-tap rev-parse HEAD)" = "$SOURCE_COMMIT"
+          test -z "$(git -C kandelo status --short)"
+          test -z "$(git -C source-tap status --short)"
+          test "$(git -C kandelo rev-parse --absolute-git-dir)" != \
+            "$(git -C source-tap rev-parse --absolute-git-dir)"
+          cmp "$out/campaign.json" "$out/assets/campaign.json"
+          observed_sha="$(sha256sum "$out/campaign.json" | awk '{print $1}')"
+          observed_bytes="$(wc -c <"$out/campaign.json" | tr -d '[:space:]')"
+          test "$observed_sha" = "$EXPECTED_CAMPAIGN_SHA256"
+          jq -e \
+            --arg kandelo "$KANDELO_COMMIT" \
+            --arg sha "$observed_sha" \
+            --arg source "$SOURCE_COMMIT" '
+              .schema == 3 and
+              .kind == "kandelo-homebrew-guest-prefix-campaign" and
+              .authority.source_tap_commit == $source and
+              .authority.predecessor_recovery_source.commit == $source and
+              .authority.kandelo_commit == $kandelo
+            ' "$out/campaign.json" >/dev/null
+          title="Kandelo Homebrew guest-prefix campaign ${observed_sha:0:12}"
+          body=$'Seals the exact Homebrew guest-prefix campaign for Kandelo ABI 42.\n\nThe campaign is content-addressed by campaign.json and targets the exact protected tap source commit recorded inside that asset. Each bottle result remains independently publishable and consumable.'
+          jq -e \
+            --arg tag "homebrew-prefix-campaign-sha256-$observed_sha" \
+            --arg source "$SOURCE_COMMIT" \
+            --arg title "$title" \
+            --arg body "$body" \
+            --arg sha "$observed_sha" \
+            --argjson bytes "$observed_bytes" '
+              . == {
+                schema: 1,
+                repository: "kandelo-dev/homebrew-tap-core",
+                tag: $tag,
+                target_commitish: $source,
+                title: $title,
+                body: $body,
+                assets: [{
+                  name: "campaign.json",
+                  sha256: $sha,
+                  bytes: $bytes
+                }],
+                preferred_asset_names: ["campaign.json"],
+                accepted_existing_asset_sets: []
+              }
+            ' "$out/release-manifest.json" >/dev/null
+          env -u GH_TOKEN -u GITHUB_TOKEN PYTHONDONTWRITEBYTECODE=1 \
+            python3 kandelo/scripts/validate-immutable-github-release-manifest.py \
+              --manifest "$out/release-manifest.json" \
+              --asset-root "$out/assets" \
+              --stage-dir "$out/revalidated-assets" \
+              --out-manifest "$out/revalidated-manifest.json"
+          cmp "$out/campaign.json" "$out/revalidated-assets/campaign.json"
+
+      - name: Publish through the immutable release lifecycle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KANDELO_COMMIT: ${{ needs.admit.outputs.kandelo-commit }}
+          SOURCE_COMMIT: ${{ needs.admit.outputs.caller-sha }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/prefix-campaign-release"
+          bash kandelo/scripts/publish-immutable-github-release.sh \
+            --manifest "$out/release-manifest.json" \
+            --asset-root "$out/assets" \
+            --lock-root source-tap \
+            --receipt "$out/publish-receipt.json" \
+            --kandelo-main-contains-sha "$KANDELO_COMMIT" \
+            --target-main-contains-sha "$SOURCE_COMMIT" \
+            --exact-execution-kandelo-main-sha "$KANDELO_COMMIT" \
+            --exact-execution-target-main-sha "$SOURCE_COMMIT"
+
+      - name: Prove anonymous content-addressed readback
+        shell: bash
+        env:
+          DERIVATION_ARTIFACT_DIGEST: ${{ needs.derive.outputs.artifact-digest }}
+          EXPECTED_CAMPAIGN_SHA256: ${{ needs.admit.outputs.campaign-sha256 }}
+          SOURCE_COMMIT: ${{ needs.admit.outputs.caller-sha }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/prefix-campaign-release"
+          tag="homebrew-prefix-campaign-sha256-$EXPECTED_CAMPAIGN_SHA256"
+          env -u GH_TOKEN -u GITHUB_TOKEN \
+            -u HOMEBREW_GITHUB_API_TOKEN \
+            -u HOMEBREW_GITHUB_PACKAGES_TOKEN \
+            -u HOMEBREW_DOCKER_REGISTRY_TOKEN \
+            python3 kandelo/scripts/homebrew-prefix-campaign-executor.py \
+              fetch-campaign-release \
+              --repository kandelo-dev/homebrew-tap-core \
+              --tag "$tag" \
+              --out "$out/anonymous-campaign.json" \
+              --receipt-out "$out/anonymous-release-receipt.json"
+          cmp "$out/campaign.json" "$out/anonymous-campaign.json"
+          anonymous_sha="$(sha256sum "$out/anonymous-campaign.json" | awk '{print $1}')"
+          anonymous_bytes="$(wc -c <"$out/anonymous-campaign.json" | tr -d '[:space:]')"
+          test "$anonymous_sha" = "$EXPECTED_CAMPAIGN_SHA256"
+          jq -e \
+            --arg tag "$tag" \
+            --arg source "$SOURCE_COMMIT" \
+            --arg sha "$anonymous_sha" \
+            --argjson bytes "$anonymous_bytes" '
+              .schema == 1 and
+              .kind == "kandelo-homebrew-prefix-campaign-readback" and
+              .repository == "kandelo-dev/homebrew-tap-core" and
+              .tag == $tag and
+              .target_commitish == $source and
+              (.release_id | type == "number" and . >= 1) and
+              .asset == {
+                name: "campaign.json",
+                sha256: $sha,
+                bytes: $bytes
+              }
+            ' "$out/anonymous-release-receipt.json" >/dev/null
+
+          tag_line="$(
+            env -u GH_TOKEN -u GITHUB_TOKEN \
+              git ls-remote \
+                https://github.com/kandelo-dev/homebrew-tap-core.git \
+                "refs/tags/$tag"
+          )"
+          test "$(printf '%s\n' "$tag_line" | wc -l | tr -d '[:space:]')" = 1
+          test "$(printf '%s\n' "$tag_line" | awk '{print $1}')" = \
+            "$SOURCE_COMMIT"
+
+          jq -n \
+            --arg artifact_digest "$DERIVATION_ARTIFACT_DIGEST" \
+            --arg tag "$tag" \
+            --arg source "$SOURCE_COMMIT" \
+            --arg release_receipt_sha "$(sha256sum "$out/anonymous-release-receipt.json" | awk '{print $1}')" '
+              {
+                schema: 1,
+                status: "success",
+                visibility: "public-anonymous-tag-ref",
+                derivation_artifact_digest: $artifact_digest,
+                tag: $tag,
+                direct_tag_commit: $source,
+                anonymous_release_receipt_sha256: $release_receipt_sha
+              }
+            ' >"$out/anonymous-tag-proof.json"
+
+      - name: Retain bounded publication evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: prefix-campaign-release-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/prefix-campaign-release/campaign.json
+            ${{ runner.temp }}/prefix-campaign-release/release-manifest.json
+            ${{ runner.temp }}/prefix-campaign-release/publish-receipt.json
+            ${{ runner.temp }}/prefix-campaign-release/anonymous-release-receipt.json
+            ${{ runner.temp }}/prefix-campaign-release/anonymous-tag-proof.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
