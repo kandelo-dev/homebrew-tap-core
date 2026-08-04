@@ -56,41 +56,30 @@ exactly one file named `campaign.json`. The file name is part of the
 authority contract, in addition to the bytes, SHA-256, release tag, and
 target commit.
 
-Stage the derived manifest under that literal base name. Then describe it
-as the only asset in Kandelo's schema-1 immutable-release manifest:
+Only the protected workflow may write this release:
+`.github/workflows/publish-prefix-campaign-release.yml`. After
+independently deriving the campaign from the exact newly merged armed
+commit `T_ARM`, record its SHA-256 as `C` and dispatch only that tuple:
 
 ```sh
-asset_root="$(mktemp -d)"
-kandelo_root=/exact/kandelo
-cp /absolute/path/to/derived-campaign.json \
-  "$asset_root/campaign.json"
+gh workflow run publish-prefix-campaign-release.yml \
+  --repo kandelo-dev/homebrew-tap-core \
+  --ref main \
+  -f expected_caller_sha="$T_ARM" \
+  -f expected_campaign_sha256="$C"
 ```
 
-The release manifest must declare `campaign.json` with its exact byte
-count and SHA-256, make it the only preferred asset, accept no existing
-asset sets, target the exact source tap commit, and use the
-content-addressed campaign tag. Validate that inert manifest without
-credentials, then publish it only with the Kandelo commit pinned by the
-tap authority:
+The workflow reconstructs the campaign from independent exact inputs. It
+then builds and validates the schema-1 immutable-release manifest. That
+manifest declares `campaign.json` with its exact byte count and SHA-256,
+makes it the only preferred asset, and accepts no existing asset sets.
+It targets the exact source tap commit and uses the content-addressed
+campaign tag.
 
-```sh
-env -u GH_TOKEN -u GITHUB_TOKEN PYTHONDONTWRITEBYTECODE=1 \
-  python3 \
-  "$kandelo_root/scripts/validate-immutable-github-release-manifest.py" \
-  --manifest "$release_manifest" \
-  --asset-root "$asset_root" \
-  --stage-dir "$validation_root/assets" \
-  --out-manifest "$validation_root/manifest.json"
-
-GITHUB_REPOSITORY=kandelo-dev/homebrew-tap-core \
-  bash "$kandelo_root/scripts/publish-immutable-github-release.sh" \
-  --manifest "$release_manifest" \
-  --asset-root "$asset_root" \
-  --lock-root /exact/source/tap/checkout \
-  --receipt "$publisher_receipt" \
-  --exact-kandelo-main-sha "$kandelo_commit" \
-  --exact-target-main-sha "$source_tap_commit"
-```
+Do not invoke `publish-immutable-github-release.sh` locally, even with a
+personal token. A local invocation is not the protected Actions run that
+owns the publication lock and exact execution authority. Do not supply
+another workflow's run ID to imitate that owner.
 
 Do not hand-roll this lifecycle with `gh release create`. In particular,
 GitHub CLI's `path#label` syntax sets a display label; it does not rename

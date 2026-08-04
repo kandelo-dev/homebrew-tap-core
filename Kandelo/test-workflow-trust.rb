@@ -1743,6 +1743,19 @@ def check_prefix_campaign_release_workflow(workflow)
       !revalidate.fetch("env", {}).key?("GH_TOKEN"),
     "#{label} credential-free write handoff validation changed"
   )
+  expected_release_run = <<~'BASH'
+    set -euo pipefail
+    out="$RUNNER_TEMP/prefix-campaign-release"
+    bash kandelo/scripts/publish-immutable-github-release.sh \
+      --manifest "$out/release-manifest.json" \
+      --asset-root "$out/assets" \
+      --lock-root source-tap \
+      --receipt "$out/publish-receipt.json" \
+      --kandelo-main-contains-sha "$KANDELO_COMMIT" \
+      --target-main-contains-sha "$SOURCE_COMMIT" \
+      --exact-execution-kandelo-main-sha "$KANDELO_COMMIT" \
+      --exact-execution-target-main-sha "$SOURCE_COMMIT"
+  BASH
   check(
     release["env"] == {
       "GH_TOKEN" => expression("github.token"),
@@ -1750,15 +1763,7 @@ def check_prefix_campaign_release_workflow(workflow)
         expression("needs.admit.outputs.kandelo-commit"),
       "SOURCE_COMMIT" => expression("needs.admit.outputs.caller-sha"),
     } &&
-      release["run"].include?(
-        "kandelo/scripts/publish-immutable-github-release.sh"
-      ) &&
-      %w[
-        --kandelo-main-contains-sha
-        --target-main-contains-sha
-        --exact-execution-kandelo-main-sha
-        --exact-execution-target-main-sha
-      ].all? { |flag| release["run"].include?(flag) },
+      release["run"] == expected_release_run,
     "#{label} immutable publication authority changed"
   )
   check(
@@ -2057,6 +2062,25 @@ def self_test(
     release["run"] = release["run"].sub(
       /[ \t]*--exact-execution-target-main-sha[^\n]*\n?/,
       ""
+    )
+    check_prefix_campaign_release_workflow(mutated)
+  end
+  expect_rejection("swapped campaign release publisher authority") do
+    mutated = deep_copy(prefix_campaign_release)
+    release = mutated.dig("jobs", "publish", "steps", 4)
+    release["run"] = release["run"].sub(
+      '--target-main-contains-sha "$SOURCE_COMMIT"',
+      '--target-main-contains-sha "$KANDELO_COMMIT"'
+    )
+    check_prefix_campaign_release_workflow(mutated)
+  end
+  expect_rejection("literal campaign release publisher authority") do
+    mutated = deep_copy(prefix_campaign_release)
+    release = mutated.dig("jobs", "publish", "steps", 4)
+    release["run"] = release["run"].sub(
+      '--exact-execution-kandelo-main-sha "$KANDELO_COMMIT"',
+      "--exact-execution-kandelo-main-sha " \
+        "#{PREFIX_CAMPAIGN_KANDELO_SHA}"
     )
     check_prefix_campaign_release_workflow(mutated)
   end
