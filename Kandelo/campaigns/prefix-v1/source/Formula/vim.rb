@@ -12,6 +12,11 @@ class Vim < Formula
   sha256 "7d460830e12082b541c34b0b96942ebface1ad9fa0b77245930717c0ccf8b664"
   license "Vim"
 
+  # WHY: F901 published rebuild-2 OCI bytes before its immutable handoff was
+  # sealed. Reserve a new Homebrew identity so recovery never overwrites or
+  # relabels those public bytes.
+  revision 1
+
   depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
   depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/dash" => :test

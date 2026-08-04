@@ -39,18 +39,18 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             manifest_path=MANIFEST,
             require_live_base=True,
         )
-        self.assertEqual(summary["files"], 44)
+        self.assertEqual(summary["files"], 46)
         self.assertEqual(
             summary["base_commit"],
             "2e192c8cf318044078e5426d39717636131cec60",
         )
         self.assertEqual(
             summary["source_tree_git_oid"],
-            "610b1bd63ea12f9c279b1f26213508da4decebe2",
+            "64567fa4d0c5eb08c5f02a9bb6db12eeb3b11886",
         )
         self.assertEqual(
             summary["target_tree_git_oid"],
-            "c7ba24b3c3b79c3b0d63f255b7dd3fc8e99829ac",
+            "fda31a22cbb81f08c190081cc7b0df7a96ffc03f",
         )
 
         active_helper = (
@@ -80,11 +80,22 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
             self.assertEqual(
                 SOURCE.source_tree_oid(output),
-                "c7ba24b3c3b79c3b0d63f255b7dd3fc8e99829ac",
+                "fda31a22cbb81f08c190081cc7b0df7a96ffc03f",
             )
-            for formula in ("homebrew-bootstrap", "libyaml"):
+            expected_revisions = {
+                "file-formula": 1,
+                "findutils": 1,
+                "homebrew-bootstrap": 1,
+                "less": 2,
+                "libyaml": 1,
+                "vim": 1,
+            }
+            for formula, revision in expected_revisions.items():
                 source = (output / "Formula" / f"{formula}.rb").read_text()
-                self.assertEqual(source.count("\n  revision 1\n"), 1)
+                self.assertEqual(
+                    source.count(f"\n  revision {revision}\n"),
+                    1,
+                )
 
     def test_materialized_prefix_contracts_are_mutually_green(
         self,

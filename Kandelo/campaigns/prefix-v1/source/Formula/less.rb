@@ -13,7 +13,11 @@ class Less < Formula
   url "https://www.greenwoodsoftware.com/less/less-668.tar.gz"
   sha256 "2819f55564d86d542abbecafd82ff61e819a3eec967faa36cd3e68f1596a44b8"
   license "GPL-3.0-or-later"
-  revision 1
+
+  # WHY: F901 published rebuild-5 OCI bytes before its immutable handoff was
+  # sealed. Reserve a new Homebrew identity so recovery never overwrites or
+  # relabels those public bytes.
+  revision 2
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
