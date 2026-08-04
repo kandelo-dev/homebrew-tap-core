@@ -7,10 +7,13 @@ name: Publish prefix-campaign bottle
 
 on:
   repository_dispatch:
-    types: [publish-prefix-campaign-bottle]
+    types:
+      - publish-prefix-campaign-bottle
+      - revalidate-f901-file-formula
 
 jobs:
   admit:
+    if: ${{ github.event.action == 'publish-prefix-campaign-bottle' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -83,6 +86,41 @@ jobs:
             --event "$GITHUB_EVENT_PATH" \
             --out "$RUNNER_TEMP/campaign-task.json" \
             --github-output "$GITHUB_OUTPUT"
+
+  revalidate-f901-file-formula:
+    if: ${{ github.event.action == 'revalidate-f901-file-formula' }}
+    # WHY: GitHub validates the reusable's permission ceiling before its
+    # recovery-mode conditions skip every writer. The recovery path itself
+    # receives no secrets and stages the historical bytes with actions:read.
+    permissions:
+      actions: read
+      contents: write
+      packages: write
+    # WHY: this one-off recovery pin is intentionally excluded from normal
+    # campaign trust rotation and is removed before the successor is sealed.
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@6cf292d284a6834862817c5695f357c6635ef643 # f901-revalidation-pin
+    with:
+      kandelo-repository: Automattic/kandelo
+      kandelo-ref: 208236d4525dbe06204aee7015c0da07703885d8
+      tap-repository: kandelo-dev/homebrew-tap-core
+      tap-name: kandelo-dev/tap-core
+      tap-ref: 77550434549173b638f7397c20ace23693009fb9
+      formulae: file-formula
+      arches: wasm32
+      release-tag: bottles-abi-v42
+      expected-cache-keys: ""
+      package-generation-wasm32: >-
+        package-generation-rootfs-wasm32-abi-v42-sha256-58367c4ffdf1c8c75e3c48dbeefe50287fce6ef896a39e107166574c9cd8a11b
+      force: true
+      dry-run: false
+      require-vfs-acceptance: false
+      defer-tap-finalization: true
+      prefix-campaign-tag: >-
+        homebrew-prefix-campaign-sha256-f90144f439caa3806cbd145fc0d5f34ddbf6905d43a15b023106389696376de0
+      prefix-campaign-dependencies: >-
+        {"dependencies":[{"formula":"bzip2","tag":"homebrew-prefix-handoff-sha256-849093b24cb737cb7e1ec16f3b2e74a450d4e04854cb29205f266e1e9638b7e9"},{"formula":"libmagic","tag":"homebrew-prefix-handoff-sha256-1dada929d56eb1f63a528f7d3fbdf8ae69975969a531319c3d626cb57c884a69"},{"formula":"xz","tag":"homebrew-prefix-handoff-sha256-333374316f3536fbb89b8e88c07794d987253c3cec7ed9b2b71fdb71636eb8b4"},{"formula":"zlib","tag":"homebrew-prefix-handoff-sha256-6964e721dffe300df856fc6a07e2dc4a31a5625e1a215912a1a565df2da170d0"}],"schema":1}
+      revalidation-source: >-
+        {"arch":"wasm32","artifacts":{"build_handoff":{"digest":"sha256:b7180d6a8775d08e301b1664cf1a26fe904bdd00a10c52c7f83a51c133be6464","id":8877510637,"name":"homebrew-build-handoff-file-formula-wasm32-attempt-1","size":352344},"index_publication":{"digest":"sha256:fb19ccf9377b3d82e7e0beda43c5eba29d53bb5efaa3edbb6f949520a02ff2c2","id":8877570128,"name":"homebrew-index-publication-file-formula-attempt-1","size":3136},"oci_child":{"digest":"sha256:7b5b5bd9e9073b84aad82542e8cde8bf1b6da8e18fecc0e7dc0702290237e917","id":8877513366,"name":"homebrew-oci-child-file-formula-wasm32-attempt-1","size":340756},"upload_receipt":{"digest":"sha256:6c7a4ab985d8aa919e7031c67d83424f6f925a8ba404306fb3d7d797634b37a1","id":8877543934,"name":"homebrew-upload-receipt-file-formula-wasm32-attempt-1","size":1058}},"bottle":{"bytes":334774,"sha256":"2cfc16330c992275781f47a5d5134ac0c0f3200683f0d0053dfc7c805880f9b5"},"campaign_tag":"homebrew-prefix-campaign-sha256-f90144f439caa3806cbd145fc0d5f34ddbf6905d43a15b023106389696376de0","child_manifest_digest":"sha256:bbe7c54317429b1970ad775e4f9389c8a53e86071fa0ed74fb23f29d9e9d884b","formula":"file-formula","head_sha":"f5858e5cfafbbe769c2f3fd6a79194ee1afc651c","jobs":{"build":91866528978,"index":91869985201,"upload":91869743698,"verify":91870197739},"producer_kandelo_commit":"208236d4525dbe06204aee7015c0da07703885d8","producer_tap_commit":"77550434549173b638f7397c20ace23693009fb9","repository":"kandelo-dev/homebrew-tap-core","run_attempt":1,"run_id":30868804114,"schema":1,"top_index_digest":"sha256:6c0900b398589444f43926ad2af954e47993168c52014354c62ac71791624cb7"}
 
   publish-rootfs:
     needs: [admit]
