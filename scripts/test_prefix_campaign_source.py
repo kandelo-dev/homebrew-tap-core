@@ -39,18 +39,18 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             manifest_path=MANIFEST,
             require_live_base=True,
         )
-        self.assertEqual(summary["files"], 46)
+        self.assertEqual(summary["files"], 47)
         self.assertEqual(
             summary["base_commit"],
             "2e192c8cf318044078e5426d39717636131cec60",
         )
         self.assertEqual(
             summary["source_tree_git_oid"],
-            "64567fa4d0c5eb08c5f02a9bb6db12eeb3b11886",
+            "87c3dd12690ac48b685090e4f6b86dc1fae85c6d",
         )
         self.assertEqual(
             summary["target_tree_git_oid"],
-            "fda31a22cbb81f08c190081cc7b0df7a96ffc03f",
+            "b91c1355e093f4c897c7012f476d6c25fee6a4b2",
         )
 
         active_helper = (
@@ -80,7 +80,7 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
             self.assertEqual(
                 SOURCE.source_tree_oid(output),
-                "fda31a22cbb81f08c190081cc7b0df7a96ffc03f",
+                "b91c1355e093f4c897c7012f476d6c25fee6a4b2",
             )
             expected_revisions = {
                 "file-formula": 1,
@@ -96,6 +96,21 @@ class PrefixCampaignSourceTests(unittest.TestCase):
                     source.count(f"\n  revision {revision}\n"),
                     1,
                 )
+            ruby_recipe = json.loads(
+                (
+                    output / "Kandelo/recipes/ruby/recipe.json"
+                ).read_text(encoding="utf-8")
+            )
+            ruby_files = [item["path"] for item in ruby_recipe["files"]]
+            self.assertEqual(ruby_files, sorted(set(ruby_files)))
+            ruby_formula = (output / "Formula/ruby.rb").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(
+                'manifest_sha256: "a1def6211d6ce2fb918df63e1be3fbba'
+                '519b7537d507e34fcbfa64f249d4032a"',
+                ruby_formula,
+            )
 
     def test_materialized_prefix_contracts_are_mutually_green(
         self,

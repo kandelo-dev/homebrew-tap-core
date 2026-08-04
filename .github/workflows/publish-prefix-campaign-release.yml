@@ -112,10 +112,10 @@ jobs:
             .target_source == {
               manifest_path: "Kandelo/campaigns/prefix-v1/manifest.json",
               manifest_sha256:
-                "cc651c02f62f7a0190f077e720a62d352d103001c7789bf061b3a7c8707cbfb1",
+                "fca4991debb9c982751795a081df8ffe7362f1721813f5bc9d44b2b69bbdff5d",
               source_root: "Kandelo/campaigns/prefix-v1/source",
-              source_tree_git_oid: "64567fa4d0c5eb08c5f02a9bb6db12eeb3b11886",
-              target_tree_git_oid: "fda31a22cbb81f08c190081cc7b0df7a96ffc03f"
+              source_tree_git_oid: "87c3dd12690ac48b685090e4f6b86dc1fae85c6d",
+              target_tree_git_oid: "b91c1355e093f4c897c7012f476d6c25fee6a4b2"
             }
           ' "$authority" >/dev/null
           test "$(sha256sum \

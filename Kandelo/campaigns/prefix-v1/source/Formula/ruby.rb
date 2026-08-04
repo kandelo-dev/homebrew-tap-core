@@ -46,7 +46,7 @@ class Ruby < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "4274b55d135925220109e278320c5b1d47b5484e368bdb6eb6bd9bbbabdde041",
+      manifest_sha256: "a1def6211d6ce2fb918df63e1be3fbba519b7537d507e34fcbfa64f249d4032a",
       script_env:      {
         "WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX,
       },

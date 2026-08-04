@@ -404,10 +404,10 @@
       },
       "path": "Formula/ruby.rb",
       "target": {
-        "blob_git_oid": "4380d46012e0192c52756c50daa0dc6dedf723ea",
+        "blob_git_oid": "b6e9b083711e875cc4399f66f53d4625df0710ce",
         "bytes": 10458,
         "mode": "100644",
-        "sha256": "6af3fbcbd12ee0f518488381c7eb826c5b15091ef25473d8ed8ce4bafe6dd4a9"
+        "sha256": "89a03b5a585b4903bca1f898a1de64056d92697ca8848859506d8ad5666d7719"
       }
     },
     {
@@ -642,6 +642,21 @@
     },
     {
       "base": {
+        "blob_git_oid": "43230d1007e0c81ebef6ab84a225c299288c2461",
+        "bytes": 887,
+        "mode": "100644",
+        "sha256": "4274b55d135925220109e278320c5b1d47b5484e368bdb6eb6bd9bbbabdde041"
+      },
+      "path": "Kandelo/recipes/ruby/recipe.json",
+      "target": {
+        "blob_git_oid": "c88ca4dc2ec362481d9b6df9a087a07f346582f6",
+        "bytes": 887,
+        "mode": "100644",
+        "sha256": "a1def6211d6ce2fb918df63e1be3fbba519b7537d507e34fcbfa64f249d4032a"
+      }
+    },
+    {
+      "base": {
         "blob_git_oid": "5582df733ad6dd294f97a5c2f92d7910633e8e3f",
         "bytes": 38885,
         "mode": "100644",
@@ -684,5 +699,5 @@
   "kind": "kandelo-homebrew-prefix-campaign-source-overlay",
   "schema": 1,
   "source_root": "Kandelo/campaigns/prefix-v1/source",
-  "target_tree_git_oid": "fda31a22cbb81f08c190081cc7b0df7a96ffc03f"
+  "target_tree_git_oid": "b91c1355e093f4c897c7012f476d6c25fee6a4b2"
 }
