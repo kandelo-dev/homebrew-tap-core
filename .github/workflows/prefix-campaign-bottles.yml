@@ -101,7 +101,7 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@880e5be7d2dbd3772602ff7eaed952c0b8c6608f
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@34e15720407123277500badf7e2a48d9fdfd1c77
     with:
       kandelo-repository: Automattic/kandelo
       kandelo-ref: ${{ needs.admit.outputs.kandelo-commit }}
@@ -143,7 +143,7 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@880e5be7d2dbd3772602ff7eaed952c0b8c6608f
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@34e15720407123277500badf7e2a48d9fdfd1c77
     with:
       kandelo-repository: Automattic/kandelo
       kandelo-ref: ${{ needs.admit.outputs.kandelo-commit }}
@@ -184,7 +184,7 @@ jobs:
       actions: read
       contents: read
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-prefix-first-child-publish.yml@880e5be7d2dbd3772602ff7eaed952c0b8c6608f
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-prefix-first-child-publish.yml@34e15720407123277500badf7e2a48d9fdfd1c77
     with:
       kandelo-repository: Automattic/kandelo
       kandelo-ref: ${{ needs.admit.outputs.kandelo-commit }}
@@ -220,7 +220,7 @@ jobs:
       actions: read
       contents: write
       packages: write
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@880e5be7d2dbd3772602ff7eaed952c0b8c6608f
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@34e15720407123277500badf7e2a48d9fdfd1c77
     with:
       kandelo-repository: Automattic/kandelo
       kandelo-ref: ${{ needs.admit.outputs.kandelo-commit }}
