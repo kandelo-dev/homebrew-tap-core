@@ -1491,6 +1491,15 @@ def check_prefix_campaign_release_workflow(workflow)
     "#{label} job configuration changed"
   )
   check(
+    admit["runs-on"] == "ubuntu-latest" &&
+      admit["timeout-minutes"] == 10 &&
+      derivation["runs-on"] == "ubuntu-latest" &&
+      derivation["timeout-minutes"] == 120 &&
+      publish["runs-on"] == "ubuntu-latest" &&
+      publish["timeout-minutes"] == 30,
+    "#{label} runner or timeout changed"
+  )
+  check(
     admit["outputs"] == {
       "caller-sha" => expression("steps.authority.outputs.caller-sha"),
       "campaign-sha256" =>
@@ -1757,13 +1766,17 @@ def check_prefix_campaign_release_workflow(workflow)
       --exact-execution-target-main-sha "$SOURCE_COMMIT"
   BASH
   check(
-    release["env"] == {
-      "GH_TOKEN" => expression("github.token"),
-      "KANDELO_COMMIT" =>
-        expression("needs.admit.outputs.kandelo-commit"),
-      "SOURCE_COMMIT" => expression("needs.admit.outputs.caller-sha"),
-    } &&
-      release["run"] == expected_release_run,
+    release == {
+      "name" => "Publish through the immutable release lifecycle",
+      "shell" => "bash",
+      "env" => {
+        "GH_TOKEN" => expression("github.token"),
+        "KANDELO_COMMIT" =>
+          expression("needs.admit.outputs.kandelo-commit"),
+        "SOURCE_COMMIT" => expression("needs.admit.outputs.caller-sha"),
+      },
+      "run" => expected_release_run,
+    },
     "#{label} immutable publication authority changed"
   )
   check(
@@ -2048,6 +2061,11 @@ def self_test(
     workflow_events(mutated)["repository_dispatch"] = {
       "types" => ["publish-prefix-campaign-release"],
     }
+    check_prefix_campaign_release_workflow(mutated)
+  end
+  expect_rejection("a self-hosted campaign release publisher") do
+    mutated = deep_copy(prefix_campaign_release)
+    mutated.dig("jobs", "publish")["runs-on"] = "self-hosted"
     check_prefix_campaign_release_workflow(mutated)
   end
   expect_rejection("a literal campaign release Kandelo helper") do
