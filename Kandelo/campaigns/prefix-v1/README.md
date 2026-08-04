@@ -49,6 +49,81 @@ readable. It can be used to prepare a closed VFS selection even while
 unrelated campaign variants fail. Only the optional whole-catalog final
 tap commit waits for the complete selected campaign.
 
+## Publish campaign authority
+
+A campaign release is accepted only when its asset inventory contains
+exactly one file named `campaign.json`. The file name is part of the
+authority contract, in addition to the bytes, SHA-256, release tag, and
+target commit.
+
+Stage the derived manifest under that literal base name. Then describe it
+as the only asset in Kandelo's schema-1 immutable-release manifest:
+
+```sh
+asset_root="$(mktemp -d)"
+kandelo_root=/exact/kandelo
+cp /absolute/path/to/derived-campaign.json \
+  "$asset_root/campaign.json"
+```
+
+The release manifest must declare `campaign.json` with its exact byte
+count and SHA-256, make it the only preferred asset, accept no existing
+asset sets, target the exact source tap commit, and use the
+content-addressed campaign tag. Validate that inert manifest without
+credentials, then publish it only with the Kandelo commit pinned by the
+tap authority:
+
+```sh
+env -u GH_TOKEN -u GITHUB_TOKEN PYTHONDONTWRITEBYTECODE=1 \
+  python3 \
+  "$kandelo_root/scripts/validate-immutable-github-release-manifest.py" \
+  --manifest "$release_manifest" \
+  --asset-root "$asset_root" \
+  --stage-dir "$validation_root/assets" \
+  --out-manifest "$validation_root/manifest.json"
+
+GITHUB_REPOSITORY=kandelo-dev/homebrew-tap-core \
+  bash "$kandelo_root/scripts/publish-immutable-github-release.sh" \
+  --manifest "$release_manifest" \
+  --asset-root "$asset_root" \
+  --lock-root /exact/source/tap/checkout \
+  --receipt "$publisher_receipt" \
+  --exact-kandelo-main-sha "$kandelo_commit" \
+  --exact-target-main-sha "$source_tap_commit"
+```
+
+Do not hand-roll this lifecycle with `gh release create`. In particular,
+GitHub CLI's `path#label` syntax sets a display label; it does not rename
+the uploaded asset. The pinned publisher owns tag creation, locking,
+draft reconciliation, exact asset upload, protected-main rechecks,
+publication, immutability checks, and anonymous readback. With release
+immutability enabled, a published naming mistake cannot be corrected in
+place.
+
+Before activating the campaign, query the public release and require all
+of these facts:
+
+- `draft` and `prerelease` are both `false`;
+- `immutable` is `true`;
+- `target_commitish` is the campaign's exact source tap commit;
+- the asset inventory is exactly `campaign.json`; and
+- the asset byte count and `sha256:` digest match the derived file and
+  content-addressed tag.
+
+Then use Kandelo's `fetch-campaign-release` command without credentials.
+It independently downloads the public bytes and writes the readback
+receipt used by campaign operations. Do not activate an authority from a
+maintainer-authenticated metadata check alone.
+
+### Rejected immutable release from 2026-08-03
+
+Release
+`homebrew-prefix-campaign-sha256-9c8ba0ddd90f64bbbde0a182fee5154dc1ae6c74a967d5088b82a7f1dd4e5061`
+is intentionally orphaned. Its bytes and digest are correct, but its sole
+asset is named `campaign-7abe0a1.json` instead of `campaign.json`.
+The controller rejects that inventory. No campaign authority may name
+this release.
+
 ## Abandoned campaigns
 
 An active campaign can be returned to its fail-closed `armed` state when its
