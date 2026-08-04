@@ -65,9 +65,9 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # While split, credentialed callers retain their complete older tuple and
 # fail the publisher's current-main check. A full rotation converges both
 # pins only after a fresh generation is admitted.
-CURRENT_KANDELO_WORKFLOW_SHA = "208236d4525dbe06204aee7015c0da07703885d8"
+CURRENT_KANDELO_WORKFLOW_SHA = "f827796e6e7da2610126371516a2accf45880ede"
 CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
-DRY_RUN_KANDELO_WORKFLOW_SHA = "208236d4525dbe06204aee7015c0da07703885d8"
+DRY_RUN_KANDELO_WORKFLOW_SHA = "f827796e6e7da2610126371516a2accf45880ede"
 # WHY: the lifecycle caller must remain pinned to reviewed Kandelo main. TA0,
 # the catalog, and the canary are separate final immutable authorities.
 MAIN_SHELL_MIRROR_KANDELO_SHA =
@@ -76,12 +76,18 @@ MAIN_SHELL_MIRROR_TAP_CATALOG_SHA = "6ad0e3dbc60e5572c4288c86919238f71c1bc110"
 MAIN_SHELL_MIRROR_AUTHORITY_SHA =
   "08f8f32c94bee8d6fc2948e453e53ece29b1c8e1"
 MAIN_SHELL_MIRROR_CANARY_SHA = "d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc"
-PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-58367c4ffdf1c8c75e3c48dbeefe50287fce6ef896a39e107166574c9cd8a11b"
+PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-3d59d5913805412763ee43fa8c25fe7b7af339fe4cd9bf4cde68d966ea89facd"
+# WHY: a sealed campaign release binds its original Kandelo executor.
+# historical source authority remains valid while current executable
+# publishers advance, so keep the two trust roles independently
+# reviewable.
+PREFIX_CAMPAIGN_KANDELO_SHA =
+  "f827796e6e7da2610126371516a2accf45880ede"
 # WHY: a closed selection writes an immutable release. The protected tap
 # caller must select exactly the Kandelo main commit that owns every executable
 # publication step; a mutable ref would let those steps change after review.
 CLOSED_SELECTION_KANDELO_SHA =
-  "208236d4525dbe06204aee7015c0da07703885d8"
+  "f827796e6e7da2610126371516a2accf45880ede"
 
 def check(condition, message)
   raise message unless condition
@@ -208,7 +214,7 @@ PAT_PUBLISH_SECRETS = {
     expression("secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN"),
 }.freeze
 
-FIRST_PUBLICATION_KANDELO_SHA = "208236d4525dbe06204aee7015c0da07703885d8"
+FIRST_PUBLICATION_KANDELO_SHA = "f827796e6e7da2610126371516a2accf45880ede"
 RETIRED_PAT_KANDELO_WORKFLOW_SHA = "acc54b0d0fb5ffc1e742d437081a58bfd163e785"
 PREVIOUS_KANDELO_WORKFLOW_SHA = "a71ab7a03cef9cb456e24c7b5f46bbc42122d9c4"
 RETIRED_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
@@ -513,6 +519,13 @@ def check_closed_selection_caller(workflow)
     workflow_events(workflow) == {
       "workflow_dispatch" => {
         "inputs" => {
+          "expected_caller_sha" => {
+            "description" =>
+              "Exact protected-main tap commit observed " \
+              "before dispatch",
+            "required" => true,
+            "type" => "string",
+          },
           "selection_plan" => {
             "description" =>
               "Canonical compact JSON selecting one complete closure",
@@ -547,6 +560,7 @@ def check_closed_selection_caller(workflow)
         "#{label} reusable workflow target changed")
   check(
     job["with"] == {
+      "expected-caller-sha" => expression("inputs.expected_caller_sha"),
       "kandelo-ref" => CLOSED_SELECTION_KANDELO_SHA,
       "selection-plan" => expression("inputs.selection_plan"),
       "selection-plan-sha256" =>
@@ -1434,9 +1448,11 @@ def check_contract_workflow(workflow)
     "Kandelo/test-workflow-trust.sh",
     "Kandelo/test-workflow-trust.rb",
     "scripts/rotate-publisher-trust.py",
+    "scripts/transition-prefix-campaign-authority.py",
     "scripts/prefix-campaign-controller.py",
     "scripts/prefix-campaign-source.py",
     "scripts/test_rotate_publisher_trust.py",
+    "scripts/test_transition_prefix_campaign_authority.py",
     "scripts/test_prefix_campaign_controller.py",
     "scripts/test_prefix_campaign_source.py",
   ]
@@ -1469,6 +1485,12 @@ def check_contract_workflow(workflow)
     {
       "name" => "Exercise complete publisher trust rotation",
       "run" => "python3 -B scripts/test_rotate_publisher_trust.py",
+    },
+    {
+      "name" => "Exercise two-commit campaign transition",
+      "run" =>
+        "python3 -B " \
+        "scripts/test_transition_prefix_campaign_authority.py",
     },
     {
       "name" => "Exercise prefix-campaign controller",
@@ -1569,16 +1591,16 @@ def self_test(
   check_closed_selection_caller(closed_selection)
   check_prefix_campaign_authority(
     prefix_authority,
-    CLOSED_SELECTION_KANDELO_SHA
+    PREFIX_CAMPAIGN_KANDELO_SHA
   )
 
-  expect_rejection("split campaign and closed-selection authority") do
+  expect_rejection("split campaign authority") do
     mutated = deep_copy(prefix_authority)
     mutated["kandelo_commit"] = "1" * 40
     mutated["reusable_workflow_commit"] = "1" * 40
     check_prefix_campaign_authority(
       mutated,
-      CLOSED_SELECTION_KANDELO_SHA
+      PREFIX_CAMPAIGN_KANDELO_SHA
     )
   end
 
@@ -1593,6 +1615,13 @@ def self_test(
     mutated = deep_copy(closed_selection)
     mutated.dig("jobs", "publish", "with")["kandelo-ref"] =
       "1" * 40
+    check_closed_selection_caller(mutated)
+  end
+  expect_rejection("an unbound closed-selection caller SHA") do
+    mutated = deep_copy(closed_selection)
+    mutated.dig("jobs", "publish", "with")[
+      "expected-caller-sha"
+    ] = expression("github.sha")
     check_closed_selection_caller(mutated)
   end
   expect_rejection("caller-local closed-selection code") do
@@ -2247,6 +2276,8 @@ begin
         "rootfs package generation is not an exact ABI 42 content tag")
   check(CLOSED_SELECTION_KANDELO_SHA.match?(/\A[0-9a-f]{40}\z/),
         "closed-selection Kandelo pin is not an exact SHA")
+  check(PREFIX_CAMPAIGN_KANDELO_SHA.match?(/\A[0-9a-f]{40}\z/),
+        "prefix-campaign Kandelo pin is not an exact SHA")
   {
     "main-shell lifecycle Kandelo M" => MAIN_SHELL_MIRROR_KANDELO_SHA,
     "main-shell mirror tap catalog TF" => MAIN_SHELL_MIRROR_TAP_CATALOG_SHA,
@@ -2329,7 +2360,7 @@ begin
   check_closed_selection_caller(closed_selection)
   check_prefix_campaign_authority(
     prefix_authority,
-    CLOSED_SELECTION_KANDELO_SHA
+    PREFIX_CAMPAIGN_KANDELO_SHA
   )
   check_prefix_campaign_workflow(prefix_campaign, prefix_authority)
   check_contract_workflow(contract)

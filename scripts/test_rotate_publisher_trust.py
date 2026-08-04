@@ -159,7 +159,22 @@ class PublisherTrustRotationTests(unittest.TestCase):
             rotation.TRUST_PATH,
             rotation.TRUST_FIRST_PUBLICATION_KANDELO_SHA,
         )
+        authority = json.loads(
+            (self.root / rotation.PREFIX_AUTHORITY_PATH).read_text()
+        )
         self.predecessor_campaign_sha = self.scalar_value(
+            rotation.TRUST_PATH,
+            rotation.TRUST_PREFIX_CAMPAIGN_KANDELO_SHA,
+        )
+        self.assertEqual(
+            self.predecessor_campaign_sha,
+            authority["kandelo_commit"],
+        )
+        self.assertEqual(
+            self.predecessor_campaign_sha,
+            authority["reusable_workflow_commit"],
+        )
+        self.predecessor_closed_selection_sha = self.scalar_value(
             rotation.TRUST_PATH,
             rotation.TRUST_CLOSED_SELECTION_KANDELO_SHA,
         )
@@ -197,6 +212,9 @@ class PublisherTrustRotationTests(unittest.TestCase):
             "predecessor_campaign_kandelo_sha": (
                 self.predecessor_campaign_sha
             ),
+            "predecessor_closed_selection_kandelo_sha": (
+                self.predecessor_closed_selection_sha
+            ),
             "predecessor_generation_tag": self.predecessor_generation,
             "predecessor_caller_sha256": self.predecessor_caller,
             "kandelo_sha": NEW_SHA,
@@ -217,6 +235,8 @@ class PublisherTrustRotationTests(unittest.TestCase):
             self.predecessor_first_publication_sha,
             "--predecessor-campaign-kandelo-sha",
             self.predecessor_campaign_sha,
+            "--predecessor-closed-selection-kandelo-sha",
+            self.predecessor_closed_selection_sha,
             "--predecessor-generation-tag",
             self.predecessor_generation,
             "--predecessor-caller-sha256",
@@ -235,6 +255,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
                 self.predecessor_dry_run_sha,
                 self.predecessor_first_publication_sha,
                 self.predecessor_campaign_sha,
+                self.predecessor_closed_selection_sha,
                 NEW_SHA,
             ):
                 return candidate
@@ -311,6 +332,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
             (rotation.CLOSED_SELECTION_PATH, rotation.CLOSED_SELECTION_USES),
             (rotation.PREFIX_AUTHORITY_PATH, rotation.AUTHORITY_KANDELO_SHA),
             (rotation.PREFIX_AUTHORITY_PATH, rotation.AUTHORITY_WORKFLOW_SHA),
+            (
+                rotation.TRUST_PATH,
+                rotation.TRUST_PREFIX_CAMPAIGN_KANDELO_SHA,
+            ),
             (
                 rotation.TRUST_PATH,
                 rotation.TRUST_CLOSED_SELECTION_KANDELO_SHA,
@@ -517,8 +542,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
                 self.mutate_authority(mutation)
                 with self.assertRaisesRegex(
                     rotation.RotationError,
-                    "prefix campaign authority changed outside its two "
-                    "Kandelo pins",
+                    "prefix campaign authority",
                 ):
                     self.build()
                 path.write_text(original)
@@ -784,11 +808,24 @@ class PublisherTrustRotationTests(unittest.TestCase):
     def test_wrong_predecessor_campaign_sha_is_rejected(self) -> None:
         with self.assertRaisesRegex(
             rotation.RotationError,
-            "prefix-campaign bottle reusable workflow SHA has unexpected "
-            "value",
+            "campaign authority has a split or unexpected Kandelo pin",
         ):
             self.build(
                 predecessor_campaign_kandelo_sha=(
+                    self.unknown_kandelo_sha()
+                )
+            )
+
+    def test_wrong_predecessor_closed_selection_sha_is_rejected(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            rotation.RotationError,
+            "closed-selection reusable workflow SHA has "
+            "unexpected value",
+        ):
+            self.build(
+                predecessor_closed_selection_kandelo_sha=(
                     self.unknown_kandelo_sha()
                 )
             )
@@ -921,6 +958,11 @@ class PublisherTrustRotationTests(unittest.TestCase):
                 "predecessor campaign Kandelo SHA must be exactly",
             ),
             (
+                {"predecessor_closed_selection_kandelo_sha": "main"},
+                "predecessor closed-selection Kandelo SHA must be "
+                "exactly",
+            ),
+            (
                 {"predecessor_generation_tag": "generation"},
                 "predecessor generation tag must be an exact ABI 42",
             ),
@@ -985,6 +1027,10 @@ class PublisherTrustRotationTests(unittest.TestCase):
             arguments.predecessor_campaign_kandelo_sha,
         )
         self.assertEqual(
+            self.predecessor_closed_selection_sha,
+            arguments.predecessor_closed_selection_kandelo_sha,
+        )
+        self.assertEqual(
             self.predecessor_generation,
             arguments.predecessor_generation_tag,
         )
@@ -1001,6 +1047,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
             "--predecessor-dry-run-kandelo-sha",
             "--predecessor-first-publication-kandelo-sha",
             "--predecessor-campaign-kandelo-sha",
+            "--predecessor-closed-selection-kandelo-sha",
             "--predecessor-generation-tag",
             "--predecessor-caller-sha256",
         ):
@@ -1067,6 +1114,9 @@ class PublisherTrustRotationTests(unittest.TestCase):
             predecessor_campaign_kandelo_sha=(
                 self.predecessor_campaign_sha
             ),
+            predecessor_closed_selection_kandelo_sha=(
+                self.predecessor_closed_selection_sha
+            ),
             predecessor_generation_tag=self.predecessor_generation,
             predecessor_caller_sha256=self.predecessor_caller,
             kandelo_sha=NEW_SHA,
@@ -1132,6 +1182,7 @@ class PublisherTrustRotationTests(unittest.TestCase):
         self.assertNotIn(self.predecessor_dry_run_sha, source)
         self.assertNotIn(self.predecessor_first_publication_sha, source)
         self.assertNotIn(self.predecessor_campaign_sha, source)
+        self.assertNotIn(self.predecessor_closed_selection_sha, source)
         self.assertNotIn(self.predecessor_generation, source)
         self.assertNotIn(self.predecessor_caller, source)
 

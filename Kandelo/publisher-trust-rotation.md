@@ -9,7 +9,9 @@ trust roots from one complete authority tuple to another:
 - `P_F`: the exact predecessor Kandelo commit selected by the
   first-publication namespace canary;
 - `P_A`: the exact predecessor Kandelo commit selected by the prefix-campaign
-  callers, closed-selection caller, and armed campaign authority;
+  callers and campaign authority;
+- `P_S`: the exact predecessor Kandelo commit selected by the
+  closed-selection caller;
 - `P_G`: the predecessor content-addressed rootfs-wasm32 generation;
 - `P_C`: the SHA-256 of the predecessor raw production caller bytes;
 - `M`: the exact new Kandelo main commit;
@@ -36,19 +38,133 @@ P_C=eea191a190495a0b760df906122d3de55f61d2281b7e360d855feaa3a200e094
 export P_M P_D P_F P_G P_C
 ```
 
-This is historical evidence, not an executable input tuple for the expanded
-helper: the pre-#1160 record predates `P_A`. Query the current protected tree
-and record `P_A` before any new rotation. Do not infer it from this section.
+This is historical evidence, not an executable input tuple for the
+expanded helper: the pre-#1160 record predates `P_A` and `P_S`.
+Query the current protected tree and record both before any new
+rotation. Do not infer them from this section.
 
 Re-query protected tap `main` immediately before preparing the live rotation.
 If any current caller or trust-root slot differs, stop and review the new
 predecessor instead of editing these values until the helper accepts the tree.
 The prefix workflow's three bottle-publisher pins and one first-child pin, the
-closed-selection workflow's publisher and `kandelo-ref`, the armed authority's
-two Kandelo fields, and `CLOSED_SELECTION_KANDELO_SHA` must all name `P_A`.
+campaign authority's two Kandelo fields, and
+`PREFIX_CAMPAIGN_KANDELO_SHA` must all name `P_A`. The closed-selection
+workflow's publisher and `kandelo-ref`, plus
+`CLOSED_SELECTION_KANDELO_SHA`, must all name `P_S`.
 Formula sidecars and aggregate metadata also contain historical
 `kandelo_commit` values. They are artifact provenance and are intentionally not
 rotation-owned; never globally replace `P_M`.
+
+## Replace an active campaign in two protected commits
+
+Do not rotate an active campaign's Kandelo fields in place. Its
+immutable release binds the old executor, generation, source tap, and
+handoffs. A successor also cannot select workflow bytes that GitHub has
+never seen on the default branch.
+
+Use two tap commits:
+
+1. Build one canonical abandoned-campaign archive from the old public
+   runs and handoffs. Put it at the content-addressed path for the old
+   campaign digest.
+2. Preview and apply `archive-active`. It proves the old active
+   authority came from the named activation commit and validates the
+   archive's recorded authority against those exact bytes. It clears
+   the campaign tag, generation, and source commit together. The
+   authority is now `armed`, so dispatch fails closed.
+3. In the same candidate tree, run the trust-rotation helper. This
+   rotates every reusable workflow, including the prefix campaign, to
+   `M`. Commit the reviewed successor scope and its exact task graph in
+   this tree. Merge that complete candidate as tap commit `T_ARM`.
+4. Derive and publish the successor campaign with Kandelo `M` and
+   source tap commit `T_ARM`. The immutable release must target
+   `T_ARM`. Verify it anonymously before activation.
+5. Start a new branch from exact `T_ARM`. Preview and apply
+   `activate-successor` with the public campaign bytes, `G`, and
+   `T_ARM`. The resulting commit may change only the data authority.
+6. Merge the data-only activation, then dispatch from its exact
+   protected-main commit.
+
+Archive and arm the predecessor before running the rotation helper:
+
+```bash
+python3 -B scripts/transition-prefix-campaign-authority.py \
+  archive-active \
+  --archive "$PREDECESSOR_ARCHIVE" \
+  --activation-commit "$PREDECESSOR_ACTIVATION"
+
+python3 -B scripts/transition-prefix-campaign-authority.py \
+  archive-active \
+  --archive "$PREDECESSOR_ARCHIVE" \
+  --activation-commit "$PREDECESSOR_ACTIVATION" \
+  --apply
+```
+
+After `T_ARM` is protected main and the successor release is public,
+activate only its data:
+
+```bash
+SUCCESSOR_SCOPE="Kandelo/campaigns/prefix-v1/successor/"\
+"f901-successor-scope.json"
+
+python3 -B scripts/transition-prefix-campaign-authority.py \
+  activate-successor \
+  --campaign "$SUCCESSOR_CAMPAIGN" \
+  --scope "$SUCCESSOR_SCOPE" \
+  --rootfs-generation "$G" \
+  --source-tap-commit "$T_ARM"
+
+python3 -B scripts/transition-prefix-campaign-authority.py \
+  activate-successor \
+  --campaign "$SUCCESSOR_CAMPAIGN" \
+  --scope "$SUCCESSOR_SCOPE" \
+  --rootfs-generation "$G" \
+  --source-tap-commit "$T_ARM" \
+  --apply
+
+test "$(git status --porcelain=v1)" = \
+  " M Kandelo/prefix-campaign-authority.json"
+```
+
+The activation helper derives the release tag from the exact campaign
+bytes. Kandelo derives that campaign only when the successor scope path
+and SHA-256 are supplied together. The campaign's optional schema-3
+`authority.successor_scope = {path, sha256}` record is mandatory for
+this activation and must name the exact scope bytes from `T_ARM`. The
+helper also reparses those scope, graph, and archive bytes from exact
+`T_ARM`. The graph is the selected 41-task shell proof, not the full
+campaign inventory. It must be the exact union of the reviewed reuse
+and build routes. Every selected reuse route must name its
+archive-verified handoff, and every selected build must remain a build.
+Other valid campaign Formula variants remain available for independent
+dispatch but are not scheduled by this graph. If they reuse an older
+handoff, their recovery record and route must bind exact archive bytes
+from `T_ARM`; unused or altered recovery records are rejected. The
+campaign's Kandelo commit, source commit, ABI, tap identity, and sealed
+target source must also match the armed tap.
+
+The transition helper binds the archive's reviewed authority bytes. It
+does not query GitHub and cannot prove that historical runs or handoffs
+were public. The successor publisher/executor from PR #1215 later
+fetches each selected predecessor campaign, handoff, and bottle
+anonymously and validates their content-addressed evidence. The
+scheduler independently reads each new successor handoff before
+marking it usable. Those checks, publication, and anonymous release
+readback remain separate because this helper has no credentials.
+
+The transition helper intentionally does not import Kandelo's complete
+campaign parser. That parser belongs to exact `M`, loads companion
+Kandelo modules, and runs in Kandelo's declared build environment.
+Making this tap-side data transition depend on an external checkout
+would replace one reviewed contract with mutable operator state.
+Instead, this helper validates only the cross-repository activation
+boundary: exact source, recovery, task graph, and routes. Every task is
+then passed through the complete `M`-pinned Kandelo validator before
+any publication write.
+
+Both transition commands are exact-state idempotent before their result
+is committed. Repeating `--apply` accepts only the same derived state
+and performs no second write.
 
 ## Establish the successor
 
@@ -129,12 +245,12 @@ authority early:
    succeeds.
 6. Once the rootfs generation yields `G`, run the complete helper below
    with `P_D="$M"` and `P_F="$M"`, while retaining the recorded
-   predecessor values for `P_M`, `P_A`, `P_G`, and `P_C`.
+   predecessor values for `P_M`, `P_A`, `P_S`, `P_G`, and `P_C`.
 
 The split state is intentional: dry-run cannot publish, and
 first-publication can create only the exact absent Libyaml child proved
 by that dry run. Normal Formula publication remains pinned to
-`P_M/P_A/P_G/P_C` until the complete rotation lands.
+`P_M/P_A/P_S/P_G/P_C` until the complete rotation lands.
 `Kandelo/test-workflow-trust.rb` permits these two live callers to
 converge on current authority but still rejects collisions with
 historical test fixtures.
@@ -220,6 +336,7 @@ python3 -B scripts/rotate-publisher-trust.py \
   --predecessor-dry-run-kandelo-sha "$P_D" \
   --predecessor-first-publication-kandelo-sha "$P_F" \
   --predecessor-campaign-kandelo-sha "$P_A" \
+  --predecessor-closed-selection-kandelo-sha "$P_S" \
   --predecessor-generation-tag "$P_G" \
   --predecessor-caller-sha256 "$P_C" \
   --kandelo-sha "$M" \
@@ -230,6 +347,7 @@ python3 -B scripts/rotate-publisher-trust.py \
   --predecessor-dry-run-kandelo-sha "$P_D" \
   --predecessor-first-publication-kandelo-sha "$P_F" \
   --predecessor-campaign-kandelo-sha "$P_A" \
+  --predecessor-closed-selection-kandelo-sha "$P_S" \
   --predecessor-generation-tag "$P_G" \
   --predecessor-caller-sha256 "$P_C" \
   --kandelo-sha "$M" \
@@ -246,12 +364,9 @@ Apply changes only these reviewed slots:
   `M`; it receives no package-generation input;
 - maintenance reusable publisher and `kandelo-ref`: `M`; generation: `G`;
 - production reusable publisher and `kandelo-ref`: `M`; generation: `G`;
-- the prefix campaign's three bottle publishers and one first-child
-  publisher: `M`;
 - the closed-selection publisher and exact `kandelo-ref`: `M`;
-- the armed prefix-campaign authority's Kandelo commit and reusable-workflow
-  commit: `M`; its campaign tag, generation tag, source commit, state, and
-  target-source contract remain unchanged and non-executable;
+- the armed campaign's three bottle publishers, first-child publisher,
+  authority Kandelo commit, and reusable-workflow commit: `M`;
 - Ruby caller trust constants, including first-publication and
   closed-selection trust: `M` and `G`; and
 - rollout-controller current authority: `M`, `G`, and derived `C`.
@@ -260,9 +375,15 @@ The helper accepts only predecessor or successor values in each owned slot. It
 also requires the raw production caller to hash to either `P_C` or the rendered
 successor `C`; this prevents scalar-only validation from approving extra jobs,
 permissions, secrets, or other unreviewed caller bytes. Files are replaced
-atomically one at a time. If the host stops between files, rerun with the same
-eight inputs to converge the partial application. A complete second invocation
-is a no-op.
+atomically one at a time. If the host stops between files, rerun with
+the same nine inputs to converge the partial application. A complete
+second invocation is a no-op.
+
+The closed-selection caller also forwards `expected_caller_sha` from
+each dispatch. Capture the exact protected tap `main` commit
+immediately before dispatch and pass that value. The reusable
+publisher stops before preparation if GitHub resolves the run at any
+other tap commit.
 
 Review exactly the owned diff and the derived caller digest:
 
@@ -332,8 +453,8 @@ The base-owned `publisher-trust-base` pull-request-target job intentionally
 requires protected trust-root bytes to equal the current base. It therefore
 cannot pass a legitimate authority rotation. Require the candidate-owned
 `publisher-trust` job and the local validations above. Review the exact
-convergence of `P_M`, `P_D`, `P_F`, and `P_A` to `M`, and of `P_G/P_C` to
-`G/C`.
+convergence of `P_M`, `P_D`, `P_F`, `P_A`, and `P_S` to `M`, and of
+`P_G/P_C` to `G/C`.
 Use only the explicitly authorized branch-protection/admin path for this
 trust-root change.
 

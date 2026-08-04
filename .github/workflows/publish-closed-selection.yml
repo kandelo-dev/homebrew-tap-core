@@ -3,6 +3,11 @@ name: Publish Homebrew closed selection
 on:
   workflow_dispatch:
     inputs:
+      expected_caller_sha:
+        description: >-
+          Exact protected-main tap commit observed before dispatch
+        required: true
+        type: string
       selection_plan:
         description: Canonical compact JSON selecting one complete closure
         required: true
@@ -19,8 +24,9 @@ jobs:
       contents: write
     # WHY: this caller is protected data-only authority. Kandelo owns every
     # executable step and rechecks both protected main branches before writes.
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-closed-selection-publish.yml@208236d4525dbe06204aee7015c0da07703885d8
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-closed-selection-publish.yml@f827796e6e7da2610126371516a2accf45880ede
     with:
-      kandelo-ref: 208236d4525dbe06204aee7015c0da07703885d8
+      expected-caller-sha: ${{ inputs.expected_caller_sha }}
+      kandelo-ref: f827796e6e7da2610126371516a2accf45880ede
       selection-plan: ${{ inputs.selection_plan }}
       selection-plan-sha256: ${{ inputs.selection_plan_sha256 }}
