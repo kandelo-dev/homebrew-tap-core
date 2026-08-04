@@ -2666,6 +2666,8 @@ def prepare_predecessor_reuse_release(
             str(plan.campaign_path),
             "--source-tap-root",
             str(target_source_root),
+            "--recovery-tap-root",
+            str(recovery_tap_root),
             "--predecessor-campaign",
             str(predecessor_campaign_path),
             "--predecessor-handoff",

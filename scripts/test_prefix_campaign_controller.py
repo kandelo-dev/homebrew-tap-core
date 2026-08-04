@@ -2525,6 +2525,10 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             self.assertEqual(len(commands), 2)
             derive = commands[0]
             self.assertEqual(derive[2], "derive-predecessor-reuse")
+            self.assertEqual(
+                derive[derive.index("--recovery-tap-root") + 1],
+                str(recovery),
+            )
             self.assertIn(str(predecessor_campaign), derive)
             self.assertIn(str(predecessor_handoff), derive)
             self.assertIn(str(predecessor_dependency), derive)

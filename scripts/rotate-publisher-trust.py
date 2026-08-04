@@ -123,6 +123,11 @@ TRUST_CLOSED_SELECTION_KANDELO_SHA = re.compile(
     r"(?P<value>[^\s\"]+\")(?P<suffix>\s*)$",
     flags=re.MULTILINE,
 )
+TRUST_PREFIX_CAMPAIGN_KANDELO_SHA = re.compile(
+    r"^(?P<prefix>PREFIX_CAMPAIGN_KANDELO_SHA\s*=\s*\n\s*\")"
+    r"(?P<value>[^\s\"]+\")(?P<suffix>\s*)$",
+    flags=re.MULTILINE,
+)
 TRUST_GENERATION = scalar_pattern(
     r'PACKAGE_GENERATION_WASM32_TAG\s*=\s*"'
 )
@@ -244,11 +249,7 @@ def reject_duplicate_pairs(
     return result
 
 
-def validate_armed_authority(
-    source: str,
-    *,
-    allowed_kandelo_shas: frozenset[str],
-) -> None:
+def load_campaign_authority(source: str) -> dict[str, object]:
     try:
         authority = json.loads(
             source,
@@ -284,6 +285,15 @@ def validate_armed_authority(
         raise RotationError(
             "prefix campaign authority field set or order changed"
         )
+    return authority
+
+
+def validate_armed_authority(
+    source: str,
+    *,
+    allowed_kandelo_shas: frozenset[str],
+) -> None:
+    authority = load_campaign_authority(source)
 
     # WHY: this helper rotates executable trust, not campaign data. Requiring
     # the complete armed non-executable record prevents a trust rotation from
@@ -458,6 +468,7 @@ def build_rotation(
     predecessor_dry_run_kandelo_sha: str,
     predecessor_first_publication_kandelo_sha: str,
     predecessor_campaign_kandelo_sha: str,
+    predecessor_closed_selection_kandelo_sha: str,
     predecessor_generation_tag: str,
     predecessor_caller_sha256: str,
     kandelo_sha: str,
@@ -477,6 +488,10 @@ def build_rotation(
     validate_kandelo_sha(
         predecessor_campaign_kandelo_sha,
         "predecessor campaign Kandelo SHA",
+    )
+    validate_kandelo_sha(
+        predecessor_closed_selection_kandelo_sha,
+        "predecessor closed-selection Kandelo SHA",
     )
     validate_generation_tag(
         predecessor_generation_tag, "predecessor generation tag"
@@ -505,12 +520,21 @@ def build_rotation(
     allowed_campaign_kandelo_shas = frozenset(
         (predecessor_campaign_kandelo_sha, kandelo_sha)
     )
+    allowed_closed_selection_kandelo_shas = frozenset(
+        (predecessor_closed_selection_kandelo_sha, kandelo_sha)
+    )
     allowed_generation_tags = frozenset(
         (predecessor_generation_tag, generation_tag)
     )
 
     original = read_rotation_files(root)
     rendered: dict[pathlib.Path, bytes] = dict(original)
+    authority_source = original[PREFIX_AUTHORITY_PATH].decode()
+    authority = rotate_armed_authority(
+        authority_source,
+        allowed_kandelo_shas=allowed_campaign_kandelo_shas,
+        new_sha=kandelo_sha,
+    )
 
     dry_run = rotate_workflow(
         original[DRY_RUN_PATH].decode(),
@@ -573,21 +597,16 @@ def build_rotation(
     closed_selection = replace_scalar(
         original[CLOSED_SELECTION_PATH].decode(),
         CLOSED_SELECTION_USES,
-        allowed=allowed_campaign_kandelo_shas,
+        allowed=allowed_closed_selection_kandelo_shas,
         replacement=kandelo_sha,
         label="closed-selection reusable workflow SHA",
     )
     closed_selection = replace_scalar(
         closed_selection,
         EXACT_KANDELO_REF,
-        allowed=allowed_campaign_kandelo_shas,
+        allowed=allowed_closed_selection_kandelo_shas,
         replacement=kandelo_sha,
         label="closed-selection kandelo-ref",
-    )
-    authority = rotate_armed_authority(
-        original[PREFIX_AUTHORITY_PATH].decode(),
-        allowed_kandelo_shas=allowed_campaign_kandelo_shas,
-        new_sha=kandelo_sha,
     )
     rendered[DRY_RUN_PATH] = dry_run.encode()
     rendered[MAINTENANCE_PATH] = maintenance.encode()
@@ -621,8 +640,15 @@ def build_rotation(
     )
     trust = replace_scalar(
         trust,
-        TRUST_CLOSED_SELECTION_KANDELO_SHA,
+        TRUST_PREFIX_CAMPAIGN_KANDELO_SHA,
         allowed=allowed_campaign_kandelo_shas,
+        replacement=kandelo_sha,
+        label="trust-test prefix-campaign Kandelo SHA",
+    )
+    trust = replace_scalar(
+        trust,
+        TRUST_CLOSED_SELECTION_KANDELO_SHA,
+        allowed=allowed_closed_selection_kandelo_shas,
         replacement=kandelo_sha,
         label="trust-test closed-selection Kandelo SHA",
     )
@@ -755,8 +781,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--predecessor-campaign-kandelo-sha",
         required=True,
         help=(
-            "exact Kandelo SHA selected by the armed campaign, prefix "
-            "caller, and closed-selection caller now"
+            "exact Kandelo SHA selected by the campaign authority and "
+            "prefix caller now"
+        ),
+    )
+    parser.add_argument(
+        "--predecessor-closed-selection-kandelo-sha",
+        required=True,
+        help=(
+            "exact Kandelo SHA selected by the closed-selection "
+            "caller now"
         ),
     )
     parser.add_argument(
@@ -803,6 +837,9 @@ def main(argv: list[str]) -> int:
             predecessor_campaign_kandelo_sha=(
                 args.predecessor_campaign_kandelo_sha
             ),
+            predecessor_closed_selection_kandelo_sha=(
+                args.predecessor_closed_selection_kandelo_sha
+            ),
             predecessor_generation_tag=args.predecessor_generation_tag,
             predecessor_caller_sha256=args.predecessor_caller_sha256,
             kandelo_sha=args.kandelo_sha,
@@ -820,7 +857,7 @@ def main(argv: list[str]) -> int:
         if not args.apply:
             print(
                 "preview only; rerun with --apply after reviewing "
-                "P_M/P_D/P_F/P_A/P_G/P_C -> M/G/C"
+                "P_M/P_D/P_F/P_A/P_S/P_G/P_C -> M/G/C"
             )
         return 0
     except (OSError, RotationError) as error:

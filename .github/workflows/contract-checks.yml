@@ -11,9 +11,11 @@ on:
       - "Kandelo/test-workflow-trust.sh"
       - "Kandelo/test-workflow-trust.rb"
       - "scripts/rotate-publisher-trust.py"
+      - "scripts/transition-prefix-campaign-authority.py"
       - "scripts/prefix-campaign-controller.py"
       - "scripts/prefix-campaign-source.py"
       - "scripts/test_rotate_publisher_trust.py"
+      - "scripts/test_transition_prefix_campaign_authority.py"
       - "scripts/test_prefix_campaign_controller.py"
       - "scripts/test_prefix_campaign_source.py"
 
@@ -35,6 +37,10 @@ jobs:
         run: bash Kandelo/test-workflow-trust.sh
       - name: Exercise complete publisher trust rotation
         run: python3 -B scripts/test_rotate_publisher_trust.py
+      - name: Exercise two-commit campaign transition
+        run: >-
+          python3 -B
+          scripts/test_transition_prefix_campaign_authority.py
       - name: Exercise prefix-campaign controller
         run: >-
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest
