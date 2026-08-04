@@ -1,21 +1,21 @@
 {
   "campaign_release": {
     "repository": "kandelo-dev/homebrew-tap-core",
-    "tag": "homebrew-prefix-campaign-sha256-b70354153423d107838c82d899adad0455858d5b713f2259ae53c2ae2915a205"
+    "tag": "homebrew-prefix-campaign-sha256-0000000000000000000000000000000000000000000000000000000000000000"
   },
-  "kandelo_commit": "333011ee523ce7344d00bf930b607009ada46d03",
+  "kandelo_commit": "880e5be7d2dbd3772602ff7eaed952c0b8c6608f",
   "kandelo_repository": "Automattic/kandelo",
   "kind": "kandelo-homebrew-prefix-campaign-caller-authority",
   "package_generations": {
-    "rootfs_wasm32": "package-generation-rootfs-wasm32-abi-v42-sha256-c98800c451cc805373cbc6327d657faf7bb47115ed7a7093507eeb200fe9a67a"
+    "rootfs_wasm32": "package-generation-rootfs-wasm32-abi-v42-sha256-0000000000000000000000000000000000000000000000000000000000000000"
   },
   "release_tag": "bottles-abi-v42",
-  "reusable_workflow_commit": "333011ee523ce7344d00bf930b607009ada46d03",
+  "reusable_workflow_commit": "880e5be7d2dbd3772602ff7eaed952c0b8c6608f",
   "schema": 2,
-  "source_tap_commit": "bf455f4e7de63c5bd35500ead27e5e54e785587a",
+  "source_tap_commit": "0000000000000000000000000000000000000000",
   "source_tap_name": "kandelo-dev/tap-core",
   "source_tap_repository": "kandelo-dev/homebrew-tap-core",
-  "state": "active",
+  "state": "armed",
   "target_source": {
     "manifest_path": "Kandelo/campaigns/prefix-v1/manifest.json",
     "manifest_sha256": "cc651c02f62f7a0190f077e720a62d352d103001c7789bf061b3a7c8707cbfb1",
