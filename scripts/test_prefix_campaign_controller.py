@@ -320,6 +320,25 @@ def write_pretty(path: pathlib.Path, value: object) -> bytes:
     return payload
 
 
+def armed_authority_template(
+    live_value: dict[str, object],
+) -> dict[str, object]:
+    # WHY: archived campaign evidence must remain reproducible whether the
+    # checked-in caller is between campaigns or has activated a successor.
+    # Only the four live campaign slots differ between those two states.
+    armed_value = copy.deepcopy(live_value)
+    armed_value["campaign_release"]["tag"] = (
+        "homebrew-prefix-campaign-sha256-" + "0" * 64
+    )
+    armed_value["package_generations"]["rootfs_wasm32"] = (
+        "package-generation-rootfs-wasm32-abi-v42-sha256-"
+        + "0" * 64
+    )
+    armed_value["source_tap_commit"] = "0" * 40
+    armed_value["state"] = "armed"
+    return armed_value
+
+
 def write_reuse_oci_shape(root: pathlib.Path) -> None:
     sha_root = root / "layout/blobs/sha256"
     sha_root.mkdir(parents=True)
@@ -580,19 +599,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             "checked-in campaign authority",
             canonical=True,
         )
-        # WHY: the abandoned C1 record must remain reproducible whether the
-        # current caller is between campaigns or has activated a successor.
-        # Normalize only the live campaign slots before reconstructing C1.
-        armed_value = copy.deepcopy(live_value)
-        armed_value["campaign_release"]["tag"] = (
-            "homebrew-prefix-campaign-sha256-" + "0" * 64
-        )
-        armed_value["package_generations"]["rootfs_wasm32"] = (
-            "package-generation-rootfs-wasm32-abi-v42-sha256-"
-            + "0" * 64
-        )
-        armed_value["source_tap_commit"] = "0" * 40
-        armed_value["state"] = "armed"
+        armed_value = armed_authority_template(live_value)
         self.assertEqual(armed_value["state"], "armed")
         self.assertEqual(
             armed_value["campaign_release"]["tag"],
@@ -750,19 +757,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             "checked-in campaign authority",
             canonical=True,
         )
-        # WHY: the abandoned C2 record must remain reproducible after a
-        # successor campaign activates. Reconstruct the inert template instead
-        # of assuming that the checked-in caller remains armed forever.
-        armed_value = copy.deepcopy(live_value)
-        armed_value["campaign_release"]["tag"] = (
-            "homebrew-prefix-campaign-sha256-" + "0" * 64
-        )
-        armed_value["package_generations"]["rootfs_wasm32"] = (
-            "package-generation-rootfs-wasm32-abi-v42-sha256-"
-            + "0" * 64
-        )
-        armed_value["source_tap_commit"] = "0" * 40
-        armed_value["state"] = "armed"
+        armed_value = armed_authority_template(live_value)
         self.assertEqual(armed_value["state"], "armed")
         active_value = copy.deepcopy(armed_value)
         active_value["campaign_release"] = record["authority"][
@@ -965,8 +960,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             "checked-in campaign authority",
             canonical=True,
         )
-        self.assertEqual(live_value["state"], "armed")
-        armed_value = copy.deepcopy(live_value)
+        armed_value = armed_authority_template(live_value)
         active_value = copy.deepcopy(armed_value)
         active_value["campaign_release"] = record["authority"][
             "campaign_release"
@@ -996,7 +990,10 @@ class PrefixCampaignControllerTests(unittest.TestCase):
         )
 
         with tempfile.TemporaryDirectory() as directory:
-            event = pathlib.Path(directory) / "event.json"
+            fixture_root = pathlib.Path(directory)
+            authority_path = fixture_root / "authority.json"
+            event = fixture_root / "event.json"
+            write_pretty(authority_path, armed_value)
             write_pretty(
                 event,
                 {
@@ -1011,7 +1008,7 @@ class PrefixCampaignControllerTests(unittest.TestCase):
             with self.assertRaises(
                 CONTROLLER.ControllerError
             ) as raised:
-                CONTROLLER.preflight(AUTHORITY, event, None)
+                CONTROLLER.preflight(authority_path, event, None)
             self.assertEqual(
                 raised.exception.status,
                 "campaign-authority-inert",
