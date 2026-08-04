@@ -65,9 +65,9 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # While split, credentialed callers retain their complete older tuple and
 # fail the publisher's current-main check. A full rotation converges both
 # pins only after a fresh generation is admitted.
-CURRENT_KANDELO_WORKFLOW_SHA = "333011ee523ce7344d00bf930b607009ada46d03"
+CURRENT_KANDELO_WORKFLOW_SHA = "880e5be7d2dbd3772602ff7eaed952c0b8c6608f"
 CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
-DRY_RUN_KANDELO_WORKFLOW_SHA = "333011ee523ce7344d00bf930b607009ada46d03"
+DRY_RUN_KANDELO_WORKFLOW_SHA = "880e5be7d2dbd3772602ff7eaed952c0b8c6608f"
 # WHY: the lifecycle caller must remain pinned to reviewed Kandelo main. TA0,
 # the catalog, and the canary are separate final immutable authorities.
 MAIN_SHELL_MIRROR_KANDELO_SHA =
@@ -76,18 +76,18 @@ MAIN_SHELL_MIRROR_TAP_CATALOG_SHA = "6ad0e3dbc60e5572c4288c86919238f71c1bc110"
 MAIN_SHELL_MIRROR_AUTHORITY_SHA =
   "08f8f32c94bee8d6fc2948e453e53ece29b1c8e1"
 MAIN_SHELL_MIRROR_CANARY_SHA = "d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc"
-PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-c98800c451cc805373cbc6327d657faf7bb47115ed7a7093507eeb200fe9a67a"
+PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-b3d53ea330cfd0dbe53d4859c583df75bb15139a14fc7626468be9c442651018"
 # WHY: a sealed campaign release binds its original Kandelo executor.
 # historical source authority remains valid while current executable
 # publishers advance, so keep the two trust roles independently
 # reviewable.
 PREFIX_CAMPAIGN_KANDELO_SHA =
-  "333011ee523ce7344d00bf930b607009ada46d03"
+  "880e5be7d2dbd3772602ff7eaed952c0b8c6608f"
 # WHY: a closed selection writes an immutable release. The protected tap
 # caller must select exactly the Kandelo main commit that owns every executable
 # publication step; a mutable ref would let those steps change after review.
 CLOSED_SELECTION_KANDELO_SHA =
-  "333011ee523ce7344d00bf930b607009ada46d03"
+  "880e5be7d2dbd3772602ff7eaed952c0b8c6608f"
 
 def check(condition, message)
   raise message unless condition
@@ -214,7 +214,7 @@ PAT_PUBLISH_SECRETS = {
     expression("secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN"),
 }.freeze
 
-FIRST_PUBLICATION_KANDELO_SHA = "333011ee523ce7344d00bf930b607009ada46d03"
+FIRST_PUBLICATION_KANDELO_SHA = "880e5be7d2dbd3772602ff7eaed952c0b8c6608f"
 RETIRED_PAT_KANDELO_WORKFLOW_SHA = "acc54b0d0fb5ffc1e742d437081a58bfd163e785"
 PREVIOUS_KANDELO_WORKFLOW_SHA = "a71ab7a03cef9cb456e24c7b5f46bbc42122d9c4"
 RETIRED_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"

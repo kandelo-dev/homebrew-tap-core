@@ -1,0 +1,68 @@
+{
+  "abandoned_at": "2026-08-04T19:28:12Z",
+  "authority": {
+    "activation_commit": "3fc11268a96a583910a64f98cd35ca9ef3564372",
+    "campaign_release": {
+      "id": 365014355,
+      "repository": "kandelo-dev/homebrew-tap-core",
+      "tag": "homebrew-prefix-campaign-sha256-b70354153423d107838c82d899adad0455858d5b713f2259ae53c2ae2915a205"
+    },
+    "kandelo_commit": "333011ee523ce7344d00bf930b607009ada46d03",
+    "payload_sha256": "9906355fac2dc970e94f933319da9b82c7a7c985c06c9dc9d707b547c94fa269",
+    "rootfs_wasm32": "package-generation-rootfs-wasm32-abi-v42-sha256-c98800c451cc805373cbc6327d657faf7bb47115ed7a7093507eeb200fe9a67a",
+    "source_tap_commit": "bf455f4e7de63c5bd35500ead27e5e54e785587a",
+    "target_source": {
+      "manifest_path": "Kandelo/campaigns/prefix-v1/manifest.json",
+      "manifest_sha256": "cc651c02f62f7a0190f077e720a62d352d103001c7789bf061b3a7c8707cbfb1",
+      "source_root": "Kandelo/campaigns/prefix-v1/source",
+      "source_tree_git_oid": "64567fa4d0c5eb08c5f02a9bb6db12eeb3b11886",
+      "target_tree_git_oid": "fda31a22cbb81f08c190081cc7b0df7a96ffc03f"
+    }
+  },
+  "cause": {
+    "corrective_workstream": "Successor publication after Automattic/kandelo#1221",
+    "kind": "scoped-predecessor-input-mismatch",
+    "summary": "The campaign made five dispatches and published no handoffs. Its first caller rejected the public-index admission shape, and the protected successor caller then rejected predecessor bottle-input comparisons for four tasks. Automattic/kandelo#1221 corrects that executor contract, so further work requires a newly derived campaign after exact rootfs re-promotion."
+  },
+  "dispatches": [
+    {
+      "arch": "wasm32",
+      "formula": "bc",
+      "result": "workflow-failed-before-handoff",
+      "run_id": 30930845971
+    },
+    {
+      "arch": "wasm32",
+      "formula": "bc",
+      "result": "workflow-failed-before-handoff",
+      "run_id": 30932822494
+    },
+    {
+      "arch": "wasm32",
+      "formula": "bzip2",
+      "result": "workflow-failed-before-handoff",
+      "run_id": 30932892473
+    },
+    {
+      "arch": "wasm32",
+      "formula": "coreutils",
+      "result": "workflow-failed-before-handoff",
+      "run_id": 30932941610
+    },
+    {
+      "arch": "wasm32",
+      "formula": "dash",
+      "result": "workflow-failed-before-handoff",
+      "run_id": 30933023153
+    }
+  ],
+  "kind": "kandelo-homebrew-prefix-abandoned-campaign",
+  "recovery": {
+    "authority_state": "armed",
+    "fresh_builds_require_successor_campaign": true,
+    "partial_publications_require_successor_revalidation": true,
+    "predecessor_handoffs_are_not_successor_authority": true,
+    "published_handoffs_remain_independently_usable": true
+  },
+  "schema": 1
+}
