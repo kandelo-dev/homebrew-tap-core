@@ -187,6 +187,54 @@ tests compare the active checkout's workflow tree with the sealed source
 tree, and task admission repeats that comparison before doing bottle
 work.
 
+### Protected campaign-release publication
+
+`.github/workflows/publish-prefix-campaign-release.yml` is the only
+supported writer for the campaign descriptor itself. It is available
+only while the authority is `armed`. The manual dispatch accepts the
+exact protected tap `main` commit that owns the run and the SHA-256 of
+an independently derived `campaign.json`. Neither input selects source
+code, a Git checkout, or release bytes.
+
+The read-only admission job requires `refs/heads/main`, equality with
+the live protected-main ref, the complete armed authority shape, and the
+committed successor scope and task graph. It then exports the Kandelo
+tool commit from that authority. A separate read-only job creates
+independent clean checkouts for the current source, predecessor recovery
+archive, historical bottle tap, and reviewed native Homebrew. It derives
+and rechecks the campaign in the Kandelo dev shell before it uploads
+inert content-addressed bytes. Publication stops unless the bytes equal
+the supplied digest. The selected task graph must be exactly 35
+predecessor handoffs plus six builds. The narrow write job downloads and
+validates only that handoff. It checks out the exact Kandelo helper and
+protected source again. It then invokes the unchanged immutable-release
+helper inside the real Actions run. Both content ancestry and exact
+current execution authority are required. A final step invokes Kandelo's
+`fetch-campaign-release` executor without credentials. This proves the
+public release is non-draft, non-prerelease, and immutable. It targets
+the exact source and contains only the exact `campaign.json`. It also
+resolves the direct tag without credentials.
+
+After independently deriving the candidate from the newly merged armed
+commit `T_ARM` and recording its digest as `C`, dispatch only that exact
+tuple:
+
+```sh
+gh workflow run publish-prefix-campaign-release.yml \
+  --repo kandelo-dev/homebrew-tap-core \
+  --ref main \
+  -f expected_caller_sha="$T_ARM" \
+  -f expected_campaign_sha256="$C"
+```
+
+Keep the resulting run ID, immutable-release receipt, and
+evidence-artifact digest. Keep the direct-tag proof and the anonymous
+release readback receipt with the activation record. Do not supply
+another workflow's run ID to a local publisher. Do not use a personal
+token to imitate an Actions lock owner.
+Activation changes the authority to `active`, which permanently closes
+this descriptor-publication entry point for that campaign.
+
 ## Prefix-campaign package bootstrap
 
 A non-active prefix-campaign caller has a separate route for a reviewed new
