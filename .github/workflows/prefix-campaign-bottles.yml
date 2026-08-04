@@ -98,7 +98,7 @@ jobs:
       packages: write
     # WHY: this one-off recovery pin is intentionally excluded from normal
     # campaign trust rotation and is removed before the successor is sealed.
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@6cf292d284a6834862817c5695f357c6635ef643 # f901-revalidation-pin
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-bottle-publish.yml@262accdb94e01906d2e12741670fccce515d4ec9 # f901-revalidation-pin
     with:
       kandelo-repository: Automattic/kandelo
       kandelo-ref: 208236d4525dbe06204aee7015c0da07703885d8

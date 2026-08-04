@@ -87,7 +87,7 @@ PREFIX_CAMPAIGN_KANDELO_SHA =
 # recovered bottle still names its original Kandelo and tap producers below.
 # Normal campaign trust rotation must neither adopt nor rewrite this pin.
 F901_REVALIDATION_KANDELO_SHA =
-  "6cf292d284a6834862817c5695f357c6635ef643"
+  "262accdb94e01906d2e12741670fccce515d4ec9"
 F901_REVALIDATION_PRODUCER_KANDELO_SHA =
   "208236d4525dbe06204aee7015c0da07703885d8"
 F901_REVALIDATION_PRODUCER_TAP_SHA =
