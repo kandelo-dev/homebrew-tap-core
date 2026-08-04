@@ -1675,6 +1675,9 @@ def check_prefix_campaign_release_workflow(workflow)
       derive["run"].include?(
         '.disposition.kind == "required-rebuild"'
       ) &&
+      derive["run"].lines.select { |line| line.include?("--jobs") }
+        .map(&:strip) == ["--jobs 2"] &&
+      derive["run"].include?("read-only run 30947720875") &&
       !derive.fetch("env", {}).key?("GH_TOKEN"),
     "#{label} deterministic derivation contract changed"
   )
@@ -2066,6 +2069,12 @@ def self_test(
   expect_rejection("a self-hosted campaign release publisher") do
     mutated = deep_copy(prefix_campaign_release)
     mutated.dig("jobs", "publish")["runs-on"] = "self-hosted"
+    check_prefix_campaign_release_workflow(mutated)
+  end
+  expect_rejection("oversubscribed campaign release derivation") do
+    mutated = deep_copy(prefix_campaign_release)
+    derive = mutated.dig("jobs", "derive", "steps", 7)
+    derive["run"] = derive["run"].sub("--jobs 2", "--jobs 8")
     check_prefix_campaign_release_workflow(mutated)
   end
   expect_rejection("a literal campaign release Kandelo helper") do
