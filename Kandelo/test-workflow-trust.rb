@@ -65,9 +65,9 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # While split, credentialed callers retain their complete older tuple and
 # fail the publisher's current-main check. A full rotation converges both
 # pins only after a fresh generation is admitted.
-CURRENT_KANDELO_WORKFLOW_SHA = "f827796e6e7da2610126371516a2accf45880ede"
+CURRENT_KANDELO_WORKFLOW_SHA = "333011ee523ce7344d00bf930b607009ada46d03"
 CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
-DRY_RUN_KANDELO_WORKFLOW_SHA = "f827796e6e7da2610126371516a2accf45880ede"
+DRY_RUN_KANDELO_WORKFLOW_SHA = "333011ee523ce7344d00bf930b607009ada46d03"
 # WHY: the lifecycle caller must remain pinned to reviewed Kandelo main. TA0,
 # the catalog, and the canary are separate final immutable authorities.
 MAIN_SHELL_MIRROR_KANDELO_SHA =
@@ -76,120 +76,18 @@ MAIN_SHELL_MIRROR_TAP_CATALOG_SHA = "6ad0e3dbc60e5572c4288c86919238f71c1bc110"
 MAIN_SHELL_MIRROR_AUTHORITY_SHA =
   "08f8f32c94bee8d6fc2948e453e53ece29b1c8e1"
 MAIN_SHELL_MIRROR_CANARY_SHA = "d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc"
-PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-3d59d5913805412763ee43fa8c25fe7b7af339fe4cd9bf4cde68d966ea89facd"
+PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-c98800c451cc805373cbc6327d657faf7bb47115ed7a7093507eeb200fe9a67a"
 # WHY: a sealed campaign release binds its original Kandelo executor.
 # historical source authority remains valid while current executable
 # publishers advance, so keep the two trust roles independently
 # reviewable.
 PREFIX_CAMPAIGN_KANDELO_SHA =
-  "f827796e6e7da2610126371516a2accf45880ede"
-# WHY: this one-off pin executes only the reviewed cross-run verifier. The
-# recovered bottle still names its original Kandelo and tap producers below.
-# Normal campaign trust rotation must neither adopt nor rewrite this pin.
-F901_REVALIDATION_KANDELO_SHA =
   "333011ee523ce7344d00bf930b607009ada46d03"
-F901_REVALIDATION_PRODUCER_KANDELO_SHA =
-  "208236d4525dbe06204aee7015c0da07703885d8"
-F901_REVALIDATION_PRODUCER_TAP_SHA =
-  "77550434549173b638f7397c20ace23693009fb9"
-F901_REVALIDATION_GENERATION =
-  "package-generation-rootfs-wasm32-abi-v42-sha256-" \
-  "58367c4ffdf1c8c75e3c48dbeefe50287fce6ef896a39e107166574c9cd8a11b"
-F901_REVALIDATION_CAMPAIGN_TAG =
-  "homebrew-prefix-campaign-sha256-" \
-  "f90144f439caa3806cbd145fc0d5f34ddbf6905d43a15b023106389696376de0"
-F901_REVALIDATION_DEPENDENCIES = JSON.generate({
-  "dependencies" => [
-    {
-      "formula" => "bzip2",
-      "tag" =>
-        "homebrew-prefix-handoff-sha256-" \
-        "849093b24cb737cb7e1ec16f3b2e74a450d4e04854cb29205f266e1e9638b7e9",
-    },
-    {
-      "formula" => "libmagic",
-      "tag" =>
-        "homebrew-prefix-handoff-sha256-" \
-        "1dada929d56eb1f63a528f7d3fbdf8ae69975969a531319c3d626cb57c884a69",
-    },
-    {
-      "formula" => "xz",
-      "tag" =>
-        "homebrew-prefix-handoff-sha256-" \
-        "333374316f3536fbb89b8e88c07794d987253c3cec7ed9b2b71fdb71636eb8b4",
-    },
-    {
-      "formula" => "zlib",
-      "tag" =>
-        "homebrew-prefix-handoff-sha256-" \
-        "6964e721dffe300df856fc6a07e2dc4a31a5625e1a215912a1a565df2da170d0",
-    },
-  ],
-  "schema" => 1,
-})
-F901_REVALIDATION_SOURCE = JSON.generate({
-  "arch" => "wasm32",
-  "artifacts" => {
-    "build_handoff" => {
-      "digest" =>
-        "sha256:b7180d6a8775d08e301b1664cf1a26fe904bdd00a10c52c7f83a51c133be6464",
-      "id" => 8_877_510_637,
-      "name" =>
-        "homebrew-build-handoff-file-formula-wasm32-attempt-1",
-      "size" => 352_344,
-    },
-    "index_publication" => {
-      "digest" =>
-        "sha256:fb19ccf9377b3d82e7e0beda43c5eba29d53bb5efaa3edbb6f949520a02ff2c2",
-      "id" => 8_877_570_128,
-      "name" => "homebrew-index-publication-file-formula-attempt-1",
-      "size" => 3_136,
-    },
-    "oci_child" => {
-      "digest" =>
-        "sha256:7b5b5bd9e9073b84aad82542e8cde8bf1b6da8e18fecc0e7dc0702290237e917",
-      "id" => 8_877_513_366,
-      "name" => "homebrew-oci-child-file-formula-wasm32-attempt-1",
-      "size" => 340_756,
-    },
-    "upload_receipt" => {
-      "digest" =>
-        "sha256:6c7a4ab985d8aa919e7031c67d83424f6f925a8ba404306fb3d7d797634b37a1",
-      "id" => 8_877_543_934,
-      "name" => "homebrew-upload-receipt-file-formula-wasm32-attempt-1",
-      "size" => 1_058,
-    },
-  },
-  "bottle" => {
-    "bytes" => 334_774,
-    "sha256" =>
-      "2cfc16330c992275781f47a5d5134ac0c0f3200683f0d0053dfc7c805880f9b5",
-  },
-  "campaign_tag" => F901_REVALIDATION_CAMPAIGN_TAG,
-  "child_manifest_digest" =>
-    "sha256:bbe7c54317429b1970ad775e4f9389c8a53e86071fa0ed74fb23f29d9e9d884b",
-  "formula" => "file-formula",
-  "head_sha" => "f5858e5cfafbbe769c2f3fd6a79194ee1afc651c",
-  "jobs" => {
-    "build" => 91_866_528_978,
-    "index" => 91_869_985_201,
-    "upload" => 91_869_743_698,
-    "verify" => 91_870_197_739,
-  },
-  "producer_kandelo_commit" => F901_REVALIDATION_PRODUCER_KANDELO_SHA,
-  "producer_tap_commit" => F901_REVALIDATION_PRODUCER_TAP_SHA,
-  "repository" => "kandelo-dev/homebrew-tap-core",
-  "run_attempt" => 1,
-  "run_id" => 30_868_804_114,
-  "schema" => 1,
-  "top_index_digest" =>
-    "sha256:6c0900b398589444f43926ad2af954e47993168c52014354c62ac71791624cb7",
-})
 # WHY: a closed selection writes an immutable release. The protected tap
 # caller must select exactly the Kandelo main commit that owns every executable
 # publication step; a mutable ref would let those steps change after review.
 CLOSED_SELECTION_KANDELO_SHA =
-  "f827796e6e7da2610126371516a2accf45880ede"
+  "333011ee523ce7344d00bf930b607009ada46d03"
 
 def check(condition, message)
   raise message unless condition
@@ -316,7 +214,7 @@ PAT_PUBLISH_SECRETS = {
     expression("secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN"),
 }.freeze
 
-FIRST_PUBLICATION_KANDELO_SHA = "f827796e6e7da2610126371516a2accf45880ede"
+FIRST_PUBLICATION_KANDELO_SHA = "333011ee523ce7344d00bf930b607009ada46d03"
 RETIRED_PAT_KANDELO_WORKFLOW_SHA = "acc54b0d0fb5ffc1e742d437081a58bfd163e785"
 PREVIOUS_KANDELO_WORKFLOW_SHA = "a71ab7a03cef9cb456e24c7b5f46bbc42122d9c4"
 RETIRED_KANDELO_WORKFLOW_SHA = "c3f91d622c3c878e15783c67e99e483e54ab25c1"
@@ -825,17 +723,13 @@ def check_prefix_campaign_workflow(workflow, authority)
         "#{label} name changed")
   check(workflow_events(workflow) == {
     "repository_dispatch" => {
-      "types" => [
-        "publish-prefix-campaign-bottle",
-        "revalidate-f901-file-formula",
-      ],
+      "types" => ["publish-prefix-campaign-bottle"],
     },
   }, "#{label} event changed")
 
   jobs = workflow["jobs"]
   check(jobs.is_a?(Hash) && jobs.keys == %w[
           admit
-          revalidate-f901-file-formula
           publish-rootfs
           build-bootstrap-rootfs
           publish-first-child
@@ -868,63 +762,6 @@ def check_prefix_campaign_workflow(workflow, authority)
     "#{label} does not expose the recovery archive authority"
   )
 
-  revalidation = jobs["revalidate-f901-file-formula"]
-  revalidation_reusable = [
-    "Automattic/kandelo/.github/workflows/",
-    "reusable-homebrew-bottle-publish.yml@",
-    F901_REVALIDATION_KANDELO_SHA,
-  ].join
-  check(
-    normalized_keys(revalidation, "#{label} revalidation job").sort ==
-      %w[if permissions uses with],
-    "#{label} revalidation job shape changed"
-  )
-  check(
-    revalidation["if"] ==
-      expression("github.event.action == 'revalidate-f901-file-formula'"),
-    "#{label} revalidation action gate changed"
-  )
-  check(
-    exact_permissions?(
-      revalidation["permissions"], {
-        "actions" => "read",
-        "contents" => "write",
-        "packages" => "write",
-      }
-    ),
-    "#{label} revalidation permission ceiling changed"
-  )
-  check(
-    revalidation["uses"] == revalidation_reusable,
-    "#{label} revalidation reusable target changed"
-  )
-  check(
-    revalidation["with"] == {
-      "kandelo-repository" => "Automattic/kandelo",
-      "kandelo-ref" => F901_REVALIDATION_PRODUCER_KANDELO_SHA,
-      "tap-repository" => "kandelo-dev/homebrew-tap-core",
-      "tap-name" => "kandelo-dev/tap-core",
-      "tap-ref" => F901_REVALIDATION_PRODUCER_TAP_SHA,
-      "formulae" => "file-formula",
-      "arches" => "wasm32",
-      "release-tag" => "bottles-abi-v42",
-      "expected-cache-keys" => "",
-      "package-generation-wasm32" => F901_REVALIDATION_GENERATION,
-      "force" => true,
-      "dry-run" => false,
-      "require-vfs-acceptance" => false,
-      "defer-tap-finalization" => true,
-      "prefix-campaign-tag" => F901_REVALIDATION_CAMPAIGN_TAG,
-      "prefix-campaign-dependencies" => F901_REVALIDATION_DEPENDENCIES,
-      "revalidation-source" => F901_REVALIDATION_SOURCE,
-    },
-    "#{label} revalidation authority changed"
-  )
-  check(
-    !JSON.generate(revalidation).include?("client_payload") &&
-      !revalidation.key?("secrets"),
-    "#{label} revalidation accepts dispatch-selected authority"
-  )
   # WHY: reusable-workflow validation checks the caller ceiling before job
   # conditions. The reusable declares skipped finalization/release writers,
   # so every call to it must permit their declared contents scope.
@@ -1185,7 +1022,6 @@ def check_prefix_campaign_workflow(workflow, authority)
     CHECKOUT_ACTION,
     CHECKOUT_ACTION,
     CHECKOUT_ACTION,
-    revalidation_reusable,
     reusable,
     reusable,
     first_child_reusable,
@@ -2237,81 +2073,15 @@ def self_test(
     mutated.dig("jobs", "admit", "permissions")["contents"] = "write"
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
-  expect_rejection("missing f901 revalidation dispatch action") do
+  expect_rejection("an unexpected recovery dispatch action") do
     mutated = deep_copy(prefix_campaign)
-    workflow_events(mutated).dig("repository_dispatch", "types").delete(
-      "revalidate-f901-file-formula"
-    )
+    workflow_events(mutated).dig("repository_dispatch", "types") <<
+      "unexpected-prefix-action"
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
-  expect_rejection("ordinary campaign admission for the recovery action") do
+  expect_rejection("campaign admission without an action gate") do
     mutated = deep_copy(prefix_campaign)
     mutated.dig("jobs", "admit").delete("if")
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("mutable f901 revalidation workflow") do
-    mutated = deep_copy(prefix_campaign)
-    mutated.dig("jobs", "revalidate-f901-file-formula")["uses"] =
-      "Automattic/kandelo/.github/workflows/" \
-      "reusable-homebrew-bottle-publish.yml@main"
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("f901 revalidation without artifact-read authority") do
-    mutated = deep_copy(prefix_campaign)
-    mutated.dig(
-      "jobs", "revalidate-f901-file-formula", "permissions"
-    ).delete("actions")
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("event-selected f901 revalidation producer") do
-    mutated = deep_copy(prefix_campaign)
-    mutated.dig(
-      "jobs", "revalidate-f901-file-formula", "with"
-    )["kandelo-ref"] = expression("github.event.client_payload.kandelo_ref")
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  expect_rejection("changed f901 revalidation source tap") do
-    mutated = deep_copy(prefix_campaign)
-    mutated.dig(
-      "jobs", "revalidate-f901-file-formula", "with"
-    )["tap-ref"] = "1" * 40
-    check_prefix_campaign_workflow(mutated, prefix_authority)
-  end
-  {
-    "artifact ID" => lambda do |source|
-      source.dig("artifacts", "build_handoff")["id"] += 1
-    end,
-    "artifact digest" => lambda do |source|
-      source.dig("artifacts", "oci_child")["digest"] =
-        "sha256:#{'1' * 64}"
-    end,
-    "artifact size" => lambda do |source|
-      source.dig("artifacts", "upload_receipt")["size"] += 1
-    end,
-    "source run" => lambda do |source|
-      source["run_id"] += 1
-    end,
-    "verifier job" => lambda do |source|
-      source.dig("jobs")["verify"] += 1
-    end,
-  }.each do |mutation_label, mutation|
-    expect_rejection("changed f901 revalidation #{mutation_label}") do
-      mutated = deep_copy(prefix_campaign)
-      source = JSON.parse(mutated.dig(
-        "jobs", "revalidate-f901-file-formula", "with",
-        "revalidation-source"
-      ))
-      mutation.call(source)
-      mutated.dig(
-        "jobs", "revalidate-f901-file-formula", "with"
-      )["revalidation-source"] = JSON.generate(source)
-      check_prefix_campaign_workflow(mutated, prefix_authority)
-    end
-  end
-  expect_rejection("secret inherited by f901 revalidation") do
-    mutated = deep_copy(prefix_campaign)
-    mutated.dig("jobs", "revalidate-f901-file-formula")["secrets"] =
-      "inherit"
     check_prefix_campaign_workflow(mutated, prefix_authority)
   end
   expect_rejection("campaign release without source ancestry") do
@@ -2525,16 +2295,6 @@ begin
         "closed-selection Kandelo pin is not an exact SHA")
   check(PREFIX_CAMPAIGN_KANDELO_SHA.match?(/\A[0-9a-f]{40}\z/),
         "prefix-campaign Kandelo pin is not an exact SHA")
-  {
-    "f901 revalidation workflow" => F901_REVALIDATION_KANDELO_SHA,
-    "f901 revalidation producer Kandelo" =>
-      F901_REVALIDATION_PRODUCER_KANDELO_SHA,
-    "f901 revalidation producer tap" =>
-      F901_REVALIDATION_PRODUCER_TAP_SHA,
-  }.each do |label, sha|
-    check(sha.match?(/\A[0-9a-f]{40}\z/),
-          "#{label} pin is not an exact SHA")
-  end
   {
     "main-shell lifecycle Kandelo M" => MAIN_SHELL_MIRROR_KANDELO_SHA,
     "main-shell mirror tap catalog TF" => MAIN_SHELL_MIRROR_TAP_CATALOG_SHA,

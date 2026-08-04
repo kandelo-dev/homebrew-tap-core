@@ -347,14 +347,8 @@ class PublisherTrustRotationTests(unittest.TestCase):
                 relative,
             )
 
-    def test_rotation_preserves_one_off_f901_revalidation_pin(self) -> None:
+    def test_rotation_owns_every_prefix_campaign_publisher_pin(self) -> None:
         source = (self.root / rotation.PREFIX_CAMPAIGN_PATH).read_text()
-        recovery_lines = tuple(
-            line
-            for line in source.splitlines()
-            if line.endswith(" # f901-revalidation-pin")
-        )
-        self.assertEqual(1, len(recovery_lines))
         self.assertEqual(
             3,
             len(tuple(rotation.PREFIX_BOTTLE_USES.finditer(source))),
@@ -363,18 +357,11 @@ class PublisherTrustRotationTests(unittest.TestCase):
         rendered = self.build().contents[
             rotation.PREFIX_CAMPAIGN_PATH
         ].decode()
-        self.assertEqual(
-            recovery_lines,
-            tuple(
-                line
-                for line in rendered.splitlines()
-                if line.endswith(" # f901-revalidation-pin")
-            ),
+        rendered_pins = tuple(
+            match.group("value")
+            for match in rotation.PREFIX_BOTTLE_USES.finditer(rendered)
         )
-        self.assertEqual(
-            3,
-            len(tuple(rotation.PREFIX_BOTTLE_USES.finditer(rendered))),
-        )
+        self.assertEqual((NEW_SHA,) * 3, rendered_pins)
 
     def test_unknown_prefix_campaign_pin_is_rejected(self) -> None:
         self.force_repeated_scalar(
