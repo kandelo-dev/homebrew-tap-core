@@ -46,11 +46,11 @@ class PrefixCampaignSourceTests(unittest.TestCase):
         )
         self.assertEqual(
             summary["source_tree_git_oid"],
-            "87c3dd12690ac48b685090e4f6b86dc1fae85c6d",
+            "8e825398d9ce414d6148ed2f8eac4e5de4ffb16c",
         )
         self.assertEqual(
             summary["target_tree_git_oid"],
-            "b91c1355e093f4c897c7012f476d6c25fee6a4b2",
+            "7e314590d18936d0ad3bf8ab42e49d7b4f234892",
         )
 
         active_helper = (
@@ -80,7 +80,7 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
             self.assertEqual(
                 SOURCE.source_tree_oid(output),
-                "b91c1355e093f4c897c7012f476d6c25fee6a4b2",
+                "7e314590d18936d0ad3bf8ab42e49d7b4f234892",
             )
             expected_revisions = {
                 "file-formula": 1,

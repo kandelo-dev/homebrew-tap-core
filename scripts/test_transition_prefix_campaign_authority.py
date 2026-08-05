@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 SCRIPT = pathlib.Path(__file__).with_name(
@@ -28,6 +29,13 @@ ROOT = SCRIPT.parent.parent
 NEW_GENERATION = (
     "package-generation-rootfs-wasm32-abi-v42-sha256-" + "9" * 64
 )
+SUCCESSOR_TARGET = {
+    "manifest_path": "Kandelo/campaigns/prefix-v1/manifest.json",
+    "manifest_sha256": "a" * 64,
+    "source_root": "Kandelo/campaigns/prefix-v1/source",
+    "source_tree_git_oid": "b" * 40,
+    "target_tree_git_oid": "c" * 40,
+}
 FIXTURE_ARCHIVE_PATH = ROOT / transition.ARCHIVE_ROOT / (
     "f90144f439caa3806cbd145fc0d5f34ddbf6905d43a15b023106389696376de0.json"
 )
@@ -239,7 +247,12 @@ class PrefixCampaignTransitionTests(unittest.TestCase):
             "schema": 1,
         }
 
-    def archive_arguments(self, *, apply: bool = False) -> list[str]:
+    def archive_arguments(
+        self,
+        *,
+        apply: bool = False,
+        successor_target: bool = False,
+    ) -> list[str]:
         values = [
             "archive-active",
             "--root",
@@ -249,6 +262,17 @@ class PrefixCampaignTransitionTests(unittest.TestCase):
             "--activation-commit",
             self.activation_commit,
         ]
+        if successor_target:
+            values.extend(
+                [
+                    "--successor-manifest-sha256",
+                    SUCCESSOR_TARGET["manifest_sha256"],
+                    "--successor-source-tree-git-oid",
+                    SUCCESSOR_TARGET["source_tree_git_oid"],
+                    "--successor-target-tree-git-oid",
+                    SUCCESSOR_TARGET["target_tree_git_oid"],
+                ]
+            )
         if apply:
             values.append("--apply")
         return values
@@ -464,6 +488,66 @@ class PrefixCampaignTransitionTests(unittest.TestCase):
         armed["reusable_workflow_commit"] = "8" * 40
         self.assertEqual(active, active_fixture_authority(active))
         self.assertEqual(active, active_fixture_authority(armed))
+
+    def test_archive_can_atomically_select_verified_successor_source(
+        self,
+    ) -> None:
+        authority_path = self.root / transition.AUTHORITY_PATH
+        with mock.patch.object(
+            transition, "verify_successor_target_source"
+        ) as verify:
+            arguments = self.archive_arguments(
+                apply=True,
+                successor_target=True,
+            )
+            self.assertEqual(0, transition.main(arguments))
+            armed, _payload = transition.load_json(
+                authority_path, "retargeted armed authority"
+            )
+            self.assertEqual(SUCCESSOR_TARGET, armed["target_source"])
+            verify.assert_called_once_with(
+                root=self.root.resolve(),
+                authority=armed,
+            )
+            verify.reset_mock()
+            self.assertEqual(0, transition.main(arguments))
+            verify.assert_called_once()
+
+    def test_archive_retarget_requires_complete_identity(self) -> None:
+        before = (self.root / transition.AUTHORITY_PATH).read_bytes()
+        arguments = self.archive_arguments(apply=True)
+        arguments.extend(
+            [
+                "--successor-manifest-sha256",
+                SUCCESSOR_TARGET["manifest_sha256"],
+            ]
+        )
+        self.assertEqual(2, transition.main(arguments))
+        self.assertEqual(
+            before,
+            (self.root / transition.AUTHORITY_PATH).read_bytes(),
+        )
+
+    def test_archive_retarget_requires_verified_source(self) -> None:
+        before = (self.root / transition.AUTHORITY_PATH).read_bytes()
+        with mock.patch.object(
+            transition,
+            "verify_successor_target_source",
+            side_effect=transition.TransitionError("test mismatch"),
+        ):
+            self.assertEqual(
+                2,
+                transition.main(
+                    self.archive_arguments(
+                        apply=True,
+                        successor_target=True,
+                    )
+                ),
+            )
+        self.assertEqual(
+            before,
+            (self.root / transition.AUTHORITY_PATH).read_bytes(),
+        )
 
     def test_archive_must_match_activation_commit_bytes(self) -> None:
         authority_path = self.root / transition.AUTHORITY_PATH

@@ -626,12 +626,102 @@ def validate_archive(
         raise TransitionError("abandoned archive differs from active authority")
 
 
-def armed_authority(active: dict[str, Any]) -> dict[str, Any]:
+def successor_target_source(
+    *,
+    manifest_sha256: str | None,
+    source_tree_git_oid: str | None,
+    target_tree_git_oid: str | None,
+) -> dict[str, str] | None:
+    identities = (
+        manifest_sha256,
+        source_tree_git_oid,
+        target_tree_git_oid,
+    )
+    if all(identity is None for identity in identities):
+        return None
+    if any(identity is None for identity in identities):
+        raise TransitionError(
+            "successor target source requires all three identities"
+        )
+    assert manifest_sha256 is not None
+    assert source_tree_git_oid is not None
+    assert target_tree_git_oid is not None
+    require_string(
+        manifest_sha256, "successor target manifest", SHA256
+    )
+    require_string(
+        source_tree_git_oid, "successor source tree", SHA
+    )
+    require_string(
+        target_tree_git_oid, "successor target tree", SHA
+    )
+    return {
+        "manifest_path": "Kandelo/campaigns/prefix-v1/manifest.json",
+        "manifest_sha256": manifest_sha256,
+        "source_root": "Kandelo/campaigns/prefix-v1/source",
+        "source_tree_git_oid": source_tree_git_oid,
+        "target_tree_git_oid": target_tree_git_oid,
+    }
+
+
+def verify_successor_target_source(
+    *,
+    root: pathlib.Path,
+    authority: dict[str, Any],
+) -> None:
+    verifier = root / "scripts/prefix-campaign-source.py"
+    if verifier.is_symlink() or not verifier.is_file():
+        raise TransitionError(
+            "prefix campaign source verifier is not a regular file"
+        )
+    with tempfile.TemporaryDirectory(
+        prefix="kandelo-prefix-successor-authority-"
+    ) as temporary:
+        candidate = pathlib.Path(temporary) / "authority.json"
+        candidate.write_bytes(canonical(authority))
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    str(verifier),
+                    "verify",
+                    "--root",
+                    str(root),
+                    "--authority",
+                    str(candidate),
+                    "--manifest",
+                    str(root / authority["target_source"]["manifest_path"]),
+                ],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=120,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise TransitionError(
+                "successor target-source verification failed"
+            ) from error
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise TransitionError(
+            "successor target source differs from the sealed checkout"
+            + (f": {detail}" if detail else "")
+        )
+
+
+def armed_authority(
+    active: dict[str, Any],
+    *,
+    successor_target: dict[str, str] | None = None,
+) -> dict[str, Any]:
     value = json.loads(json.dumps(active))
     value["campaign_release"]["tag"] = ZERO_CAMPAIGN
     value["package_generations"]["rootfs_wasm32"] = ZERO_GENERATION
     value["source_tap_commit"] = ZERO_SHA
     value["state"] = "armed"
+    if successor_target is not None:
+        value["target_source"] = successor_target
     validate_authority(value, state="armed")
     return value
 
@@ -1016,6 +1106,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     archive.add_argument("--root", type=pathlib.Path, default=pathlib.Path.cwd())
     archive.add_argument("--archive", type=pathlib.Path, required=True)
     archive.add_argument("--activation-commit", required=True)
+    archive.add_argument("--successor-manifest-sha256")
+    archive.add_argument("--successor-source-tree-git-oid")
+    archive.add_argument("--successor-target-tree-git-oid")
     archive.add_argument("--apply", action="store_true")
     activate = commands.add_parser("activate-successor")
     activate.add_argument("--root", type=pathlib.Path, default=pathlib.Path.cwd())
@@ -1034,6 +1127,15 @@ def main(argv: list[str]) -> int:
         authority_path = root / AUTHORITY_PATH
         authority, payload = load_json(authority_path, "campaign authority")
         if arguments.command == "archive-active":
+            successor_target = successor_target_source(
+                manifest_sha256=arguments.successor_manifest_sha256,
+                source_tree_git_oid=(
+                    arguments.successor_source_tree_git_oid
+                ),
+                target_tree_git_oid=(
+                    arguments.successor_target_tree_git_oid
+                ),
+            )
             if authority.get("state") == "active":
                 validate_authority(authority, state="active")
                 active = authority
@@ -1052,7 +1154,9 @@ def main(argv: list[str]) -> int:
                     active_payload, "historical active authority"
                 )
                 validate_authority(active, state="active")
-                if authority != armed_authority(active):
+                if authority != armed_authority(
+                    active, successor_target=successor_target
+                ):
                     raise TransitionError(
                         "armed authority is not the exact archive result"
                     )
@@ -1067,7 +1171,14 @@ def main(argv: list[str]) -> int:
                 active_payload=active_payload,
                 activation_commit=arguments.activation_commit,
             )
-            result = armed_authority(active)
+            result = armed_authority(
+                active, successor_target=successor_target
+            )
+            if successor_target is not None:
+                verify_successor_target_source(
+                    root=root,
+                    authority=result,
+                )
         else:
             # WHY: the immutable successor release selects workflows
             # from T_ARM. Requiring current HEAD prevents activation on

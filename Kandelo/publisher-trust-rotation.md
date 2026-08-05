@@ -71,7 +71,10 @@ Use two tap commits:
    authority came from the named activation commit and validates the
    archive's recorded authority against those exact bytes. It clears
    the campaign tag, generation, and source commit together. The
-   authority is now `armed`, so dispatch fails closed.
+   authority is now `armed`, so dispatch fails closed. When the successor
+   deliberately changes the sealed target source, supply all three successor
+   source identities together. The helper verifies those identities against
+   the manifest and inert source checkout before it changes the authority.
 3. In the same candidate tree, run the trust-rotation helper. This
    rotates every reusable workflow, including the prefix campaign, to
    `M`. Commit the reviewed successor scope and its exact task graph in
@@ -138,12 +141,24 @@ Archive and arm the predecessor before running the rotation helper:
 python3 -B scripts/transition-prefix-campaign-authority.py \
   archive-active \
   --archive "$PREDECESSOR_ARCHIVE" \
-  --activation-commit "$PREDECESSOR_ACTIVATION"
+  --activation-commit "$PREDECESSOR_ACTIVATION" \
+  --successor-manifest-sha256 \
+    b430d1b934e3b5b07e8f7fcf1b3c1ab6737a82eb6722dad7b5fdaa81ea949243 \
+  --successor-source-tree-git-oid \
+    8e825398d9ce414d6148ed2f8eac4e5de4ffb16c \
+  --successor-target-tree-git-oid \
+    7e314590d18936d0ad3bf8ab42e49d7b4f234892
 
 python3 -B scripts/transition-prefix-campaign-authority.py \
   archive-active \
   --archive "$PREDECESSOR_ARCHIVE" \
   --activation-commit "$PREDECESSOR_ACTIVATION" \
+  --successor-manifest-sha256 \
+    b430d1b934e3b5b07e8f7fcf1b3c1ab6737a82eb6722dad7b5fdaa81ea949243 \
+  --successor-source-tree-git-oid \
+    8e825398d9ce414d6148ed2f8eac4e5de4ffb16c \
+  --successor-target-tree-git-oid \
+    7e314590d18936d0ad3bf8ab42e49d7b4f234892 \
   --apply
 ```
 
