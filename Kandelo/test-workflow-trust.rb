@@ -135,7 +135,10 @@ def check_c6_successor_scope(scope, graph)
     "Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json"
   graph_sha256 =
     "40a651d2ebe3a3aaab4bf9b65d91cf34db9908cb764a518437ac850747c4b139"
-  ruby_task = { "arch" => "wasm32", "formula" => "ruby" }
+  build_tasks = [
+    { "arch" => "wasm32", "formula" => "git" },
+    { "arch" => "wasm32", "formula" => "ruby" },
+  ]
 
   check(
     graph.keys == %w[kind max_active repository schema tasks workflow] &&
@@ -152,8 +155,8 @@ def check_c6_successor_scope(scope, graph)
     graph_tasks.length == 41 &&
       graph_tasks.all? { |task| task.keys == %w[arch formula] } &&
       graph_tasks.uniq.length == graph_tasks.length &&
-      graph_tasks.count(ruby_task) == 1,
-    "canonical shell graph is not the unique 41-task Ruby graph"
+      build_tasks.all? { |task| graph_tasks.count(task) == 1 },
+    "canonical shell graph is not the unique 41-task Git/Ruby graph"
   )
   check(
     Digest::SHA256.file(C6_CANONICAL_GRAPH_PATH).hexdigest == graph_sha256,
@@ -176,10 +179,11 @@ def check_c6_successor_scope(scope, graph)
     "C6 successor scope authority changed"
   )
   check(
-    scope.fetch("build_tasks") == [ruby_task] &&
-      scope.fetch("reuse_tasks") == graph_tasks.reject { |task| task == ruby_task } &&
-      scope.fetch("reuse_tasks").length == 40,
-    "C6 successor scope is not exactly 40 C5 reuses plus Ruby rebuild"
+    scope.fetch("build_tasks") == build_tasks &&
+      scope.fetch("reuse_tasks") ==
+        graph_tasks.reject { |task| build_tasks.include?(task) } &&
+      scope.fetch("reuse_tasks").length == 39,
+    "C6 successor scope is not exactly 39 C5 reuses plus Git/Ruby rebuilds"
   )
 
   archive_path = File.join(ROOT, C5_TERMINAL_ARCHIVE_RELATIVE_PATH)
@@ -1772,19 +1776,25 @@ def check_prefix_campaign_release_workflow(workflow)
         "--successor-scope-sha256 #{C6_SUCCESSOR_SCOPE_SHA256}"
       ) &&
       derive["run"].include?(
-        '($scope[0].reuse_tasks | length) == 40'
+        '($scope[0].reuse_tasks | length) == 39'
       ) &&
       derive["run"].include?(
-        '($scope[0].build_tasks | length) == 1'
+        '($scope[0].build_tasks | length) == 2'
       ) &&
+      derive["run"].scan("length) == 39").length == 2 &&
+      derive["run"].scan("length) == 2").length == 2 &&
       derive["run"].include?(
         '($scope[0].build_tasks | map(.formula) | sort) =='
       ) &&
       derive["run"].include?(
-        '["ruby"] and'
+        '["git", "ruby"] and'
       ) &&
       derive["run"].include?(
         '.reuse_source.campaign_tag == $c5'
+      ) &&
+      derive["run"].include?(
+        '--arg c5 "homebrew-prefix-campaign-sha256-' \
+        '9705e20fa5cdbbf41bb0254aab4eb75278e091549e4bf6ee6ae79decdf029eae"'
       ) &&
       derive["run"].include?(
         '.campaign.tag != $b703 and .campaign.tag != $f901'

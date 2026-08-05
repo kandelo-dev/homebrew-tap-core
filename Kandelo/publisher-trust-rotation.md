@@ -85,7 +85,7 @@ Use two tap commits:
 6. Merge the data-only activation, then dispatch from its exact
    protected-main commit.
 
-### Finalize the terminal C5 to Ruby-only C6 candidate
+### Finalize the terminal C5 to Git/Ruby C6 candidate
 
 The current structural candidate starts from protected tap commit
 `03b53348c4291ca421a48d2d0890f4b5a56ae380`, which activated campaign
@@ -93,22 +93,28 @@ The current structural candidate starts from protected tap commit
 It deliberately does not guess terminal run evidence, the next Kandelo commit
 `M` (K2), or generation `G`.
 
+The known Git terminal fact is narrower: its coherent API freeze passed, then
+the runtime test `git -C clone mergetool --tool-help` exceeded 120000 ms before
+handoff publication. The archive must bind that fact to the real dispatch and
+run identity; this prototype records no guessed ID.
+
 Before making the candidate executable:
 
 1. Freeze the real terminal C5 ledger at
    `Kandelo/campaigns/prefix-v1/aborted-campaigns/`
    `9705e20fa5cdbbf41bb0254aab4eb75278e091549e4bf6ee6ae79decdf029eae.json`.
-   Preserve every actual dispatch and unique run ID. Exactly the 40 selected
-   non-Ruby tasks must end in `handoff-published-and-publicly-verified`; Ruby
-   must not have a verified handoff and remains the sole fresh build. Do not
-   infer a public handoff from a successful build or an authenticated query.
+   Preserve every actual dispatch and unique run ID. Exactly the 39 selected
+   non-Git/Ruby tasks must end in
+   `handoff-published-and-publicly-verified`. Git and Ruby must not have
+   verified handoffs and remain the two fresh builds. Do not infer a public
+   handoff from a successful build or an authenticated query.
 2. Compute the canonical archive bytes' SHA-256 and replace
    `__C5_TERMINAL_ARCHIVE_SHA256__` in
    `successor/9705-successor-scope.json` and its trust-test constant.
 3. Recompute the now-final scope bytes' SHA-256 and replace
    `__C6_SUCCESSOR_SCOPE_SHA256__` in the campaign-release caller and its
-   trust-test constant. The scope must still be the exact union of 40 C5 reuse
-   tasks and the Ruby build in `canonical-shell41-wasm32.json`.
+   trust-test constant. The scope must still be the exact union of 39 C5 reuse
+   tasks and the Git and Ruby builds in `canonical-shell41-wasm32.json`.
 4. Query protected Kandelo `main` for exact `M`, publish and validate the
    exact `M` rootfs generation `G`, and query every predecessor slot from the
    current tap tree. Do not substitute a PR head, synthetic merge, or expected

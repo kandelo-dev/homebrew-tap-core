@@ -290,10 +290,10 @@ jobs:
                 sha256: "__C6_SUCCESSOR_SCOPE_SHA256__"
               } and
               ($graph[0].tasks | length) == 41 and
-              ($scope[0].reuse_tasks | length) == 40 and
-              ($scope[0].build_tasks | length) == 1 and
+              ($scope[0].reuse_tasks | length) == 39 and
+              ($scope[0].build_tasks | length) == 2 and
               ($scope[0].build_tasks | map(.formula) | sort) ==
-                ["ruby"] and
+                ["git", "ruby"] and
               (($scope[0].reuse_tasks + $scope[0].build_tasks) |
                 sort_by([.formula, .arch])) ==
                 ($graph[0].tasks | sort_by([.formula, .arch])) and
@@ -303,13 +303,13 @@ jobs:
                   .reuse_source.kind == "predecessor-handoff" and
                   .reuse_source.campaign_tag == $c5
                 )] |
-                length) == 40 and
+                length) == 39 and
               ([$scope[0].build_tasks[] as $task |
                 variant($task) |
                 select(
                   (has("reuse_source") | not) and
                   .disposition.kind == "required-rebuild"
-                )] | length) == 1 and
+                )] | length) == 2 and
               all(.formulae[].variants[];
                 ((.reuse_source.campaign_tag? // "") != $b703 and
                  (.reuse_source.campaign_tag? // "") != $f901)) and

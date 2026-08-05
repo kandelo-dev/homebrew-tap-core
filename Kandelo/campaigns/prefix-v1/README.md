@@ -139,9 +139,9 @@ handoffs; they are not rebuilt merely because the original workflows failed
 after publishing them.
 
 The planned successor to campaign `9705e20f...` keeps that same canonical
-41-task graph but partitions it into 40 exact C5 handoffs and one fresh Ruby
-build. `9705-successor-scope.json` is only a structural candidate while its C5
-archive digest is `__C5_TERMINAL_ARCHIVE_SHA256__`; the campaign-release caller
-is likewise disabled by `__C6_SUCCESSOR_SCOPE_SHA256__`. Finalize those values
-only after the terminal C5 ledger proves every selected non-Ruby handoff by
-public readback and records Ruby as the sole build route.
+41-task graph but partitions it into 39 exact C5 handoffs and fresh Git and
+Ruby builds. `9705-successor-scope.json` is only a structural candidate while
+its C5 archive digest is `__C5_TERMINAL_ARCHIVE_SHA256__`; the campaign-release
+caller is likewise disabled by `__C6_SUCCESSOR_SCOPE_SHA256__`. Finalize those
+values only after the terminal C5 ledger proves every selected non-Git/Ruby
+handoff by public readback and records Git and Ruby as the two build routes.
