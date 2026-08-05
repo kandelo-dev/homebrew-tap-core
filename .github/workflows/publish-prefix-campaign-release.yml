@@ -121,7 +121,7 @@ jobs:
           test "$(sha256sum \
             Kandelo/campaigns/prefix-v1/successor/9705-successor-scope.json \
             | awk '{print $1}')" = \
-            __C6_SUCCESSOR_SCOPE_SHA256__
+            258e85edff6610e4d478abb6d8b887561b39a80e3f20f6bd8ba3b3a017992f64
           test "$(sha256sum \
             Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json \
             | awk '{print $1}')" = \
@@ -244,7 +244,7 @@ jobs:
             --metadata-sha256 34f1cb2454ff6d9c134195302a5c5fcac85b9502f2522d3e584bf55d539c9a7d
             --guest-layout-sha256 03cbe2ef439d1c274a5b43cc86fb877da3b4942cc6489fba9df99d8e3968f857
             --successor-scope-path Kandelo/campaigns/prefix-v1/successor/9705-successor-scope.json
-            --successor-scope-sha256 __C6_SUCCESSOR_SCOPE_SHA256__
+            --successor-scope-sha256 258e85edff6610e4d478abb6d8b887561b39a80e3f20f6bd8ba3b3a017992f64
             # WHY: read-only run 30947720875 timed out on ruby/wasm32
             # with eight concurrent Wasm inspectors on a hosted runner.
             # Two matches 2-4 vCPU while preserving the 120s bound.
@@ -287,7 +287,7 @@ jobs:
               .authority.predecessor_recovery_source.commit == $source and
               .authority.successor_scope == {
                 path: "Kandelo/campaigns/prefix-v1/successor/9705-successor-scope.json",
-                sha256: "__C6_SUCCESSOR_SCOPE_SHA256__"
+                sha256: "258e85edff6610e4d478abb6d8b887561b39a80e3f20f6bd8ba3b3a017992f64"
               } and
               ($graph[0].tasks | length) == 41 and
               ($scope[0].reuse_tasks | length) == 39 and
