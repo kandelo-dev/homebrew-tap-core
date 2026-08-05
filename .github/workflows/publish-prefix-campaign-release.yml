@@ -119,9 +119,9 @@ jobs:
             }
           ' "$authority" >/dev/null
           test "$(sha256sum \
-            Kandelo/campaigns/prefix-v1/successor/f692-successor-scope.json \
+            Kandelo/campaigns/prefix-v1/successor/8ede-successor-scope.json \
             | awk '{print $1}')" = \
-            227830740f1c179e6194b32d7383d358b321763d1bbb7ff2ec029a549a47c315
+            dce71abbeb512b74adb3469a1388ccbdcbbfda28c124fe46f6773d96b8e59841
           test "$(sha256sum \
             Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json \
             | awk '{print $1}')" = \
@@ -243,8 +243,8 @@ jobs:
             --native-brew-commit cf5bc21c6b127e168ef7cfa982ba7db62874690e
             --metadata-sha256 34f1cb2454ff6d9c134195302a5c5fcac85b9502f2522d3e584bf55d539c9a7d
             --guest-layout-sha256 03cbe2ef439d1c274a5b43cc86fb877da3b4942cc6489fba9df99d8e3968f857
-            --successor-scope-path Kandelo/campaigns/prefix-v1/successor/f692-successor-scope.json
-            --successor-scope-sha256 227830740f1c179e6194b32d7383d358b321763d1bbb7ff2ec029a549a47c315
+            --successor-scope-path Kandelo/campaigns/prefix-v1/successor/8ede-successor-scope.json
+            --successor-scope-sha256 dce71abbeb512b74adb3469a1388ccbdcbbfda28c124fe46f6773d96b8e59841
             # WHY: read-only run 30947720875 timed out on ruby/wasm32
             # with eight concurrent Wasm inspectors on a hosted runner.
             # Two matches 2-4 vCPU while preserving the 120s bound.
@@ -269,7 +269,7 @@ jobs:
           test "$observed_sha" = "$EXPECTED_CAMPAIGN_SHA256"
           test "$observed_bytes" -gt 0
 
-          scope="$GITHUB_WORKSPACE/source-tap/Kandelo/campaigns/prefix-v1/successor/f692-successor-scope.json"
+          scope="$GITHUB_WORKSPACE/source-tap/Kandelo/campaigns/prefix-v1/successor/8ede-successor-scope.json"
           graph="$GITHUB_WORKSPACE/source-tap/Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json"
           jq -e \
             --arg source "$SOURCE_COMMIT" \
@@ -277,6 +277,7 @@ jobs:
             --arg f901 "homebrew-prefix-campaign-sha256-f90144f439caa3806cbd145fc0d5f34ddbf6905d43a15b023106389696376de0" \
             --arg c5 "homebrew-prefix-campaign-sha256-9705e20fa5cdbbf41bb0254aab4eb75278e091549e4bf6ee6ae79decdf029eae" \
             --arg c6 "homebrew-prefix-campaign-sha256-f692a88aa001ae95bf9c7265012b082498ad4c1b0b84cd1c4c94b8b9a73d7f41" \
+            --arg c7 "homebrew-prefix-campaign-sha256-8edea42ae932691b45c8695d5d6ab93a4a7ce1e08ee492ce3d7ead51fa45a185" \
             --slurpfile scope "$scope" \
             --slurpfile graph "$graph" '
               def variant($task):
@@ -287,8 +288,8 @@ jobs:
               .authority.source_tap_commit == $source and
               .authority.predecessor_recovery_source.commit == $source and
               .authority.successor_scope == {
-                path: "Kandelo/campaigns/prefix-v1/successor/f692-successor-scope.json",
-                sha256: "227830740f1c179e6194b32d7383d358b321763d1bbb7ff2ec029a549a47c315"
+                path: "Kandelo/campaigns/prefix-v1/successor/8ede-successor-scope.json",
+                sha256: "dce71abbeb512b74adb3469a1388ccbdcbbfda28c124fe46f6773d96b8e59841"
               } and
               ($graph[0].tasks | length) == 41 and
               ($scope[0].reuse_tasks | length) == 40 and
@@ -302,7 +303,7 @@ jobs:
                 variant($task) |
                 select(
                   .reuse_source.kind == "predecessor-handoff" and
-                  .reuse_source.campaign_tag == $c6
+                  .reuse_source.campaign_tag == $c7
                 )] |
                 length) == 40 and
               ([$scope[0].build_tasks[] as $task |
@@ -314,10 +315,11 @@ jobs:
               all(.formulae[].variants[];
                 ((.reuse_source.campaign_tag? // "") != $b703 and
                  (.reuse_source.campaign_tag? // "") != $f901 and
-                 (.reuse_source.campaign_tag? // "") != $c5)) and
+                 (.reuse_source.campaign_tag? // "") != $c5 and
+                 (.reuse_source.campaign_tag? // "") != $c6)) and
               all(.authority.predecessor_recovery[];
                 (.campaign.tag != $b703 and .campaign.tag != $f901 and
-                 .campaign.tag != $c5))
+                 .campaign.tag != $c5 and .campaign.tag != $c6))
             ' "$out/campaign.json" >/dev/null
 
           cp "$out/campaign.json" "$out/assets/campaign.json"

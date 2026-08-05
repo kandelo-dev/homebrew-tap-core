@@ -1,0 +1,444 @@
+{
+  "abandoned_at": "2026-08-05T15:16:53Z",
+  "authority": {
+    "activation_commit": "454e5d54456c8d870496bacc0ba9c2759c863ab1",
+    "campaign_release": {
+      "id": 365573223,
+      "repository": "kandelo-dev/homebrew-tap-core",
+      "tag": "homebrew-prefix-campaign-sha256-8edea42ae932691b45c8695d5d6ab93a4a7ce1e08ee492ce3d7ead51fa45a185"
+    },
+    "kandelo_commit": "c157026d1234c9a28dc630d02f963828525897a7",
+    "payload_sha256": "e4ca5b13d5ee7df0fb22636d1aaee75d2afaf7808016a620c7641c24ae584d47",
+    "rootfs_wasm32": "package-generation-rootfs-wasm32-abi-v42-sha256-f44d50ad73b5bdd6c6f396b47806babff3b3fdc6869ee9f1d2f88f9460581fb4",
+    "source_tap_commit": "c2204492c868fecb6cad0b795a9ef93a7677ddef",
+    "target_source": {
+      "manifest_path": "Kandelo/campaigns/prefix-v1/manifest.json",
+      "manifest_sha256": "b430d1b934e3b5b07e8f7fcf1b3c1ab6737a82eb6722dad7b5fdaa81ea949243",
+      "source_root": "Kandelo/campaigns/prefix-v1/source",
+      "source_tree_git_oid": "8e825398d9ce414d6148ed2f8eac4e5de4ffb16c",
+      "target_tree_git_oid": "7e314590d18936d0ad3bf8ab42e49d7b4f234892"
+    }
+  },
+  "cause": {
+    "corrective_workstream": "C8 successor after native Homebrew dependency tree size-bound correction",
+    "kind": "terminal-campaign-with-verified-partial-publications",
+    "summary": "The exact terminal campaign verified 40 of 41 wasm32 tasks; ruby/wasm32 run 31017507098 failed because authenticated LLVM 22.1.8 expanded to 2,624,809,107 regular-file bytes, above the 2 GiB native-keg aggregate. Kandelo commit 75885de70c80448f08600b31a9466608e369713c raises only each native tool keg and its exact target-Cellar proxy to a 4 GiB aggregate while preserving the 1 GiB per-file and existing target dependency, recipe source, and recipe output limits."
+  },
+  "dispatches": [
+    {
+      "arch": "wasm32",
+      "formula": "bash",
+      "handoff_release": {
+        "id": 365595474,
+        "tag": "homebrew-prefix-handoff-sha256-15f5ad01a751a8fc8747a52390cd1da5a7f3de5ffd447fc3fc94654433d578a8"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31016084282
+    },
+    {
+      "arch": "wasm32",
+      "formula": "bc",
+      "handoff_release": {
+        "id": 365579017,
+        "tag": "homebrew-prefix-handoff-sha256-e630b9a0c30c54fe2e7d6c1cd4b32147130c041339a7d046a61c2149a5973dd0"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31014084006
+    },
+    {
+      "arch": "wasm32",
+      "formula": "bzip2",
+      "handoff_release": {
+        "id": 365579389,
+        "tag": "homebrew-prefix-handoff-sha256-f6cbb95a202f254a9119edb256c84f5c027750f1f43b5ba97cfa3457544dba51"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31014166383
+    },
+    {
+      "arch": "wasm32",
+      "formula": "coreutils",
+      "handoff_release": {
+        "id": 365580209,
+        "tag": "homebrew-prefix-handoff-sha256-26b86f6c87ac0e1d250f4fb6092d72be0c5961558587035642cf0a26f440103d"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31014264127
+    },
+    {
+      "arch": "wasm32",
+      "formula": "curl",
+      "handoff_release": {
+        "id": 365607506,
+        "tag": "homebrew-prefix-handoff-sha256-7d4db60e9e59d3155a848d0db90dfde1c338b90047130cc0a7adc7582de59099"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31017677721
+    },
+    {
+      "arch": "wasm32",
+      "formula": "dash",
+      "handoff_release": {
+        "id": 365580877,
+        "tag": "homebrew-prefix-handoff-sha256-bffe36c7efde813c8d729285c978dc264d60980dd60e93bd158deb868ec0d4c2"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31014349025
+    },
+    {
+      "arch": "wasm32",
+      "formula": "diffutils",
+      "handoff_release": {
+        "id": 365584062,
+        "tag": "homebrew-prefix-handoff-sha256-1696afb84dd3da146b2de8d25686af990518eb87463e626beccc21a0bb6dba4b"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31014755638
+    },
+    {
+      "arch": "wasm32",
+      "formula": "ed",
+      "handoff_release": {
+        "id": 365581598,
+        "tag": "homebrew-prefix-handoff-sha256-5b013c2986c4a7ae88d43f411367330a040d06a8fb583ca51e6a4452e8d7aead"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31014446943
+    },
+    {
+      "arch": "wasm32",
+      "formula": "fbdoom",
+      "handoff_release": {
+        "id": 365582540,
+        "tag": "homebrew-prefix-handoff-sha256-f424582291350cf159d94c46aa7ecdaf577599769933c7e72df242302dbf799e"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31014532653
+    },
+    {
+      "arch": "wasm32",
+      "formula": "file-formula",
+      "handoff_release": {
+        "id": 365608513,
+        "tag": "homebrew-prefix-handoff-sha256-5995f26c32adc38a1dcb5e9a6a387a5b28999b34244f9dec078cf5e6b9d31f43"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31017771133
+    },
+    {
+      "arch": "wasm32",
+      "formula": "findutils",
+      "handoff_release": {
+        "id": 365583272,
+        "tag": "homebrew-prefix-handoff-sha256-67fdc4ad962fd3dca2fe755403982bd9b657770fade5610ca0f7633ee3c7d117"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31014660155
+    },
+    {
+      "arch": "wasm32",
+      "formula": "gawk",
+      "handoff_release": {
+        "id": 365584692,
+        "tag": "homebrew-prefix-handoff-sha256-00da6732661fff5cf4ddecfb276b332080cac9f25e065cb5a7e1f72428040bc2"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31014843757
+    },
+    {
+      "arch": "wasm32",
+      "formula": "git",
+      "handoff_release": {
+        "id": 365609892,
+        "tag": "homebrew-prefix-handoff-sha256-5702c02ee6f4e403d470352b8aaac78b1b34db7a782fdb92fa326bd24c1c9c86"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31017868439
+    },
+    {
+      "arch": "wasm32",
+      "formula": "grep",
+      "handoff_release": {
+        "id": 365585416,
+        "tag": "homebrew-prefix-handoff-sha256-564954eb58c15285bde132b3511ce4748d467a1b70cc8c8d709679ea68c43dd0"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31014941943
+    },
+    {
+      "arch": "wasm32",
+      "formula": "gzip",
+      "handoff_release": {
+        "id": 365586048,
+        "tag": "homebrew-prefix-handoff-sha256-203a0130979c92d22e8e15b9cc14403cd154d1ef23a12cc2c80d5d5c3d80eedb"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31015033015
+    },
+    {
+      "arch": "wasm32",
+      "formula": "homebrew-bootstrap",
+      "handoff_release": {
+        "id": 365587475,
+        "tag": "homebrew-prefix-handoff-sha256-2888e658a2bd4a2be2ca4d350227d98cc694fb3e7715346171b80ca1f78f7df5"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31015119693
+    },
+    {
+      "arch": "wasm32",
+      "formula": "less",
+      "handoff_release": {
+        "id": 365596037,
+        "tag": "homebrew-prefix-handoff-sha256-1a46dc9019d5c749fb4ed1ecf89d371c13c876a892bb099dfa4def8c64a3ee9d"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31016186054
+    },
+    {
+      "arch": "wasm32",
+      "formula": "libcurl",
+      "handoff_release": {
+        "id": 365604902,
+        "tag": "homebrew-prefix-handoff-sha256-33f9ecd51bb107cca4115af5cde923ba3d24f72726013639456b84bb60176f70"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31017328842
+    },
+    {
+      "arch": "wasm32",
+      "formula": "libcxx",
+      "handoff_release": {
+        "id": 365588649,
+        "tag": "homebrew-prefix-handoff-sha256-2e53b34a4a63c08965ea17357e5978f054c436d7e420c53933a840945e50791a"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31015214524
+    },
+    {
+      "arch": "wasm32",
+      "formula": "libmagic",
+      "handoff_release": {
+        "id": 365605624,
+        "tag": "homebrew-prefix-handoff-sha256-898e51c06b4adf6a6df9a17d2d745688a3526f8c53c69f159d1ac1059f177b5c"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31017410795
+    },
+    {
+      "arch": "wasm32",
+      "formula": "libyaml",
+      "handoff_release": {
+        "id": 365589248,
+        "tag": "homebrew-prefix-handoff-sha256-9262f7c3274e3d192e2fdff8cf804afc45b2f83e68cd68ef3c47c01bbd522dab"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31015312948
+    },
+    {
+      "arch": "wasm32",
+      "formula": "lsof",
+      "handoff_release": {
+        "id": 365589732,
+        "tag": "homebrew-prefix-handoff-sha256-748e376a5f8f07533514e0b46b4ff9b01dd1d4ce5dd2d234d278a0ef73236256"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31015399152
+    },
+    {
+      "arch": "wasm32",
+      "formula": "m4",
+      "handoff_release": {
+        "id": 365590707,
+        "tag": "homebrew-prefix-handoff-sha256-5dc62b3e8c686ddbb5fbeeb5f96bbe486d0dce667ae5db33f2dc2305b056e5f1"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31015481978
+    },
+    {
+      "arch": "wasm32",
+      "formula": "make",
+      "handoff_release": {
+        "id": 365591399,
+        "tag": "homebrew-prefix-handoff-sha256-a5debc057591ab8bf384e0057af091a7f700276047662d3615980de2382b6371"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31015594080
+    },
+    {
+      "arch": "wasm32",
+      "formula": "modeset",
+      "handoff_release": {
+        "id": 365592231,
+        "tag": "homebrew-prefix-handoff-sha256-3baf56d9be90272a016f14d61315eea1e3a5ed8b19fc5b8621a5438711e3a6cd"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31015694586
+    },
+    {
+      "arch": "wasm32",
+      "formula": "nano",
+      "handoff_release": {
+        "id": 365597653,
+        "tag": "homebrew-prefix-handoff-sha256-1508a03f9572baabbe7bbe277f04ce698429feabd16d4353ba16534445f5173c"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31016283753
+    },
+    {
+      "arch": "wasm32",
+      "formula": "ncurses",
+      "handoff_release": {
+        "id": 365592699,
+        "tag": "homebrew-prefix-handoff-sha256-5a520562abfc9cf175b9039a3d4637dff03917f9b65ca8ac58c44556563135e6"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31015777350
+    },
+    {
+      "arch": "wasm32",
+      "formula": "netcat",
+      "handoff_release": {
+        "id": 365593557,
+        "tag": "homebrew-prefix-handoff-sha256-4606a327f38247ede332e52382f37fb8b72d96a6948aabb30d3c4a28549a198b"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31015878831
+    },
+    {
+      "arch": "wasm32",
+      "formula": "nethack",
+      "handoff_release": {
+        "id": 365597792,
+        "tag": "homebrew-prefix-handoff-sha256-ebf7f7d54587592d1cfc964a2e98b8f50a17535374211012d28ce5f8df7b08bf"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31016379189
+    },
+    {
+      "arch": "wasm32",
+      "formula": "openssl",
+      "handoff_release": {
+        "id": 365594469,
+        "tag": "homebrew-prefix-handoff-sha256-ec6d965b2a1e1f93a27f5636932e51ee48aeccab83e7ce2e0311fa8d5cd1469c"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31015979523
+    },
+    {
+      "arch": "wasm32",
+      "formula": "posix-utils-lite",
+      "handoff_release": {
+        "id": 365598478,
+        "tag": "homebrew-prefix-handoff-sha256-c49a6635d77ae3a2358383ed732dbb2e0ba8f86576f331758691e343ea44de13"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31016476443
+    },
+    {
+      "arch": "wasm32",
+      "formula": "ruby",
+      "result": "workflow-failed-before-handoff",
+      "run_id": 31017507098
+    },
+    {
+      "arch": "wasm32",
+      "formula": "sed",
+      "handoff_release": {
+        "id": 365598918,
+        "tag": "homebrew-prefix-handoff-sha256-3005e7e5ef2b6da186a117d280bd7e1bed0757a47cc3fb06d4dcea78b3524bb9"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31016561883
+    },
+    {
+      "arch": "wasm32",
+      "formula": "tar",
+      "handoff_release": {
+        "id": 365599740,
+        "tag": "homebrew-prefix-handoff-sha256-86fa37d36bc34fbb14066d993343921025538062ebc6fb2a820705cb96fd563c"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31016646866
+    },
+    {
+      "arch": "wasm32",
+      "formula": "unzip",
+      "handoff_release": {
+        "id": 365600280,
+        "tag": "homebrew-prefix-handoff-sha256-3f075bef1dc34d12d0eebf46ada1712d8262cc78becb6a7bc6beeea47b8a2610"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31016731605
+    },
+    {
+      "arch": "wasm32",
+      "formula": "vim",
+      "handoff_release": {
+        "id": 365601343,
+        "tag": "homebrew-prefix-handoff-sha256-7751d80d8b8a17c8eee7a5d9a6e7058a2de543a874202da221745a779c8be811"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31016836864
+    },
+    {
+      "arch": "wasm32",
+      "formula": "wget",
+      "handoff_release": {
+        "id": 365606660,
+        "tag": "homebrew-prefix-handoff-sha256-179edf004c778bf43adfe342b4d2d5c16e24aa7999a9daf632db00c870adc615"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31017592156
+    },
+    {
+      "arch": "wasm32",
+      "formula": "xz",
+      "handoff_release": {
+        "id": 365601624,
+        "tag": "homebrew-prefix-handoff-sha256-6eefcf60a167483152de15f226ee4d21797175971720a593fe65fd2e306cde4f"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31016924612
+    },
+    {
+      "arch": "wasm32",
+      "formula": "zip",
+      "handoff_release": {
+        "id": 365602447,
+        "tag": "homebrew-prefix-handoff-sha256-d3194a53e8796fbebe5a21e8636a4b5afaad6662a7d9bc636ad746bb6391b38e"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31017010163
+    },
+    {
+      "arch": "wasm32",
+      "formula": "zlib",
+      "handoff_release": {
+        "id": 365602977,
+        "tag": "homebrew-prefix-handoff-sha256-df2c397de85f9ef07637cd23593c3950259dc932576b29a92531ce0bf370c6d1"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31017097125
+    },
+    {
+      "arch": "wasm32",
+      "formula": "zstd",
+      "handoff_release": {
+        "id": 365603881,
+        "tag": "homebrew-prefix-handoff-sha256-5f8740bdab323987bd0b3dfaf5009445d3d475a7f7cc6fdb41ced5eb1a82344e"
+      },
+      "result": "handoff-published-and-publicly-verified",
+      "run_id": 31017201889
+    }
+  ],
+  "kind": "kandelo-homebrew-prefix-abandoned-campaign",
+  "recovery": {
+    "authority_state": "armed",
+    "fresh_builds_require_successor_campaign": true,
+    "partial_publications_require_successor_revalidation": true,
+    "predecessor_handoffs_are_not_successor_authority": true,
+    "published_handoffs_remain_independently_usable": true
+  },
+  "schema": 1
+}

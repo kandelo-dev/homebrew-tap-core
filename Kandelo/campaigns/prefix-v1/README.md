@@ -169,5 +169,23 @@ under exact protected Kandelo commit
 `package-generation-rootfs-wasm32-abi-v42-sha256-f44d50ad73b5bdd6c6f396b47806babff3b3fdc6869ee9f1d2f88f9460581fb4`.
 That executor corrects the LLVM failure boundary by sealing and admitting the
 exact prefix runtime root `etc/clang`; it does not admit a broader `etc` tree.
-The authority remains armed until the content-addressed C7 campaign is
-published from the protected arm commit and anonymously verified.
+The authority remained armed until the content-addressed C7 campaign was
+published from the protected arm commit and anonymously verified; protected
+commit `454e5d54456c8d870496bacc0ba9c2759c863ab1` then activated it.
+
+The successor to campaign `8edea42a...` starts from that active C7 commit with
+the same canonical graph and sealed target overlay. The C8 scope again contains
+40 exact predecessor handoffs and one fresh Ruby build, but its predecessor is
+the terminal C7 campaign. The archived C7 evidence is sealed as
+`76c26c5af78a97bdcb840884451ca007ab95a37645b7db7804008646b2ca4150`;
+`8ede-successor-scope.json` is sealed as
+`dce71abbeb512b74adb3469a1388ccbdcbbfda28c124fe46f6773d96b8e59841`.
+Ruby rebuilds under exact protected Kandelo commit
+`75885de70c80448f08600b31a9466608e369713c` and public rootfs generation
+`package-generation-rootfs-wasm32-abi-v42-sha256-697af3ea327198ae4fcfb8100662e504cf58d32de4b2045423b821c6e905a0a5`.
+Run `31017507098` failed before recipe execution because authenticated LLVM
+22.1.8 expands to 2,624,809,107 regular-file bytes, above the former 2 GiB
+native-keg aggregate. C8 raises only each authenticated native tool keg and its
+exact target-Cellar proxy to 4 GiB. The 1 GiB per-file limit and the 2 GiB
+true-target-dependency, recipe-source, and recipe-output limits remain
+unchanged.
