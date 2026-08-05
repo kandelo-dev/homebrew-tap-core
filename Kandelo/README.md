@@ -205,7 +205,7 @@ independent clean checkouts for the current source, predecessor recovery
 archive, historical bottle tap, and reviewed native Homebrew. It derives
 and rechecks the campaign in the Kandelo dev shell before it uploads
 inert content-addressed bytes. Publication stops unless the bytes equal
-the supplied digest. The C7 selected task graph must be exactly 40 C6
+the supplied digest. The C8 selected task graph must be exactly 40 C7
 predecessor handoffs plus a fresh Ruby build. The narrow write job
 downloads and validates only that handoff. It checks out the exact Kandelo
 helper and protected source again. It then invokes the unchanged immutable-release
@@ -216,13 +216,13 @@ public release is non-draft, non-prerelease, and immutable. It targets
 the exact source and contains only the exact `campaign.json`. It also
 resolves the direct tag without credentials.
 
-The checked-in C7 campaign-release caller starts from active C6 tap commit
+The historical C7 campaign-release caller started from active C6 tap commit
 `1d7d63673d70c7204fef83f9284f4367b30a8b8a` and pins Kandelo commit
 `c157026d1234c9a28dc630d02f963828525897a7`. The combined arm rotates the live
 package-generation consumers to public rootfs generation
 `package-generation-rootfs-wasm32-abi-v42-sha256-f44d50ad73b5bdd6c6f396b47806babff3b3fdc6869ee9f1d2f88f9460581fb4`;
-the armed campaign authority still keeps its release, generation, and source
-identities zero until the published successor is activated. Its successor
+the armed campaign authority kept its release, generation, and source
+identities zero until the published successor was activated. Its successor
 scope is sealed as
 `227830740f1c179e6194b32d7383d358b321763d1bbb7ff2ec029a549a47c315`,
 which in turn pins terminal C6 archive
@@ -230,13 +230,35 @@ which in turn pins terminal C6 archive
 The canonical 41-task graph and sealed target overlay are unchanged; the graph
 remains
 `40a651d2ebe3a3aaab4bf9b65d91cf34db9908cb764a518437ac850747c4b139`.
-All 40 direct C6 handoffs, including Git, remain reuse inputs. Ruby alone
-rebuilds after the executor correction seals and admits LLVM's exact prefix
+All 40 direct C6 handoffs, including Git, remained reuse inputs. Ruby alone
+rebuilt after the executor correction sealed and admitted LLVM's exact prefix
 runtime root `etc/clang`; no broader `etc` tree is admitted.
 The workflow's digest admission makes any later scope or archive change fail
-closed. The campaign remains non-dispatchable while its authority is armed;
-only exact protected Kandelo `main`, a publicly verified generation, and a
-subsequently published content-addressed campaign may activate it.
+closed. The campaign remained non-dispatchable while its authority was armed;
+exact protected Kandelo `main`, a publicly verified generation, and the
+subsequently published content-addressed campaign activated it at protected
+commit `454e5d54456c8d870496bacc0ba9c2759c863ab1`.
+
+The checked-in C8 campaign-release caller starts from active C7 tap commit
+`454e5d54456c8d870496bacc0ba9c2759c863ab1`, which activates campaign
+`homebrew-prefix-campaign-sha256-8edea42ae932691b45c8695d5d6ab93a4a7ce1e08ee492ce3d7ead51fa45a185`,
+and pins Kandelo commit
+`75885de70c80448f08600b31a9466608e369713c`. The combined arm rotates the live
+package-generation consumers to public rootfs generation
+`package-generation-rootfs-wasm32-abi-v42-sha256-697af3ea327198ae4fcfb8100662e504cf58d32de4b2045423b821c6e905a0a5`;
+the armed campaign authority again keeps its release, generation, and source
+identities zero until the published successor is activated. Its successor
+scope is sealed as
+`dce71abbeb512b74adb3469a1388ccbdcbbfda28c124fe46f6773d96b8e59841`,
+which pins terminal C7 archive
+`76c26c5af78a97bdcb840884451ca007ab95a37645b7db7804008646b2ca4150`.
+The canonical 41-task graph and sealed target overlay remain unchanged. All 40
+direct C7 handoffs remain reuse inputs; Ruby alone rebuilds after run
+`31017507098` proved that authenticated LLVM 22.1.8 expands to
+2,624,809,107 regular-file bytes. The corrected executor gives each
+authenticated native tool keg and its exact target-Cellar proxy a 4 GiB
+aggregate bound. It retains the 1 GiB per-file bound and the existing 2 GiB
+bounds for true target dependencies, recipe source, and recipe output.
 
 After independently deriving the candidate from the newly merged armed
 commit `T_ARM` and recording its digest as `C`, dispatch only that exact

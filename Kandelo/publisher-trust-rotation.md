@@ -88,7 +88,7 @@ Use two tap commits:
 6. Merge the data-only activation, then dispatch from its exact
    protected-main commit.
 
-### Complete the terminal C6 to Ruby-only C7 transition
+### Historical terminal C6 to Ruby-only C7 transition
 
 The C7 candidate starts from protected tap commit
 `1d7d63673d70c7204fef83f9284f4367b30a8b8a`, which activated campaign
@@ -112,6 +112,26 @@ including Git, and rebuilds only Ruby under the corrected Kandelo executor.
 The correction seals and admits exactly the prefix runtime root `etc/clang`;
 it does not admit the rest of `etc`.
 
+### Complete the terminal C7 to Ruby-only C8 transition
+
+The C8 candidate starts from protected tap commit
+`454e5d54456c8d870496bacc0ba9c2759c863ab1`, which activated campaign
+`8edea42ae932691b45c8695d5d6ab93a4a7ce1e08ee492ce3d7ead51fa45a185`.
+Its terminal ledger contains 40 publicly verified handoffs and failed
+Ruby/wasm32 run `31017507098` with no handoff. The exact terminal archive
+digest is
+`76c26c5af78a97bdcb840884451ca007ab95a37645b7db7804008646b2ca4150`;
+the 40-reuse/Ruby-build scope digest is
+`dce71abbeb512b74adb3469a1388ccbdcbbfda28c124fe46f6773d96b8e59841`.
+The canonical 41-task graph and sealed target overlay remain unchanged.
+
+Ruby again failed before recipe execution, this time because authenticated
+LLVM 22.1.8 expands to 2,624,809,107 regular-file bytes, above the former
+2 GiB native-keg aggregate. C8 raises only each authenticated native tool keg
+and its exact target-Cellar proxy to 4 GiB. It preserves the 1 GiB per-file
+limit and the existing 2 GiB limits for true target dependencies, recipe
+source, and recipe output.
+
 Before making the candidate executable:
 
 1. Re-query protected Kandelo `main` and require exact `M`. Recheck the public
@@ -119,20 +139,20 @@ Before making the candidate executable:
    the current tap tree. Do not substitute a PR head, synthetic merge, or
    expected future commit.
 2. In one candidate tree, preview and apply `archive-active` with activation
-   commit `1d7d63673d70c7204fef83f9284f4367b30a8b8a`; then preview and apply
+   commit `454e5d54456c8d870496bacc0ba9c2759c863ab1`; then preview and apply
    `rotate-publisher-trust` with the complete queried predecessor tuple,
    exact `M`, and exact `G`. Commit the archive, finalized scope,
    campaign-release caller, docs, trust tests, armed authority, and all
    rotation-owned files together as `T_ARM`.
 
-The sealed target overlay is unchanged in C7: manifest SHA-256
+The sealed target overlay is unchanged in C8: manifest SHA-256
 `b430d1b934e3b5b07e8f7fcf1b3c1ab6737a82eb6722dad7b5fdaa81ea949243`,
 source tree Git OID `8e825398d9ce414d6148ed2f8eac4e5de4ffb16c`, and target tree Git OID
 `7e314590d18936d0ad3bf8ab42e49d7b4f234892`. `archive-active` validates the
 already-present archive and writes the intermediate armed authority
 atomically; the trust-rotation helper then advances the two equal Kandelo
-fields to exact `M`. `archive-active` alone does not authorize C7, and rotating
-an active C6 authority in place remains forbidden.
+fields to exact `M`. `archive-active` alone does not authorize C8, and rotating
+an active C7 authority in place remains forbidden.
 
 Archive and arm the predecessor before running the rotation helper:
 
@@ -154,7 +174,7 @@ activate only its data:
 
 ```bash
 SUCCESSOR_SCOPE="Kandelo/campaigns/prefix-v1/successor/"\
-"f692-successor-scope.json"
+"8ede-successor-scope.json"
 
 python3 -B scripts/transition-prefix-campaign-authority.py \
   activate-successor \
@@ -226,17 +246,17 @@ Both transition commands are exact-state idempotent before their result
 is committed. Repeating `--apply` accepts only the same derived state
 and performs no second write.
 
-## Establish the C7 executor and generation
+## Establish the C8 executor and generation
 
-The exact C7 executor and rootfs generation were established before this tap
+The exact C8 executor and rootfs generation were established before this tap
 arm. Do not repeat the earlier #1160 `force-rebuild.yml` procedure or promote
-from the mutable `binaries-abi-v42` tag. C7 uses the same rootfs package bytes
+from the mutable `binaries-abi-v42` tag. C8 uses the same rootfs package bytes
 through an independently verified package-cache projection because the
 intervening Kandelo changes do not alter that package closure.
 
 1. Set `M` to exact protected Kandelo commit
-   `c157026d1234c9a28dc630d02f963828525897a7` and `G` to exact public release
-   `package-generation-rootfs-wasm32-abi-v42-sha256-f44d50ad73b5bdd6c6f396b47806babff3b3fdc6869ee9f1d2f88f9460581fb4`.
+   `75885de70c80448f08600b31a9466608e369713c` and `G` to exact public release
+   `package-generation-rootfs-wasm32-abi-v42-sha256-697af3ea327198ae4fcfb8100662e504cf58d32de4b2045423b821c6e905a0a5`.
 2. Re-query protected Kandelo `main` and require it still equals `M`. Do not use
    a PR head, synthetic merge, or expected future commit.
 3. Require the immutable public `generation.json` and its anonymous readback
@@ -258,8 +278,8 @@ Use the exact already-published identities:
 ```bash
 set -euo pipefail
 
-M=c157026d1234c9a28dc630d02f963828525897a7
-G=package-generation-rootfs-wasm32-abi-v42-sha256-f44d50ad73b5bdd6c6f396b47806babff3b3fdc6869ee9f1d2f88f9460581fb4
+M=75885de70c80448f08600b31a9466608e369713c
+G=package-generation-rootfs-wasm32-abi-v42-sha256-697af3ea327198ae4fcfb8100662e504cf58d32de4b2045423b821c6e905a0a5
 test "$(gh api repos/Automattic/kandelo/commits/main --jq .sha)" = "$M"
 export M G
 ```
@@ -267,7 +287,7 @@ export M G
 If Kandelo `main` advances before the arm merge or campaign-release write
 boundary, stop. Derive a new authority bundle and independently validate an
 appropriate generation against the new current-main commit; do not substitute
-the new commit or relabel `G` inside this reviewed C7 tree. Publication and
+the new commit or relabel `G` inside this reviewed C8 tree. Publication and
 maintenance re-query `main`, so stale `M` fails closed even after the tap has
 selected it.
 
@@ -301,14 +321,14 @@ by that dry run. Normal Formula publication remained pinned to
 converge on current authority but still rejects collisions with
 historical test fixtures.
 
-For C7, query all predecessor slots from exact active base
-`1d7d63673d70c7204fef83f9284f4367b30a8b8a` and rotate them together. Do not
+For C8, query all predecessor slots from exact active base
+`454e5d54456c8d870496bacc0ba9c2759c863ab1` and rotate them together. Do not
 rerun the namespace canary or introduce a new split rotation.
 
 ## Audit authority before changing files
 
-Start from a clean checkout at exact active C6 tap commit
-`1d7d63673d70c7204fef83f9284f4367b30a8b8a`. Apply the generated C7 archive,
+Start from a clean checkout at exact active C7 tap commit
+`454e5d54456c8d870496bacc0ba9c2759c863ab1`. Apply the generated C8 archive,
 scope, authority transition, complete trust rotation, campaign-release caller,
 tests, and documentation in one reviewed arm tree. Do not stack unrelated work
 or silently rebase these identities onto a different protected base.
