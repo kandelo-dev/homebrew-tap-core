@@ -204,10 +204,10 @@ independent clean checkouts for the current source, predecessor recovery
 archive, historical bottle tap, and reviewed native Homebrew. It derives
 and rechecks the campaign in the Kandelo dev shell before it uploads
 inert content-addressed bytes. Publication stops unless the bytes equal
-the supplied digest. The C6 selected task graph must be exactly 40 C5
-predecessor handoffs plus one fresh Ruby build. The narrow write job downloads
-and validates only that handoff. It checks out the exact Kandelo helper and
-protected source again. It then invokes the unchanged immutable-release
+the supplied digest. The C6 selected task graph must be exactly 39 C5
+predecessor handoffs plus fresh Git and Ruby builds. The narrow write job
+downloads and validates only that handoff. It checks out the exact Kandelo
+helper and protected source again. It then invokes the unchanged immutable-release
 helper inside the real Actions run. Both content ancestry and exact
 current execution authority are required. A final step invokes Kandelo's
 `fetch-campaign-release` executor without credentials. This proves the
