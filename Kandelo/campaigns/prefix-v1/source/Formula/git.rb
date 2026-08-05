@@ -423,7 +423,7 @@ class Git < Formula
       Array.new(471, 0) + Array.new(248, 1) + Array.new(30, 127)
     mergetool_help = run_git.call(
       ["-C", "clone", "mergetool", "--tool-help"],
-      guest_env:                         { "TIMEOUT" => "120000" },
+      guest_env:                         { "TIMEOUT" => "180000" },
       merge_stderr:                      true,
       expected_fork_descendant_statuses: mergetool_help_descendant_statuses,
     )

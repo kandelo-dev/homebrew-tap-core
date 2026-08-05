@@ -119,6 +119,9 @@ An active campaign can be returned to its fail-closed `armed` state when its
 frozen publisher cannot build the reviewed source. That transition clears the
 campaign release, package generation, and source-tap commit together. It does
 not delete public evidence or make an old handoff valid for a later campaign.
+If the successor corrects the sealed target source, `archive-active` must also
+receive all three new content identities and verify them against the checked-in
+manifest and inert source tree before it writes the armed authority.
 
 `aborted-campaigns/` retains the exact abandoned authority, dispatches, and
 public handoffs. The bounded recovery path may rebind a prior reuse handoff
