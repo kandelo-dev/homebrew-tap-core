@@ -2881,10 +2881,12 @@ def validate_readback_handoff(
     formula_source = plan.formula.get("formula_source")
     destination = plan.formula.get("destination")
     dependencies = plan.formula.get("dependencies")
+    runtime_dependencies = plan.formula.get("runtime_dependencies")
     if (
         not isinstance(formula_source, dict)
         or not isinstance(destination, dict)
         or not isinstance(dependencies, list)
+        or not isinstance(runtime_dependencies, list)
     ):
         fail(
             "invalid-campaign",
@@ -2897,7 +2899,7 @@ def validate_readback_handoff(
             0,
             2**31 - 1,
         ),
-        "dependencies": dependencies,
+        "dependencies": runtime_dependencies,
         "formula_sha256": require_string(
             formula_source.get("sha256"),
             "campaign Formula SHA-256",
