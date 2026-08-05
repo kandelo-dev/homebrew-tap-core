@@ -22,10 +22,11 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/prefix-campaign-source.py \
 ```
 
 Do not copy individual staged files into the live tap. The caller authority
-must remain `inert` until the reviewed Kandelo reusable publisher consumes this
-exact overlay, and only the campaign finalizer may replace the active files
-together with all selected Formula bottle blocks and generated catalog
-metadata in one atomic tap commit.
+must remain non-active while the campaign is prepared: `inert` before its
+executor is fixed and `armed` after the protected workflow tree is installed.
+Only an anonymously verified campaign may activate the authority, and only the
+campaign finalizer may replace the active files together with all selected
+Formula bottle blocks and generated catalog metadata in one atomic tap commit.
 
 The publication workflow handles one `(Formula, architecture)` variant
 at a time. A build selected for wasm32 uses the exact rootfs package
@@ -149,5 +150,24 @@ and `9705-successor-scope.json` is sealed as
 `258e85edff6610e4d478abb6d8b887561b39a80e3f20f6bd8ba3b3a017992f64`.
 The selected Git source changes only the bounded mergetool guest deadline from
 120000 to 180000 ms; its exact 749 descendant statuses and output assertions
-remain unchanged. The authority stays armed until protected Kandelo `main`
-and its publicly verified rootfs generation provide the exact executable pins.
+remain unchanged. That authority stayed armed until protected Kandelo `main`
+and its publicly verified rootfs generation provided the exact executable
+pins.
+
+The successor to campaign `f692a88a...` starts from active C6 tap commit
+`1d7d63673d70c7204fef83f9284f4367b30a8b8a` and keeps that same canonical
+41-task graph and sealed target overlay. The graph remains sealed as
+`40a651d2ebe3a3aaab4bf9b65d91cf34db9908cb764a518437ac850747c4b139`.
+The C7 scope partitions it into 40 exact direct C6 handoffs and one fresh Ruby
+build. Its terminal predecessor archive is sealed as
+`3b1e288aadb23fa85db549cfc874aabc035756a18bace01b606ed0d1c54b9f07`,
+and `f692-successor-scope.json` is sealed as
+`227830740f1c179e6194b32d7383d358b321763d1bbb7ff2ec029a549a47c315`.
+Git's complete public C6 handoff is among the reused inputs. Ruby rebuilds
+under exact protected Kandelo commit
+`c157026d1234c9a28dc630d02f963828525897a7` and public rootfs generation
+`package-generation-rootfs-wasm32-abi-v42-sha256-f44d50ad73b5bdd6c6f396b47806babff3b3fdc6869ee9f1d2f88f9460581fb4`.
+That executor corrects the LLVM failure boundary by sealing and admitting the
+exact prefix runtime root `etc/clang`; it does not admit a broader `etc` tree.
+The authority remains armed until the content-addressed C7 campaign is
+published from the protected arm commit and anonymously verified.

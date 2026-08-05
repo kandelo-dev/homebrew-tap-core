@@ -88,43 +88,51 @@ Use two tap commits:
 6. Merge the data-only activation, then dispatch from its exact
    protected-main commit.
 
-### Complete the terminal C5 to Git/Ruby C6 transition
+### Complete the terminal C6 to Ruby-only C7 transition
 
-The C6 candidate starts from protected tap commit
-`03b53348c4291ca421a48d2d0890f4b5a56ae380`, which activated campaign
-`9705e20fa5cdbbf41bb0254aab4eb75278e091549e4bf6ee6ae79decdf029eae`.
-It records the terminal C5 ledger as 39 publicly verified handoffs plus failed
-Git and Ruby workflows with no handoff. The canonical archive digest is
-`de031d03eb2d9d598bc00f7bfe34538dc07fbbc27ef76f1ace22b83382a07b4e`;
-the 39-reuse/Git-and-Ruby-build scope digest is
-`258e85edff6610e4d478abb6d8b887561b39a80e3f20f6bd8ba3b3a017992f64`.
-Only the next protected Kandelo commit `M` (K2) and its generation `G` remain
-operator-resolved inputs.
+The C7 candidate starts from protected tap commit
+`1d7d63673d70c7204fef83f9284f4367b30a8b8a`, which activated campaign
+`f692a88aa001ae95bf9c7265012b082498ad4c1b0b84cd1c4c94b8b9a73d7f41`.
+It records the terminal C6 ledger as 40 publicly verified handoffs plus the
+failed Ruby workflow with no handoff. The canonical archive digest is
+`3b1e288aadb23fa85db549cfc874aabc035756a18bace01b606ed0d1c54b9f07`;
+the 40-reuse/Ruby-build scope digest is
+`227830740f1c179e6194b32d7383d358b321763d1bbb7ff2ec029a549a47c315`.
+The canonical 41-task graph remains unchanged at
+`40a651d2ebe3a3aaab4bf9b65d91cf34db9908cb764a518437ac850747c4b139`.
+The exact protected Kandelo commit is
+`M=c157026d1234c9a28dc630d02f963828525897a7`; its anonymously validated
+rootfs generation is
+`G=package-generation-rootfs-wasm32-abi-v42-sha256-f44d50ad73b5bdd6c6f396b47806babff3b3fdc6869ee9f1d2f88f9460581fb4`.
 
-Git's coherent API freeze and build passed, then the runtime test
-`git -C clone mergetool --tool-help` exceeded 120000 ms before handoff
-publication. Historical executions of the same 749-status test completed at
-119.945 and 119.305 seconds, so C6 changes only that bounded deadline to
-180000 ms. Its exact status vector and output assertions remain unchanged.
+Ruby failed before recipe execution because LLVM's bottle exposes
+`etc/clang` through a keg-local symlink whose target was absent from the two
+sealed native execution roots. C7 keeps every exact direct C6 handoff,
+including Git, and rebuilds only Ruby under the corrected Kandelo executor.
+The correction seals and admits exactly the prefix runtime root `etc/clang`;
+it does not admit the rest of `etc`.
 
 Before making the candidate executable:
 
-1. Query protected Kandelo `main` for exact `M`, publish and validate the
-   exact `M` rootfs generation `G`, and query every predecessor slot from the
-   current tap tree. Do not substitute a PR head, synthetic merge, or expected
-   future commit.
+1. Re-query protected Kandelo `main` and require exact `M`. Recheck the public
+   generation and require exact `G`, then query every predecessor slot from
+   the current tap tree. Do not substitute a PR head, synthetic merge, or
+   expected future commit.
 2. In one candidate tree, preview and apply `archive-active` with activation
-   commit `03b53348c4291ca421a48d2d0890f4b5a56ae380`; then preview and apply
+   commit `1d7d63673d70c7204fef83f9284f4367b30a8b8a`; then preview and apply
    `rotate-publisher-trust` with the complete queried predecessor tuple,
    exact `M`, and exact `G`. Commit the archive, finalized scope,
    campaign-release caller, docs, trust tests, armed authority, and all
    rotation-owned files together as `T_ARM`.
 
-The explicit successor target tuple makes `archive-active` first verify the
-new sealed checkout against a temporary armed authority, validate the
-already-present archive, and then write the successor authority atomically.
-`archive-active` alone does not authorize C6, and rotating an active C5
-authority in place remains forbidden.
+The sealed target overlay is unchanged in C7: manifest SHA-256
+`b430d1b934e3b5b07e8f7fcf1b3c1ab6737a82eb6722dad7b5fdaa81ea949243`,
+source tree Git OID `8e825398d9ce414d6148ed2f8eac4e5de4ffb16c`, and target tree Git OID
+`7e314590d18936d0ad3bf8ab42e49d7b4f234892`. `archive-active` validates the
+already-present archive and writes the intermediate armed authority
+atomically; the trust-rotation helper then advances the two equal Kandelo
+fields to exact `M`. `archive-active` alone does not authorize C7, and rotating
+an active C6 authority in place remains forbidden.
 
 Archive and arm the predecessor before running the rotation helper:
 
@@ -132,24 +140,12 @@ Archive and arm the predecessor before running the rotation helper:
 python3 -B scripts/transition-prefix-campaign-authority.py \
   archive-active \
   --archive "$PREDECESSOR_ARCHIVE" \
-  --activation-commit "$PREDECESSOR_ACTIVATION" \
-  --successor-manifest-sha256 \
-    b430d1b934e3b5b07e8f7fcf1b3c1ab6737a82eb6722dad7b5fdaa81ea949243 \
-  --successor-source-tree-git-oid \
-    8e825398d9ce414d6148ed2f8eac4e5de4ffb16c \
-  --successor-target-tree-git-oid \
-    7e314590d18936d0ad3bf8ab42e49d7b4f234892
+  --activation-commit "$PREDECESSOR_ACTIVATION"
 
 python3 -B scripts/transition-prefix-campaign-authority.py \
   archive-active \
   --archive "$PREDECESSOR_ARCHIVE" \
   --activation-commit "$PREDECESSOR_ACTIVATION" \
-  --successor-manifest-sha256 \
-    b430d1b934e3b5b07e8f7fcf1b3c1ab6737a82eb6722dad7b5fdaa81ea949243 \
-  --successor-source-tree-git-oid \
-    8e825398d9ce414d6148ed2f8eac4e5de4ffb16c \
-  --successor-target-tree-git-oid \
-    7e314590d18936d0ad3bf8ab42e49d7b4f234892 \
   --apply
 ```
 
@@ -158,7 +154,7 @@ activate only its data:
 
 ```bash
 SUCCESSOR_SCOPE="Kandelo/campaigns/prefix-v1/successor/"\
-"9705-successor-scope.json"
+"f692-successor-scope.json"
 
 python3 -B scripts/transition-prefix-campaign-authority.py \
   activate-successor \
@@ -230,101 +226,92 @@ Both transition commands are exact-state idempotent before their result
 is committed. Repeating `--apply` accepts only the same derived state
 and performs no second write.
 
-## Establish the successor
+## Establish the C7 executor and generation
 
-1. Merge Automattic/kandelo PR #1160 and query its actual merge commit from
-   protected `main`. Do not use the PR head or GitHub's synthetic test merge as
-   `M`.
-2. Confirm `M` is still the freshly queried `Automattic/kandelo` `main`.
-3. Rebuild `rootfs/wasm32` and its package closure from exact `M`.
-   The reviewed pull-request head already passed the complete suites,
-   so this provenance-only rebuild may use `skip_tests=true`; bottle
-   publication and the later live lifecycle still supply shipping
-   evidence.
-4. From exact `M`, promote a fresh rootfs-wasm32 package generation with
-   exact-main authority, `source-tag=binaries-abi-v42`,
-   `validation-method=identical-git-tree-v1`, `expected-abi=42`,
-   `selection-kind=root-package`, `root-package=rootfs`, and both producer and
-   validated-main SHAs equal to `M`.
-5. Record the content-derived public release tag as `G`. Its immutable
-   `generation.json` must validate `M` as its authority, consumer, package
-   source, and required archive source. A successful workflow summary alone is
-   not generation authority.
+The exact C7 executor and rootfs generation were established before this tap
+arm. Do not repeat the earlier #1160 `force-rebuild.yml` procedure or promote
+from the mutable `binaries-abi-v42` tag. C7 uses the same rootfs package bytes
+through an independently verified package-cache projection because the
+intervening Kandelo changes do not alter that package closure.
 
-For example:
+1. Set `M` to exact protected Kandelo commit
+   `c157026d1234c9a28dc630d02f963828525897a7` and `G` to exact public release
+   `package-generation-rootfs-wasm32-abi-v42-sha256-f44d50ad73b5bdd6c6f396b47806babff3b3fdc6869ee9f1d2f88f9460581fb4`.
+2. Re-query protected Kandelo `main` and require it still equals `M`. Do not use
+   a PR head, synthetic merge, or expected future commit.
+3. Require the immutable public `generation.json` and its anonymous readback
+   receipt to bind `.identity.authority_sha=M`,
+   `.identity.validated_against_main.commit=M`, `.identity.abi_version=42`,
+   `.identity.projection.root_package=rootfs`,
+   `.identity.projection.arch=wasm32`, and
+   `.identity.validated_against_main.method=identical-package-cache-projection-v1`.
+4. Require its exact preserved source tag to be
+   `preserved-package-generation-rootfs-wasm32-abi-v42-source-662f00c44f3e1d0ebc0d1a573df101e721b73006-sha256-0f60546befd9287a17420a00c0e2d68a5dbd22bc9d5861d31bd3e75acb38eb48`
+   at `.identity.producer.evidence.tag` and its producer SHA to be
+   `662f00c44f3e1d0ebc0d1a573df101e721b73006` at
+   `.identity.producer.evidence.producer_sha`. Verify every selected archive
+   against that preserved source; a successful workflow summary alone is not
+   generation authority.
+
+Use the exact already-published identities:
 
 ```bash
 set -euo pipefail
 
-M="$(
-  gh api repos/Automattic/kandelo/commits/main --jq .sha
-)"
-gh workflow run force-rebuild.yml \
-  --repo Automattic/kandelo \
-  --ref main \
-  -f packages=rootfs \
-  -f arches=wasm32 \
-  -f ref="$M" \
-  -f skip_tests=true \
-  -f bump_packages=false
-
-# Wait for the exact-M rebuild before promotion.
-gh workflow run promote-package-generation.yml \
-  --repo Automattic/kandelo \
-  --ref main \
-  -f source-tag=binaries-abi-v42 \
-  -f producer-sha="$M" \
-  -f validated-main-sha="$M" \
-  -f validation-method=identical-git-tree-v1 \
-  -f expected-abi=42 \
-  -f selection-kind=root-package \
-  -f root-package=rootfs \
-  -f arch=wasm32
-
-G='<exact package-generation-rootfs-wasm32-abi-v42-sha256-... tag>'
+M=c157026d1234c9a28dc630d02f963828525897a7
+G=package-generation-rootfs-wasm32-abi-v42-sha256-f44d50ad73b5bdd6c6f396b47806babff3b3fdc6869ee9f1d2f88f9460581fb4
+test "$(gh api repos/Automattic/kandelo/commits/main --jq .sha)" = "$M"
 export M G
 ```
 
-If Kandelo `main` advances before promotion or before the final publisher write
-boundary, use the new current-main commit and promote its own generation.
-Publication and maintenance re-query `main`; a stale `M` fails closed even
-after the tap has selected it.
+If Kandelo `main` advances before the arm merge or campaign-release write
+boundary, stop. Derive a new authority bundle and independently validate an
+appropriate generation against the new current-main commit; do not substitute
+the new commit or relabel `G` inside this reviewed C7 tree. Publication and
+maintenance re-query `main`, so stale `M` fails closed even after the tap has
+selected it.
 
-### Overlap the one-time Libyaml bootstrap
+### Historical one-time Libyaml bootstrap overlap
 
-The rootfs rebuild normally takes longer than the namespace bootstrap.
-This migration may overlap them without granting production publication
-authority early:
+An earlier migration stage overlapped its rootfs rebuild with the one-time
+Libyaml namespace bootstrap. That bootstrap completed before C7 and must not be
+repeated. This history explains why the predecessor tuple can contain distinct
+dry-run and first-publication pins:
 
-1. Start the exact-`M` rootfs rebuild immediately.
-2. In a separate tap pull request, rotate only the dry-run caller, the
+1. The stage started its exact-`M` rootfs rebuild immediately.
+2. A separate tap pull request rotated only the dry-run caller, the
    first-publication caller, and their two Ruby trust constants to `M`.
-   Leave production, maintenance, generation, and rollout-controller
-   authority unchanged.
-3. Merge that tap pull request and record its exact protected-main
-   commit as `D`.
-4. At exact `D`, run the Libyaml dry run and one-time first-child
-   publication. Keep tap `main == D` between those two runs.
-5. Disable the first-publication workflow again after the child
-   succeeds.
-6. Once the rootfs generation yields `G`, run the complete helper below
+   Production, maintenance, generation, and rollout-controller
+   authority remained unchanged.
+3. That tap pull request merged and its exact protected-main commit was
+   recorded as `D`.
+4. At exact `D`, the stage ran the Libyaml dry run and one-time first-child
+   publication while tap `main` remained at `D`.
+5. The first-publication workflow was disabled again after the child
+   succeeded.
+6. Once the rootfs generation yielded `G`, the stage ran the complete helper
    with `P_D="$M"` and `P_F="$M"`, while retaining the recorded
    predecessor values for `P_M`, `P_A`, `P_S`, `P_G`, and `P_C`.
 
-The split state is intentional: dry-run cannot publish, and
-first-publication can create only the exact absent Libyaml child proved
-by that dry run. Normal Formula publication remains pinned to
-`P_M/P_A/P_S/P_G/P_C` until the complete rotation lands.
+The split state was intentional: dry-run could not publish, and
+first-publication could create only the exact absent Libyaml child proved
+by that dry run. Normal Formula publication remained pinned to
+`P_M/P_A/P_S/P_G/P_C` until the complete rotation landed.
 `Kandelo/test-workflow-trust.rb` permits these two live callers to
 converge on current authority but still rejects collisions with
 historical test fixtures.
 
+For C7, query all predecessor slots from exact active base
+`1d7d63673d70c7204fef83f9284f4367b30a8b8a` and rotate them together. Do not
+rerun the namespace canary or introduce a new split rotation.
+
 ## Audit authority before changing files
 
-Start from a clean checkout containing the final tap changes that the rotation
-will accompany. If the closed-recipe work from PR #129 lands first, stack the
-rotation helper commit onto that exact result. PR #129 did not change the nine
-rotation-owned files when this runbook was prepared.
+Start from a clean checkout at exact active C6 tap commit
+`1d7d63673d70c7204fef83f9284f4367b30a8b8a`. Apply the generated C7 archive,
+scope, authority transition, complete trust rotation, campaign-release caller,
+tests, and documentation in one reviewed arm tree. Do not stack unrelated work
+or silently rebase these identities onto a different protected base.
 
 Confirm the complete predecessor production caller, not only its visible pins:
 
