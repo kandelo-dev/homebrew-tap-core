@@ -16,7 +16,7 @@
   "kind": "kandelo-homebrew-prefix-successor-scope",
   "predecessor_archive": {
     "path": "Kandelo/campaigns/prefix-v1/aborted-campaigns/9705e20fa5cdbbf41bb0254aab4eb75278e091549e4bf6ee6ae79decdf029eae.json",
-    "sha256": "__C5_TERMINAL_ARCHIVE_SHA256__"
+    "sha256": "de031d03eb2d9d598bc00f7bfe34538dc07fbbc27ef76f1ace22b83382a07b4e"
   },
   "reuse_tasks": [
     {
