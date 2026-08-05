@@ -141,6 +141,7 @@ def formula_document(
     arches: tuple[str, ...],
     formula_sha256: str,
     admission_kind: str = "anonymous-absence",
+    runtime_dependencies: list[dict[str, str]] | None = None,
 ) -> dict[str, object]:
     probe_status = (
         "auth-required"
@@ -191,6 +192,11 @@ def formula_document(
             "sha256": formula_sha256,
         },
         "name": name,
+        "runtime_dependencies": (
+            dependencies
+            if runtime_dependencies is None
+            else runtime_dependencies
+        ),
         **(
             {"source_kind": "reviewed-new-entrant"}
             if admission_kind
@@ -529,7 +535,7 @@ def handoff_document(
             "bottle_rebuild": (
                 formula["destination"]["bottle_rebuild"]
             ),
-            "dependencies": formula["dependencies"],
+            "dependencies": formula["runtime_dependencies"],
             "formula_sha256": (
                 formula["formula_source"]["sha256"]
             ),
@@ -3138,6 +3144,136 @@ class PrefixCampaignControllerTests(unittest.TestCase):
                         + "0" * 64
                     ),
                 )
+
+    def test_readback_separates_runtime_identity_from_build_handoffs(
+        self,
+    ) -> None:
+        file_dependencies = ("bzip2", "libmagic", "xz", "zlib")
+        cases = (
+            ("findutils", ("dash",), ()),
+            ("less", ("dash", "ncurses"), ("ncurses",)),
+            ("file-formula", file_dependencies, file_dependencies),
+        )
+
+        def dependency_records(names: tuple[str, ...]) -> list[dict[str, str]]:
+            return [
+                {
+                    "full_name": f"kandelo-dev/tap-core/{name}",
+                    "version": "1.0",
+                }
+                for name in names
+            ]
+
+        for formula_name, build_names, runtime_names in cases:
+            with (
+                self.subTest(formula=formula_name),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                fixture = Fixture(pathlib.Path(directory))
+                authority = CONTROLLER.load_authority(
+                    fixture.authority,
+                    require_active=True,
+                )
+                plan = fixture.plan()
+                build_dependencies = dependency_records(build_names)
+                runtime_dependencies = dependency_records(runtime_names)
+                dependency_tags = tuple(
+                    (
+                        name,
+                        "homebrew-prefix-handoff-sha256-"
+                        + hashlib.sha256(name.encode()).hexdigest(),
+                    )
+                    for name in build_names
+                )
+                formula = formula_document(
+                    formula_name,
+                    "2.0",
+                    build_dependencies,
+                    "required-build",
+                    ("wasm32",),
+                    LEAF_FORMULA_SHA256,
+                    runtime_dependencies=runtime_dependencies,
+                )
+                plan = dataclasses.replace(
+                    plan,
+                    formula=formula,
+                    request=dataclasses.replace(
+                        plan.request,
+                        formula=formula_name,
+                        dependency_tags=dependency_tags,
+                    ),
+                )
+                handoff = handoff_document(authority, plan)
+                handoff_path = fixture.root / "scoped-handoff.json"
+                write_pretty(handoff_path, handoff)
+
+                validated = CONTROLLER.validate_readback_handoff(
+                    handoff_path,
+                    authority=authority,
+                    plan=plan,
+                    tag=tag_for_handoff(handoff),
+                )
+
+                self.assertEqual(
+                    validated["formula"]["dependencies"],
+                    runtime_dependencies,
+                )
+                self.assertEqual(
+                    [
+                        dependency["formula"]
+                        for dependency in validated[
+                            "dependency_handoffs"
+                        ]
+                    ],
+                    [name for name, _tag in dependency_tags],
+                )
+                if build_names != runtime_names:
+                    handoff["formula"]["dependencies"] = (
+                        build_dependencies
+                    )
+                    write_pretty(handoff_path, handoff)
+                    with self.assertRaisesRegex(
+                        CONTROLLER.ControllerError,
+                        "wrong Formula identity",
+                    ):
+                        CONTROLLER.validate_readback_handoff(
+                            handoff_path,
+                            authority=authority,
+                            plan=plan,
+                            tag=tag_for_handoff(handoff),
+                        )
+
+    def test_readback_requires_runtime_dependency_array(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Fixture(pathlib.Path(directory))
+            authority = CONTROLLER.load_authority(
+                fixture.authority,
+                require_active=True,
+            )
+            plan = fixture.plan()
+            handoff = handoff_document(authority, plan)
+            handoff_path = fixture.root / "handoff.json"
+            write_pretty(handoff_path, handoff)
+            for label, value in (("missing", None), ("non-list", {})):
+                with self.subTest(label=label):
+                    formula = copy.deepcopy(plan.formula)
+                    if value is None:
+                        formula.pop("runtime_dependencies")
+                    else:
+                        formula["runtime_dependencies"] = value
+                    with self.assertRaisesRegex(
+                        CONTROLLER.ControllerError,
+                        "lacks exact handoff evidence",
+                    ):
+                        CONTROLLER.validate_readback_handoff(
+                            handoff_path,
+                            authority=authority,
+                            plan=dataclasses.replace(
+                                plan,
+                                formula=formula,
+                            ),
+                            tag=tag_for_handoff(handoff),
+                        )
 
     def test_readback_accepts_only_the_exact_reuse_inventory(
         self,
