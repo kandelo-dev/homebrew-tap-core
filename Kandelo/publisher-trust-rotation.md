@@ -88,52 +88,42 @@ Use two tap commits:
 6. Merge the data-only activation, then dispatch from its exact
    protected-main commit.
 
-### Finalize the terminal C5 to Git/Ruby C6 candidate
+### Complete the terminal C5 to Git/Ruby C6 transition
 
-The current structural candidate starts from protected tap commit
+The C6 candidate starts from protected tap commit
 `03b53348c4291ca421a48d2d0890f4b5a56ae380`, which activated campaign
 `9705e20fa5cdbbf41bb0254aab4eb75278e091549e4bf6ee6ae79decdf029eae`.
-It deliberately does not guess terminal run evidence, the next Kandelo commit
-`M` (K2), or generation `G`.
+It records the terminal C5 ledger as 39 publicly verified handoffs plus failed
+Git and Ruby workflows with no handoff. The canonical archive digest is
+`de031d03eb2d9d598bc00f7bfe34538dc07fbbc27ef76f1ace22b83382a07b4e`;
+the 39-reuse/Git-and-Ruby-build scope digest is
+`258e85edff6610e4d478abb6d8b887561b39a80e3f20f6bd8ba3b3a017992f64`.
+Only the next protected Kandelo commit `M` (K2) and its generation `G` remain
+operator-resolved inputs.
 
-The known Git terminal fact is narrower: its coherent API freeze passed, then
-the runtime test `git -C clone mergetool --tool-help` exceeded 120000 ms before
-handoff publication. The archive must bind that fact to the real dispatch and
-run identity; this prototype records no guessed ID.
+Git's coherent API freeze and build passed, then the runtime test
+`git -C clone mergetool --tool-help` exceeded 120000 ms before handoff
+publication. Historical executions of the same 749-status test completed at
+119.945 and 119.305 seconds, so C6 changes only that bounded deadline to
+180000 ms. Its exact status vector and output assertions remain unchanged.
 
 Before making the candidate executable:
 
-1. Freeze the real terminal C5 ledger at
-   `Kandelo/campaigns/prefix-v1/aborted-campaigns/`
-   `9705e20fa5cdbbf41bb0254aab4eb75278e091549e4bf6ee6ae79decdf029eae.json`.
-   Preserve every actual dispatch and unique run ID. Exactly the 39 selected
-   non-Git/Ruby tasks must end in
-   `handoff-published-and-publicly-verified`. Git and Ruby must not have
-   verified handoffs and remain the two fresh builds. Do not infer a public
-   handoff from a successful build or an authenticated query.
-2. Compute the canonical archive bytes' SHA-256 and replace
-   `__C5_TERMINAL_ARCHIVE_SHA256__` in
-   `successor/9705-successor-scope.json` and its trust-test constant.
-3. Recompute the now-final scope bytes' SHA-256 and replace
-   `__C6_SUCCESSOR_SCOPE_SHA256__` in the campaign-release caller and its
-   trust-test constant. The scope must still be the exact union of 39 C5 reuse
-   tasks and the Git and Ruby builds in `canonical-shell41-wasm32.json`.
-4. Query protected Kandelo `main` for exact `M`, publish and validate the
+1. Query protected Kandelo `main` for exact `M`, publish and validate the
    exact `M` rootfs generation `G`, and query every predecessor slot from the
    current tap tree. Do not substitute a PR head, synthetic merge, or expected
    future commit.
-5. In one candidate tree, preview and apply `archive-active` with activation
+2. In one candidate tree, preview and apply `archive-active` with activation
    commit `03b53348c4291ca421a48d2d0890f4b5a56ae380`; then preview and apply
    `rotate-publisher-trust` with the complete queried predecessor tuple,
    exact `M`, and exact `G`. Commit the archive, finalized scope,
    campaign-release caller, docs, trust tests, armed authority, and all
    rotation-owned files together as `T_ARM`.
 
-The two placeholder strings are intentionally not SHA-256 values. The scope
-parser and campaign-release admission therefore reject this structural
-prototype until steps 1-3 have used exact evidence. `archive-active` alone
-does not authorize C6, and rotating an active C5 authority in place remains
-forbidden.
+The explicit successor target tuple makes `archive-active` first verify the
+new sealed checkout against a temporary armed authority and then write the
+archive and successor authority atomically. `archive-active` alone does not
+authorize C6, and rotating an active C5 authority in place remains forbidden.
 
 Archive and arm the predecessor before running the rotation helper:
 

@@ -141,10 +141,13 @@ builds: Git, Ruby, and Vim. Findutils and Less reuse their immutable `01cc`
 handoffs; they are not rebuilt merely because the original workflows failed
 after publishing them.
 
-The planned successor to campaign `9705e20f...` keeps that same canonical
-41-task graph but partitions it into 39 exact C5 handoffs and fresh Git and
-Ruby builds. `9705-successor-scope.json` is only a structural candidate while
-its C5 archive digest is `__C5_TERMINAL_ARCHIVE_SHA256__`; the campaign-release
-caller is likewise disabled by `__C6_SUCCESSOR_SCOPE_SHA256__`. Finalize those
-values only after the terminal C5 ledger proves every selected non-Git/Ruby
-handoff by public readback and records Git and Ruby as the two build routes.
+The successor to campaign `9705e20f...` keeps that same canonical 41-task
+graph but partitions it into 39 exact C5 handoffs and fresh Git and Ruby
+builds. Its terminal predecessor archive is sealed as
+`de031d03eb2d9d598bc00f7bfe34538dc07fbbc27ef76f1ace22b83382a07b4e`,
+and `9705-successor-scope.json` is sealed as
+`258e85edff6610e4d478abb6d8b887561b39a80e3f20f6bd8ba3b3a017992f64`.
+The selected Git source changes only the bounded mergetool guest deadline from
+120000 to 180000 ms; its exact 749 descendant statuses and output assertions
+remain unchanged. The authority stays armed until protected Kandelo `main`
+and its publicly verified rootfs generation provide the exact executable pins.
