@@ -220,9 +220,9 @@ The checked-in C6 caller pins successor scope
 which in turn pins terminal C5 archive
 `de031d03eb2d9d598bc00f7bfe34538dc07fbbc27ef76f1ace22b83382a07b4e`.
 The workflow's digest admission makes any later scope or archive change fail
-closed. The campaign remains inert while its authority is armed; only exact
-protected Kandelo `main`, a publicly verified generation, and a subsequently
-published content-addressed campaign may activate it.
+closed. The campaign remains non-dispatchable while its authority is armed;
+only exact protected Kandelo `main`, a publicly verified generation, and a
+subsequently published content-addressed campaign may activate it.
 
 After independently deriving the candidate from the newly merged armed
 commit `T_ARM` and recording its digest as `C`, dispatch only that exact

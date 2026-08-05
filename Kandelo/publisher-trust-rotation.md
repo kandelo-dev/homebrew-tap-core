@@ -121,9 +121,10 @@ Before making the candidate executable:
    rotation-owned files together as `T_ARM`.
 
 The explicit successor target tuple makes `archive-active` first verify the
-new sealed checkout against a temporary armed authority and then write the
-archive and successor authority atomically. `archive-active` alone does not
-authorize C6, and rotating an active C5 authority in place remains forbidden.
+new sealed checkout against a temporary armed authority, validate the
+already-present archive, and then write the successor authority atomically.
+`archive-active` alone does not authorize C6, and rotating an active C5
+authority in place remains forbidden.
 
 Archive and arm the predecessor before running the rotation helper:
 
