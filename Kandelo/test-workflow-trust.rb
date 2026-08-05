@@ -20,6 +20,19 @@ PREFIX_CAMPAIGN_RELEASE_PATH =
   File.join(WORKFLOW_ROOT, "publish-prefix-campaign-release.yml")
 PREFIX_CAMPAIGN_AUTHORITY_PATH =
   File.join(ROOT, "Kandelo/prefix-campaign-authority.json")
+C6_SUCCESSOR_SCOPE_PATH = File.join(
+  ROOT,
+  "Kandelo/campaigns/prefix-v1/successor/9705-successor-scope.json"
+)
+C6_CANONICAL_GRAPH_PATH = File.join(
+  ROOT,
+  "Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json"
+)
+C5_TERMINAL_ARCHIVE_RELATIVE_PATH =
+  "Kandelo/campaigns/prefix-v1/aborted-campaigns/" \
+  "9705e20fa5cdbbf41bb0254aab4eb75278e091549e4bf6ee6ae79decdf029eae.json"
+C5_TERMINAL_ARCHIVE_SHA256 = "__C5_TERMINAL_ARCHIVE_SHA256__"
+C6_SUCCESSOR_SCOPE_SHA256 = "__C6_SUCCESSOR_SCOPE_SHA256__"
 PREFIX_CAMPAIGN_CONTROLLER_PATH =
   File.join(ROOT, "scripts/prefix-campaign-controller.py")
 EXPECTED_WORKFLOW_FILES = %w[
@@ -115,6 +128,83 @@ def load_json(path)
   value = parse_canonical_json(File.read(path), File.basename(path))
   check(value.is_a?(Hash), "#{File.basename(path)} is not a JSON mapping")
   value
+end
+
+def check_c6_successor_scope(scope, graph)
+  graph_relative_path =
+    "Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json"
+  graph_sha256 =
+    "40a651d2ebe3a3aaab4bf9b65d91cf34db9908cb764a518437ac850747c4b139"
+  ruby_task = { "arch" => "wasm32", "formula" => "ruby" }
+
+  check(
+    graph.keys == %w[kind max_active repository schema tasks workflow] &&
+      graph.fetch("kind") == "kandelo-prefix-campaign-task-graph" &&
+      graph.fetch("max_active") == 8 &&
+      graph.fetch("repository") == "Kandelo-dev/homebrew-tap-core" &&
+      graph.fetch("schema") == 1 &&
+      graph.fetch("workflow") ==
+        ".github/workflows/prefix-campaign-bottles.yml",
+    "canonical shell graph authority changed"
+  )
+  graph_tasks = graph.fetch("tasks")
+  check(
+    graph_tasks.length == 41 &&
+      graph_tasks.all? { |task| task.keys == %w[arch formula] } &&
+      graph_tasks.uniq.length == graph_tasks.length &&
+      graph_tasks.count(ruby_task) == 1,
+    "canonical shell graph is not the unique 41-task Ruby graph"
+  )
+  check(
+    Digest::SHA256.file(C6_CANONICAL_GRAPH_PATH).hexdigest == graph_sha256,
+    "canonical shell graph digest changed"
+  )
+
+  check(
+    scope.keys ==
+      %w[build_tasks graph kind predecessor_archive reuse_tasks schema] &&
+      scope.fetch("schema") == 1 &&
+      scope.fetch("kind") == "kandelo-homebrew-prefix-successor-scope" &&
+      scope.fetch("graph") == {
+        "path" => graph_relative_path,
+        "sha256" => graph_sha256,
+      } &&
+      scope.fetch("predecessor_archive") == {
+        "path" => C5_TERMINAL_ARCHIVE_RELATIVE_PATH,
+        "sha256" => C5_TERMINAL_ARCHIVE_SHA256,
+      },
+    "C6 successor scope authority changed"
+  )
+  check(
+    scope.fetch("build_tasks") == [ruby_task] &&
+      scope.fetch("reuse_tasks") == graph_tasks.reject { |task| task == ruby_task } &&
+      scope.fetch("reuse_tasks").length == 40,
+    "C6 successor scope is not exactly 40 C5 reuses plus Ruby rebuild"
+  )
+
+  archive_path = File.join(ROOT, C5_TERMINAL_ARCHIVE_RELATIVE_PATH)
+  if C5_TERMINAL_ARCHIVE_SHA256.match?(/\A[0-9a-f]{64}\z/)
+    check(File.file?(archive_path), "C5 terminal archive is absent")
+    check(
+      Digest::SHA256.file(archive_path).hexdigest == C5_TERMINAL_ARCHIVE_SHA256,
+      "C5 terminal archive digest changed"
+    )
+  else
+    check(
+      C5_TERMINAL_ARCHIVE_SHA256 == "__C5_TERMINAL_ARCHIVE_SHA256__" &&
+        !File.exist?(archive_path),
+      "C5 terminal archive boundary is neither sealed nor a clean placeholder"
+    )
+  end
+
+  observed_scope_sha256 = Digest::SHA256.file(C6_SUCCESSOR_SCOPE_PATH).hexdigest
+  unless C6_SUCCESSOR_SCOPE_SHA256 == "__C6_SUCCESSOR_SCOPE_SHA256__"
+    check(
+      C6_SUCCESSOR_SCOPE_SHA256.match?(/\A[0-9a-f]{64}\z/) &&
+        observed_scope_sha256 == C6_SUCCESSOR_SCOPE_SHA256,
+      "C6 successor scope digest changed"
+    )
+  end
 end
 
 def workflow_events(workflow)
@@ -1612,7 +1702,12 @@ def check_prefix_campaign_release_workflow(workflow)
       admission["run"].include?('.state == "armed"') &&
       admission["run"].include?(
         '.kandelo_commit == .reusable_workflow_commit'
-      ),
+      ) &&
+      admission["run"].include?(
+        "Kandelo/campaigns/prefix-v1/successor/" \
+        "9705-successor-scope.json"
+      ) &&
+      admission["run"].include?(C6_SUCCESSOR_SCOPE_SHA256),
     "#{label} protected-main or armed-authority admission changed"
   )
 
@@ -1671,20 +1766,25 @@ def check_prefix_campaign_release_workflow(workflow)
       ) &&
       derive["run"].include?(
         '--successor-scope-path ' \
-        'Kandelo/campaigns/prefix-v1/successor/01cc-successor-scope.json'
+        'Kandelo/campaigns/prefix-v1/successor/9705-successor-scope.json'
       ) &&
       derive["run"].include?(
-        '--successor-scope-sha256 ' \
-        'b52db5e8ae6a2ad1f5311646f190e3a972900bb2b970111311a8e39bff8958ee'
+        "--successor-scope-sha256 #{C6_SUCCESSOR_SCOPE_SHA256}"
       ) &&
       derive["run"].include?(
-        '($scope[0].reuse_tasks | length) == 38'
+        '($scope[0].reuse_tasks | length) == 40'
       ) &&
       derive["run"].include?(
-        '($scope[0].build_tasks | length) == 3'
+        '($scope[0].build_tasks | length) == 1'
       ) &&
       derive["run"].include?(
-        '.reuse_source.campaign_tag == $c4'
+        '($scope[0].build_tasks | map(.formula) | sort) =='
+      ) &&
+      derive["run"].include?(
+        '["ruby"] and'
+      ) &&
+      derive["run"].include?(
+        '.reuse_source.campaign_tag == $c5'
       ) &&
       derive["run"].include?(
         '.campaign.tag != $b703 and .campaign.tag != $f901'
@@ -2887,6 +2987,8 @@ begin
   contract = load_workflow(CONTRACT_PATH)
   base_contract = load_workflow(BASE_CONTRACT_PATH)
   prefix_authority = load_json(PREFIX_CAMPAIGN_AUTHORITY_PATH)
+  c6_successor_scope = load_json(C6_SUCCESSOR_SCOPE_PATH)
+  c6_canonical_graph = load_json(C6_CANONICAL_GRAPH_PATH)
   prefix_campaign = load_workflow(PREFIX_CAMPAIGN_PATH)
   prefix_campaign_release = load_workflow(PREFIX_CAMPAIGN_RELEASE_PATH)
   check(
@@ -2910,6 +3012,7 @@ begin
     prefix_authority,
     PREFIX_CAMPAIGN_KANDELO_SHA
   )
+  check_c6_successor_scope(c6_successor_scope, c6_canonical_graph)
   check_prefix_campaign_workflow(prefix_campaign, prefix_authority)
   check_prefix_campaign_release_workflow(prefix_campaign_release)
   check_contract_workflow(contract)
