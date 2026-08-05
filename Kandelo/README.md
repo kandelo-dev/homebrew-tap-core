@@ -205,7 +205,7 @@ independent clean checkouts for the current source, predecessor recovery
 archive, historical bottle tap, and reviewed native Homebrew. It derives
 and rechecks the campaign in the Kandelo dev shell before it uploads
 inert content-addressed bytes. Publication stops unless the bytes equal
-the supplied digest. The C8 selected task graph must be exactly 40 C7
+the supplied digest. The C9 selected task graph must be exactly 40 C8
 predecessor handoffs plus a fresh Ruby build. The narrow write job
 downloads and validates only that handoff. It checks out the exact Kandelo
 helper and protected source again. It then invokes the unchanged immutable-release
@@ -239,7 +239,7 @@ exact protected Kandelo `main`, a publicly verified generation, and the
 subsequently published content-addressed campaign activated it at protected
 commit `454e5d54456c8d870496bacc0ba9c2759c863ab1`.
 
-The checked-in C8 campaign-release caller starts from active C7 tap commit
+The historical C8 campaign-release caller started from active C7 tap commit
 `454e5d54456c8d870496bacc0ba9c2759c863ab1`, which activates campaign
 `homebrew-prefix-campaign-sha256-8edea42ae932691b45c8695d5d6ab93a4a7ce1e08ee492ce3d7ead51fa45a185`,
 and pins Kandelo commit
@@ -259,6 +259,43 @@ direct C7 handoffs remain reuse inputs; Ruby alone rebuilds after run
 authenticated native tool keg and its exact target-Cellar proxy a 4 GiB
 aggregate bound. It retains the 1 GiB per-file bound and the existing 2 GiB
 bounds for true target dependencies, recipe source, and recipe output.
+
+The checked-in C9 arm starts from active C8 tap commit
+`9bbdbd334e4f45bf780e4d139cda1dc865a21419`, whose terminal campaign is
+`homebrew-prefix-campaign-sha256-a516aa5e61f4b7513c18c3e5b279a6a1f2d8b07e6a7348706238bc261a63ada4`.
+That campaign publicly verified 40 of 41 wasm32 tasks. Ruby run
+`31043674986` failed before recipe execution and produced no handoff because
+the later generic target-Cellar seal rejected LLVM 22.1.8's launcher-registered
+`etc/clang` bridge into the separately sealed native prefix.
+
+The terminal C8 archive is
+`Kandelo/campaigns/prefix-v1/aborted-campaigns/a516aa5e61f4b7513c18c3e5b279a6a1f2d8b07e6a7348706238bc261a63ada4.json`,
+sealed as
+`7d8a7a9d1ac4df5c5dda459990384a5fe296511217053edf2a8d13c16703a483`.
+The C9 successor scope is
+`Kandelo/campaigns/prefix-v1/successor/a516-successor-scope.json`, sealed as
+`a721afcecf9cde3185dcb6d5791a80e35ae99169bdd1a82666d63775ac32e187`.
+It preserves all 40 exact C8 handoffs and schedules only Ruby for a fresh
+build; the canonical 41-task graph and target overlay remain unchanged.
+
+The C9 executor correction composes the two existing seals instead of
+weakening either one. Only a proxy created by the launcher's registered native
+bridge transaction may retain a link into its separately sealed native
+closure; the exact immutable proxy shape and its component-aware link audit
+are revalidated before that one keg is excluded from the ordinary
+target-Cellar containment rule. Unregistered, redirected, writable, or
+otherwise changed bridges still fail closed.
+
+The C9 arm is finalized against the live protected Kandelo authority and its
+independently, anonymously verified rootfs generation:
+
+- `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106`; and
+- `package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
+
+These exact identities must remain equal across every rotation-owned
+executable, trust, authority, and documentation slot. A PR head, synthetic
+merge, predecessor executor, mutable package tag, or merely expected future
+identity is not a substitute.
 
 After independently deriving the candidate from the newly merged armed
 commit `T_ARM` and recording its digest as `C`, dispatch only that exact

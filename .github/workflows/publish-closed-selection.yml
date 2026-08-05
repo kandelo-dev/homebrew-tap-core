@@ -24,9 +24,9 @@ jobs:
       contents: write
     # WHY: this caller is protected data-only authority. Kandelo owns every
     # executable step and rechecks both protected main branches before writes.
-    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-closed-selection-publish.yml@75885de70c80448f08600b31a9466608e369713c
+    uses: Automattic/kandelo/.github/workflows/reusable-homebrew-closed-selection-publish.yml@45a45fed06ff053ee4dd2cc2bb6564a99d5ce106
     with:
       expected-caller-sha: ${{ inputs.expected_caller_sha }}
-      kandelo-ref: 75885de70c80448f08600b31a9466608e369713c
+      kandelo-ref: 45a45fed06ff053ee4dd2cc2bb6564a99d5ce106
       selection-plan: ${{ inputs.selection_plan }}
       selection-plan-sha256: ${{ inputs.selection_plan_sha256 }}

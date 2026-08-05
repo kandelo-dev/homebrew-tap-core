@@ -154,8 +154,8 @@ remain unchanged. That authority stayed armed until protected Kandelo `main`
 and its publicly verified rootfs generation provided the exact executable
 pins.
 
-The successor to campaign `f692a88a...` starts from active C6 tap commit
-`1d7d63673d70c7204fef83f9284f4367b30a8b8a` and keeps that same canonical
+The historical C7 successor to campaign `f692a88a...` started from active C6
+tap commit `1d7d63673d70c7204fef83f9284f4367b30a8b8a` and keeps that same canonical
 41-task graph and sealed target overlay. The graph remains sealed as
 `40a651d2ebe3a3aaab4bf9b65d91cf34db9908cb764a518437ac850747c4b139`.
 The C7 scope partitions it into 40 exact direct C6 handoffs and one fresh Ruby
@@ -173,7 +173,7 @@ The authority remained armed until the content-addressed C7 campaign was
 published from the protected arm commit and anonymously verified; protected
 commit `454e5d54456c8d870496bacc0ba9c2759c863ab1` then activated it.
 
-The successor to campaign `8edea42a...` starts from that active C7 commit with
+The historical C8 successor to campaign `8edea42a...` started from that active C7 commit with
 the same canonical graph and sealed target overlay. The C8 scope again contains
 40 exact predecessor handoffs and one fresh Ruby build, but its predecessor is
 the terminal C7 campaign. The archived C7 evidence is sealed as
@@ -189,3 +189,34 @@ native-keg aggregate. C8 raises only each authenticated native tool keg and its
 exact target-Cellar proxy to 4 GiB. The 1 GiB per-file limit and the 2 GiB
 true-target-dependency, recipe-source, and recipe-output limits remain
 unchanged.
+
+The checked-in C9 successor starts from active C8 tap commit
+`9bbdbd334e4f45bf780e4d139cda1dc865a21419` and terminal campaign
+`a516aa5e61f4b7513c18c3e5b279a6a1f2d8b07e6a7348706238bc261a63ada4`.
+That terminal ledger retains 40 publicly verified handoffs and failed
+Ruby/wasm32 run `31043674986` with no handoff. Its canonical archive is
+`aborted-campaigns/a516aa5e61f4b7513c18c3e5b279a6a1f2d8b07e6a7348706238bc261a63ada4.json`,
+sealed as
+`7d8a7a9d1ac4df5c5dda459990384a5fe296511217053edf2a8d13c16703a483`.
+The new `successor/a516-successor-scope.json` is sealed as
+`a721afcecf9cde3185dcb6d5791a80e35ae99169bdd1a82666d63775ac32e187`
+and selects exactly those 40 C8 handoffs plus one fresh Ruby build against the
+unchanged canonical graph.
+
+Ruby failed before recipe execution because the generic target-Cellar seal
+correctly rejected its copied LLVM proxy's launcher-registered `etc/clang`
+link into the separately sealed native prefix. The C9 correction does not make
+cross-prefix target links generally valid. It recognizes only immutable proxy
+kegs recorded by the launcher's native-bridge transaction, revalidates their
+exact source, target, ownership, modes, and opt link, and subjects retained
+links to the component-aware sealed-native projection audit. An unregistered,
+redirected, writable, or changed proxy remains a hard failure.
+
+The arm is finalized with these live, independently verified identities:
+
+- `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106`; and
+- `package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
+
+They name the final protected Kandelo `main` commit and the exact public rootfs
+generation admitted against that commit. Historical C6, C7, and C8 identities
+above remain audit evidence and were not rewritten during finalization.

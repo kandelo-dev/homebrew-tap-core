@@ -112,7 +112,7 @@ including Git, and rebuilds only Ruby under the corrected Kandelo executor.
 The correction seals and admits exactly the prefix runtime root `etc/clang`;
 it does not admit the rest of `etc`.
 
-### Complete the terminal C7 to Ruby-only C8 transition
+### Historical terminal C7 to Ruby-only C8 transition
 
 The C8 candidate starts from protected tap commit
 `454e5d54456c8d870496bacc0ba9c2759c863ab1`, which activated campaign
@@ -132,6 +132,41 @@ and its exact target-Cellar proxy to 4 GiB. It preserves the 1 GiB per-file
 limit and the existing 2 GiB limits for true target dependencies, recipe
 source, and recipe output.
 
+### Complete the terminal C8 to Ruby-only C9 transition
+
+The C9 candidate starts from protected tap commit
+`9bbdbd334e4f45bf780e4d139cda1dc865a21419`, which activated terminal C8
+campaign
+`a516aa5e61f4b7513c18c3e5b279a6a1f2d8b07e6a7348706238bc261a63ada4`.
+Its terminal ledger contains 40 publicly verified handoffs and failed
+Ruby/wasm32 run `31043674986` with no handoff. The exact terminal archive is
+`Kandelo/campaigns/prefix-v1/aborted-campaigns/a516aa5e61f4b7513c18c3e5b279a6a1f2d8b07e6a7348706238bc261a63ada4.json`,
+sealed as
+`7d8a7a9d1ac4df5c5dda459990384a5fe296511217053edf2a8d13c16703a483`.
+The 40-reuse/Ruby-build scope is
+`Kandelo/campaigns/prefix-v1/successor/a516-successor-scope.json`, sealed as
+`a721afcecf9cde3185dcb6d5791a80e35ae99169bdd1a82666d63775ac32e187`.
+The canonical 41-task graph and sealed target overlay remain unchanged.
+
+Ruby failed before recipe execution because the generic target-Cellar seal
+rejected authenticated LLVM 22.1.8's launcher-registered `etc/clang` bridge
+into the separately sealed native prefix. C9 preserves that link only for the
+exact immutable proxy recorded by the launcher's native-bridge transaction.
+It revalidates the registered source, proxy shape, ownership, modes, opt link,
+and component-aware native projection before excluding only that selected keg
+from the ordinary containment rule. Unregistered or redirected cross-prefix
+links and writable or changed proxies still fail closed.
+
+The candidate is finalized with the protected Kandelo commit and independently
+admitted generation:
+
+- `M=45a45fed06ff053ee4dd2cc2bb6564a99d5ce106`; and
+- `G=package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
+
+Require both across every rotation-owned executable, trust, authority, and
+documentation slot before merge. Historical C6, C7, and C8 evidence was not a
+finalization target.
+
 Before making the candidate executable:
 
 1. Re-query protected Kandelo `main` and require exact `M`. Recheck the public
@@ -139,20 +174,20 @@ Before making the candidate executable:
    the current tap tree. Do not substitute a PR head, synthetic merge, or
    expected future commit.
 2. In one candidate tree, preview and apply `archive-active` with activation
-   commit `454e5d54456c8d870496bacc0ba9c2759c863ab1`; then preview and apply
+   commit `9bbdbd334e4f45bf780e4d139cda1dc865a21419`; then preview and apply
    `rotate-publisher-trust` with the complete queried predecessor tuple,
    exact `M`, and exact `G`. Commit the archive, finalized scope,
    campaign-release caller, docs, trust tests, armed authority, and all
    rotation-owned files together as `T_ARM`.
 
-The sealed target overlay is unchanged in C8: manifest SHA-256
+The sealed target overlay is unchanged in C9: manifest SHA-256
 `b430d1b934e3b5b07e8f7fcf1b3c1ab6737a82eb6722dad7b5fdaa81ea949243`,
 source tree Git OID `8e825398d9ce414d6148ed2f8eac4e5de4ffb16c`, and target tree Git OID
 `7e314590d18936d0ad3bf8ab42e49d7b4f234892`. `archive-active` validates the
 already-present archive and writes the intermediate armed authority
 atomically; the trust-rotation helper then advances the two equal Kandelo
-fields to exact `M`. `archive-active` alone does not authorize C8, and rotating
-an active C7 authority in place remains forbidden.
+fields to exact `M`. `archive-active` alone does not authorize C9, and rotating
+an active C8 authority in place remains forbidden.
 
 Archive and arm the predecessor before running the rotation helper:
 
@@ -174,7 +209,7 @@ activate only its data:
 
 ```bash
 SUCCESSOR_SCOPE="Kandelo/campaigns/prefix-v1/successor/"\
-"8ede-successor-scope.json"
+"a516-successor-scope.json"
 
 python3 -B scripts/transition-prefix-campaign-authority.py \
   activate-successor \
@@ -246,26 +281,33 @@ Both transition commands are exact-state idempotent before their result
 is committed. Repeating `--apply` accepts only the same derived state
 and performs no second write.
 
-## Establish the C8 executor and generation
+## Establish the C9 executor and generation
 
-The exact C8 executor and rootfs generation were established before this tap
-arm. Do not repeat the earlier #1160 `force-rebuild.yml` procedure or promote
-from the mutable `binaries-abi-v42` tag. C8 uses the same rootfs package bytes
-through an independently verified package-cache projection because the
-intervening Kandelo changes do not alter that package closure.
+The C9 executor includes the registered sealed native-bridge correction on
+exact protected Kandelo `main`; its pull-request head is not authority. The
+final commit is `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106` and its
+independently admitted rootfs generation is
+`package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
+Both are live authority, not predicted defaults.
 
-1. Set `M` to exact protected Kandelo commit
-   `75885de70c80448f08600b31a9466608e369713c` and `G` to exact public release
-   `package-generation-rootfs-wasm32-abi-v42-sha256-697af3ea327198ae4fcfb8100662e504cf58d32de4b2045423b821c6e905a0a5`.
-2. Re-query protected Kandelo `main` and require it still equals `M`. Do not use
-   a PR head, synthetic merge, or expected future commit.
-3. Require the immutable public `generation.json` and its anonymous readback
+Do not repeat the earlier #1160 `force-rebuild.yml` procedure or promote from
+the mutable `binaries-abi-v42` tag. C9 may use the same rootfs package bytes
+only through a new independently verified package-cache projection because
+the registered bridge correction does not alter that package closure.
+
+1. Keep both exact identities equal in every rotation-owned slot. Do not
+   substitute a PR head, synthetic merge, predecessor executor, or expected
+   future commit.
+2. Keep protected Kandelo `main` frozen at `M`; `G` is the anonymously verified
+   content-addressed projection of the preserved rootfs source against `M`.
+3. Re-query protected Kandelo `main` and require it still equals `M`.
+4. Require the immutable public `generation.json` and its anonymous readback
    receipt to bind `.identity.authority_sha=M`,
    `.identity.validated_against_main.commit=M`, `.identity.abi_version=42`,
    `.identity.projection.root_package=rootfs`,
    `.identity.projection.arch=wasm32`, and
    `.identity.validated_against_main.method=identical-package-cache-projection-v1`.
-4. Require its exact preserved source tag to be
+5. Require its exact preserved source tag to be
    `preserved-package-generation-rootfs-wasm32-abi-v42-source-662f00c44f3e1d0ebc0d1a573df101e721b73006-sha256-0f60546befd9287a17420a00c0e2d68a5dbd22bc9d5861d31bd3e75acb38eb48`
    at `.identity.producer.evidence.tag` and its producer SHA to be
    `662f00c44f3e1d0ebc0d1a573df101e721b73006` at
@@ -273,13 +315,15 @@ intervening Kandelo changes do not alter that package closure.
    against that preserved source; a successful workflow summary alone is not
    generation authority.
 
-Use the exact already-published identities:
+The finalized arm uses the independently verified values:
 
 ```bash
 set -euo pipefail
 
-M=75885de70c80448f08600b31a9466608e369713c
-G=package-generation-rootfs-wasm32-abi-v42-sha256-697af3ea327198ae4fcfb8100662e504cf58d32de4b2045423b821c6e905a0a5
+M=45a45fed06ff053ee4dd2cc2bb6564a99d5ce106
+G=package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40
+[[ "$M" =~ ^[0-9a-f]{40}$ ]]
+[[ "$G" =~ ^package-generation-rootfs-wasm32-abi-v42-sha256-[0-9a-f]{64}$ ]]
 test "$(gh api repos/Automattic/kandelo/commits/main --jq .sha)" = "$M"
 export M G
 ```
@@ -287,7 +331,7 @@ export M G
 If Kandelo `main` advances before the arm merge or campaign-release write
 boundary, stop. Derive a new authority bundle and independently validate an
 appropriate generation against the new current-main commit; do not substitute
-the new commit or relabel `G` inside this reviewed C8 tree. Publication and
+the new commit or relabel `G` inside this reviewed C9 tree. Publication and
 maintenance re-query `main`, so stale `M` fails closed even after the tap has
 selected it.
 
@@ -321,17 +365,18 @@ by that dry run. Normal Formula publication remained pinned to
 converge on current authority but still rejects collisions with
 historical test fixtures.
 
-For C8, query all predecessor slots from exact active base
-`454e5d54456c8d870496bacc0ba9c2759c863ab1` and rotate them together. Do not
+For C9, query all predecessor slots from exact active base
+`9bbdbd334e4f45bf780e4d139cda1dc865a21419` and rotate them together. Do not
 rerun the namespace canary or introduce a new split rotation.
 
 ## Audit authority before changing files
 
-Start from a clean checkout at exact active C7 tap commit
-`454e5d54456c8d870496bacc0ba9c2759c863ab1`. Apply the generated C8 archive,
-scope, authority transition, complete trust rotation, campaign-release caller,
-tests, and documentation in one reviewed arm tree. Do not stack unrelated work
-or silently rebase these identities onto a different protected base.
+Start from a clean checkout at exact active C8 tap commit
+`9bbdbd334e4f45bf780e4d139cda1dc865a21419`. Apply the generated terminal-C8
+archive, C9 scope, authority transition, complete trust rotation,
+campaign-release caller, tests, and documentation in one reviewed arm tree. Do
+not stack unrelated work or silently rebase these identities onto a different
+protected base.
 
 Confirm the complete predecessor production caller, not only its visible pins:
 
