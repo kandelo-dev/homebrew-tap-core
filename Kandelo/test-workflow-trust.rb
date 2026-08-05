@@ -1670,7 +1670,24 @@ def check_prefix_campaign_release_workflow(workflow)
         'test "$observed_sha" = "$EXPECTED_CAMPAIGN_SHA256"'
       ) &&
       derive["run"].include?(
-        '.reuse_source.campaign_tag == $f901'
+        '--successor-scope-path ' \
+        'Kandelo/campaigns/prefix-v1/successor/01cc-successor-scope.json'
+      ) &&
+      derive["run"].include?(
+        '--successor-scope-sha256 ' \
+        'b52db5e8ae6a2ad1f5311646f190e3a972900bb2b970111311a8e39bff8958ee'
+      ) &&
+      derive["run"].include?(
+        '($scope[0].reuse_tasks | length) == 38'
+      ) &&
+      derive["run"].include?(
+        '($scope[0].build_tasks | length) == 3'
+      ) &&
+      derive["run"].include?(
+        '.reuse_source.campaign_tag == $c4'
+      ) &&
+      derive["run"].include?(
+        '.campaign.tag != $b703 and .campaign.tag != $f901'
       ) &&
       derive["run"].include?(
         '.disposition.kind == "required-rebuild"'
