@@ -215,11 +215,14 @@ public release is non-draft, non-prerelease, and immutable. It targets
 the exact source and contains only the exact `campaign.json`. It also
 resolves the direct tag without credentials.
 
-The checked-in C6 structure is deliberately inert while
-`__C5_TERMINAL_ARCHIVE_SHA256__` or `__C6_SUCCESSOR_SCOPE_SHA256__` remains.
-Replace those markers only from the exact terminal C5 archive and the final
-scope bytes. The workflow's digest admission then makes any later scope or
-archive change fail closed.
+The checked-in C6 caller pins successor scope
+`258e85edff6610e4d478abb6d8b887561b39a80e3f20f6bd8ba3b3a017992f64`,
+which in turn pins terminal C5 archive
+`de031d03eb2d9d598bc00f7bfe34538dc07fbbc27ef76f1ace22b83382a07b4e`.
+The workflow's digest admission makes any later scope or archive change fail
+closed. The campaign remains inert while its authority is armed; only exact
+protected Kandelo `main`, a publicly verified generation, and a subsequently
+published content-addressed campaign may activate it.
 
 After independently deriving the candidate from the newly merged armed
 commit `T_ARM` and recording its digest as `C`, dispatch only that exact
