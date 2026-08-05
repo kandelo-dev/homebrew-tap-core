@@ -119,9 +119,9 @@ jobs:
             }
           ' "$authority" >/dev/null
           test "$(sha256sum \
-            Kandelo/campaigns/prefix-v1/successor/f901-successor-scope.json \
+            Kandelo/campaigns/prefix-v1/successor/01cc-successor-scope.json \
             | awk '{print $1}')" = \
-            a2781de5f9d2f029a59aa6ce8ac11283b56fbf892135267a5c30be841021830d
+            b52db5e8ae6a2ad1f5311646f190e3a972900bb2b970111311a8e39bff8958ee
           test "$(sha256sum \
             Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json \
             | awk '{print $1}')" = \
@@ -243,8 +243,8 @@ jobs:
             --native-brew-commit cf5bc21c6b127e168ef7cfa982ba7db62874690e
             --metadata-sha256 34f1cb2454ff6d9c134195302a5c5fcac85b9502f2522d3e584bf55d539c9a7d
             --guest-layout-sha256 03cbe2ef439d1c274a5b43cc86fb877da3b4942cc6489fba9df99d8e3968f857
-            --successor-scope-path Kandelo/campaigns/prefix-v1/successor/f901-successor-scope.json
-            --successor-scope-sha256 a2781de5f9d2f029a59aa6ce8ac11283b56fbf892135267a5c30be841021830d
+            --successor-scope-path Kandelo/campaigns/prefix-v1/successor/01cc-successor-scope.json
+            --successor-scope-sha256 b52db5e8ae6a2ad1f5311646f190e3a972900bb2b970111311a8e39bff8958ee
             # WHY: read-only run 30947720875 timed out on ruby/wasm32
             # with eight concurrent Wasm inspectors on a hosted runner.
             # Two matches 2-4 vCPU while preserving the 120s bound.
@@ -269,12 +269,13 @@ jobs:
           test "$observed_sha" = "$EXPECTED_CAMPAIGN_SHA256"
           test "$observed_bytes" -gt 0
 
-          scope="$GITHUB_WORKSPACE/source-tap/Kandelo/campaigns/prefix-v1/successor/f901-successor-scope.json"
+          scope="$GITHUB_WORKSPACE/source-tap/Kandelo/campaigns/prefix-v1/successor/01cc-successor-scope.json"
           graph="$GITHUB_WORKSPACE/source-tap/Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json"
           jq -e \
             --arg source "$SOURCE_COMMIT" \
             --arg b703 "homebrew-prefix-campaign-sha256-b70354153423d107838c82d899adad0455858d5b713f2259ae53c2ae2915a205" \
             --arg f901 "homebrew-prefix-campaign-sha256-f90144f439caa3806cbd145fc0d5f34ddbf6905d43a15b023106389696376de0" \
+            --arg c4 "homebrew-prefix-campaign-sha256-01cc2e9a3eeff3ee323af55e4dd1fdd2641be3898232c6a541f81256f216126b" \
             --slurpfile scope "$scope" \
             --slurpfile graph "$graph" '
               def variant($task):
@@ -285,12 +286,14 @@ jobs:
               .authority.source_tap_commit == $source and
               .authority.predecessor_recovery_source.commit == $source and
               .authority.successor_scope == {
-                path: "Kandelo/campaigns/prefix-v1/successor/f901-successor-scope.json",
-                sha256: "a2781de5f9d2f029a59aa6ce8ac11283b56fbf892135267a5c30be841021830d"
+                path: "Kandelo/campaigns/prefix-v1/successor/01cc-successor-scope.json",
+                sha256: "b52db5e8ae6a2ad1f5311646f190e3a972900bb2b970111311a8e39bff8958ee"
               } and
               ($graph[0].tasks | length) == 41 and
-              ($scope[0].reuse_tasks | length) == 35 and
-              ($scope[0].build_tasks | length) == 6 and
+              ($scope[0].reuse_tasks | length) == 38 and
+              ($scope[0].build_tasks | length) == 3 and
+              ($scope[0].build_tasks | map(.formula) | sort) ==
+                ["git", "ruby", "vim"] and
               (($scope[0].reuse_tasks + $scope[0].build_tasks) |
                 sort_by([.formula, .arch])) ==
                 ($graph[0].tasks | sort_by([.formula, .arch])) and
@@ -298,19 +301,20 @@ jobs:
                 variant($task) |
                 select(
                   .reuse_source.kind == "predecessor-handoff" and
-                  .reuse_source.campaign_tag == $f901
+                  .reuse_source.campaign_tag == $c4
                 )] |
-                length) == 35 and
+                length) == 38 and
               ([$scope[0].build_tasks[] as $task |
                 variant($task) |
                 select(
                   (has("reuse_source") | not) and
                   .disposition.kind == "required-rebuild"
-                )] | length) == 6 and
+                )] | length) == 3 and
               all(.formulae[].variants[];
-                (.reuse_source.campaign_tag? // "") != $b703) and
+                ((.reuse_source.campaign_tag? // "") != $b703 and
+                 (.reuse_source.campaign_tag? // "") != $f901)) and
               all(.authority.predecessor_recovery[];
-                .campaign.tag != $b703)
+                (.campaign.tag != $b703 and .campaign.tag != $f901))
             ' "$out/campaign.json" >/dev/null
 
           cp "$out/campaign.json" "$out/assets/campaign.json"

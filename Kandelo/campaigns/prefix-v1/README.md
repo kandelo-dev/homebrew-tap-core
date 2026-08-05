@@ -121,10 +121,19 @@ campaign release, package generation, and source-tap commit together. It does
 not delete public evidence or make an old handoff valid for a later campaign.
 
 `aborted-campaigns/` retains the exact abandoned authority, dispatches, and
-public handoffs. The planned bounded recovery may rebind a prior reuse handoff
+public handoffs. The bounded recovery path may rebind a prior reuse handoff
 without rebuilding or reinspecting its bottle only when the ABI, bottle bytes,
 Formula source, guest layout, validation contract, and dependency digests are
-all unchanged. That support is not active until its controller path and tests
-land. Its successor receipt must name both campaigns and the immutable
-predecessor handoff. A fresh build or any changed input must use the normal
-successor task instead.
+all unchanged. A workflow failure after complete publication does not make its
+handoff verified archive evidence by itself. Recovery must retain the frozen
+terminal ledger unchanged, identify the protected verifier correction, and
+bind a separately durable credential-free readback supplement before the
+archive may classify that exact release as publicly verified. Its successor
+receipt must name both campaigns and the immutable predecessor handoff. A
+fresh build or any changed input must use the normal successor task instead.
+
+The successor scope for campaign `01cc2e9a...` partitions the canonical
+41-task wasm32 shell graph into 38 exact predecessor handoffs and three fresh
+builds: Git, Ruby, and Vim. Findutils and Less reuse their immutable `01cc`
+handoffs; they are not rebuilt merely because the original workflows failed
+after publishing them.

@@ -105,7 +105,7 @@ activate only its data:
 
 ```bash
 SUCCESSOR_SCOPE="Kandelo/campaigns/prefix-v1/successor/"\
-"f901-successor-scope.json"
+"01cc-successor-scope.json"
 
 python3 -B scripts/transition-prefix-campaign-authority.py \
   activate-successor \
@@ -151,6 +151,17 @@ anonymously and validates their content-addressed evidence. The
 scheduler independently reads each new successor handoff before
 marking it usable. Those checks, publication, and anonymous release
 readback remain separate because this helper has no credentials.
+
+If an original workflow published a complete handoff but failed in a later
+tap-side validation step, do not rewrite its terminal scheduler entry and do
+not use GitHub's re-run control. First merge the verifier correction to
+protected main, then run the exact protected verifier bytes locally without
+credentials and freeze the complete readback as a separately checksummed
+supplement. The archive cause must name the protected correction commit and
+supplement digest. Only then may the archive classify that original release as
+publicly verified; its dispatch still names the original publication run and
+release identity. A local pre-merge check or an authenticated metadata query is
+not archive authority.
 
 The transition helper intentionally does not import Kandelo's complete
 campaign parser. That parser belongs to exact `M`, loads companion
