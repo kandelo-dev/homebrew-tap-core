@@ -116,14 +116,15 @@ verification, Homebrew pour/test evidence, and runtime and browser gates.
 Formula-specific provenance records the bottle and runtime results; run-scoped
 transport receipts provide the registry proof.
 
-## First `libyaml` GHCR Child
+## Historical first `libyaml` GHCR child
 
-`.github/workflows/repository-namespace-canary.yml` is the narrow bootstrap
-caller for the absent public `homebrew-tap-core/libyaml` package. It is fixed in
-reviewed YAML to Formula `libyaml`, architecture `wasm32`, this tap's exact
-protected-main commit, and one immutable Kandelo workflow commit. The workflow
-can run only through the separate `publish-first-homebrew-child` repository
-dispatch; neither an ordinary dry run nor the prefix campaign can invoke it.
+`.github/workflows/repository-namespace-canary.yml` was the narrow bootstrap
+caller for the then-absent public `homebrew-tap-core/libyaml` package. It is
+fixed in reviewed YAML to Formula `libyaml`, architecture `wasm32`, this tap's
+exact protected-main commit, and one immutable Kandelo workflow commit. The
+workflow can run only through the separate `publish-first-homebrew-child`
+repository dispatch; neither an ordinary dry run nor the prefix campaign can
+invoke it.
 
 The dispatch supplies evidence, not publication policy: one completed-success
 `dry-run-bottles.yml` run ID and attempt from the same tap commit, the unique
@@ -140,17 +141,17 @@ package, or non-public readback fails closed.
 This path publishes no marker, mutable version index, Formula edit, sidecar, or
 campaign handoff. It is serialized per Formula and must reject every
 replay after the package repository exists. A separate normal `libyaml`
-publication must later publish and verify the complete index, finalize
-tap state, and pass the acceptance procedure below. A prefix campaign
-may be `inert` or `armed`, but it is not dispatchable until it is
-`active`; campaign selection and reuse continue to require anonymous
-public evidence.
+publication was still required to publish and verify the complete index,
+finalize tap state, and pass the acceptance procedure below. Its complete C6
+handoff is now among C7's selected reuse evidence. The one-time namespace
+bootstrap is complete and must not be run again.
 
-After the prerequisite Kandelo commit and this caller are both on their exact
-protected `main` refs, first run a fresh `libyaml`/`wasm32` dry run at that tap
-commit. Inspect the run and artifact through the GitHub API, download the exact
-named child to read `.oci.manifest.digest` from `receipt.json`, and only then
-dispatch the reviewed event with string-valued evidence:
+For audit history, the completed bootstrap first ran a fresh
+`libyaml`/`wasm32` dry run after both prerequisite commits reached their exact
+protected `main` refs. The operator inspected the run and artifact through the
+GitHub API, downloaded the exact named child to read `.oci.manifest.digest`
+from `receipt.json`, and only then dispatched the reviewed event with
+string-valued evidence:
 
 ```json
 {
@@ -204,8 +205,8 @@ independent clean checkouts for the current source, predecessor recovery
 archive, historical bottle tap, and reviewed native Homebrew. It derives
 and rechecks the campaign in the Kandelo dev shell before it uploads
 inert content-addressed bytes. Publication stops unless the bytes equal
-the supplied digest. The C6 selected task graph must be exactly 39 C5
-predecessor handoffs plus fresh Git and Ruby builds. The narrow write job
+the supplied digest. The C7 selected task graph must be exactly 40 C6
+predecessor handoffs plus a fresh Ruby build. The narrow write job
 downloads and validates only that handoff. It checks out the exact Kandelo
 helper and protected source again. It then invokes the unchanged immutable-release
 helper inside the real Actions run. Both content ancestry and exact
@@ -215,10 +216,23 @@ public release is non-draft, non-prerelease, and immutable. It targets
 the exact source and contains only the exact `campaign.json`. It also
 resolves the direct tag without credentials.
 
-The checked-in C6 caller pins successor scope
-`258e85edff6610e4d478abb6d8b887561b39a80e3f20f6bd8ba3b3a017992f64`,
-which in turn pins terminal C5 archive
-`de031d03eb2d9d598bc00f7bfe34538dc07fbbc27ef76f1ace22b83382a07b4e`.
+The checked-in C7 campaign-release caller starts from active C6 tap commit
+`1d7d63673d70c7204fef83f9284f4367b30a8b8a` and pins Kandelo commit
+`c157026d1234c9a28dc630d02f963828525897a7`. The combined arm rotates the live
+package-generation consumers to public rootfs generation
+`package-generation-rootfs-wasm32-abi-v42-sha256-f44d50ad73b5bdd6c6f396b47806babff3b3fdc6869ee9f1d2f88f9460581fb4`;
+the armed campaign authority still keeps its release, generation, and source
+identities zero until the published successor is activated. Its successor
+scope is sealed as
+`227830740f1c179e6194b32d7383d358b321763d1bbb7ff2ec029a549a47c315`,
+which in turn pins terminal C6 archive
+`3b1e288aadb23fa85db549cfc874aabc035756a18bace01b606ed0d1c54b9f07`.
+The canonical 41-task graph and sealed target overlay are unchanged; the graph
+remains
+`40a651d2ebe3a3aaab4bf9b65d91cf34db9908cb764a518437ac850747c4b139`.
+All 40 direct C6 handoffs, including Git, remain reuse inputs. Ruby alone
+rebuilds after the executor correction seals and admits LLVM's exact prefix
+runtime root `etc/clang`; no broader `etc` tree is admitted.
 The workflow's digest admission makes any later scope or archive change fail
 closed. The campaign remains non-dispatchable while its authority is armed;
 only exact protected Kandelo `main`, a publicly verified generation, and a
