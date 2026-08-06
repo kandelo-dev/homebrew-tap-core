@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -29,57 +30,157 @@ MANIFEST = ROOT / "Kandelo/campaigns/prefix-v1/manifest.json"
 SOURCE_ROOT = ROOT / "Kandelo/campaigns/prefix-v1/source"
 EXPECTED_SOURCE_TREE_GIT_OID = "f9ec87e3b50beea1c71cede57abe160e639fb5d8"
 EXPECTED_TARGET_TREE_GIT_OID = "7d22236c4234fe91100d19f5bf72214e5f191c8a"
+EXPECTED_BASE_COMMIT = "2e192c8cf318044078e5426d39717636131cec60"
+PRE_CUTOVER_FIXTURE_COMMIT = "d98a00a0c087e366aa95a3b0b2c73c5eb8181f3f"
+PROMOTED_NON_FORMULA_PRODUCT_PATHS = (
+    "Kandelo/formula_support/kandelo_formula_support.rb",
+    "Kandelo/formula_support/test/kandelo_formula_support_test.rb",
+    "Kandelo/formula_support/test/run-browser-wasm.test.ts",
+    "Kandelo/recipes/homebrew-bootstrap/PATCH-LICENSE.md",
+    "Kandelo/recipes/homebrew-bootstrap/build.sh",
+    "Kandelo/recipes/homebrew-bootstrap/patches/"
+    "0001-add-kandelo-wasm-bottle-tags.patch",
+    "Kandelo/recipes/homebrew-bootstrap/recipe.json",
+    "Kandelo/recipes/homebrew-bootstrap/source-lock.json",
+    "Kandelo/recipes/homebrew-bootstrap/verify-source-lock.rb",
+    "Kandelo/recipes/ruby/build.sh",
+    "Kandelo/recipes/ruby/recipe.json",
+)
 
 
 class PrefixCampaignSourceTests(unittest.TestCase):
-    def test_checked_in_overlay_is_exact_and_live_tree_stays_at_base(
+    def post_cutover_fixture(
         self,
-    ) -> None:
-        summary = SOURCE.verify_source(
-            root=ROOT,
-            authority_path=AUTHORITY,
-            manifest_path=MANIFEST,
-            require_live_base=True,
+        directory: str,
+    ) -> pathlib.Path:
+        root = pathlib.Path(directory) / "post-cutover"
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                "--shared",
+                "--no-checkout",
+                str(ROOT),
+                str(root),
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=120,
         )
-        self.assertEqual(summary["files"], 48)
-        self.assertEqual(
-            summary["base_commit"],
-            "2e192c8cf318044078e5426d39717636131cec60",
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "checkout",
+                "--quiet",
+                "--detach",
+                PRE_CUTOVER_FIXTURE_COMMIT,
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=120,
         )
-        self.assertEqual(
-            summary["source_tree_git_oid"],
-            EXPECTED_SOURCE_TREE_GIT_OID,
+        manifest = json.loads(
+            (root / MANIFEST.relative_to(ROOT)).read_text(encoding="utf-8")
         )
-        self.assertEqual(
-            summary["target_tree_git_oid"],
-            EXPECTED_TARGET_TREE_GIT_OID,
+        target_modes = {
+            file_record["path"]: file_record["target"]["mode"]
+            for file_record in manifest["files"]
+        }
+        for path_value in PROMOTED_NON_FORMULA_PRODUCT_PATHS:
+            path = pathlib.PurePosixPath(path_value)
+            source = (
+                root
+                / SOURCE_ROOT.relative_to(ROOT)
+                / pathlib.Path(*path.parts)
+            )
+            destination = root / pathlib.Path(*path.parts)
+            shutil.copyfile(source, destination, follow_symlinks=False)
+            os.chmod(
+                destination,
+                0o755 if target_modes[path_value] == "100755" else 0o644,
+            )
+        return root
+
+    def materialize_post_cutover(
+        self,
+        *,
+        root: pathlib.Path,
+        output: pathlib.Path,
+    ) -> dict[str, object]:
+        return SOURCE.materialize(
+            root=root,
+            authority_path=root / AUTHORITY.relative_to(ROOT),
+            manifest_path=root / MANIFEST.relative_to(ROOT),
+            output=output,
+            require_live_base=False,
         )
 
+    def assert_promoted_product_support_is_exact(
+        self,
+        root: pathlib.Path,
+    ) -> None:
+        for path_value in PROMOTED_NON_FORMULA_PRODUCT_PATHS:
+            path = pathlib.Path(path_value)
+            self.assertEqual(
+                (root / path).read_bytes(),
+                (
+                    root
+                    / SOURCE_ROOT.relative_to(ROOT)
+                    / path
+                ).read_bytes(),
+                path_value,
+            )
         active_helper = (
-            ROOT / "Kandelo/formula_support/kandelo_formula_support.rb"
+            root / "Kandelo/formula_support/kandelo_formula_support.rb"
         ).read_text(encoding="utf-8")
-        target_helper = (
-            SOURCE_ROOT
-            / "Kandelo/formula_support/kandelo_formula_support.rb"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn(
+        self.assertIn(
             'KANDELO_GUEST_HOMEBREW_PREFIX = "/opt/kandelo/homebrew"',
             active_helper,
         )
-        self.assertIn(
-            'KANDELO_GUEST_HOMEBREW_PREFIX = "/opt/kandelo/homebrew"',
-            target_helper,
-        )
 
-    def test_materialization_is_the_exact_reviewed_target_tree(self) -> None:
+    def test_materialization_requires_live_base_by_default(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            root = self.post_cutover_fixture(directory)
             output = pathlib.Path(directory) / "target"
-            SOURCE.materialize(
-                root=ROOT,
-                authority_path=AUTHORITY,
-                manifest_path=MANIFEST,
+            with self.assertRaisesRegex(
+                SOURCE.SourceError,
+                "live pre-cutover path .* differs",
+            ):
+                SOURCE.materialize(
+                    root=root,
+                    authority_path=root / AUTHORITY.relative_to(ROOT),
+                    manifest_path=root / MANIFEST.relative_to(ROOT),
+                    output=output,
+                )
+
+    def test_post_cutover_materialization_is_exact_reviewed_target_tree(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.post_cutover_fixture(directory)
+            output = pathlib.Path(directory) / "target"
+            summary = self.materialize_post_cutover(
+                root=root,
                 output=output,
             )
+            self.assertEqual(summary["files"], 48)
+            self.assertEqual(summary["base_commit"], EXPECTED_BASE_COMMIT)
+            self.assertEqual(
+                summary["source_tree_git_oid"],
+                EXPECTED_SOURCE_TREE_GIT_OID,
+            )
+            self.assertEqual(
+                summary["target_tree_git_oid"],
+                EXPECTED_TARGET_TREE_GIT_OID,
+            )
+            self.assert_promoted_product_support_is_exact(root)
             self.assertEqual(
                 SOURCE.source_tree_oid(output),
                 EXPECTED_TARGET_TREE_GIT_OID,
@@ -119,11 +220,10 @@ class PrefixCampaignSourceTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            root = self.post_cutover_fixture(directory)
             target = pathlib.Path(directory) / "target"
-            SOURCE.materialize(
-                root=ROOT,
-                authority_path=AUTHORITY,
-                manifest_path=MANIFEST,
+            self.materialize_post_cutover(
+                root=root,
                 output=target,
             )
             commands = [
