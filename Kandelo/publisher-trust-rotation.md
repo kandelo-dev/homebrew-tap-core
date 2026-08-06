@@ -341,20 +341,72 @@ Both transition commands are exact-state idempotent before their result
 is committed. Repeating `--apply` accepts only the same derived state
 and performs no second write.
 
-## Retain the C10 executor and generation for C11
+### Complete the terminal C11 to Ruby-only C12 transition
 
-The C11 correction is confined to the sealed tap recipe, so it retains the C10
-executor on exact protected Kandelo `main`. The commit remains
-`45a45fed06ff053ee4dd2cc2bb6564a99d5ce106` and its independently admitted
-rootfs generation remains
-`package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
-Both are live authority, not predicted defaults, and neither is relabeled by
-the tap-only source correction.
+The C12 candidate starts from protected tap commit
+`f4daa689d89b2de2a4359bf358854a7db130ca97`, which activated terminal C11
+campaign
+`b0476cd05b16a835bd42292bcd34bffdada50f6d06bb1129bc106a9f86763896`.
+Its terminal ledger contains 40 publicly verified handoffs and failed
+Ruby/wasm32 run `31075257926` with no handoff. The run passed campaign
+admission and planning, then failed in the signed native API contract before
+native dependency installation, Formula recipe execution, bottle publication,
+or handoff publication because the signed Homebrew API selected a newer
+`python@3.13` than the checked-in compatibility lock.
+
+The exact terminal archive is
+`Kandelo/campaigns/prefix-v1/aborted-campaigns/b0476cd05b16a835bd42292bcd34bffdada50f6d06bb1129bc106a9f86763896.json`,
+sealed as `0c31f4b6a4eb24f1bc193a1b807d9352e81a76a3995453020c5bd16847573f32`.
+The 40-reuse/Ruby-build scope is
+`Kandelo/campaigns/prefix-v1/successor/b047-successor-scope.json`, sealed as
+`84a43358c03dd6700b2edf6c337f7d22523af69207a07eb9babc99452c7a0d88`.
+The canonical 41-task graph and sealed target source remain unchanged:
+manifest SHA-256
+`3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e`,
+source tree Git OID `17bcb5910fd3d403d861b695f9ee945f1ce14d30`, and target tree Git OID
+`f235ec029446883f067db5ea5d7e179710167dc6`.
+
+C12 advances the executor to the reviewed native Formula records on exact
+protected Kandelo `main` and independently admits the preserved rootfs
+projection against that commit:
+
+- `M=af80a443a6b4820e3b04845a64ab5cb8854638cd`; and
+- `G=package-generation-rootfs-wasm32-abi-v42-sha256-7ed33d5d51b7362c2ac04c0aca812a49c859bde25a2930d0e876f1c1e1aafcc9`.
+
+The predecessor production caller is sealed as
+`bdc530070e9586e517daba7a2ec5e1f832e3342ab178b71e8f84746d2dd18cf0`.
+The complete reviewed rotation renders its successor as
+`e219c9b2fca71f28494374259b58978b75ce780983868410aacc5ed506c9c381`.
+No historical campaign, handoff, source tree, or rootfs archive is relabeled
+by that executable-authority transition.
+
+In one candidate tree, preview and apply `archive-active` with activation
+commit `f4daa689d89b2de2a4359bf358854a7db130ca97` and the exact C11 archive.
+Because the target source is unchanged, do not supply replacement target-source
+identities. Require the intermediate authority to retain the C11 Kandelo pins
+while clearing the campaign, generation, and source commit. Then preview and
+apply `rotate-publisher-trust` with every predecessor Kandelo slot equal to
+`45a45fed06ff053ee4dd2cc2bb6564a99d5ce106`, predecessor generation
+`package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`,
+and predecessor caller digest `bdc530070e9586e517daba7a2ec5e1f832e3342ab178b71e8f84746d2dd18cf0`.
+The resulting armed authority must name exact `M` in both Kandelo fields while
+its campaign, generation, and source identities remain zero. Commit the
+archive, scope, campaign-release caller, helper-owned rotation, authority,
+tests, and documentation together as `T_ARM`.
+
+## Advance the executor and generation for C12
+
+C12 changes the Kandelo-owned reviewed native Formula records, so it cannot
+retain C11's executor as current authority. Exact protected Kandelo `main` is
+`af80a443a6b4820e3b04845a64ab5cb8854638cd`, and its independently admitted
+rootfs generation is
+`package-generation-rootfs-wasm32-abi-v42-sha256-7ed33d5d51b7362c2ac04c0aca812a49c859bde25a2930d0e876f1c1e1aafcc9`.
+The older executor and generation remain C11 archive authority; the rotation
+does not relabel them.
 
 Do not repeat the earlier #1160 `force-rebuild.yml` procedure or promote from
-the mutable `binaries-abi-v42` tag. C11 uses the already admitted C10 rootfs
-generation because only the tap-owned staged recipe changes; no rootfs package
-or Kandelo source is modified.
+the mutable `binaries-abi-v42` tag. C12 uses the independently admitted,
+content-addressed projection of the preserved rootfs source against exact `M`.
 
 1. Keep both exact identities equal in every rotation-owned slot. Do not
    substitute a PR head, synthetic merge, predecessor executor, or expected
@@ -381,8 +433,8 @@ The finalized arm uses the independently verified values:
 ```bash
 set -euo pipefail
 
-M=45a45fed06ff053ee4dd2cc2bb6564a99d5ce106
-G=package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40
+M=af80a443a6b4820e3b04845a64ab5cb8854638cd
+G=package-generation-rootfs-wasm32-abi-v42-sha256-7ed33d5d51b7362c2ac04c0aca812a49c859bde25a2930d0e876f1c1e1aafcc9
 [[ "$M" =~ ^[0-9a-f]{40}$ ]]
 [[ "$G" =~ ^package-generation-rootfs-wasm32-abi-v42-sha256-[0-9a-f]{64}$ ]]
 test "$(gh api repos/Automattic/kandelo/commits/main --jq .sha)" = "$M"
@@ -392,7 +444,7 @@ export M G
 If Kandelo `main` advances before the arm merge or campaign-release write
 boundary, stop. Derive a new authority bundle and independently validate an
 appropriate generation against the new current-main commit; do not substitute
-the new commit or relabel `G` inside this reviewed C11 tree. Publication and
+the new commit or relabel `G` inside this reviewed C12 tree. Publication and
 maintenance re-query `main`, so stale `M` fails closed even after the tap has
 selected it.
 
@@ -426,20 +478,21 @@ by that dry run. Normal Formula publication remained pinned to
 converge on current authority but still rejects collisions with
 historical test fixtures.
 
-For C11, query all predecessor slots from exact active base
-`5fec71d3e3de0f0fc8a0b543bee0c4afbe4bb810` and require them to remain the
-same tuple. Do not run the rotation helper, rerun the namespace canary, or
-introduce a split rotation.
+For C12, query all predecessor slots from exact active base
+`f4daa689d89b2de2a4359bf358854a7db130ca97` and require them to remain the
+complete C11 tuple. Run the rotation helper only with that complete
+predecessor and the exact reviewed `M`, `G`, and derived caller digest. Do not
+rerun the namespace canary or introduce a split rotation.
 
 ## Audit authority before changing files
 
-Start from a clean checkout at exact active C10 tap commit
-`5fec71d3e3de0f0fc8a0b543bee0c4afbe4bb810`. Apply the generated terminal-C10
-archive, C11 scope, sealed tap recipe correction, authority transition,
-campaign-release caller, target-contract expectations, tests, and documentation
-in one reviewed arm tree. Prove the other publisher callers and rollout
-controller byte-identical to the protected base. Do not stack unrelated work
-or silently rebase these identities onto a different protected base.
+Start from a clean checkout at exact active C11 tap commit
+`f4daa689d89b2de2a4359bf358854a7db130ca97`. Apply the generated terminal-C11
+archive, C12 scope, authority transition, campaign-release caller, complete
+helper-owned trust rotation, tests, and documentation in one reviewed arm
+tree. Prove the sealed target source and every path outside that reviewed
+boundary byte-identical to the protected base. Do not stack unrelated work or
+silently rebase these identities onto a different protected base.
 
 Confirm the complete predecessor production caller, not only its visible pins:
 
