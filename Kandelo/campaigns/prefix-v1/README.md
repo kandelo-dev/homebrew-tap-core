@@ -212,14 +212,14 @@ exact source, target, ownership, modes, and opt link, and subjects retained
 links to the component-aware sealed-native projection audit. An unregistered,
 redirected, writable, or changed proxy remains a hard failure.
 
-The C9 arm was finalized with these live, independently verified identities:
+The C9 arm was finalized with these then-live, independently verified
+identities:
 
 - `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106`; and
 - `package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
 
-They name the final protected Kandelo `main` commit and the exact public rootfs
-generation admitted against that commit. Historical C6, C7, and C8 identities
-above remain audit evidence and were not rewritten during finalization.
+They remained current through C11. Historical C6 through C11 identities remain
+audit evidence and are not rewritten during C12 finalization.
 
 The C10 successor starts from active C9 tap commit
 `47c232b5332ff2acad25c301ef6ba5f3f1e883b1` and terminal campaign
@@ -272,6 +272,34 @@ unused Formula-level Rust build dependency; local-root-spill remains an exact
 separately sealed campaign input. The corrected target is sealed by manifest
 `3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e`, source tree
 `17bcb5910fd3d403d861b695f9ee945f1ce14d30`, and target tree
-`f235ec029446883f067db5ea5d7e179710167dc6`. It keeps exact Kandelo executor
+`f235ec029446883f067db5ea5d7e179710167dc6`. C11 used exact Kandelo executor
 `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106` and exact rootfs generation
 `package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
+It was armed at `be405601ca9cbc8cff9aa3ce023e0490040cd035`, activated at
+`f4daa689d89b2de2a4359bf358854a7db130ca97`, and published campaign
+`b0476cd05b16a835bd42292bcd34bffdada50f6d06bb1129bc106a9f86763896`.
+
+C11 verified all 40 reuse tasks. Ruby/wasm32 run `31075257926` passed
+campaign admission and planning, then failed in the signed native API contract
+before native dependency installation, Formula recipe execution, bottle
+publication, or handoff publication because the signed Homebrew API selected
+a newer `python@3.13` than the checked-in compatibility lock.
+
+The C12 successor starts from active C11 tap commit
+`f4daa689d89b2de2a4359bf358854a7db130ca97`. Its terminal predecessor archive
+is
+`aborted-campaigns/b0476cd05b16a835bd42292bcd34bffdada50f6d06bb1129bc106a9f86763896.json`,
+sealed as `0c31f4b6a4eb24f1bc193a1b807d9352e81a76a3995453020c5bd16847573f32`.
+The new `successor/b047-successor-scope.json` is sealed as
+`84a43358c03dd6700b2edf6c337f7d22523af69207a07eb9babc99452c7a0d88`
+and selects all 40 exact C11 handoffs plus one fresh Ruby build against the
+unchanged canonical graph.
+
+C12 advances executable authority to exact protected Kandelo commit
+`af80a443a6b4820e3b04845a64ab5cb8854638cd` and exact independently admitted
+rootfs generation
+`package-generation-rootfs-wasm32-abi-v42-sha256-7ed33d5d51b7362c2ac04c0aca812a49c859bde25a2930d0e876f1c1e1aafcc9`.
+The target source remains unchanged: manifest
+`3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e`,
+source tree `17bcb5910fd3d403d861b695f9ee945f1ce14d30`, and target tree
+`f235ec029446883f067db5ea5d7e179710167dc6`.

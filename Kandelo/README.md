@@ -205,7 +205,7 @@ independent clean checkouts for the current source, predecessor recovery
 archive, historical bottle tap, and reviewed native Homebrew. It derives
 and rechecks the campaign in the Kandelo dev shell before it uploads
 inert content-addressed bytes. Publication stops unless the bytes equal
-the supplied digest. The C11 selected task graph must be exactly 40 C10
+the supplied digest. The C12 selected task graph must be exactly 40 C11
 predecessor handoffs plus a fresh Ruby build. The narrow write job
 downloads and validates only that handoff. It checks out the exact Kandelo
 helper and protected source again. It then invokes the unchanged immutable-release
@@ -292,10 +292,10 @@ independently, anonymously verified rootfs generation:
 - `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106`; and
 - `package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
 
-These exact identities must remain equal across every rotation-owned
-executable, trust, authority, and documentation slot. A PR head, synthetic
-merge, predecessor executor, mutable package tag, or merely expected future
-identity is not a substitute.
+Those identities remained current through C11. They are historical authority
+for those campaigns and must not be rewritten during C12. A PR head,
+synthetic merge, predecessor executor, mutable package tag, or merely expected
+future identity is not a substitute for current authority.
 
 The C9 campaign was activated at protected tap commit
 `47c232b5332ff2acad25c301ef6ba5f3f1e883b1` with campaign tag
@@ -350,10 +350,37 @@ authenticated local-root-spill transform remains a separately sealed campaign
 input. The corrected target is sealed by manifest SHA-256
 `3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e`, source
 tree Git OID `17bcb5910fd3d403d861b695f9ee945f1ce14d30`, and target tree Git OID
-`f235ec029446883f067db5ea5d7e179710167dc6`. The Kandelo executor and rootfs
-inputs do not change: they remain
+`f235ec029446883f067db5ea5d7e179710167dc6`. C11 used exact Kandelo executor
 `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106` and
 `package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
+It was armed at `be405601ca9cbc8cff9aa3ce023e0490040cd035` and activated at
+`f4daa689d89b2de2a4359bf358854a7db130ca97` with campaign
+`homebrew-prefix-campaign-sha256-b0476cd05b16a835bd42292bcd34bffdada50f6d06bb1129bc106a9f86763896`.
+
+C11 publicly verified 40 of the 41 selected tasks. Ruby/wasm32 run
+`31075257926` passed campaign admission and planning, then failed in the signed
+native API contract before native dependency installation, Formula recipe
+execution, bottle publication, or handoff publication. The signed Homebrew
+API selected a newer `python@3.13` than the checked-in compatibility lock.
+
+The C11 terminal archive for C12 is
+`Kandelo/campaigns/prefix-v1/aborted-campaigns/b0476cd05b16a835bd42292bcd34bffdada50f6d06bb1129bc106a9f86763896.json`,
+sealed as `0c31f4b6a4eb24f1bc193a1b807d9352e81a76a3995453020c5bd16847573f32`.
+Its successor scope is
+`Kandelo/campaigns/prefix-v1/successor/b047-successor-scope.json`, sealed as
+`84a43358c03dd6700b2edf6c337f7d22523af69207a07eb9babc99452c7a0d88`.
+It preserves the 40 exact public C11 handoffs and selects only Ruby for a
+fresh build against the unchanged canonical graph and target source.
+
+C12 advances executable trust to exact protected Kandelo commit
+`af80a443a6b4820e3b04845a64ab5cb8854638cd`, whose reviewed native Formula
+records include the selected `python@3.13`, and to independently admitted
+rootfs generation
+`package-generation-rootfs-wasm32-abi-v42-sha256-7ed33d5d51b7362c2ac04c0aca812a49c859bde25a2930d0e876f1c1e1aafcc9`.
+The tap target source does not change: it remains sealed by manifest SHA-256
+`3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e`,
+source tree Git OID `17bcb5910fd3d403d861b695f9ee945f1ce14d30`, and target tree Git OID
+`f235ec029446883f067db5ea5d7e179710167dc6`.
 
 After independently deriving the candidate from the newly merged armed
 commit `T_ARM` and recording its digest as `C`, dispatch only that exact
