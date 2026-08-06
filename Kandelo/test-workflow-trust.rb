@@ -20,25 +20,25 @@ PREFIX_CAMPAIGN_RELEASE_PATH =
   File.join(WORKFLOW_ROOT, "publish-prefix-campaign-release.yml")
 PREFIX_CAMPAIGN_AUTHORITY_PATH =
   File.join(ROOT, "Kandelo/prefix-campaign-authority.json")
-C10_SUCCESSOR_SCOPE_PATH = File.join(
+C11_SUCCESSOR_SCOPE_PATH = File.join(
   ROOT,
-  "Kandelo/campaigns/prefix-v1/successor/f3f4-successor-scope.json"
+  "Kandelo/campaigns/prefix-v1/successor/ac95-successor-scope.json"
 )
-C10_CANONICAL_GRAPH_PATH = File.join(
+C11_CANONICAL_GRAPH_PATH = File.join(
   ROOT,
   "Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json"
 )
-C9_TERMINAL_ARCHIVE_RELATIVE_PATH =
+C10_TERMINAL_ARCHIVE_RELATIVE_PATH =
   "Kandelo/campaigns/prefix-v1/aborted-campaigns/" \
-  "f3f4cb4cda613c5cb6bbc73ec1a6952d3454971bfa92a31c9a10f9526b7308c3.json"
-C9_TERMINAL_ARCHIVE_SHA256 =
-  "a451e756879e38dea3834ee873d445fbfff8777ecd6812a9876c0129dd65dce8"
-C10_SUCCESSOR_SCOPE_SHA256 =
-  "4cfbb756def4280f4a9b74d330ba1f4c34298308da88dd0f1b0730764a7ec8b1"
-C10_TARGET_MANIFEST_SHA256 =
-  "48f2f519beba22237d857b7b6860d5eccb57d5cb8abad2d7733f10b424fb34bf"
-C10_SOURCE_TREE_GIT_OID = "7917903175fb2f75714ec2bc6fa0ab603efb6975"
-C10_TARGET_TREE_GIT_OID = "af6215547bcd9fb2703e5f358721f7283b97eaee"
+  "ac950955718d406fa3ee31a7396c22c13ede154f948673f28171ca49592c2f34.json"
+C10_TERMINAL_ARCHIVE_SHA256 =
+  "f861ae7e8b4f2669ec1851a943c1ac6ad92c780e20e2e38fac5785cd84109b15"
+C11_SUCCESSOR_SCOPE_SHA256 =
+  "a5073d0351dd3d802b87bb0ff48052dc741c12e547e0184963549846cf81aba5"
+C11_TARGET_MANIFEST_SHA256 =
+  "3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e"
+C11_SOURCE_TREE_GIT_OID = "17bcb5910fd3d403d861b695f9ee945f1ce14d30"
+C11_TARGET_TREE_GIT_OID = "f235ec029446883f067db5ea5d7e179710167dc6"
 PREFIX_CAMPAIGN_CONTROLLER_PATH =
   File.join(ROOT, "scripts/prefix-campaign-controller.py")
 EXPECTED_WORKFLOW_FILES = %w[
@@ -136,7 +136,7 @@ def load_json(path)
   value
 end
 
-def check_c10_successor_scope(scope, graph)
+def check_c11_successor_scope(scope, graph)
   graph_relative_path =
     "Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json"
   graph_sha256 =
@@ -164,7 +164,7 @@ def check_c10_successor_scope(scope, graph)
     "canonical shell graph is not the unique 41-task graph containing Ruby"
   )
   check(
-    Digest::SHA256.file(C10_CANONICAL_GRAPH_PATH).hexdigest == graph_sha256,
+    Digest::SHA256.file(C11_CANONICAL_GRAPH_PATH).hexdigest == graph_sha256,
     "canonical shell graph digest changed"
   )
 
@@ -178,40 +178,40 @@ def check_c10_successor_scope(scope, graph)
         "sha256" => graph_sha256,
       } &&
       scope.fetch("predecessor_archive") == {
-        "path" => C9_TERMINAL_ARCHIVE_RELATIVE_PATH,
-        "sha256" => C9_TERMINAL_ARCHIVE_SHA256,
+        "path" => C10_TERMINAL_ARCHIVE_RELATIVE_PATH,
+        "sha256" => C10_TERMINAL_ARCHIVE_SHA256,
       },
-    "C10 successor scope authority changed"
+    "C11 successor scope authority changed"
   )
   check(
     scope.fetch("build_tasks") == build_tasks &&
       scope.fetch("reuse_tasks") ==
         graph_tasks.reject { |task| build_tasks.include?(task) } &&
       scope.fetch("reuse_tasks").length == 40,
-    "C10 successor scope is not exactly 40 C9 reuses plus a Ruby rebuild"
+    "C11 successor scope is not exactly 40 C10 reuses plus a Ruby rebuild"
   )
 
-  archive_path = File.join(ROOT, C9_TERMINAL_ARCHIVE_RELATIVE_PATH)
-  if C9_TERMINAL_ARCHIVE_SHA256.match?(/\A[0-9a-f]{64}\z/)
-    check(File.file?(archive_path), "C9 terminal archive is absent")
+  archive_path = File.join(ROOT, C10_TERMINAL_ARCHIVE_RELATIVE_PATH)
+  if C10_TERMINAL_ARCHIVE_SHA256.match?(/\A[0-9a-f]{64}\z/)
+    check(File.file?(archive_path), "C10 terminal archive is absent")
     check(
-      Digest::SHA256.file(archive_path).hexdigest == C9_TERMINAL_ARCHIVE_SHA256,
-      "C9 terminal archive digest changed"
+      Digest::SHA256.file(archive_path).hexdigest == C10_TERMINAL_ARCHIVE_SHA256,
+      "C10 terminal archive digest changed"
     )
   else
     check(
-      C9_TERMINAL_ARCHIVE_SHA256 == "__C9_TERMINAL_ARCHIVE_SHA256__" &&
+      C10_TERMINAL_ARCHIVE_SHA256 == "__C10_TERMINAL_ARCHIVE_SHA256__" &&
         !File.exist?(archive_path),
-      "C9 terminal archive boundary is neither sealed nor a clean placeholder"
+      "C10 terminal archive boundary is neither sealed nor a clean placeholder"
     )
   end
 
-  observed_scope_sha256 = Digest::SHA256.file(C10_SUCCESSOR_SCOPE_PATH).hexdigest
-  unless C10_SUCCESSOR_SCOPE_SHA256 == "__C10_SUCCESSOR_SCOPE_SHA256__"
+  observed_scope_sha256 = Digest::SHA256.file(C11_SUCCESSOR_SCOPE_PATH).hexdigest
+  unless C11_SUCCESSOR_SCOPE_SHA256 == "__C11_SUCCESSOR_SCOPE_SHA256__"
     check(
-      C10_SUCCESSOR_SCOPE_SHA256.match?(/\A[0-9a-f]{64}\z/) &&
-        observed_scope_sha256 == C10_SUCCESSOR_SCOPE_SHA256,
-      "C10 successor scope digest changed"
+      C11_SUCCESSOR_SCOPE_SHA256.match?(/\A[0-9a-f]{64}\z/) &&
+        observed_scope_sha256 == C11_SUCCESSOR_SCOPE_SHA256,
+      "C11 successor scope digest changed"
     )
   end
 end
@@ -1714,12 +1714,12 @@ def check_prefix_campaign_release_workflow(workflow)
       ) &&
       admission["run"].include?(
         "Kandelo/campaigns/prefix-v1/successor/" \
-        "f3f4-successor-scope.json"
+        "ac95-successor-scope.json"
       ) &&
-      admission["run"].include?(C10_SUCCESSOR_SCOPE_SHA256) &&
-      admission["run"].include?(C10_TARGET_MANIFEST_SHA256) &&
-      admission["run"].include?(C10_SOURCE_TREE_GIT_OID) &&
-      admission["run"].include?(C10_TARGET_TREE_GIT_OID),
+      admission["run"].include?(C11_SUCCESSOR_SCOPE_SHA256) &&
+      admission["run"].include?(C11_TARGET_MANIFEST_SHA256) &&
+      admission["run"].include?(C11_SOURCE_TREE_GIT_OID) &&
+      admission["run"].include?(C11_TARGET_TREE_GIT_OID),
     "#{label} protected-main or armed-authority admission changed"
   )
 
@@ -1778,10 +1778,10 @@ def check_prefix_campaign_release_workflow(workflow)
       ) &&
       derive["run"].include?(
         '--successor-scope-path ' \
-        'Kandelo/campaigns/prefix-v1/successor/f3f4-successor-scope.json'
+        'Kandelo/campaigns/prefix-v1/successor/ac95-successor-scope.json'
       ) &&
       derive["run"].include?(
-        "--successor-scope-sha256 #{C10_SUCCESSOR_SCOPE_SHA256}"
+        "--successor-scope-sha256 #{C11_SUCCESSOR_SCOPE_SHA256}"
       ) &&
       derive["run"].include?(
         '($scope[0].reuse_tasks | length) == 40'
@@ -1798,7 +1798,7 @@ def check_prefix_campaign_release_workflow(workflow)
         '["ruby"] and'
       ) &&
       derive["run"].include?(
-        '.reuse_source.campaign_tag == $c9'
+        '.reuse_source.campaign_tag == $c10'
       ) &&
       derive["run"].include?(
         '--arg c5 "homebrew-prefix-campaign-sha256-' \
@@ -1821,6 +1821,10 @@ def check_prefix_campaign_release_workflow(workflow)
         'f3f4cb4cda613c5cb6bbc73ec1a6952d3454971bfa92a31c9a10f9526b7308c3"'
       ) &&
       derive["run"].include?(
+        '--arg c10 "homebrew-prefix-campaign-sha256-' \
+        'ac950955718d406fa3ee31a7396c22c13ede154f948673f28171ca49592c2f34"'
+      ) &&
+      derive["run"].include?(
         '.campaign.tag != $b703 and .campaign.tag != $f901 and'
       ) &&
       derive["run"].include?(
@@ -1839,6 +1843,9 @@ def check_prefix_campaign_release_workflow(workflow)
         '(.reuse_source.campaign_tag? // "") != $c8'
       ) &&
       derive["run"].include?(
+        '(.reuse_source.campaign_tag? // "") != $c9'
+      ) &&
+      derive["run"].include?(
         '.campaign.tag != $c6 and'
       ) &&
       derive["run"].include?(
@@ -1846,6 +1853,9 @@ def check_prefix_campaign_release_workflow(workflow)
       ) &&
       derive["run"].include?(
         '.campaign.tag != $c8'
+      ) &&
+      derive["run"].include?(
+        '.campaign.tag != $c9'
       ) &&
       derive["run"].include?(
         '.disposition.kind == "required-rebuild"'
@@ -3045,8 +3055,8 @@ begin
   contract = load_workflow(CONTRACT_PATH)
   base_contract = load_workflow(BASE_CONTRACT_PATH)
   prefix_authority = load_json(PREFIX_CAMPAIGN_AUTHORITY_PATH)
-  c10_successor_scope = load_json(C10_SUCCESSOR_SCOPE_PATH)
-  c10_canonical_graph = load_json(C10_CANONICAL_GRAPH_PATH)
+  c11_successor_scope = load_json(C11_SUCCESSOR_SCOPE_PATH)
+  c11_canonical_graph = load_json(C11_CANONICAL_GRAPH_PATH)
   prefix_campaign = load_workflow(PREFIX_CAMPAIGN_PATH)
   prefix_campaign_release = load_workflow(PREFIX_CAMPAIGN_RELEASE_PATH)
   check(
@@ -3070,7 +3080,7 @@ begin
     prefix_authority,
     PREFIX_CAMPAIGN_KANDELO_SHA
   )
-  check_c10_successor_scope(c10_successor_scope, c10_canonical_graph)
+  check_c11_successor_scope(c11_successor_scope, c11_canonical_graph)
   check_prefix_campaign_workflow(prefix_campaign, prefix_authority)
   check_prefix_campaign_release_workflow(prefix_campaign_release)
   check_contract_workflow(contract)

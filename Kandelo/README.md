@@ -205,7 +205,7 @@ independent clean checkouts for the current source, predecessor recovery
 archive, historical bottle tap, and reviewed native Homebrew. It derives
 and rechecks the campaign in the Kandelo dev shell before it uploads
 inert content-addressed bytes. Publication stops unless the bytes equal
-the supplied digest. The C10 selected task graph must be exactly 40 C9
+the supplied digest. The C11 selected task graph must be exactly 40 C10
 predecessor handoffs plus a fresh Ruby build. The narrow write job
 downloads and validates only that handoff. It checks out the exact Kandelo
 helper and protected source again. It then invokes the unchanged immutable-release
@@ -316,15 +316,42 @@ sealed as `a451e756879e38dea3834ee873d445fbfff8777ecd6812a9876c0129dd65dce8`. It
 `4cfbb756def4280f4a9b74d330ba1f4c34298308da88dd0f1b0730764a7ec8b1`. It selects the same exact 40 public C9
 handoffs and rebuilds only Ruby against the unchanged canonical 41-task graph.
 
-The correction is tap-only and stays inside the sealed target source. The
-Ruby recipe is staged explicitly, consumes the authenticated
+That tap-only correction stayed inside the sealed target source. The
+Ruby recipe was staged explicitly, consumed the authenticated
 `WASM_POSIX_LOCAL_ROOT_SPILL` and `WASM_POSIX_FORK_INSTRUMENT` inputs instead
-of reaching through a publisher checkout root, and copies the authenticated
-source into its writable work directory before applying patches. Its pending
-sealed identities are manifest SHA-256 `48f2f519beba22237d857b7b6860d5eccb57d5cb8abad2d7733f10b424fb34bf`, source
+of reaching through a publisher checkout root, and copied the authenticated
+source into its writable work directory before applying patches. Its sealed
+identities are manifest SHA-256 `48f2f519beba22237d857b7b6860d5eccb57d5cb8abad2d7733f10b424fb34bf`, source
 tree Git OID `7917903175fb2f75714ec2bc6fa0ab603efb6975`, and target tree Git OID
-`af6215547bcd9fb2703e5f358721f7283b97eaee`. The Kandelo executor and rootfs inputs do not
-change: they remain
+`af6215547bcd9fb2703e5f358721f7283b97eaee`. C10 was armed at
+`c4039570825e9a0bd5932f84f933056368ccdf0a` and activated at
+`5fec71d3e3de0f0fc8a0b543bee0c4afbe4bb810` with campaign
+`homebrew-prefix-campaign-sha256-ac950955718d406fa3ee31a7396c22c13ede154f948673f28171ca49592c2f34`.
+
+C10 publicly verified the same 40 predecessor tasks. Ruby/wasm32 run
+`31069244063` installed the declared authenticated `gpatch` dependency and
+entered the isolated recipe runner, but stopped before patching or compiling.
+On Linux, Homebrew's `gpatch` Formula exposes `bin/patch`; the recipe required
+the macOS-prefixed name `gpatch`. The run published no Ruby bottle or handoff.
+
+The C10 terminal archive for C11 is
+`Kandelo/campaigns/prefix-v1/aborted-campaigns/ac950955718d406fa3ee31a7396c22c13ede154f948673f28171ca49592c2f34.json`,
+sealed as `f861ae7e8b4f2669ec1851a943c1ac6ad92c780e20e2e38fac5785cd84109b15`.
+Its successor scope is
+`Kandelo/campaigns/prefix-v1/successor/ac95-successor-scope.json`, sealed as
+`a5073d0351dd3d802b87bb0ff48052dc741c12e547e0184963549846cf81aba5`.
+It preserves all 40 exact public C10 handoffs and rebuilds only Ruby against
+the unchanged canonical 41-task graph.
+
+The C11 correction binds the exact declared Linux-keg executables for patch,
+make, Perl, and Python into the isolated recipe environment and invokes only
+those paths. It removes the unused Formula-level Rust build dependency; the
+authenticated local-root-spill transform remains a separately sealed campaign
+input. The corrected target is sealed by manifest SHA-256
+`3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e`, source
+tree Git OID `17bcb5910fd3d403d861b695f9ee945f1ce14d30`, and target tree Git OID
+`f235ec029446883f067db5ea5d7e179710167dc6`. The Kandelo executor and rootfs
+inputs do not change: they remain
 `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106` and
 `package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
 

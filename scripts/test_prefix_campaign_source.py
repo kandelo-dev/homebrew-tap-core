@@ -27,8 +27,8 @@ SPEC.loader.exec_module(SOURCE)
 AUTHORITY = ROOT / "Kandelo/prefix-campaign-authority.json"
 MANIFEST = ROOT / "Kandelo/campaigns/prefix-v1/manifest.json"
 SOURCE_ROOT = ROOT / "Kandelo/campaigns/prefix-v1/source"
-C10_SOURCE_TREE_GIT_OID = "7917903175fb2f75714ec2bc6fa0ab603efb6975"
-C10_TARGET_TREE_GIT_OID = "af6215547bcd9fb2703e5f358721f7283b97eaee"
+C11_SOURCE_TREE_GIT_OID = "17bcb5910fd3d403d861b695f9ee945f1ce14d30"
+C11_TARGET_TREE_GIT_OID = "f235ec029446883f067db5ea5d7e179710167dc6"
 
 
 class PrefixCampaignSourceTests(unittest.TestCase):
@@ -48,11 +48,11 @@ class PrefixCampaignSourceTests(unittest.TestCase):
         )
         self.assertEqual(
             summary["source_tree_git_oid"],
-            C10_SOURCE_TREE_GIT_OID,
+            C11_SOURCE_TREE_GIT_OID,
         )
         self.assertEqual(
             summary["target_tree_git_oid"],
-            C10_TARGET_TREE_GIT_OID,
+            C11_TARGET_TREE_GIT_OID,
         )
 
         active_helper = (
@@ -82,7 +82,7 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
             self.assertEqual(
                 SOURCE.source_tree_oid(output),
-                C10_TARGET_TREE_GIT_OID,
+                C11_TARGET_TREE_GIT_OID,
             )
             expected_revisions = {
                 "file-formula": 1,
@@ -110,8 +110,8 @@ class PrefixCampaignSourceTests(unittest.TestCase):
                 encoding="utf-8"
             )
             self.assertIn(
-                'manifest_sha256: "7b24ee812fdb3ffda1767c695b71c3f2'
-                '206ac9ca50f5e17cb90dee5faf010177"',
+                'manifest_sha256: "5270f951e13b50d05f69121db066c394'
+                '1bcee455246a6b0a1fe91d25698f27c1"',
                 ruby_formula,
             )
 

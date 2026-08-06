@@ -170,33 +170,37 @@ Both were required across every rotation-owned executable, trust, authority,
 and documentation slot before merge. Historical C6, C7, and C8 evidence was
 not a finalization target.
 
-### Complete the terminal C9 to Ruby-only C10 transition
+### Complete the terminal C10 to Ruby-only C11 transition
 
-The C10 candidate starts from protected tap commit
-`47c232b5332ff2acad25c301ef6ba5f3f1e883b1`, which activated terminal C9
+The C11 candidate starts from protected tap commit
+`5fec71d3e3de0f0fc8a0b543bee0c4afbe4bb810`, which activated terminal C10
 campaign
-`f3f4cb4cda613c5cb6bbc73ec1a6952d3454971bfa92a31c9a10f9526b7308c3`.
+`ac950955718d406fa3ee31a7396c22c13ede154f948673f28171ca49592c2f34`.
 Its terminal ledger contains 40 publicly verified handoffs and failed
-Ruby/wasm32 run `31062254998` with no handoff. That run passed campaign
-admission and planning, installed its sealed C9 Libyaml and Zlib handoffs, and
-entered the unprivileged recipe runner. It stopped before compiling Ruby
-because the staged Ruby recipe required `HOMEBREW_KANDELO_ROOT`, an implicit
-publisher checkout root deliberately absent from that isolated environment.
+Ruby/wasm32 run `31069244063` with no handoff. The run installed the declared
+authenticated `gpatch` dependency and entered the isolated recipe runner, but
+stopped before patching or compiling because the Linux `gpatch` keg exposes
+`bin/patch`, while the recipe required the macOS-prefixed name `gpatch`.
 
 The exact terminal archive is
-`Kandelo/campaigns/prefix-v1/aborted-campaigns/f3f4cb4cda613c5cb6bbc73ec1a6952d3454971bfa92a31c9a10f9526b7308c3.json`,
-sealed as `a451e756879e38dea3834ee873d445fbfff8777ecd6812a9876c0129dd65dce8`. The 40-reuse/Ruby-build scope is
-`Kandelo/campaigns/prefix-v1/successor/f3f4-successor-scope.json`, sealed as
-`4cfbb756def4280f4a9b74d330ba1f4c34298308da88dd0f1b0730764a7ec8b1`. The canonical 41-task graph remains
-unchanged.
+`Kandelo/campaigns/prefix-v1/aborted-campaigns/ac950955718d406fa3ee31a7396c22c13ede154f948673f28171ca49592c2f34.json`,
+sealed as `f861ae7e8b4f2669ec1851a943c1ac6ad92c780e20e2e38fac5785cd84109b15`.
+The 40-reuse/Ruby-build scope is
+`Kandelo/campaigns/prefix-v1/successor/ac95-successor-scope.json`, sealed as
+`a5073d0351dd3d802b87bb0ff48052dc741c12e547e0184963549846cf81aba5`.
+The canonical 41-task graph remains unchanged.
 
-The C10 correction is tap-only. It stages the exact Ruby recipe into the
-sealed overlay, uses the authenticated `WASM_POSIX_LOCAL_ROOT_SPILL` and
-`WASM_POSIX_FORK_INSTRUMENT` inputs, and copies the authenticated source to a
-writable recipe work directory before applying patches. The corrected target
-source is sealed as manifest SHA-256 `48f2f519beba22237d857b7b6860d5eccb57d5cb8abad2d7733f10b424fb34bf`, source
-tree Git OID `7917903175fb2f75714ec2bc6fa0ab603efb6975`, and target tree Git OID
-`af6215547bcd9fb2703e5f358721f7283b97eaee`.
+The C11 correction is tap-only. It passes exact executable paths from the
+declared `gpatch`, `make`, `perl`, and `python@3.13` kegs into the isolated
+recipe and invokes only those paths. This fixes the observed Linux `patch`
+name and the same latent Linux `make` versus macOS `gmake` mismatch while
+preventing ambient Perl or Python from satisfying declared dependencies. It
+also removes the unused Formula-level Rust build dependency; the authenticated
+local-root-spill transform remains a separately sealed campaign input. The
+corrected target source is sealed as manifest SHA-256
+`3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e`, source
+tree Git OID `17bcb5910fd3d403d861b695f9ee945f1ce14d30`, and target tree Git OID
+`f235ec029446883f067db5ea5d7e179710167dc6`.
 
 No Kandelo executor or rootfs package input changes. The candidate retains:
 
@@ -204,7 +208,7 @@ No Kandelo executor or rootfs package input changes. The candidate retains:
 - `G=package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
 
 Require those exact values and the five resolved archive, scope, manifest, and
-tree seals across the atomic arm before merge. Historical C9 campaign bytes
+tree seals across the atomic arm before merge. Historical C10 campaign bytes
 and all 40 predecessor handoffs remain immutable evidence.
 
 Before making the candidate executable:
@@ -214,23 +218,23 @@ Before making the candidate executable:
    the current tap tree. Do not substitute a PR head, synthetic merge, or
    expected future commit.
 2. In one candidate tree, preview and apply `archive-active` with activation
-   commit `47c232b5332ff2acad25c301ef6ba5f3f1e883b1` and all three corrected
+   commit `5fec71d3e3de0f0fc8a0b543bee0c4afbe4bb810` and all three corrected
    target-source identities. Do not run `rotate-publisher-trust`: every live
    Kandelo pin already equals exact `M`, every generation pin already equals
    exact `G`, and the production caller digest remains exact `P_C`. Commit the
    archive, finalized scope, campaign-release caller, docs, trust tests,
    armed authority, and target-contract consumers together as `T_ARM`.
 
-The sealed target overlay changes in C10: manifest SHA-256
-`48f2f519beba22237d857b7b6860d5eccb57d5cb8abad2d7733f10b424fb34bf`, source tree Git OID
-`7917903175fb2f75714ec2bc6fa0ab603efb6975`, and target tree Git OID
-`af6215547bcd9fb2703e5f358721f7283b97eaee`. `archive-active` validates the
+The sealed target overlay changes in C11: manifest SHA-256
+`3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e`, source
+tree Git OID `17bcb5910fd3d403d861b695f9ee945f1ce14d30`, and target tree Git OID
+`f235ec029446883f067db5ea5d7e179710167dc6`. `archive-active` validates the
 already-present archive and writes the intermediate armed authority
 atomically. It preserves the two already-equal Kandelo fields at exact `M`
 while clearing campaign, generation, and source-commit execution data. The
 later data-only activation restores exact `G`; no live publisher trust changes
-at the arm boundary. `archive-active` alone does not authorize C10, and
-rotating an active C9 authority in place remains forbidden.
+at the arm boundary. `archive-active` alone does not authorize C11, and
+rotating an active C10 authority in place remains forbidden.
 
 Archive and arm the predecessor without rotating the unchanged live caller
 tuple:
@@ -241,22 +245,22 @@ python3 -B scripts/transition-prefix-campaign-authority.py \
   --archive "$PREDECESSOR_ARCHIVE" \
   --activation-commit "$PREDECESSOR_ACTIVATION" \
   --successor-manifest-sha256 \
-    48f2f519beba22237d857b7b6860d5eccb57d5cb8abad2d7733f10b424fb34bf \
+    3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e \
   --successor-source-tree-git-oid \
-    7917903175fb2f75714ec2bc6fa0ab603efb6975 \
+    17bcb5910fd3d403d861b695f9ee945f1ce14d30 \
   --successor-target-tree-git-oid \
-    af6215547bcd9fb2703e5f358721f7283b97eaee
+    f235ec029446883f067db5ea5d7e179710167dc6
 
 python3 -B scripts/transition-prefix-campaign-authority.py \
   archive-active \
   --archive "$PREDECESSOR_ARCHIVE" \
   --activation-commit "$PREDECESSOR_ACTIVATION" \
   --successor-manifest-sha256 \
-    48f2f519beba22237d857b7b6860d5eccb57d5cb8abad2d7733f10b424fb34bf \
+    3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e \
   --successor-source-tree-git-oid \
-    7917903175fb2f75714ec2bc6fa0ab603efb6975 \
+    17bcb5910fd3d403d861b695f9ee945f1ce14d30 \
   --successor-target-tree-git-oid \
-    af6215547bcd9fb2703e5f358721f7283b97eaee \
+    f235ec029446883f067db5ea5d7e179710167dc6 \
   --apply
 ```
 
@@ -265,7 +269,7 @@ activate only its data:
 
 ```bash
 SUCCESSOR_SCOPE="Kandelo/campaigns/prefix-v1/successor/"\
-"f3f4-successor-scope.json"
+"ac95-successor-scope.json"
 
 python3 -B scripts/transition-prefix-campaign-authority.py \
   activate-successor \
@@ -337,9 +341,9 @@ Both transition commands are exact-state idempotent before their result
 is committed. Repeating `--apply` accepts only the same derived state
 and performs no second write.
 
-## Retain the C9 executor and generation for C10
+## Retain the C10 executor and generation for C11
 
-The C10 correction is confined to the sealed tap recipe, so it retains the C9
+The C11 correction is confined to the sealed tap recipe, so it retains the C10
 executor on exact protected Kandelo `main`. The commit remains
 `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106` and its independently admitted
 rootfs generation remains
@@ -348,7 +352,7 @@ Both are live authority, not predicted defaults, and neither is relabeled by
 the tap-only source correction.
 
 Do not repeat the earlier #1160 `force-rebuild.yml` procedure or promote from
-the mutable `binaries-abi-v42` tag. C10 uses the already admitted C9 rootfs
+the mutable `binaries-abi-v42` tag. C11 uses the already admitted C10 rootfs
 generation because only the tap-owned staged recipe changes; no rootfs package
 or Kandelo source is modified.
 
@@ -388,7 +392,7 @@ export M G
 If Kandelo `main` advances before the arm merge or campaign-release write
 boundary, stop. Derive a new authority bundle and independently validate an
 appropriate generation against the new current-main commit; do not substitute
-the new commit or relabel `G` inside this reviewed C10 tree. Publication and
+the new commit or relabel `G` inside this reviewed C11 tree. Publication and
 maintenance re-query `main`, so stale `M` fails closed even after the tap has
 selected it.
 
@@ -422,16 +426,16 @@ by that dry run. Normal Formula publication remained pinned to
 converge on current authority but still rejects collisions with
 historical test fixtures.
 
-For C10, query all predecessor slots from exact active base
-`47c232b5332ff2acad25c301ef6ba5f3f1e883b1` and require them to remain the
+For C11, query all predecessor slots from exact active base
+`5fec71d3e3de0f0fc8a0b543bee0c4afbe4bb810` and require them to remain the
 same tuple. Do not run the rotation helper, rerun the namespace canary, or
 introduce a split rotation.
 
 ## Audit authority before changing files
 
-Start from a clean checkout at exact active C9 tap commit
-`47c232b5332ff2acad25c301ef6ba5f3f1e883b1`. Apply the generated terminal-C9
-archive, C10 scope, sealed tap recipe correction, authority transition,
+Start from a clean checkout at exact active C10 tap commit
+`5fec71d3e3de0f0fc8a0b543bee0c4afbe4bb810`. Apply the generated terminal-C10
+archive, C11 scope, sealed tap recipe correction, authority transition,
 campaign-release caller, target-contract expectations, tests, and documentation
 in one reviewed arm tree. Prove the other publisher callers and rollout
 controller byte-identical to the protected base. Do not stack unrelated work
