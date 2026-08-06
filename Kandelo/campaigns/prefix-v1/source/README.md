@@ -110,8 +110,10 @@ the verified source nor the reviewed Kandelo checkout is a build destination.
 
 Ruby owns a closed build recipe under `Kandelo/recipes/ruby/`. It copies
 Homebrew's authenticated source into recipe-owned work space before applying
-patches or running source-writing build steps, and consumes only the sealed
-Kandelo transform tools projected by the publisher.
+patches or running source-writing build steps. The recipe consumes the sealed
+Kandelo transforms projected by the publisher and exact executables from its
+declared native `gpatch`, `make`, Perl, and Python kegs; it does not select
+those build tools from ambient `PATH`.
 
 `homebrew-bootstrap` owns a closed build recipe under
 `Kandelo/recipes/homebrew-bootstrap/`. The Formula binds its complete recipe

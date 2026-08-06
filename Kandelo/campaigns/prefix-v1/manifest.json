@@ -404,10 +404,10 @@
       },
       "path": "Formula/ruby.rb",
       "target": {
-        "blob_git_oid": "cd2b0e6a7aad81e65995b990e8eb2566d234fc7d",
-        "bytes": 10458,
+        "blob_git_oid": "ca85fb04ef280032e110679dc963f67797c891a2",
+        "bytes": 10885,
         "mode": "100644",
-        "sha256": "10c32e30d65bd63ce6f4658cb25d18b8b892c624f7401937d27bbcf421f322df"
+        "sha256": "9557d5f4d06652cab4c070ad83f4e7692ddf70f6cce7fe6b0dc675c80142c8f8"
       }
     },
     {
@@ -509,10 +509,10 @@
       },
       "path": "Kandelo/formula_support/test/kandelo_formula_support_test.rb",
       "target": {
-        "blob_git_oid": "913c003efebf23d945e2a7d12734e0c71f8973df",
-        "bytes": 192272,
+        "blob_git_oid": "616be3a4a6563627149d88e9723adb58fd4f6a7b",
+        "bytes": 193567,
         "mode": "100644",
-        "sha256": "c1632e7ca0569bc557441edb09a24debedb1065b2bdd4e1b56396ace159dfb7d"
+        "sha256": "b948f504ab20d78e9c0c2ac745ca99ea1c1ee6c9940bc28726da555506514eec"
       }
     },
     {
@@ -649,10 +649,10 @@
       },
       "path": "Kandelo/recipes/ruby/build.sh",
       "target": {
-        "blob_git_oid": "98cfeb70198c4309c05696d415caafbefca69f87",
-        "bytes": 52055,
+        "blob_git_oid": "13802fc42e9b11e4a1f3a22396a06f10c0b62826",
+        "bytes": 52684,
         "mode": "100755",
-        "sha256": "f60e54eaf788446a0d7f5f2fa842940493251e032090f81f9d570082e04d214d"
+        "sha256": "ea8047adf679a95325a04fcf944cc6d914c9058377cfa3fb595d767365a91dfa"
       }
     },
     {
@@ -664,10 +664,10 @@
       },
       "path": "Kandelo/recipes/ruby/recipe.json",
       "target": {
-        "blob_git_oid": "a4ee312fcdf5db7b8c812c0771775af0368d7de7",
+        "blob_git_oid": "978880fba46ef22979da98ce785990fcdf5240bd",
         "bytes": 887,
         "mode": "100644",
-        "sha256": "7b24ee812fdb3ffda1767c695b71c3f2206ac9ca50f5e17cb90dee5faf010177"
+        "sha256": "5270f951e13b50d05f69121db066c3941bcee455246a6b0a1fe91d25698f27c1"
       }
     },
     {
@@ -679,10 +679,10 @@
       },
       "path": "README.md",
       "target": {
-        "blob_git_oid": "72123ccaff08f8e9840f69ae538cf8901b1b234b",
-        "bytes": 39150,
+        "blob_git_oid": "adf497a7d634347c597334d941feb01e5d3f92fe",
+        "bytes": 39292,
         "mode": "100644",
-        "sha256": "a2974e1a953170b3f357ace013ee41fccc1dd09b0176f53e03ffe0486e58af8e"
+        "sha256": "102afbfca8a41ccf2027e568b45ce04abeb6e9dfa9ed25791df4ae775d03d781"
       }
     },
     {
@@ -714,5 +714,5 @@
   "kind": "kandelo-homebrew-prefix-campaign-source-overlay",
   "schema": 1,
   "source_root": "Kandelo/campaigns/prefix-v1/source",
-  "target_tree_git_oid": "af6215547bcd9fb2703e5f358721f7283b97eaee"
+  "target_tree_git_oid": "f235ec029446883f067db5ea5d7e179710167dc6"
 }

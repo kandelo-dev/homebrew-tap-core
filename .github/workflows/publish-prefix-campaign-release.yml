@@ -112,16 +112,16 @@ jobs:
             .target_source == {
               manifest_path: "Kandelo/campaigns/prefix-v1/manifest.json",
               manifest_sha256:
-                "48f2f519beba22237d857b7b6860d5eccb57d5cb8abad2d7733f10b424fb34bf",
+                "3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e",
               source_root: "Kandelo/campaigns/prefix-v1/source",
-              source_tree_git_oid: "7917903175fb2f75714ec2bc6fa0ab603efb6975",
-              target_tree_git_oid: "af6215547bcd9fb2703e5f358721f7283b97eaee"
+              source_tree_git_oid: "17bcb5910fd3d403d861b695f9ee945f1ce14d30",
+              target_tree_git_oid: "f235ec029446883f067db5ea5d7e179710167dc6"
             }
           ' "$authority" >/dev/null
           test "$(sha256sum \
-            Kandelo/campaigns/prefix-v1/successor/f3f4-successor-scope.json \
+            Kandelo/campaigns/prefix-v1/successor/ac95-successor-scope.json \
             | awk '{print $1}')" = \
-            4cfbb756def4280f4a9b74d330ba1f4c34298308da88dd0f1b0730764a7ec8b1
+            a5073d0351dd3d802b87bb0ff48052dc741c12e547e0184963549846cf81aba5
           test "$(sha256sum \
             Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json \
             | awk '{print $1}')" = \
@@ -243,8 +243,8 @@ jobs:
             --native-brew-commit cf5bc21c6b127e168ef7cfa982ba7db62874690e
             --metadata-sha256 34f1cb2454ff6d9c134195302a5c5fcac85b9502f2522d3e584bf55d539c9a7d
             --guest-layout-sha256 03cbe2ef439d1c274a5b43cc86fb877da3b4942cc6489fba9df99d8e3968f857
-            --successor-scope-path Kandelo/campaigns/prefix-v1/successor/f3f4-successor-scope.json
-            --successor-scope-sha256 4cfbb756def4280f4a9b74d330ba1f4c34298308da88dd0f1b0730764a7ec8b1
+            --successor-scope-path Kandelo/campaigns/prefix-v1/successor/ac95-successor-scope.json
+            --successor-scope-sha256 a5073d0351dd3d802b87bb0ff48052dc741c12e547e0184963549846cf81aba5
             # WHY: read-only run 30947720875 timed out on ruby/wasm32
             # with eight concurrent Wasm inspectors on a hosted runner.
             # Two matches 2-4 vCPU while preserving the 120s bound.
@@ -269,7 +269,7 @@ jobs:
           test "$observed_sha" = "$EXPECTED_CAMPAIGN_SHA256"
           test "$observed_bytes" -gt 0
 
-          scope="$GITHUB_WORKSPACE/source-tap/Kandelo/campaigns/prefix-v1/successor/f3f4-successor-scope.json"
+          scope="$GITHUB_WORKSPACE/source-tap/Kandelo/campaigns/prefix-v1/successor/ac95-successor-scope.json"
           graph="$GITHUB_WORKSPACE/source-tap/Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json"
           jq -e \
             --arg source "$SOURCE_COMMIT" \
@@ -280,6 +280,7 @@ jobs:
             --arg c7 "homebrew-prefix-campaign-sha256-8edea42ae932691b45c8695d5d6ab93a4a7ce1e08ee492ce3d7ead51fa45a185" \
             --arg c8 "homebrew-prefix-campaign-sha256-a516aa5e61f4b7513c18c3e5b279a6a1f2d8b07e6a7348706238bc261a63ada4" \
             --arg c9 "homebrew-prefix-campaign-sha256-f3f4cb4cda613c5cb6bbc73ec1a6952d3454971bfa92a31c9a10f9526b7308c3" \
+            --arg c10 "homebrew-prefix-campaign-sha256-ac950955718d406fa3ee31a7396c22c13ede154f948673f28171ca49592c2f34" \
             --slurpfile scope "$scope" \
             --slurpfile graph "$graph" '
               def variant($task):
@@ -290,8 +291,8 @@ jobs:
               .authority.source_tap_commit == $source and
               .authority.predecessor_recovery_source.commit == $source and
               .authority.successor_scope == {
-                path: "Kandelo/campaigns/prefix-v1/successor/f3f4-successor-scope.json",
-                sha256: "4cfbb756def4280f4a9b74d330ba1f4c34298308da88dd0f1b0730764a7ec8b1"
+                path: "Kandelo/campaigns/prefix-v1/successor/ac95-successor-scope.json",
+                sha256: "a5073d0351dd3d802b87bb0ff48052dc741c12e547e0184963549846cf81aba5"
               } and
               ($graph[0].tasks | length) == 41 and
               ($scope[0].reuse_tasks | length) == 40 and
@@ -305,7 +306,7 @@ jobs:
                 variant($task) |
                 select(
                   .reuse_source.kind == "predecessor-handoff" and
-                  .reuse_source.campaign_tag == $c9
+                  .reuse_source.campaign_tag == $c10
                 )] |
                 length) == 40 and
               ([$scope[0].build_tasks[] as $task |
@@ -320,11 +321,13 @@ jobs:
                  (.reuse_source.campaign_tag? // "") != $c5 and
                  (.reuse_source.campaign_tag? // "") != $c6 and
                  (.reuse_source.campaign_tag? // "") != $c7 and
-                 (.reuse_source.campaign_tag? // "") != $c8)) and
+                 (.reuse_source.campaign_tag? // "") != $c8 and
+                 (.reuse_source.campaign_tag? // "") != $c9)) and
               all(.authority.predecessor_recovery[];
                 (.campaign.tag != $b703 and .campaign.tag != $f901 and
                  .campaign.tag != $c5 and .campaign.tag != $c6 and
-                 .campaign.tag != $c7 and .campaign.tag != $c8))
+                 .campaign.tag != $c7 and .campaign.tag != $c8 and
+                 .campaign.tag != $c9))
             ' "$out/campaign.json" >/dev/null
 
           cp "$out/campaign.json" "$out/assets/campaign.json"

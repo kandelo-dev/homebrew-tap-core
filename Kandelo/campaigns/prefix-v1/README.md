@@ -239,12 +239,39 @@ is sealed as `a451e756879e38dea3834ee873d445fbfff8777ecd6812a9876c0129dd65dce8`.
 `4cfbb756def4280f4a9b74d330ba1f4c34298308da88dd0f1b0730764a7ec8b1` and selects those exact 40 C9 handoffs plus
 one fresh Ruby build against the unchanged canonical graph.
 
-The correction changes only the sealed tap target source. It stages the Ruby
-recipe explicitly, consumes the authenticated `WASM_POSIX_LOCAL_ROOT_SPILL`
-and `WASM_POSIX_FORK_INSTRUMENT` paths, and copies the authenticated Ruby source
+That correction changed only the sealed tap target source. It staged the Ruby
+recipe explicitly, consumed the authenticated `WASM_POSIX_LOCAL_ROOT_SPILL`
+and `WASM_POSIX_FORK_INSTRUMENT` paths, and copied the authenticated Ruby source
 into a writable work directory before patching it. The corrected target is
 sealed by manifest `48f2f519beba22237d857b7b6860d5eccb57d5cb8abad2d7733f10b424fb34bf`, source tree
 `7917903175fb2f75714ec2bc6fa0ab603efb6975`, and target tree
-`af6215547bcd9fb2703e5f358721f7283b97eaee`. It keeps exact Kandelo executor
+`af6215547bcd9fb2703e5f358721f7283b97eaee`. C10 was armed at
+`c4039570825e9a0bd5932f84f933056368ccdf0a`, activated at
+`5fec71d3e3de0f0fc8a0b543bee0c4afbe4bb810`, and published campaign
+`ac950955718d406fa3ee31a7396c22c13ede154f948673f28171ca49592c2f34`.
+
+C10 verified all 40 reused tasks. Ruby/wasm32 run `31069244063` installed its
+declared authenticated `gpatch` dependency and entered the isolated recipe
+runner, but stopped before patching or compilation because the Linux `gpatch`
+keg exposes `bin/patch`, not the macOS-prefixed executable `gpatch`. It
+published no Ruby bottle or handoff.
+
+The C11 successor starts from active C10 tap commit
+`5fec71d3e3de0f0fc8a0b543bee0c4afbe4bb810`. Its terminal predecessor archive
+is `aborted-campaigns/ac950955718d406fa3ee31a7396c22c13ede154f948673f28171ca49592c2f34.json`,
+sealed as `f861ae7e8b4f2669ec1851a943c1ac6ad92c780e20e2e38fac5785cd84109b15`.
+The new `successor/ac95-successor-scope.json` is sealed as
+`a5073d0351dd3d802b87bb0ff48052dc741c12e547e0184963549846cf81aba5`
+and selects all 40 exact C10 handoffs plus one fresh Ruby build against the
+unchanged canonical graph.
+
+The C11 tap-only correction passes exact declared-keg paths for patch, make,
+Perl, and Python into the recipe and invokes those paths directly, preventing
+ambient host tools from satisfying declared dependencies. It also removes the
+unused Formula-level Rust build dependency; local-root-spill remains an exact
+separately sealed campaign input. The corrected target is sealed by manifest
+`3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e`, source tree
+`17bcb5910fd3d403d861b695f9ee945f1ce14d30`, and target tree
+`f235ec029446883f067db5ea5d7e179710167dc6`. It keeps exact Kandelo executor
 `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106` and exact rootfs generation
 `package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.

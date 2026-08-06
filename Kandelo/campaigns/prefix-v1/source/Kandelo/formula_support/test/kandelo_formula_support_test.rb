@@ -3519,7 +3519,7 @@ class KandeloFormulaSupportTest < Minitest::Test
   def test_ruby_declares_every_closed_recipe_native_build_dependency
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
     native_declarations = formula.lines.grep(
-      /^\s*depends_on (?:"(?:gpatch|llvm|make|perl|python@3\.13|rust|unzip)"|KandeloFormulaSupport::(?:Binaryen|Wabt)Requirement) => :build/,
+      /^\s*depends_on (?:"(?:gpatch|llvm|make|perl|python@3\.13|unzip)"|KandeloFormulaSupport::(?:Binaryen|Wabt)Requirement) => :build/,
     )
 
     assert_equal [
@@ -3530,13 +3530,21 @@ class KandeloFormulaSupportTest < Minitest::Test
       %Q(  depends_on "make" => :build\n),
       %Q(  depends_on "perl" => :build\n),
       %Q(  depends_on "python@3.13" => :build\n),
-      %Q(  depends_on "rust" => :build\n),
       %Q(  depends_on "unzip" => :build\n),
     ], native_declarations
 
     assert_includes formula, "  KANDELO_TAP_RECIPE = true\n"
     assert_includes formula, 'depends_on "kandelo-dev/tap-core/libyaml"'
     assert_includes formula, "kandelo_build_tap_recipe("
+    assert_includes formula,
+                    '"WASM_POSIX_DEP_PATCH"        => formula_opt_bin("gpatch")/"patch"'
+    assert_includes formula,
+                    '"WASM_POSIX_DEP_MAKE"         => formula_opt_bin("make")/"make"'
+    assert_includes formula,
+                    '"WASM_POSIX_DEP_PERL"         => formula_opt_bin("perl")/"perl"'
+    assert_includes formula,
+                    '"WASM_POSIX_DEP_PYTHON"       => formula_opt_bin("python@3.13")/"python3.13"'
+    refute_includes formula, 'depends_on "rust" => :build'
     refute_includes formula, "KANDELO_REGISTRY_BRIDGE"
     refute_includes formula, "kandelo_build_package("
 
@@ -3564,6 +3572,20 @@ class KandeloFormulaSupportTest < Minitest::Test
                     'ROOT_SPILL="${WASM_POSIX_LOCAL_ROOT_SPILL:?}"'
     assert_includes recipe,
                     'FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"'
+    assert_includes recipe, 'PATCH="${WASM_POSIX_DEP_PATCH:?}"'
+    assert_includes recipe, 'MAKE="${WASM_POSIX_DEP_MAKE:?}"'
+    assert_includes recipe, 'PERL="${WASM_POSIX_DEP_PERL:?}"'
+    assert_includes recipe, 'PYTHON="${WASM_POSIX_DEP_PYTHON:?}"'
+    assert_includes recipe, '[ ! -x "$MAKE" ]'
+    assert_includes recipe, '[ ! -x "$PATCH" ]'
+    assert_includes recipe, '[ ! -x "$PERL" ]'
+    assert_includes recipe, '[ ! -x "$PYTHON" ]'
+    assert_includes recipe,
+                    '"$PATCH" -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-require-libraries-roots.patch"'
+    refute_match(/(^|[^$A-Z_])gpatch(?:\s|$)/, recipe)
+    refute_match(/(^|[^$A-Z_])gmake(?:\s|$)/, recipe)
+    refute_match(/(^|[^$A-Z_])perl(?:\s|$)/, recipe)
+    refute_match(/(^|[^$A-Z_])python3\.13(?:\s|$)/, recipe)
     refute_includes recipe, "HOMEBREW_KANDELO_ROOT"
     refute_match(/\bREPO_ROOT\b/, recipe)
     refute_includes recipe, 'SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"'
@@ -3610,7 +3632,7 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     assert_includes(
       build,
-      'gpatch -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-posix-spawn.patch"',
+      '"$PATCH" -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-posix-spawn.patch"',
     )
     refute_nil build_record
     assert_equal build.bytesize, build_record.fetch("bytes")
