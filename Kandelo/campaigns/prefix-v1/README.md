@@ -4,7 +4,7 @@ This directory stages the reviewed `/opt/kandelo/homebrew` cutover without
 changing the tap's active Formulae, helper, bootstrap recipe, metadata, or
 bottle selections.
 
-`source/` mirrors the 47 files that differ between the protected base
+`source/` mirrors the 48 files that differ between the protected base
 recorded in `manifest.json` and the reviewed target tree. The manifest
 binds every base preimage and target file by mode, byte length, Git blob
 ID, and SHA-256. The caller authority additionally binds the canonical
@@ -190,7 +190,7 @@ exact target-Cellar proxy to 4 GiB. The 1 GiB per-file limit and the 2 GiB
 true-target-dependency, recipe-source, and recipe-output limits remain
 unchanged.
 
-The checked-in C9 successor starts from active C8 tap commit
+The historical C9 successor started from active C8 tap commit
 `9bbdbd334e4f45bf780e4d139cda1dc865a21419` and terminal campaign
 `a516aa5e61f4b7513c18c3e5b279a6a1f2d8b07e6a7348706238bc261a63ada4`.
 That terminal ledger retains 40 publicly verified handoffs and failed
@@ -198,7 +198,7 @@ Ruby/wasm32 run `31043674986` with no handoff. Its canonical archive is
 `aborted-campaigns/a516aa5e61f4b7513c18c3e5b279a6a1f2d8b07e6a7348706238bc261a63ada4.json`,
 sealed as
 `7d8a7a9d1ac4df5c5dda459990384a5fe296511217053edf2a8d13c16703a483`.
-The new `successor/a516-successor-scope.json` is sealed as
+The C9 `successor/a516-successor-scope.json` is sealed as
 `a721afcecf9cde3185dcb6d5791a80e35ae99169bdd1a82666d63775ac32e187`
 and selects exactly those 40 C8 handoffs plus one fresh Ruby build against the
 unchanged canonical graph.
@@ -212,7 +212,7 @@ exact source, target, ownership, modes, and opt link, and subjects retained
 links to the component-aware sealed-native projection audit. An unregistered,
 redirected, writable, or changed proxy remains a hard failure.
 
-The arm is finalized with these live, independently verified identities:
+The C9 arm was finalized with these live, independently verified identities:
 
 - `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106`; and
 - `package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
@@ -220,3 +220,31 @@ The arm is finalized with these live, independently verified identities:
 They name the final protected Kandelo `main` commit and the exact public rootfs
 generation admitted against that commit. Historical C6, C7, and C8 identities
 above remain audit evidence and were not rewritten during finalization.
+
+The C10 successor starts from active C9 tap commit
+`47c232b5332ff2acad25c301ef6ba5f3f1e883b1` and terminal campaign
+`f3f4cb4cda613c5cb6bbc73ec1a6952d3454971bfa92a31c9a10f9526b7308c3`.
+All 40 reused tasks have public immutable C9 handoffs. Ruby/wasm32 run
+`31062254998` passed admission, planning, sealed source materialization, native
+dependency preparation, and installation of its Libyaml and Zlib handoffs. It
+then entered the isolated tap-recipe runner and stopped before compilation
+because `Kandelo/recipes/ruby/build.sh` required the intentionally unavailable
+publisher checkout variable `HOMEBREW_KANDELO_ROOT`. No Ruby bottle or handoff
+was produced.
+
+The terminal archive
+`aborted-campaigns/f3f4cb4cda613c5cb6bbc73ec1a6952d3454971bfa92a31c9a10f9526b7308c3.json`
+is sealed as `a451e756879e38dea3834ee873d445fbfff8777ecd6812a9876c0129dd65dce8`. The new
+`successor/f3f4-successor-scope.json` is sealed as
+`4cfbb756def4280f4a9b74d330ba1f4c34298308da88dd0f1b0730764a7ec8b1` and selects those exact 40 C9 handoffs plus
+one fresh Ruby build against the unchanged canonical graph.
+
+The correction changes only the sealed tap target source. It stages the Ruby
+recipe explicitly, consumes the authenticated `WASM_POSIX_LOCAL_ROOT_SPILL`
+and `WASM_POSIX_FORK_INSTRUMENT` paths, and copies the authenticated Ruby source
+into a writable work directory before patching it. The corrected target is
+sealed by manifest `48f2f519beba22237d857b7b6860d5eccb57d5cb8abad2d7733f10b424fb34bf`, source tree
+`7917903175fb2f75714ec2bc6fa0ab603efb6975`, and target tree
+`af6215547bcd9fb2703e5f358721f7283b97eaee`. It keeps exact Kandelo executor
+`45a45fed06ff053ee4dd2cc2bb6564a99d5ce106` and exact rootfs generation
+`package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.

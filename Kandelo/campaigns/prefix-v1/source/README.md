@@ -100,13 +100,18 @@ Formula source currently present in this repository includes:
   built directly from the checksum-pinned upstream source; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
 
-These seven exact-shell Formulae and Ruby intentionally use the transitional
-`kandelo_build_package` bridge for their first bottle proof. Their Formulae pin
-source identity, declare native and target dependencies, retain every current
-shell output, validate final Wasm artifacts, and run through Kandelo.
+These seven exact-shell Formulae intentionally use the transitional
+`kandelo_build_package` bridge for their first bottle proof. Their Formulae
+pin source identity, declare native and target dependencies, retain every
+current shell output, validate final Wasm artifacts, and run through Kandelo.
 The six recipes that accept already-extracted source isolate Homebrew's
 checksum-verified tree from sibling caller-owned work and output roots; neither
 the verified source nor the reviewed Kandelo checkout is a build destination.
+
+Ruby owns a closed build recipe under `Kandelo/recipes/ruby/`. It copies
+Homebrew's authenticated source into recipe-owned work space before applying
+patches or running source-writing build steps, and consumes only the sealed
+Kandelo transform tools projected by the publisher.
 
 `homebrew-bootstrap` owns a closed build recipe under
 `Kandelo/recipes/homebrew-bootstrap/`. The Formula binds its complete recipe

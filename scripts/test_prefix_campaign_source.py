@@ -27,6 +27,8 @@ SPEC.loader.exec_module(SOURCE)
 AUTHORITY = ROOT / "Kandelo/prefix-campaign-authority.json"
 MANIFEST = ROOT / "Kandelo/campaigns/prefix-v1/manifest.json"
 SOURCE_ROOT = ROOT / "Kandelo/campaigns/prefix-v1/source"
+C10_SOURCE_TREE_GIT_OID = "7917903175fb2f75714ec2bc6fa0ab603efb6975"
+C10_TARGET_TREE_GIT_OID = "af6215547bcd9fb2703e5f358721f7283b97eaee"
 
 
 class PrefixCampaignSourceTests(unittest.TestCase):
@@ -39,18 +41,18 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             manifest_path=MANIFEST,
             require_live_base=True,
         )
-        self.assertEqual(summary["files"], 47)
+        self.assertEqual(summary["files"], 48)
         self.assertEqual(
             summary["base_commit"],
             "2e192c8cf318044078e5426d39717636131cec60",
         )
         self.assertEqual(
             summary["source_tree_git_oid"],
-            "8e825398d9ce414d6148ed2f8eac4e5de4ffb16c",
+            C10_SOURCE_TREE_GIT_OID,
         )
         self.assertEqual(
             summary["target_tree_git_oid"],
-            "7e314590d18936d0ad3bf8ab42e49d7b4f234892",
+            C10_TARGET_TREE_GIT_OID,
         )
 
         active_helper = (
@@ -80,7 +82,7 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
             self.assertEqual(
                 SOURCE.source_tree_oid(output),
-                "7e314590d18936d0ad3bf8ab42e49d7b4f234892",
+                C10_TARGET_TREE_GIT_OID,
             )
             expected_revisions = {
                 "file-formula": 1,
@@ -88,6 +90,7 @@ class PrefixCampaignSourceTests(unittest.TestCase):
                 "homebrew-bootstrap": 1,
                 "less": 2,
                 "libyaml": 1,
+                "ruby": 2,
                 "vim": 1,
             }
             for formula, revision in expected_revisions.items():
@@ -107,8 +110,8 @@ class PrefixCampaignSourceTests(unittest.TestCase):
                 encoding="utf-8"
             )
             self.assertIn(
-                'manifest_sha256: "a1def6211d6ce2fb918df63e1be3fbba'
-                '519b7537d507e34fcbfa64f249d4032a"',
+                'manifest_sha256: "7b24ee812fdb3ffda1767c695b71c3f2'
+                '206ac9ca50f5e17cb90dee5faf010177"',
                 ruby_formula,
             )
 
@@ -150,6 +153,9 @@ class PrefixCampaignSourceTests(unittest.TestCase):
                     "--name",
                     "/guest_homebrew_paths_use_kandelo_identity|"
                     "formula_sources_use_the_shared_guest_homebrew_prefix|"
+                    "ruby_closed_recipe_uses_only_sealed_source_and_"
+                    "transform_inputs|"
+                    "ruby_closed_recipe_owns_the_posix_spawn_backend|"
                     "tap_recipe_helper_exposes_formula_and_package_versions|"
                     "tap_recipe_helper_owns_the_package_version_environment/",
                 ],

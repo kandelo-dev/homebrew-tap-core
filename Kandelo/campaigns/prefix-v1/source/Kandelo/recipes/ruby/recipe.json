@@ -7,10 +7,10 @@
   "entrypoint": "build.sh",
   "files": [
     {
-      "bytes": 51209,
+      "bytes": 52055,
       "mode": "0755",
       "path": "build.sh",
-      "sha256": "6bc501cae8cebbbb8ff745eb4a03afec899a579c3e39d3f79eac0bdb66125d36"
+      "sha256": "f60e54eaf788446a0d7f5f2fa842940493251e032090f81f9d570082e04d214d"
     },
     {
       "bytes": 1132,
