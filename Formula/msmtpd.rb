@@ -3,7 +3,8 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Msmtpd < Formula
   include KandeloFormulaSupport
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/msmtpd".freeze
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/msmtpd".freeze
 
   desc "Minimal SMTP server for Kandelo"
   homepage "https://marlam.de/msmtp/"

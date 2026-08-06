@@ -17,7 +17,8 @@ class Bash < Formula
 
   skip_clean "bin/bash"
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/bash".freeze
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/bash".freeze
 
   CLEANUP_WRAPPERS = {
     "pop_stream"                => "pop_stream_w",
@@ -467,7 +468,7 @@ class Bash < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 5
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "735265043b7097032d77bfb10dd5edba7c2802c79e8f3940651e3bcafa30aadb"
+    rebuild 6
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "77562969825c92d652576b37bc4b838045860cca53269d2cfff312f90a1ad036"
   end
 end

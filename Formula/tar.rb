@@ -3,7 +3,8 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Tar < Formula
   include KandeloFormulaSupport
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/tar".freeze
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/tar".freeze
 
   desc "GNU archiving utility for Kandelo"
   homepage "https://www.gnu.org/software/tar/"
@@ -118,8 +119,8 @@ class Tar < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "057a97a7c9eccaa898ddb1f9abefd73767b893d458487b1424880b1c610f8548"
+    rebuild 2
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "26c6b7d2f299b2367907b490f98d43db3b7c31f0bb3c01bb55a6b320ea1bb56f"
   end
 
 end

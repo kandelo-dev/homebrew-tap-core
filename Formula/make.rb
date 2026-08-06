@@ -116,8 +116,8 @@ class Make < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "359bd177f0c40f6c08eb7fd4281554dcb9029dce24266f49847538df884bac98"
+    rebuild 2
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "7656f307e4ae8af169e7ae9f85607cadca4304e88abb4054a60550b37eb30288"
   end
 
 end

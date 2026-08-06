@@ -38,6 +38,38 @@ class KandeloFormulaSupportTest < Minitest::Test
     KandeloFormulaSupport::WabtRequirement     => ["wabt", "wasm-validate"],
   }.freeze
 
+  def test_guest_homebrew_paths_use_kandelo_identity
+    assert_equal(
+      "/opt/kandelo/homebrew",
+      KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX,
+    )
+    assert_equal(
+      "/opt/kandelo/homebrew/Cellar",
+      KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_CELLAR,
+    )
+  end
+
+  def test_formula_sources_use_the_shared_guest_homebrew_prefix
+    formula_dir = Pathname(__dir__).join("../../..", "Formula").cleanpath
+
+    formula_dir.glob("*.rb").sort.each do |path|
+      # Bottle Cellar values are generated publication metadata. Formula build
+      # and test code must use the shared source-level authority instead of
+      # growing another literal that can drift during a future path migration.
+      recipe_source = path.binread.split(/^  bottle do\s*$/, 2).first
+      refute_includes(
+        recipe_source,
+        "/home/linuxbrew/.linuxbrew",
+        "#{path.basename} retains the retired guest prefix",
+      )
+      refute_includes(
+        recipe_source,
+        KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX,
+        "#{path.basename} hardcodes the canonical guest prefix",
+      )
+    end
+  end
+
   def test_native_requirements_have_the_closed_publisher_identity
     support = Pathname(__dir__).join("..", "kandelo_formula_support.rb").binread
     NATIVE_REQUIREMENT_IDENTITIES.each do |requirement, (formula, sentinel)|
@@ -126,7 +158,8 @@ class KandeloFormulaSupportTest < Minitest::Test
     include KandeloFormulaSupport
 
     attr_accessor :build_path, :dependency_formulae, :formula_full_name, :formula_name, :formula_path,
-                  :formula_version, :formula_binary_cache_root, :formula_checker_path,
+                  :formula_pkg_version, :formula_version, :formula_binary_cache_root,
+                  :formula_checker_path,
                   :formula_resolver_repo_root, :homebrew_prefix_path, :nix_path, :prefix_path,
                   :root_path, :runtime_formulae, :shell_result, :stable_spec, :test_path,
                   :tier2_runtime, :resources
@@ -151,6 +184,10 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     def version
       formula_version || "1.0"
+    end
+
+    def pkg_version
+      formula_pkg_version || version
     end
 
     def full_name
@@ -430,6 +467,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         "entrypoint"        => "build.sh",
         "file_count"        => 1,
         "manifest_sha256"   => "b" * 64,
+        "pkg_version"       => "1.0",
         "resources"         => [],
         "script_env_keys"   => ["HELLO_VALUE"],
         "source_sha256"     => "e" * 64,
@@ -744,6 +782,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         "entrypoint"        => manifest.fetch("entrypoint"),
         "file_count"        => records.length,
         "manifest_sha256"   => Digest::SHA256.file(manifest_path).hexdigest,
+        "pkg_version"       => "1.0",
         "resources"         => resource_records,
         "script_env_keys"   => script_env.keys.sort,
         "source_sha256"     => "a" * 64,
@@ -1239,6 +1278,7 @@ class KandeloFormulaSupportTest < Minitest::Test
         Pathname("/bin"),
       ].join(File::PATH_SEPARATOR), environment.fetch("PATH")
       assert_equal "hello", environment.fetch("WASM_POSIX_DEP_NAME")
+      assert_equal "1.0", environment.fetch("WASM_POSIX_DEP_PKG_VERSION")
       assert_equal "attested-value", environment.fetch("HELLO_VALUE")
       assert_equal fixture.fetch(:recipe_root).to_s,
                    environment.fetch("WASM_POSIX_DEP_RECIPE_DIR")
@@ -1309,6 +1349,46 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_equal "/ambient/fork-instrument", ENV.fetch("WASM_POSIX_FORK_INSTRUMENT")
       assert_equal "/ambient/local-root-spill", ENV.fetch("WASM_POSIX_LOCAL_ROOT_SPILL")
       assert_equal "/ambient/xtask", ENV.fetch("WASM_POSIX_XTASK_BIN")
+    end
+  end
+
+  def test_tap_recipe_helper_exposes_formula_and_package_versions
+    with_tap_recipe_build_fixture do |fixture|
+      # Model a publisher process whose ambient environment is already
+      # polluted. The sealed recipe attestation, not that process state, owns
+      # the package identity handed to the privileged runner.
+      ENV["WASM_POSIX_DEP_PKG_VERSION"] = "ambient-poison"
+      fixture.fetch(:harness).formula_pkg_version = "1.0_7"
+      fixture.fetch(:recipe)["pkg_version"] = "1.0_7"
+
+      run_tap_recipe(fixture)
+
+      request = fixture.fetch(:runner_requests).fetch(0)
+      environment = request.fetch("environment")
+      assert_equal "1.0", environment.fetch("WASM_POSIX_DEP_VERSION")
+      assert_equal "1.0_7", environment.fetch("WASM_POSIX_DEP_PKG_VERSION")
+      assert_equal "1.0", request.fetch("version")
+      assert_equal "ambient-poison", ENV.fetch("WASM_POSIX_DEP_PKG_VERSION")
+    end
+  end
+
+  def test_tap_recipe_helper_rejects_package_version_attestation_drift
+    with_tap_recipe_build_fixture do |fixture|
+      fixture.fetch(:harness).formula_pkg_version = "1.0_7"
+
+      error = assert_tap_recipe_rejected_before_activation(fixture)
+
+      assert_includes error.message, "Formula identity differs"
+    end
+  end
+
+  def test_tap_recipe_helper_owns_the_package_version_environment
+    with_tap_recipe_build_fixture(
+      script_env: { "WASM_POSIX_DEP_PKG_VERSION" => "1.0_7" },
+    ) do |fixture|
+      error = assert_tap_recipe_rejected_before_activation(fixture)
+
+      assert_includes error.message, "helper-owned key"
     end
   end
 
@@ -3263,7 +3343,7 @@ class KandeloFormulaSupportTest < Minitest::Test
     Dir.mktmpdir("kandelo-formula-support") do |dir|
       harness = artifact_validation_harness(dir)
       wasm = harness.buildpath/"program.wasm"
-      wasm.binwrite("/home/linuxbrew/.linuxbrew/opt/formula")
+      wasm.binwrite("/opt/kandelo/homebrew/opt/formula")
 
       assert_equal wasm, harness.kandelo_validate_wasm_artifact(wasm)
     end
@@ -3439,7 +3519,7 @@ class KandeloFormulaSupportTest < Minitest::Test
   def test_ruby_declares_every_closed_recipe_native_build_dependency
     formula = File.read(File.expand_path("../../../Formula/ruby.rb", __dir__))
     native_declarations = formula.lines.grep(
-      /^\s*depends_on (?:"(?:gpatch|llvm|make|perl|python@3\.13|rust|unzip)"|KandeloFormulaSupport::(?:Binaryen|Wabt)Requirement) => :build/,
+      /^\s*depends_on (?:"(?:gpatch|llvm|make|perl|python@3\.13|unzip)"|KandeloFormulaSupport::(?:Binaryen|Wabt)Requirement) => :build/,
     )
 
     assert_equal [
@@ -3450,13 +3530,21 @@ class KandeloFormulaSupportTest < Minitest::Test
       %Q(  depends_on "make" => :build\n),
       %Q(  depends_on "perl" => :build\n),
       %Q(  depends_on "python@3.13" => :build\n),
-      %Q(  depends_on "rust" => :build\n),
       %Q(  depends_on "unzip" => :build\n),
     ], native_declarations
 
     assert_includes formula, "  KANDELO_TAP_RECIPE = true\n"
     assert_includes formula, 'depends_on "kandelo-dev/tap-core/libyaml"'
     assert_includes formula, "kandelo_build_tap_recipe("
+    assert_includes formula,
+                    '"WASM_POSIX_DEP_PATCH"        => formula_opt_bin("gpatch")/"patch"'
+    assert_includes formula,
+                    '"WASM_POSIX_DEP_MAKE"         => formula_opt_bin("make")/"make"'
+    assert_includes formula,
+                    '"WASM_POSIX_DEP_PERL"         => formula_opt_bin("perl")/"perl"'
+    assert_includes formula,
+                    '"WASM_POSIX_DEP_PYTHON"       => formula_opt_bin("python@3.13")/"python3.13"'
+    refute_includes formula, 'depends_on "rust" => :build'
     refute_includes formula, "KANDELO_REGISTRY_BRIDGE"
     refute_includes formula, "kandelo_build_package("
 
@@ -3464,6 +3552,54 @@ class KandeloFormulaSupportTest < Minitest::Test
     refute_match(/\b(?:curl|wget)\b/, recipe)
     refute_includes recipe, "build-deps resolve"
     refute_includes recipe, "install-local-binary"
+  end
+
+  def test_ruby_closed_recipe_uses_only_sealed_source_and_transform_inputs
+    recipe = File.read(
+      File.expand_path("../../recipes/ruby/build.sh", __dir__),
+      encoding: "UTF-8",
+    )
+
+    assert_includes recipe, 'SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"'
+    assert_includes recipe, 'SRC_DIR="$WORK_DIR/ruby-source"'
+    assert_includes recipe,
+                    'cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$SRC_DIR/"'
+    assert_includes recipe,
+                    'find -P "$SRC_DIR" -type d -exec chmod u+rwx {} +'
+    assert_includes recipe,
+                    'find -P "$SRC_DIR" -type f -exec chmod u+rw {} +'
+    assert_includes recipe,
+                    'cp -a --no-preserve=ownership "$SOURCE_SYSROOT/." "$SYSROOT/"'
+    assert_includes recipe,
+                    'find -P "$SYSROOT" -type d -exec chmod u+rwx {} +'
+    assert_includes recipe,
+                    'find -P "$SYSROOT" -type f -exec chmod u+rw {} +'
+    assert_includes recipe,
+                    'ROOT_SPILL="${WASM_POSIX_LOCAL_ROOT_SPILL:?}"'
+    assert_includes recipe,
+                    'FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"'
+    assert_includes recipe, 'PATCH="${WASM_POSIX_DEP_PATCH:?}"'
+    assert_includes recipe, 'MAKE="${WASM_POSIX_DEP_MAKE:?}"'
+    assert_includes recipe, 'PERL="${WASM_POSIX_DEP_PERL:?}"'
+    assert_includes recipe, 'PYTHON="${WASM_POSIX_DEP_PYTHON:?}"'
+    assert_includes recipe, '[ ! -x "$MAKE" ]'
+    assert_includes recipe, '[ ! -x "$PATCH" ]'
+    assert_includes recipe, '[ ! -x "$PERL" ]'
+    assert_includes recipe, '[ ! -x "$PYTHON" ]'
+    assert_includes recipe,
+                    '"$PATCH" -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-require-libraries-roots.patch"'
+    refute_match(/(^|[^$A-Z_])gpatch(?:\s|$)/, recipe)
+    refute_match(/(^|[^$A-Z_])gmake(?:\s|$)/, recipe)
+    refute_match(/(^|[^$A-Z_])perl(?:\s|$)/, recipe)
+    refute_match(/(^|[^$A-Z_])python3\.13(?:\s|$)/, recipe)
+    refute_includes recipe, "HOMEBREW_KANDELO_ROOT"
+    refute_match(/\bREPO_ROOT\b/, recipe)
+    refute_includes recipe, 'SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"'
+    refute_includes recipe, 'cd "$SOURCE_INPUT"'
+    assert_operator recipe.index('cp -a --no-preserve=ownership'), :<,
+                    recipe.index("# ─── Source patches for wasm32-posix")
+    assert_operator recipe.index('find -P "$SYSROOT" -type f'), :<,
+                    recipe.index('cp "$LIBYAML_PREFIX/include/yaml.h"')
   end
 
   def test_ruby_exercises_the_installed_guest_runtime_without_rubylib
@@ -3493,14 +3629,23 @@ class KandeloFormulaSupportTest < Minitest::Test
     patch = patch_path.binread
     manifest_path = recipe_root/"recipe.json"
     manifest = JSON.parse(manifest_path.binread)
+    manifest_paths = manifest.fetch("files").map { |entry| entry.fetch("path") }
+    assert_equal manifest_paths.sort, manifest_paths
+    build_record = manifest.fetch("files").find do |entry|
+      entry.fetch("path") == "build.sh"
+    end
     patch_record = manifest.fetch("files").find do |entry|
       entry.fetch("path") == "patches/kandelo-posix-spawn.patch"
     end
 
     assert_includes(
       build,
-      'gpatch -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-posix-spawn.patch"',
+      '"$PATCH" -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-posix-spawn.patch"',
     )
+    refute_nil build_record
+    assert_equal build.bytesize, build_record.fetch("bytes")
+    assert_equal Digest::SHA256.hexdigest(build), build_record.fetch("sha256")
+    assert_equal "0755", build_record.fetch("mode")
     refute_nil patch_record
     assert_equal patch.bytesize, patch_record.fetch("bytes")
     assert_equal Digest::SHA256.hexdigest(patch), patch_record.fetch("sha256")
@@ -3577,14 +3722,14 @@ class KandeloFormulaSupportTest < Minitest::Test
   end
 
   def test_changed_tier2_formulae_keep_the_reviewed_abi42_bottle_identity
-    # These Formulae already consumed rebuild 1 when their Tier-2 isolation
-    # fixes were finalized. ABI 42 must use the next identity because GHCR's
-    # Homebrew references do not include the Kandelo ABI.
+    # These Formulae already consumed rebuild 2 during the ABI 42 bottle
+    # rebuild. The canonical-prefix bottles must use the next identity because
+    # GHCR's Homebrew references do not include the Kandelo ABI.
     %w[bc fbdoom lsof modeset netcat posix-utils-lite].each do |name|
       formula = File.read(File.expand_path("../../../Formula/#{name}.rb", __dir__))
       rebuild_declarations = formula.lines.grep(/^\s*rebuild /)
 
-      assert_equal [%Q(    rebuild 2\n)], rebuild_declarations, name
+      assert_equal [%Q(    rebuild 3\n)], rebuild_declarations, name
     end
   end
 
@@ -4218,9 +4363,9 @@ class KandeloFormulaSupportTest < Minitest::Test
     harness.kandelo_run_wasm(
       "program.wasm",
       ["input.tex"],
-      argv0:                     "/home/linuxbrew/.linuxbrew/opt/texlive/bin/pdflatex",
+      argv0:                     "/opt/kandelo/homebrew/opt/texlive/bin/pdflatex",
       exec_programs:             {
-        "/home/linuxbrew/.linuxbrew/opt/texlive/bin/pdflatex" => "/formula/pdflatex",
+        "/opt/kandelo/homebrew/opt/texlive/bin/pdflatex" => "/formula/pdflatex",
       },
       writable_host_directories: { "/work" => "/formula/test-output" },
     )
@@ -4228,7 +4373,7 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes harness.command, "run-network-wasm.ts"
     assert_includes harness.command, "KANDELO_FORMULA_ARGV0="
     assert_includes harness.command, "KANDELO_FORMULA_WRITABLE_HOST_DIRS_JSON="
-    assert_includes harness.command, "/home/linuxbrew/.linuxbrew/opt/texlive/bin/pdflatex"
+    assert_includes harness.command, "/opt/kandelo/homebrew/opt/texlive/bin/pdflatex"
     assert_includes harness.command, "/work"
     assert_includes harness.command, "/formula/test-output"
   end
@@ -4479,15 +4624,15 @@ class KandeloFormulaSupportTest < Minitest::Test
       harness.test_path.mkpath
       output = harness.kandelo_run_pty_wasm(
         "program.wasm", ["note.txt"],
-        argv0:                      "/home/linuxbrew/.linuxbrew/opt/program/bin/program",
+        argv0:                      "/opt/kandelo/homebrew/opt/program/bin/program",
         env:                        { "KERNEL_CWD" => "/tmp/formula test" },
         inputs:                     ["\u001c", "beta", "\r"],
         input_ready_text:           "editor ready",
         rerun_inputs:               ["\u0018"],
         exec_programs:              { "/opt/program/bin/helper" => "/formula/helper" },
         guest_files:                { "/etc/program.conf" => "/formula/program.conf" },
-        guest_directories:          ["/home/linuxbrew/.linuxbrew/var/program/save"],
-        writable_guest_directories: ["/home/linuxbrew/.linuxbrew/var/program"],
+        guest_directories:          ["/opt/kandelo/homebrew/var/program/save"],
+        writable_guest_directories: ["/opt/kandelo/homebrew/var/program"],
         writable_host_directories:  { "/work" => "/formula/test output" },
         expected_fork_descendants:  2,
         timeout_ms:                 120_000,
@@ -4503,14 +4648,14 @@ class KandeloFormulaSupportTest < Minitest::Test
       config = harness.pty_config
       assert_equal 0600, harness.pty_config_mode
       refute_path_exists harness.pty_config_path
-      assert_equal "/home/linuxbrew/.linuxbrew/opt/program/bin/program", config.fetch("argv0")
+      assert_equal "/opt/kandelo/homebrew/opt/program/bin/program", config.fetch("argv0")
       assert_equal ["\u001c", "beta", "\r"], config.fetch("inputs")
       assert_equal "editor ready", config.fetch("inputReadyText")
       assert_equal ["\u0018"], config.fetch("rerunInputs")
       assert_equal({ "/opt/program/bin/helper" => "/formula/helper" }, config.fetch("execPrograms"))
       assert_equal({ "/etc/program.conf" => "/formula/program.conf" }, config.fetch("guestFiles"))
       assert_equal(
-        ["/home/linuxbrew/.linuxbrew/var/program"],
+        ["/opt/kandelo/homebrew/var/program"],
         config.fetch("writableGuestDirectories"),
       )
       assert_equal({ "/work" => "/formula/test output" }, config.fetch("writableHostDirectories"))

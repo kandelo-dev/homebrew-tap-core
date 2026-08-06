@@ -3,15 +3,21 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Less < Formula
   include KandeloFormulaSupport
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/less".freeze
-  GUEST_NCURSES_PREFIX = "/home/linuxbrew/.linuxbrew/opt/ncurses".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+  GUEST_OPT_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/less".freeze
+  GUEST_NCURSES_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/ncurses".freeze
 
   desc "Terminal pager with more-compatible mode for Kandelo"
   homepage "https://www.greenwoodsoftware.com/less/"
   url "https://www.greenwoodsoftware.com/less/less-668.tar.gz"
   sha256 "2819f55564d86d542abbecafd82ff61e819a3eec967faa36cd3e68f1596a44b8"
   license "GPL-3.0-or-later"
-  revision 1
+
+  # WHY: F901 published rebuild-5 OCI bytes before its immutable handoff was
+  # sealed. Reserve a new Homebrew identity so recovery never overwrites or
+  # relabels those public bytes.
+  revision 2
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
@@ -130,7 +136,6 @@ class Less < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 4
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "287816b46a24222478b8fd4bb20f5aff5559d215ce85e28e80a55c3704feb017"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "a2987e33443d593d1e8acf596d5facd2a270fb7928cf6687a36525c20d293ad8"
   end
 end

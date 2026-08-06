@@ -101,7 +101,8 @@ class Patch < Formula
 
     (workspace/"ed-target.txt").write("one\nremove\nthree\n")
     guest_work = "/work"
-    guest_ed = "/home/linuxbrew/.linuxbrew/opt/ed/bin/ed"
+    guest_ed =
+      "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/ed/bin/ed"
     kandelo_run_wasm(
       bin/"patch",
       ["--batch", "--silent", "-e", "ed-target.txt"],

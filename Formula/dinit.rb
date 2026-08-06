@@ -3,8 +3,10 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Dinit < Formula
   include KandeloFormulaSupport
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/dinit".freeze
-  GUEST_LIBCXX_PREFIX = "/home/linuxbrew/.linuxbrew/opt/libcxx".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+  GUEST_OPT_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/dinit".freeze
+  GUEST_LIBCXX_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/libcxx".freeze
   PROGRAMS = %w[dinit dinitctl dinitcheck].freeze
 
   desc "Service manager and process supervisor for Kandelo"

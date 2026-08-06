@@ -13,7 +13,9 @@ class Ruby < Formula
   # Remove the patch when the platform fix meets the criteria in:
   # https://github.com/Automattic/kandelo/pull/1166
   RUBY_API_VERSION = "4.0.0".freeze
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/ruby".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+  GUEST_OPT_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/ruby".freeze
   GUEST_RUNTIME = "#{GUEST_OPT_PREFIX}/lib/ruby/#{RUBY_API_VERSION}".freeze
 
   desc "Interpreter for the Ruby scripting language on Kandelo (with psych/YAML)"
@@ -31,9 +33,6 @@ class Ruby < Formula
   depends_on "make" => :build
   depends_on "perl" => :build
   depends_on "python@3.13" => :build
-  # wasm-local-root-spill is a trusted Kandelo build transform implemented in
-  # Rust. Keep its toolchain explicit instead of inheriting publisher state.
-  depends_on "rust" => :build
   depends_on "unzip" => :build
   depends_on "kandelo-dev/tap-core/libyaml"
   depends_on "kandelo-dev/tap-core/zlib"
@@ -44,9 +43,17 @@ class Ruby < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "4274b55d135925220109e278320c5b1d47b5484e368bdb6eb6bd9bbbabdde041",
+      manifest_sha256: "7b9b4f2a94665b1a81bffe90452d4c28188d0ff325322b05c01c469126e507e2",
       script_env:      {
         "WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX,
+        # Homebrew's gpatch Formula installs `patch` on Linux; only macOS
+        # applies the `g` program prefix. Bind the exact declared keg tool so
+        # the isolated recipe cannot fall through to ambient /usr/bin/patch.
+        "WASM_POSIX_DEP_PATCH"        => formula_opt_bin("gpatch")/"patch",
+        # The Linux make keg likewise exposes `make`, not macOS's `gmake`.
+        "WASM_POSIX_DEP_MAKE"         => formula_opt_bin("make")/"make",
+        "WASM_POSIX_DEP_PERL"         => formula_opt_bin("perl")/"perl",
+        "WASM_POSIX_DEP_PYTHON"       => formula_opt_bin("python@3.13")/"python3.13",
       },
     )
     kandelo_validate_wasm_artifact(out_dir/"ruby.wasm", fork: :required)
@@ -98,7 +105,7 @@ class Ruby < Formula
       install_prefix = RbConfig::CONFIG['prefix']
       allowed_install_prefixes = [
         '#{GUEST_OPT_PREFIX}',
-        '/home/linuxbrew/.linuxbrew/Cellar/ruby/#{pkg_version}',
+        '#{GUEST_HOMEBREW_PREFIX}/Cellar/ruby/#{pkg_version}',
       ]
       unless allowed_install_prefixes.include?(install_prefix)
         raise "unexpected install prefix: %s" % install_prefix

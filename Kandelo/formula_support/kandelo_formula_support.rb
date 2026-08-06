@@ -31,6 +31,13 @@ else
 module KandeloFormulaSupport
   KANDELO_FORMULA_SUPPORT_API_VERSION = 1
   KANDELO_CORE_TAP_FORMULA_PREFIX = "kandelo-dev/tap-core/"
+  # WHY: target Formulae must record Kandelo's guest namespace, never the
+  # native Homebrew-on-Linux prefix used only for trusted CI host tools.
+  # Keeping the target prefix here gives every Formula one reviewable path
+  # authority.
+  KANDELO_GUEST_HOMEBREW_PREFIX = "/opt/kandelo/homebrew".freeze
+  KANDELO_GUEST_HOMEBREW_CELLAR =
+    "#{KANDELO_GUEST_HOMEBREW_PREFIX}/Cellar".freeze
   KANDELO_PORTABLE_BINARY_CACHE_BASENAME = ".ci-test-binary-cache"
   KANDELO_TIER2_ATTESTATION_BASENAME = ".kandelo-publisher-tier2-attestation.json"
   KANDELO_TIER2_ATTESTATION_MAX_BYTES = 65_536
@@ -88,8 +95,8 @@ module KandeloFormulaSupport
     script_sha256 source_mode source_sha256 source_url version
   ].freeze
   KANDELO_TAP_RECIPE_KEYS = %w[
-    dependencies entrypoint file_count manifest_sha256 resources script_env_keys
-    source_sha256 source_url total_bytes version
+    dependencies entrypoint file_count manifest_sha256 pkg_version resources
+    script_env_keys source_sha256 source_url total_bytes version
   ].freeze
   KANDELO_TIER2_TRUSTED_ENV_KEYS = %w[
     HOMEBREW_KANDELO_ARCH HOMEBREW_KANDELO_FORK_INSTRUMENT
@@ -603,6 +610,10 @@ module KandeloFormulaSupport
                      recipe["file_count"].between?(1, KANDELO_TAP_RECIPE_MAX_FILES) &&
                      recipe["total_bytes"].is_a?(Integer) &&
                      recipe["total_bytes"].between?(0, KANDELO_TAP_RECIPE_MAX_BYTES) &&
+                     recipe["pkg_version"].is_a?(String) &&
+                     recipe["pkg_version"].match?(
+                       /\A[A-Za-z0-9][A-Za-z0-9._+,-]{0,254}\z/
+                     ) &&
                      recipe["version"].is_a?(String) &&
                      recipe["version"].match?(/\A[A-Za-z0-9][A-Za-z0-9._+,-]{0,254}\z/) &&
                      recipe["source_url"].is_a?(String) &&
@@ -1832,6 +1843,7 @@ module KandeloFormulaSupport
       end
       if %w[
         WASM_POSIX_DEP_NAME WASM_POSIX_DEP_OUT_DIR WASM_POSIX_DEP_RECIPE_DIR
+        WASM_POSIX_DEP_PKG_VERSION
         WASM_POSIX_DEP_SOURCE_DIR WASM_POSIX_DEP_SOURCE_SHA256
         WASM_POSIX_DEP_SOURCE_URL WASM_POSIX_DEP_TARGET_ARCH
         WASM_POSIX_DEP_VERSION WASM_POSIX_DEP_WORK_DIR
@@ -2547,6 +2559,7 @@ module KandeloFormulaSupport
     formula_full_name = respond_to?(:full_name) ? full_name.to_s : "kandelo-dev/tap-core/#{formula_name}"
     unless formula_name == attestation.fetch("formula") &&
            formula_full_name == attestation.fetch("full_name") &&
+           pkg_version.to_s == recipe.fetch("pkg_version") &&
            version.to_s == recipe.fetch("version") &&
            stable.url.to_s == recipe.fetch("source_url") &&
            stable.checksum.hexdigest == recipe.fetch("source_sha256")
@@ -2629,12 +2642,16 @@ module KandeloFormulaSupport
     helper_env = {
       "WASM_POSIX_DEP_NAME"             => formula_name,
       "WASM_POSIX_DEP_OUT_DIR"          => out_dir,
+      # WHY: Formula#version omits Homebrew's revision suffix, while
+      # Formula#pkg_version includes it. Recipes that bind published bytes
+      # must receive both identities instead of reconstructing `_N`.
+      "WASM_POSIX_DEP_PKG_VERSION"      => recipe.fetch("pkg_version"),
       "WASM_POSIX_DEP_RECIPE_DIR"       => recipe_root,
       "WASM_POSIX_DEP_SOURCE_DIR"       => source_dir,
       "WASM_POSIX_DEP_SOURCE_SHA256"    => recipe.fetch("source_sha256"),
       "WASM_POSIX_DEP_SOURCE_URL"       => recipe.fetch("source_url"),
       "WASM_POSIX_DEP_TARGET_ARCH"      => arch,
-      "WASM_POSIX_DEP_VERSION"          => recipe.fetch("version"),
+      "WASM_POSIX_DEP_VERSION"          => version.to_s,
       "WASM_POSIX_DEP_WORK_DIR"         => work_dir,
       "WASM_POSIX_INSTALL_LOCAL_MIRROR" => "0",
     }.merge(dependency_env).merge(resource_env)

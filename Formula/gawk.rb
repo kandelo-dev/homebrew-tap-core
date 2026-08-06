@@ -15,7 +15,7 @@ class Gawk < Formula
   def install
     kandelo_require_arch!("wasm32")
 
-    guest_prefix = "/home/linuxbrew/.linuxbrew"
+    guest_prefix = KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
     instrumented = buildpath/"gawk.instrumented"
     kandelo_wasm_build do |root|
       system kandelo_configure, *kandelo_std_configure_args,
@@ -85,8 +85,8 @@ class Gawk < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "d79b3af6327266ddb6521dfbcc6413b8ec3f041176f7db917606adab381e8b63"
+    rebuild 2
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "842c9d2eb0dba098af0e3ab288c03c9a7b148a1bb0d2c71911cb89adc0312bea"
   end
 
 end

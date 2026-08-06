@@ -54,7 +54,7 @@ class Sed < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
+    rebuild 2
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "49217f1c99b44bb6ec11e0ca5416a1b6330106bfbdde32df40ee8bd2f61db41e"
   end
 

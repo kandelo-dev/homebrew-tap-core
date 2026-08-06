@@ -117,9 +117,8 @@ class Curl < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "c286edbaea2b8cac64d905b1ebd85df0d10d68a843d7a64de90e16903ba8347a"
-    sha256 cellar: :any_skip_relocation, wasm64_kandelo: "5099eb96cde7f10374626fd465e196740cdd9aadbce62202f8d31a5d0fb967a6"
+    rebuild 2
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "f0dca680303d3ad87e4899e031d24bb538b99273d126ea37e43981d6a405ee1b"
   end
 
 end

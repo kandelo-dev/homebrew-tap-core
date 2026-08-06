@@ -10,6 +10,11 @@ class Findutils < Formula
   sha256 "1387e0b67ff247d2abde998f90dfbf70c1491391a59ddfecb8ae698789f0a4f5"
   license "GPL-3.0-or-later"
 
+  # WHY: F901 published rebuild-2 OCI bytes before its immutable handoff was
+  # sealed. Reserve a new Homebrew identity so recovery never overwrites or
+  # relabels those public bytes.
+  revision 1
+
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/dash" => :test
@@ -97,8 +102,7 @@ class Findutils < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "6b35b405280a50d10ac1f9dce5583aa4eda34c1b07e531f8174bc52b29085c44"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "970b4858f75e8952018ebce350e1c2035d646f21c9346eb770ad434ca444b22a"
   end
 
 end

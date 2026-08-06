@@ -3,7 +3,8 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Git < Formula
   include KandeloFormulaSupport
 
-  GUEST_HOMEBREW_PREFIX = "/home/linuxbrew/.linuxbrew".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
   GUEST_OPT_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/git".freeze
   GUEST_GIT_BIN = "#{GUEST_OPT_PREFIX}/bin".freeze
   GUEST_GIT_EXEC_PATH = "#{GUEST_OPT_PREFIX}/libexec/git-core".freeze
@@ -422,7 +423,7 @@ class Git < Formula
       Array.new(471, 0) + Array.new(248, 1) + Array.new(30, 127)
     mergetool_help = run_git.call(
       ["-C", "clone", "mergetool", "--tool-help"],
-      guest_env:                         { "TIMEOUT" => "120000" },
+      guest_env:                         { "TIMEOUT" => "180000" },
       merge_stderr:                      true,
       expected_fork_descendant_statuses: mergetool_help_descendant_statuses,
     )
@@ -480,8 +481,8 @@ class Git < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "61e6dabaca0b17c726a2747c639aaddfe8b982d86be05b283f72caff9f40ae6f"
+    rebuild 2
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "27b72cdc76c9271e8a95230c845717241d75c61b11335615299fd572446d1be5"
   end
 
 end

@@ -6,7 +6,8 @@ class Python < Formula
   KANDELO_REGISTRY_BRIDGE = true
 
   PYTHON_MAJOR_MINOR = "3.13".freeze
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/python".freeze
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/python".freeze
   GUEST_RUNTIME = "#{GUEST_OPT_PREFIX}/lib/python3.13".freeze
 
   desc "CPython interpreter and standard library for Kandelo"

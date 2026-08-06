@@ -7,6 +7,11 @@ require "optparse"
 
 SHA256 = /\A[0-9a-f]{64}\z/
 GIT_OID = /\A[0-9a-f]{40}\z/
+# WHY: Formula#version is the upstream version, but Homebrew appends `_N`
+# to Formula#pkg_version when a Formula has revision N. The lock binds the
+# complete package identity and therefore accepts only that canonical suffix.
+HOMEBREW_BOOTSTRAP_PKG_VERSION =
+  /\A[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-g[0-9a-f]{7,40}(?:_[1-9][0-9]*)?\z/
 
 def fail_lock(message)
   raise "homebrew-bootstrap source lock: #{message}"
@@ -59,7 +64,10 @@ def load_lock(path)
   package = lock.fetch("package")
   exact_keys(package, %w[arch name version], "package")
   fail_lock("package.name must be homebrew-bootstrap") unless package["name"] == "homebrew-bootstrap"
-  string_field(package["version"], /\A[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-g[0-9a-f]{7,40}\z/, "package.version")
+  string_field(
+    package["version"], HOMEBREW_BOOTSTRAP_PKG_VERSION,
+    "package.version"
+  )
   fail_lock("package.arch must be wasm32") unless package["arch"] == "wasm32"
 
   source = lock.fetch("source")

@@ -15,7 +15,8 @@ class Procps < Formula
 
   skip_clean "bin/ps"
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/procps".freeze
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/procps".freeze
 
   def install
     kandelo_require_arch!("wasm32")

@@ -6,7 +6,7 @@ class Erlang < Formula
   KANDELO_REGISTRY_BRIDGE = true
 
   ERTS_VERSION = "16.1.2".freeze
-  GUEST_PREFIX = "/home/linuxbrew/.linuxbrew".freeze
+  GUEST_PREFIX = KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
   GUEST_OPT_PREFIX = "#{GUEST_PREFIX}/opt/erlang".freeze
   GUEST_OTP_ROOT = "#{GUEST_OPT_PREFIX}/lib/erlang".freeze
   GUEST_ERTS_BIN = "#{GUEST_OTP_ROOT}/erts-#{ERTS_VERSION}/bin".freeze

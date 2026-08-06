@@ -17,7 +17,7 @@ class Nano < Formula
   def install
     kandelo_require_arch!("wasm32")
     ncurses = formula_opt_prefix("kandelo-dev/tap-core/ncurses")
-    guest_prefix = "/home/linuxbrew/.linuxbrew"
+    guest_prefix = KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
 
     kandelo_wasm_build do |root|
       ENV["CFLAGS"] = "-O2 -gline-tables-only -fdebug-compilation-dir=."
@@ -72,14 +72,17 @@ class Nano < Formula
     assert_equal "alpha\nBETA\n", note.read
 
     binary = File.binread(bin/"nano")
-    assert_includes binary, "/home/linuxbrew/.linuxbrew/etc/nanorc"
+    assert_includes(
+      binary,
+      "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/etc/nanorc",
+    )
     refute_includes binary, prefix.to_s
     refute_match %r{/Users/[^/]+/}, binary
   end
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 4
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "171800f66407de356375b653e0f998bfe978dab5ab67b52754c370b03fce198f"
+    rebuild 5
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "0a5c0ce39a015fba3163af74d7161b6e839e9954c5aeef98983a08c31ef82823"
   end
 end

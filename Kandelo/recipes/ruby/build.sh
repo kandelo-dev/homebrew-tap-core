@@ -10,12 +10,18 @@ set -euo pipefail
 # The schema-3 Formula helper owns every path and supplies only the declared
 # target dependency closure. This recipe deliberately has no package-registry,
 # resolver, downloader, or local-binary installation authority.
-REPO_ROOT="${HOMEBREW_KANDELO_ROOT:?}"
 SCRIPT_DIR="${WASM_POSIX_DEP_RECIPE_DIR:?}"
-SRC_DIR="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"
 WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
+SRC_DIR="$WORK_DIR/ruby-source"
 OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
 SOURCE_SYSROOT="${WASM_POSIX_SYSROOT:?}"
+ROOT_SPILL="${WASM_POSIX_LOCAL_ROOT_SPILL:?}"
+FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"
+MAKE="${WASM_POSIX_DEP_MAKE:?}"
+PATCH="${WASM_POSIX_DEP_PATCH:?}"
+PERL="${WASM_POSIX_DEP_PERL:?}"
+PYTHON="${WASM_POSIX_DEP_PYTHON:?}"
 RUBY_VERSION="${WASM_POSIX_DEP_VERSION:?}"
 SOURCE_URL="${WASM_POSIX_DEP_SOURCE_URL:?}"
 SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
@@ -60,14 +66,38 @@ if [ ! -f "$LIBYAML_PREFIX/lib/libyaml.a" ] ||
     echo "ERROR: Ruby requires the selected libyaml keg" >&2
     exit 1
 fi
-for tool in gmake gpatch perl python3.13 wasm32posix-ar wasm32posix-cc \
-    wasm32posix-nm wasm32posix-pkg-config wasm32posix-ranlib \
+for tool in wasm32posix-ar wasm32posix-cc wasm32posix-nm \
+    wasm32posix-pkg-config wasm32posix-ranlib \
     wasm32posix-strip; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "ERROR: required Ruby build tool is unavailable: $tool" >&2
         exit 1
     }
 done
+if [ ! -x "$MAKE" ]; then
+    echo "ERROR: Ruby requires the declared native make tool" >&2
+    exit 1
+fi
+if [ ! -x "$PATCH" ]; then
+    echo "ERROR: Ruby requires the declared native patch tool" >&2
+    exit 1
+fi
+if [ ! -x "$PERL" ]; then
+    echo "ERROR: Ruby requires the declared native Perl tool" >&2
+    exit 1
+fi
+if [ ! -x "$PYTHON" ]; then
+    echo "ERROR: Ruby requires the declared native Python tool" >&2
+    exit 1
+fi
+if [ ! -x "$ROOT_SPILL" ]; then
+    echo "ERROR: Ruby requires the sealed local-root-spill transform" >&2
+    exit 1
+fi
+if [ ! -x "$FORK_INSTRUMENT" ]; then
+    echo "ERROR: Ruby requires the sealed fork instrumenter" >&2
+    exit 1
+fi
 
 HOST_BUILD_DIR="$WORK_DIR/ruby-host-build"
 CROSS_BUILD_DIR="$WORK_DIR/ruby-cross-build"
@@ -77,12 +107,32 @@ RUNTIME_ZIP="$BIN_DIR/ruby-runtime.zip"
 mkdir -p "$WORK_DIR"
 BUILD_JOBS="${WASM_POSIX_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)}"
 
+# WHY: Ruby's patches, configure probes, generators, and build all write in
+# the source tree. The authenticated source projection is deliberately
+# read-only, so preserve it and grant writes only to this complete,
+# recipe-owned copy. Do not retain the projection's root ownership.
+[ ! -e "$SRC_DIR" ] || {
+    echo "ERROR: private Ruby source already exists: $SRC_DIR" >&2
+    exit 1
+}
+mkdir "$SRC_DIR"
+cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$SRC_DIR/"
+# Do not follow source-tree symlinks while making the private copy writable.
+find -P "$SRC_DIR" -type d -exec chmod u+rwx {} +
+find -P "$SRC_DIR" -type f -exec chmod u+rw {} +
+
 # Ruby's configure probes and compatibility headers need a few additions. The
 # publisher's attested sysroot is shared read-only input, so always augment an
 # isolated caller-owned copy and never mutate the platform source.
 SYSROOT="$WORK_DIR/kandelo-ruby-sysroot"
 mkdir -p "$SYSROOT"
-cp -a "$SOURCE_SYSROOT/." "$SYSROOT/"
+cp -a --no-preserve=ownership "$SOURCE_SYSROOT/." "$SYSROOT/"
+# The authenticated sysroot projection is sealed mode 0555/0444. Preserve
+# those source bytes, but restore owner writes only on this recipe-owned copy
+# before adding libyaml and Ruby's compatibility files. Do not follow any
+# projected symlink while changing the private tree's modes.
+find -P "$SYSROOT" -type d -exec chmod u+rwx {} +
+find -P "$SYSROOT" -type f -exec chmod u+rw {} +
 export WASM_POSIX_SYSROOT="$SYSROOT"
 
 echo "==> zlib at $ZLIB_PREFIX"
@@ -123,7 +173,7 @@ fi
 # In the single-threaded thread_none backend these hooks must be no-ops.
 if ! grep -q 'rb_thread_acquire_fork_lock' "$SRC_DIR/thread_none.c"; then
     echo "==> Patching thread_none.c: adding fork lock no-op stubs..."
-    perl -0pi -e 's/\nvoid\nrb_thread_sched_init/\nvoid\nrb_thread_acquire_fork_lock(void)\n{\n}\n\nvoid\nrb_thread_release_fork_lock(void)\n{\n}\n\nvoid\nrb_thread_reset_fork_lock(void)\n{\n}\n\nvoid\nrb_thread_sched_init/' "$SRC_DIR/thread_none.c"
+    "$PERL" -0pi -e 's/\nvoid\nrb_thread_sched_init/\nvoid\nrb_thread_acquire_fork_lock(void)\n{\n}\n\nvoid\nrb_thread_release_fork_lock(void)\n{\n}\n\nvoid\nrb_thread_reset_fork_lock(void)\n{\n}\n\nvoid\nrb_thread_sched_init/' "$SRC_DIR/thread_none.c"
 fi
 
 # wasm/machine.c: missing <stdint.h> for uint8_t
@@ -142,7 +192,7 @@ fi
 # alignment-sensitive atomic access.
 if ! grep -q 'Kandelo avoids unaligned 64-bit wasm atomics' "$SRC_DIR/ruby_atomic.h"; then
     echo "==> Patching ruby_atomic.h: avoid unaligned 64-bit wasm atomics..."
-    python3.13 - "$SRC_DIR/ruby_atomic.h" <<'PY'
+    "$PYTHON" - "$SRC_DIR/ruby_atomic.h" <<'PY'
 import sys
 
 path = sys.argv[1]
@@ -194,36 +244,36 @@ if ! grep -q 'RUBY_KANDELO_POSIX' "$SRC_DIR/gc.c"; then
     echo "==> Patching Ruby wasm runtime guards for Kandelo POSIX..."
 fi
 for file in main.c gc.c eval_intern.h include/ruby/ruby.h vm_core.h vm.c; do
-    perl -0pi -e 's/defined\(__wasm__\) && !defined\(__EMSCRIPTEN__\)(?: && !defined\(RUBY_KANDELO_POSIX\))*/defined(__wasm__) && !defined(__EMSCRIPTEN__) && !defined(RUBY_KANDELO_POSIX)/g' "$SRC_DIR/$file"
+    "$PERL" -0pi -e 's/defined\(__wasm__\) && !defined\(__EMSCRIPTEN__\)(?: && !defined\(RUBY_KANDELO_POSIX\))*/defined(__wasm__) && !defined(__EMSCRIPTEN__) && !defined(RUBY_KANDELO_POSIX)/g' "$SRC_DIR/$file"
 done
-perl -0pi -e 's/^#if defined\(__wasm__\)$/#if defined(__wasm__) && !defined(RUBY_KANDELO_POSIX)/mg' "$SRC_DIR/gc.c"
-perl -0pi -e 's/^#elif defined\(__wasm__\)$/#elif defined(__wasm__) && !defined(RUBY_KANDELO_POSIX)/mg' "$SRC_DIR/gc.c"
+"$PERL" -0pi -e 's/^#if defined\(__wasm__\)$/#if defined(__wasm__) && !defined(RUBY_KANDELO_POSIX)/mg' "$SRC_DIR/gc.c"
+"$PERL" -0pi -e 's/^#elif defined\(__wasm__\)$/#elif defined(__wasm__) && !defined(RUBY_KANDELO_POSIX)/mg' "$SRC_DIR/gc.c"
 
 if ! grep -q 'Kandelo initializes Ruby stack roots' "$SRC_DIR/thread_none.c"; then
     echo "==> Patching thread_none.c: Kandelo stack base without Ruby wasm runtime..."
-    perl -0pi -e 's/\n#if defined\(RUBY_KANDELO_POSIX\)\nstatic volatile VALUE \*ruby_kandelo_stack_start;\n#endif\n/\n/g' "$SRC_DIR/thread_none.c"
-    perl -0pi -e 's/#if defined\(__wasm__\) && !defined\(__EMSCRIPTEN__\)(?: && !defined\(RUBY_KANDELO_POSIX\))?\n# include "wasm\/machine\.h"\n#endif/#if defined(__wasm__) \&\& !defined(__EMSCRIPTEN__) \&\& !defined(RUBY_KANDELO_POSIX)\n# include "wasm\/machine.h"\n#endif/' "$SRC_DIR/thread_none.c"
-    perl -0pi -e 's/#if defined\(RUBY_KANDELO_POSIX\)\n    th->ec->machine.stack_start = \(VALUE \*\)ruby_kandelo_stack_start;\n#elif defined\(__wasm__\) && !defined\(__EMSCRIPTEN__\)\n    th->ec->machine.stack_start = \(VALUE \*\)rb_wasm_stack_get_base\(\);\n#endif/#if defined(RUBY_KANDELO_POSIX)\n    \/* Kandelo initializes Ruby stack roots from RUBY_INIT_STACK. *\/\n    th->ec->machine.stack_start = (VALUE *)local_in_parent_frame;\n    th->ec->machine.stack_maxsize = 0;\n#elif defined(__wasm__) \&\& !defined(__EMSCRIPTEN__)\n    th->ec->machine.stack_start = (VALUE *)rb_wasm_stack_get_base();\n#endif/' "$SRC_DIR/thread_none.c"
-    perl -0pi -e 's/#if defined\(__wasm__\) && !defined\(__EMSCRIPTEN__\)\n    th->ec->machine.stack_start = \(VALUE \*\)rb_wasm_stack_get_base\(\);\n#endif/#if defined(RUBY_KANDELO_POSIX)\n    \/* Kandelo initializes Ruby stack roots from RUBY_INIT_STACK. *\/\n    th->ec->machine.stack_start = (VALUE *)local_in_parent_frame;\n    th->ec->machine.stack_maxsize = 0;\n#elif defined(__wasm__) \&\& !defined(__EMSCRIPTEN__)\n    th->ec->machine.stack_start = (VALUE *)rb_wasm_stack_get_base();\n#endif/' "$SRC_DIR/thread_none.c"
+    "$PERL" -0pi -e 's/\n#if defined\(RUBY_KANDELO_POSIX\)\nstatic volatile VALUE \*ruby_kandelo_stack_start;\n#endif\n/\n/g' "$SRC_DIR/thread_none.c"
+    "$PERL" -0pi -e 's/#if defined\(__wasm__\) && !defined\(__EMSCRIPTEN__\)(?: && !defined\(RUBY_KANDELO_POSIX\))?\n# include "wasm\/machine\.h"\n#endif/#if defined(__wasm__) \&\& !defined(__EMSCRIPTEN__) \&\& !defined(RUBY_KANDELO_POSIX)\n# include "wasm\/machine.h"\n#endif/' "$SRC_DIR/thread_none.c"
+    "$PERL" -0pi -e 's/#if defined\(RUBY_KANDELO_POSIX\)\n    th->ec->machine.stack_start = \(VALUE \*\)ruby_kandelo_stack_start;\n#elif defined\(__wasm__\) && !defined\(__EMSCRIPTEN__\)\n    th->ec->machine.stack_start = \(VALUE \*\)rb_wasm_stack_get_base\(\);\n#endif/#if defined(RUBY_KANDELO_POSIX)\n    \/* Kandelo initializes Ruby stack roots from RUBY_INIT_STACK. *\/\n    th->ec->machine.stack_start = (VALUE *)local_in_parent_frame;\n    th->ec->machine.stack_maxsize = 0;\n#elif defined(__wasm__) \&\& !defined(__EMSCRIPTEN__)\n    th->ec->machine.stack_start = (VALUE *)rb_wasm_stack_get_base();\n#endif/' "$SRC_DIR/thread_none.c"
+    "$PERL" -0pi -e 's/#if defined\(__wasm__\) && !defined\(__EMSCRIPTEN__\)\n    th->ec->machine.stack_start = \(VALUE \*\)rb_wasm_stack_get_base\(\);\n#endif/#if defined(RUBY_KANDELO_POSIX)\n    \/* Kandelo initializes Ruby stack roots from RUBY_INIT_STACK. *\/\n    th->ec->machine.stack_start = (VALUE *)local_in_parent_frame;\n    th->ec->machine.stack_maxsize = 0;\n#elif defined(__wasm__) \&\& !defined(__EMSCRIPTEN__)\n    th->ec->machine.stack_start = (VALUE *)rb_wasm_stack_get_base();\n#endif/' "$SRC_DIR/thread_none.c"
 fi
 if ! grep -q 'Kandelo initializes pthread Ruby stack roots' "$SRC_DIR/thread_pthread.c"; then
     echo "==> Patching thread_pthread.c: Kandelo stack base without nonportable pthread stack APIs..."
-    perl -0pi -e 's/#else\n        rb_raise\(rb_eNotImpError, "ruby engine can initialize only in the main thread"\);\n#endif/#elif defined(RUBY_KANDELO_POSIX)\n        \/* Kandelo initializes pthread Ruby stack roots from the native thread frame. *\/\n        th->ec->machine.stack_start = (VALUE *)local_in_parent_frame;\n        th->ec->machine.stack_maxsize = 0;\n#else\n        rb_raise(rb_eNotImpError, "ruby engine can initialize only in the main thread");\n#endif/' "$SRC_DIR/thread_pthread.c"
+    "$PERL" -0pi -e 's/#else\n        rb_raise\(rb_eNotImpError, "ruby engine can initialize only in the main thread"\);\n#endif/#elif defined(RUBY_KANDELO_POSIX)\n        \/* Kandelo initializes pthread Ruby stack roots from the native thread frame. *\/\n        th->ec->machine.stack_start = (VALUE *)local_in_parent_frame;\n        th->ec->machine.stack_maxsize = 0;\n#else\n        rb_raise(rb_eNotImpError, "ruby engine can initialize only in the main thread");\n#endif/' "$SRC_DIR/thread_pthread.c"
 fi
 
 if ! grep -q 'Kandelo cross build has rb_reg_onig_match' "$SRC_DIR/ext/strscan/strscan.c"; then
     echo "==> Patching strscan.c: avoid strict-prototype mkmf false negative..."
-    perl -0pi -e 's|/\* rb_reg_onig_match is available in Ruby 3\.3 and later\. \*/|/* rb_reg_onig_match is available in Ruby 3.3 and later. */\n#if defined(RUBY_KANDELO_POSIX) \&\& !defined(HAVE_RB_REG_ONIG_MATCH)\n/* Kandelo cross build has rb_reg_onig_match; mkmf probes it with a conflicting prototype. */\n# define HAVE_RB_REG_ONIG_MATCH 1\n#endif|' "$SRC_DIR/ext/strscan/strscan.c"
+    "$PERL" -0pi -e 's|/\* rb_reg_onig_match is available in Ruby 3\.3 and later\. \*/|/* rb_reg_onig_match is available in Ruby 3.3 and later. */\n#if defined(RUBY_KANDELO_POSIX) \&\& !defined(HAVE_RB_REG_ONIG_MATCH)\n/* Kandelo cross build has rb_reg_onig_match; mkmf probes it with a conflicting prototype. */\n# define HAVE_RB_REG_ONIG_MATCH 1\n#endif|' "$SRC_DIR/ext/strscan/strscan.c"
 fi
 
 if ! grep -q 'Kandelo cross build has json parser Ruby APIs' "$SRC_DIR/ext/json/parser/parser.c"; then
     echo "==> Patching json/parser.c: avoid strict-prototype mkmf false negatives..."
-    perl -0pi -e 's|#include "\.\./json\.h"|#include "../json.h"\n#if defined(RUBY_KANDELO_POSIX)\n/* Kandelo cross build has json parser Ruby APIs; mkmf probes them with conflicting prototypes. */\n# if !defined(HAVE_RB_HASH_BULK_INSERT)\n#  define HAVE_RB_HASH_BULK_INSERT 1\n# endif\n# if !defined(HAVE_RB_STR_TO_INTERNED_STR)\n#  define HAVE_RB_STR_TO_INTERNED_STR 1\n# endif\n#endif\n/* Kandelo cross build has json parser Ruby APIs. */|' "$SRC_DIR/ext/json/parser/parser.c"
+    "$PERL" -0pi -e 's|#include "\.\./json\.h"|#include "../json.h"\n#if defined(RUBY_KANDELO_POSIX)\n/* Kandelo cross build has json parser Ruby APIs; mkmf probes them with conflicting prototypes. */\n# if !defined(HAVE_RB_HASH_BULK_INSERT)\n#  define HAVE_RB_HASH_BULK_INSERT 1\n# endif\n# if !defined(HAVE_RB_STR_TO_INTERNED_STR)\n#  define HAVE_RB_STR_TO_INTERNED_STR 1\n# endif\n#endif\n/* Kandelo cross build has json parser Ruby APIs. */|' "$SRC_DIR/ext/json/parser/parser.c"
 fi
 
 if grep -q 'Kandelo wasm32-posix socket dependencies' "$SRC_DIR/ext/socket/extconf.rb" && grep -q 'HAVE_GETPEEREID' "$SRC_DIR/ext/socket/extconf.rb"; then
     echo "==> Repairing socket extconf Kandelo branch: avoid unavailable getpeereid..."
-    perl -0pi -e 's/\n    -DHAVE_GETPEEREID=1//' "$SRC_DIR/ext/socket/extconf.rb"
+    "$PERL" -0pi -e 's/\n    -DHAVE_GETPEEREID=1//' "$SRC_DIR/ext/socket/extconf.rb"
 fi
 if ! grep -q 'Kandelo wasm32-posix socket dependencies' "$SRC_DIR/ext/socket/extconf.rb"; then
     echo "==> Patching socket extconf: avoid link-based mkmf false negatives..."
@@ -301,33 +351,33 @@ if ! grep -q 'Kandelo wasm32-posix socket dependencies' "$SRC_DIR/ext/socket/ext
 fi
 if grep -q 'Kandelo wasm32-posix socket dependencies' "$SRC_DIR/ext/socket/extconf.rb" && ! grep -q 'HAVE_NETPACKET_PACKET_H' "$SRC_DIR/ext/socket/extconf.rb"; then
     echo "==> Repairing socket extconf Kandelo branch: add packet socket headers..."
-    perl -0pi -e 's/(\n    -DHAVE_ARPA_INET_H=1\n)/$1    -DHAVE_NETPACKET_PACKET_H=1\n    -DHAVE_NET_ETHERNET_H=1\n/' "$SRC_DIR/ext/socket/extconf.rb"
+    "$PERL" -0pi -e 's/(\n    -DHAVE_ARPA_INET_H=1\n)/$1    -DHAVE_NETPACKET_PACKET_H=1\n    -DHAVE_NET_ETHERNET_H=1\n/' "$SRC_DIR/ext/socket/extconf.rb"
 fi
 
 if ! grep -q 'Kandelo wasm32-posix uses Unix98 PTY APIs' "$SRC_DIR/ext/pty/extconf.rb"; then
     echo "==> Patching pty extconf: force Unix98 PTY probes for Kandelo cross builds..."
-    perl -0pi -e 's|require '\''mkmf'\''|require '\''mkmf'\''\n\nif ENV["WASM_POSIX_CROSS_COMPILE"] == "1"\n  # Kandelo wasm32-posix uses Unix98 PTY APIs; mkmf cannot infer these\n  # reliably while cross-compiling and otherwise falls through to _getpty.\n  have_header("termios.h")\n  have_header("sys/ioctl.h")\n  \$defs << "-DHAVE_POSIX_OPENPT=1"\n  \$defs << "-DHAVE_PTSNAME_R=1"\n  \$defs << "-DHAVE_SETSID=1"\n  \$defs << "-DHAVE_UNISTD_H=1"\n  create_makefile("pty")\nelse|' "$SRC_DIR/ext/pty/extconf.rb"
+    "$PERL" -0pi -e 's|require '\''mkmf'\''|require '\''mkmf'\''\n\nif ENV["WASM_POSIX_CROSS_COMPILE"] == "1"\n  # Kandelo wasm32-posix uses Unix98 PTY APIs; mkmf cannot infer these\n  # reliably while cross-compiling and otherwise falls through to _getpty.\n  have_header("termios.h")\n  have_header("sys/ioctl.h")\n  \$defs << "-DHAVE_POSIX_OPENPT=1"\n  \$defs << "-DHAVE_PTSNAME_R=1"\n  \$defs << "-DHAVE_SETSID=1"\n  \$defs << "-DHAVE_UNISTD_H=1"\n  create_makefile("pty")\nelse|' "$SRC_DIR/ext/pty/extconf.rb"
     printf '\nend\n' >> "$SRC_DIR/ext/pty/extconf.rb"
 elif grep -q '^[[:space:]]*<< "-DHAVE_POSIX_OPENPT=1"' "$SRC_DIR/ext/pty/extconf.rb"; then
     echo "==> Repairing pty extconf Kandelo probe definitions..."
-    perl -0pi -e 's/^[[:space:]]*<< "-DHAVE_POSIX_OPENPT=1"/  \$defs << "-DHAVE_POSIX_OPENPT=1"/mg; s/^[[:space:]]*<< "-DHAVE_PTSNAME_R=1"/  \$defs << "-DHAVE_PTSNAME_R=1"/mg' "$SRC_DIR/ext/pty/extconf.rb"
+    "$PERL" -0pi -e 's/^[[:space:]]*<< "-DHAVE_POSIX_OPENPT=1"/  \$defs << "-DHAVE_POSIX_OPENPT=1"/mg; s/^[[:space:]]*<< "-DHAVE_PTSNAME_R=1"/  \$defs << "-DHAVE_PTSNAME_R=1"/mg' "$SRC_DIR/ext/pty/extconf.rb"
 elif grep -q 'create_makefile("pty")' "$SRC_DIR/ext/pty/extconf.rb" && grep -q '^[[:space:]]*exit$' "$SRC_DIR/ext/pty/extconf.rb"; then
     echo "==> Repairing pty extconf Kandelo branch: avoid SystemExit dummy makefile..."
-    perl -0pi -e 's/^\s*exit\nend\n\n\$INCFLAGS/else\n\n\$INCFLAGS/m' "$SRC_DIR/ext/pty/extconf.rb"
+    "$PERL" -0pi -e 's/^\s*exit\nend\n\n\$INCFLAGS/else\n\n\$INCFLAGS/m' "$SRC_DIR/ext/pty/extconf.rb"
     printf '\nend\n' >> "$SRC_DIR/ext/pty/extconf.rb"
 fi
 if grep -q 'Kandelo wasm32-posix uses Unix98 PTY APIs' "$SRC_DIR/ext/pty/extconf.rb" && ! grep -q 'HAVE_SETSID' "$SRC_DIR/ext/pty/extconf.rb"; then
     echo "==> Repairing pty extconf Kandelo branch: add session/unistd definitions..."
-    perl -0pi -e 's/(\$defs << "-DHAVE_PTSNAME_R=1"\n)/$1  \$defs << "-DHAVE_SETSID=1"\n  \$defs << "-DHAVE_UNISTD_H=1"\n/' "$SRC_DIR/ext/pty/extconf.rb"
+    "$PERL" -0pi -e 's/(\$defs << "-DHAVE_PTSNAME_R=1"\n)/$1  \$defs << "-DHAVE_SETSID=1"\n  \$defs << "-DHAVE_UNISTD_H=1"\n/' "$SRC_DIR/ext/pty/extconf.rb"
 fi
 if grep -q 'Kandelo wasm32-posix uses Unix98 PTY APIs' "$SRC_DIR/ext/pty/extconf.rb"; then
     echo "==> Repairing pty extconf Kandelo branch: add Ruby internal include path..."
-    perl -0pi -e 's/(\$defs << "-DHAVE_UNISTD_H=1"\n)(?!  \$INCFLAGS << " -I\$\((?:topdir|top_srcdir)\))/$1  \$INCFLAGS << " -I\$(topdir) -I\$(top_srcdir)"\n/' "$SRC_DIR/ext/pty/extconf.rb"
+    "$PERL" -0pi -e 's/(\$defs << "-DHAVE_UNISTD_H=1"\n)(?!  \$INCFLAGS << " -I\$\((?:topdir|top_srcdir)\))/$1  \$INCFLAGS << " -I\$(topdir) -I\$(top_srcdir)"\n/' "$SRC_DIR/ext/pty/extconf.rb"
 fi
 
 if ! grep -q 'Kandelo wasm32-posix has io/console dependencies' "$SRC_DIR/ext/io/console/extconf.rb"; then
     echo "==> Patching io/console extconf: avoid link-based mkmf false negatives..."
-    perl -0pi -e 's|require '\''mkmf'\''|require '\''mkmf'\''\n\nif ENV["WASM_POSIX_CROSS_COMPILE"] == "1"\n  # Kandelo wasm32-posix has io/console dependencies in the sysroot and Ruby\n  # static core, but link-based mkmf probes can fail on duplicate libc glue.\n  have_header("termios.h")\n  have_header("sys/ioctl.h")\n  \$defs << "-DHAVE_RB_SYSERR_FAIL_STR=1"\n  \$defs << "-DHAVE_RB_INTERNED_STR_CSTR=1"\n  \$defs << "-DHAVE_RB_IO_PATH=1"\n  \$defs << "-DHAVE_RB_IO_DESCRIPTOR=1"\n  \$defs << "-DHAVE_RB_IO_GET_WRITE_IO=1"\n  \$defs << "-DHAVE_RB_IO_CLOSED_P=1"\n  \$defs << "-DHAVE_RB_IO_OPEN_DESCRIPTOR=1"\n  \$defs << "-DHAVE_RB_RACTOR_LOCAL_STORAGE_VALUE_NEWKEY=1"\n  \$defs << "-DHAVE_CFMAKERAW=1"\n  \$defs << "-DHAVE_TTYNAME_R=1"\n  create_makefile("io/console")\nelse|' "$SRC_DIR/ext/io/console/extconf.rb"
+    "$PERL" -0pi -e 's|require '\''mkmf'\''|require '\''mkmf'\''\n\nif ENV["WASM_POSIX_CROSS_COMPILE"] == "1"\n  # Kandelo wasm32-posix has io/console dependencies in the sysroot and Ruby\n  # static core, but link-based mkmf probes can fail on duplicate libc glue.\n  have_header("termios.h")\n  have_header("sys/ioctl.h")\n  \$defs << "-DHAVE_RB_SYSERR_FAIL_STR=1"\n  \$defs << "-DHAVE_RB_INTERNED_STR_CSTR=1"\n  \$defs << "-DHAVE_RB_IO_PATH=1"\n  \$defs << "-DHAVE_RB_IO_DESCRIPTOR=1"\n  \$defs << "-DHAVE_RB_IO_GET_WRITE_IO=1"\n  \$defs << "-DHAVE_RB_IO_CLOSED_P=1"\n  \$defs << "-DHAVE_RB_IO_OPEN_DESCRIPTOR=1"\n  \$defs << "-DHAVE_RB_RACTOR_LOCAL_STORAGE_VALUE_NEWKEY=1"\n  \$defs << "-DHAVE_CFMAKERAW=1"\n  \$defs << "-DHAVE_TTYNAME_R=1"\n  create_makefile("io/console")\nelse|' "$SRC_DIR/ext/io/console/extconf.rb"
     printf '\nend\n' >> "$SRC_DIR/ext/io/console/extconf.rb"
 fi
 
@@ -337,12 +387,12 @@ for uri_common in \
     "$SRC_DIR/lib/bundler/vendor/uri/lib/uri/common.rb"; do
     if [ -f "$uri_common" ] && ! grep -q 'Kandelo avoids URI unary fstrings' "$uri_common"; then
         echo "==> Patching ${uri_common#"$SRC_DIR"/}: avoid Ruby 4 wasm fstring crash in URI tables..."
-        perl -0pi -e 's|TBLENCWWWCOMP_ = \{\} # :nodoc:|TBLENCWWWCOMP_ = {} # :nodoc:\n  # Kandelo avoids URI unary fstrings here because Ruby 4.0 wasm builds can mis-handle\n  # byte strings generated after the parser/scheme setup above.|' "$uri_common"
-        perl -0pi -e "s|TBLENCWWWCOMP_\\[-i\\.chr\\] = -\\('%%%02X' % i\\)|TBLENCWWWCOMP_[i.chr.freeze] = ('%%%02X' % i).freeze|" "$uri_common"
-        perl -0pi -e "s|TBLDECWWWCOMP_\\[-\\('%%%X%X' % \\[h, l\\]\\)\\] = -i\\.chr|TBLDECWWWCOMP_[('%%%X%X' % [h, l]).freeze] = i.chr.freeze|" "$uri_common"
-        perl -0pi -e "s|TBLDECWWWCOMP_\\[-\\('%%%x%X' % \\[h, l\\]\\)\\] = -i\\.chr|TBLDECWWWCOMP_[('%%%x%X' % [h, l]).freeze] = i.chr.freeze|" "$uri_common"
-        perl -0pi -e "s|TBLDECWWWCOMP_\\[-\\('%%%X%x' % \\[h, l\\]\\)\\] = -i\\.chr|TBLDECWWWCOMP_[('%%%X%x' % [h, l]).freeze] = i.chr.freeze|" "$uri_common"
-        perl -0pi -e "s|TBLDECWWWCOMP_\\[-\\('%%%x%x' % \\[h, l\\]\\)\\] = -i\\.chr|TBLDECWWWCOMP_[('%%%x%x' % [h, l]).freeze] = i.chr.freeze|" "$uri_common"
+        "$PERL" -0pi -e 's|TBLENCWWWCOMP_ = \{\} # :nodoc:|TBLENCWWWCOMP_ = {} # :nodoc:\n  # Kandelo avoids URI unary fstrings here because Ruby 4.0 wasm builds can mis-handle\n  # byte strings generated after the parser/scheme setup above.|' "$uri_common"
+        "$PERL" -0pi -e "s|TBLENCWWWCOMP_\\[-i\\.chr\\] = -\\('%%%02X' % i\\)|TBLENCWWWCOMP_[i.chr.freeze] = ('%%%02X' % i).freeze|" "$uri_common"
+        "$PERL" -0pi -e "s|TBLDECWWWCOMP_\\[-\\('%%%X%X' % \\[h, l\\]\\)\\] = -i\\.chr|TBLDECWWWCOMP_[('%%%X%X' % [h, l]).freeze] = i.chr.freeze|" "$uri_common"
+        "$PERL" -0pi -e "s|TBLDECWWWCOMP_\\[-\\('%%%x%X' % \\[h, l\\]\\)\\] = -i\\.chr|TBLDECWWWCOMP_[('%%%x%X' % [h, l]).freeze] = i.chr.freeze|" "$uri_common"
+        "$PERL" -0pi -e "s|TBLDECWWWCOMP_\\[-\\('%%%X%x' % \\[h, l\\]\\)\\] = -i\\.chr|TBLDECWWWCOMP_[('%%%X%x' % [h, l]).freeze] = i.chr.freeze|" "$uri_common"
+        "$PERL" -0pi -e "s|TBLDECWWWCOMP_\\[-\\('%%%x%x' % \\[h, l\\]\\)\\] = -i\\.chr|TBLDECWWWCOMP_[('%%%x%x' % [h, l]).freeze] = i.chr.freeze|" "$uri_common"
     fi
 done
 
@@ -413,12 +463,12 @@ COROEOF
 
 if ! grep -q 'kandelo_require_libraries_state' "$SRC_DIR/ruby.c"; then
     echo "==> Patching ruby.c: keeping command-line -r preload roots visible..."
-    gpatch -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-require-libraries-roots.patch"
+    "$PATCH" -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-require-libraries-roots.patch"
 fi
 
 if ! grep -q 'kandelo_execarg_can_posix_spawn' "$SRC_DIR/process.c"; then
     echo "==> Patching process.c: using non-forking spawn when options are representable..."
-    gpatch -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-posix-spawn.patch"
+    "$PATCH" -d "$SRC_DIR" -p1 < "$SCRIPT_DIR/patches/kandelo-posix-spawn.patch"
 fi
 
 reject_asyncify_coroutine() {
@@ -444,7 +494,7 @@ if [ ! -x "$HOST_BUILD_DIR/miniruby" ]; then
             --disable-install-rdoc \
             --disable-jit-support \
             --with-out-ext=openssl,fiddle,readline
-        gmake miniruby -j"$BUILD_JOBS"
+        "$MAKE" miniruby -j"$BUILD_JOBS"
     )
 fi
 
@@ -882,7 +932,7 @@ SITE_EOF
 
     if [ -f Makefile ]; then
         echo "==> Ensuring Ruby generated POSTLINK is disabled (root-spill/fork instrumentation run explicitly after make)..."
-        perl -0pi -e 's/^POSTLINK\s*=.*$/POSTLINK = :/mg' Makefile
+        "$PERL" -0pi -e 's/^POSTLINK\s*=.*$/POSTLINK = :/mg' Makefile
     fi
 
     # Patch config.h: disable HAVE_* that slipped through link-based detection
@@ -903,7 +953,7 @@ SITE_EOF
         echo "WARNING: config.h not found, skipping patch"
     else
         echo "==> Patching $CONFIG_H..."
-        python3.13 -c "
+        "$PYTHON" -c "
 import re
 
 with open('$CONFIG_H', 'r') as f:
@@ -1025,8 +1075,8 @@ reject_asyncify_coroutine
 
 if [ -f Makefile ]; then
     echo "==> Patching Ruby static archive rule for generated extension initializers..."
-    perl -0pi -e 's/^(CPPFLAGS = )(?!.*RUBY_KANDELO_POSIX)/$1-DRUBY_KANDELO_POSIX=1 /m' Makefile
-    perl -0pi -e 's/^\t\t\$\(Q\).*ARFLAGS.*LIBRUBY_A_OBJS.*$/\t\t\$(Q) \$(AR) \$(ARFLAGS) \$@ \$(LIBRUBY_A_OBJS)/m' Makefile
+    "$PERL" -0pi -e 's/^(CPPFLAGS = )(?!.*RUBY_KANDELO_POSIX)/$1-DRUBY_KANDELO_POSIX=1 /m' Makefile
+    "$PERL" -0pi -e 's/^\t\t\$\(Q\).*ARFLAGS.*LIBRUBY_A_OBJS.*$/\t\t\$(Q) \$(AR) \$(ARFLAGS) \$@ \$(LIBRUBY_A_OBJS)/m' Makefile
     rm -f libruby-static.a
 fi
 
@@ -1062,7 +1112,7 @@ export WASM_POSIX_CROSS_COMPILE=1
 RUBY_MAKE_ARGS=(
     -j"$BUILD_JOBS"
 )
-gmake "${RUBY_MAKE_ARGS[@]}" 2>&1 || {
+"$MAKE" "${RUBY_MAKE_ARGS[@]}" 2>&1 || {
     echo "ERROR: full Ruby build failed; refusing to publish miniruby as ruby.wasm." >&2
     exit 1
 }
@@ -1080,7 +1130,7 @@ STATIC_LINK_PATHS="-L. -L$SYSROOT/lib -L$LIBYAML_PREFIX/lib -L$ZLIB_PREFIX/lib"
 FINAL_RUBY_LDFLAGS="$STATIC_LINK_PATHS -Wl,-z,stack-size=1048576"
 
 echo "==> Relinking Ruby with static extensions and encodings..."
-gmake -f exts.mk \
+"$MAKE" -f exts.mk \
     libdir="$GUEST_PREFIX/lib" \
     LIBRUBY_EXTS=./.libruby-with-ext.time \
     "EXTENCS=$STATIC_ENCOBJS" \
@@ -1092,7 +1142,7 @@ gmake -f exts.mk \
 # the final wasm32 link produces a smaller executable shape that loses the
 # validated Ruby GC/root behavior. Keep the final link to linker paths plus the
 # explicit 1 MiB stack, matching the known-good fullmake package artifact.
-gmake \
+"$MAKE" \
     "LDFLAGS=$FINAL_RUBY_LDFLAGS" \
     "EXTOBJS=$STATIC_EXTOBJS $STATIC_ENCOBJS" \
     "EXTLIBS=$STATIC_EXTLIBS" \
@@ -1110,8 +1160,6 @@ else
     exit 1
 fi
 
-ROOT_SPILL="$REPO_ROOT/scripts/run-wasm-local-root-spill.sh"
-FORK_INSTRUMENT="$REPO_ROOT/scripts/run-wasm-fork-instrument.sh"
 echo "==> Applying wasm-local-root-spill to ruby.wasm..."
 "$ROOT_SPILL" --profile ruby "$BIN_DIR/ruby.wasm" -o "$BIN_DIR/ruby.wasm.roots"
 mv "$BIN_DIR/ruby.wasm.roots" "$BIN_DIR/ruby.wasm"
@@ -1126,9 +1174,9 @@ echo "==> Installing Ruby runtime..."
 mkdir -p "$INSTALL_DIR"
 RUBY_INSTALL_ROOT="$INSTALL_DIR$GUEST_PREFIX"
 RUBY_LIB_DIR="$RUBY_INSTALL_ROOT/lib/ruby/${RUBY_MAJOR_MINOR}.0"
-gmake install \
+"$MAKE" install \
     DESTDIR="$INSTALL_DIR" 2>/dev/null || {
-    echo "==> gmake install failed, copying lib manually..."
+    echo "==> make install failed, copying lib manually..."
     mkdir -p "$RUBY_LIB_DIR"
     cp -r "$SRC_DIR/lib/"* "$RUBY_LIB_DIR/" 2>/dev/null || true
 }
@@ -1185,7 +1233,7 @@ cp -R "$RUBY_INSTALL_ROOT/bin" "$RUNTIME_STAGE/usr/bin"
 # Info-ZIP records caller timestamps and filesystem enumeration order. Build a
 # canonical stored ZIP instead; the outer Homebrew bottle supplies compression,
 # while stable entry metadata makes independent publisher runs reproducible.
-python3.13 - "$RUNTIME_STAGE" "$RUNTIME_ZIP" <<'PY'
+"$PYTHON" - "$RUNTIME_STAGE" "$RUNTIME_ZIP" <<'PY'
 from pathlib import Path
 import os
 import stat

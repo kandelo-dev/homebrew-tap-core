@@ -3,7 +3,8 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Libxml2 < Formula
   include KandeloFormulaSupport
 
-  GUEST_SYSCONFDIR = "/home/linuxbrew/.linuxbrew/etc".freeze
+  GUEST_SYSCONFDIR =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/etc".freeze
   GUEST_CATALOG_URI = "file://#{GUEST_SYSCONFDIR}/xml/catalog".freeze
 
   desc "GNOME XML parsing library for Kandelo"
