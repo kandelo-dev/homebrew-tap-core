@@ -3,7 +3,8 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Nginx < Formula
   include KandeloFormulaSupport
 
-  GUEST_HOMEBREW_PREFIX = "/home/linuxbrew/.linuxbrew".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
   GUEST_OPT_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/nginx".freeze
   GUEST_PCRE2_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/pcre2".freeze
   GUEST_ZLIB_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/zlib".freeze

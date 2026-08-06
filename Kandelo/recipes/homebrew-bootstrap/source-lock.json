@@ -3,20 +3,20 @@
   "kind": "kandelo-homebrew-bootstrap-tap-recipe-lock",
   "package": {
     "name": "homebrew-bootstrap",
-    "version": "6.0.4-3-gd6c1be4",
+    "version": "6.0.12-153-gcf5bc21_1",
     "arch": "wasm32"
   },
   "source": {
     "repository": "https://github.com/Homebrew/brew.git",
-    "revision": "d6c1be418446eec7de09fc72441ba4462282a142",
-    "archive_url": "https://github.com/Homebrew/brew/archive/d6c1be418446eec7de09fc72441ba4462282a142.tar.gz",
-    "archive_sha256": "d3a38612b71eba6ab297a67c06b367829b96250fef48bc0a5088e832a659fc5c",
-    "tree_git_oid": "3f8819e0d323511fdc15c1f6132849ed3b64aebe",
-    "commit_timestamp": 1782429402
+    "revision": "cf5bc21c6b127e168ef7cfa982ba7db62874690e",
+    "archive_url": "https://github.com/Homebrew/brew/archive/cf5bc21c6b127e168ef7cfa982ba7db62874690e.tar.gz",
+    "archive_sha256": "18d3c5384b1a90e0dca3c044b31d8a2b61b500bc5b880a14b1e52a590088de40",
+    "tree_git_oid": "df4aa7ac462564d14c713e0a6e07e33cbd0a4f8a",
+    "commit_timestamp": 1785072239
   },
   "patch": {
     "path": "patches/0001-add-kandelo-wasm-bottle-tags.patch",
-    "sha256": "9c52238d811616c210cd1ecdd23b0192a3e0333219a70b34d8ea6d77dbcfbf74"
+    "sha256": "faf62befeb70033ea450e88eb1b21427e221030a7f6b6ce932ad2c7c728ac2bc"
   },
   "license": {
     "expression": "BSD-2-Clause AND GPL-2.0-or-later",
@@ -29,20 +29,20 @@
     "kandelo_patch": {
       "spdx": "GPL-2.0-or-later",
       "evidence_path": "PATCH-LICENSE.md",
-      "evidence_sha256": "22eef64e04c8d9dc0dbff51ce5e79622914789391b85aa908316cb62dd19094c"
+      "evidence_sha256": "d2650ac56b8d0c9a03d92baa44e5ad7388cc7d087fa2549270ca9511f0b5101c"
     }
   },
   "prepared": {
-    "patched_tree_git_oid": "aa63e300318064a4d0801723574ff7c9430f12ce",
-    "patched_tree_sha256": "4e6bea0da427684a04acdd7126b8ebb92f2a6b5c7ee8abfe8da0271a6d7314b0",
-    "portable_ruby_version": "4.0.5_1",
+    "patched_tree_git_oid": "ae657d9bdebaa2218527f3e3a6b8b51e6907d365",
+    "patched_tree_sha256": "1a29720ca3ab7368940dc873396d93709e897bacc1b16cb9d9f153276546a2a3",
+    "portable_ruby_version": "4.0.6",
     "archive_format": "kandelo-deterministic-zip-v1"
   },
   "outputs": {
     "archive": {
       "path": "homebrew-bootstrap.zip",
-      "sha256": "96aafa1546d0f737b2242589dbd0e47decf2af8352a3069d0552638eb2ebe03b",
-      "bytes": 5046915
+      "sha256": "26ac98e328573244d3e7c0c149f30114ef5d9c8882200f5a22e56f97d2541482",
+      "bytes": 5251369
     },
     "environment": {
       "path": "homebrew-brew.env",

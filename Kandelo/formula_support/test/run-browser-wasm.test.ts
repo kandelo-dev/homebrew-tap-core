@@ -14,11 +14,11 @@ describe("formula browser guest executable path", () => {
 
   it("accepts an explicit normalized installed path", () => {
     expect(resolveGuestProgram(
-      { argv0: "python3", guestProgram: "/home/linuxbrew/.linuxbrew/opt/python/bin/python3" },
+      { argv0: "python3", guestProgram: "/opt/kandelo/homebrew/opt/python/bin/python3" },
       ["/dev", "/proc", "/tmp"],
       {},
       {},
-    )).toBe("/home/linuxbrew/.linuxbrew/opt/python/bin/python3");
+    )).toBe("/opt/kandelo/homebrew/opt/python/bin/python3");
   });
 
   it("rejects traversal, overlaid roots, and staged-file collisions", () => {

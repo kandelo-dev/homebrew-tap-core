@@ -3,7 +3,8 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Wget < Formula
   include KandeloFormulaSupport
 
-  GUEST_HOMEBREW_PREFIX = "/home/linuxbrew/.linuxbrew".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
   GUEST_OPT_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/wget".freeze
   GUEST_OPENSSL_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/openssl".freeze
   GUEST_ZLIB_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/zlib".freeze
@@ -197,8 +198,8 @@ class Wget < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "1631f7d4a43ab205497bcc555ab01bb8a3e0a1eb51f401a3abdd90ed4371a4c4"
+    rebuild 2
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "1d8f4db36b729250708cd7d5a360b01e46cd92f47b7dec5d26ac7937aa1f006c"
   end
 
 end

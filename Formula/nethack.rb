@@ -5,7 +5,8 @@ class Nethack < Formula
 
   KANDELO_REGISTRY_BRIDGE = true
 
-  GUEST_OPT_PREFIX = "/home/linuxbrew/.linuxbrew/opt/nethack".freeze
+  GUEST_OPT_PREFIX =
+    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/nethack".freeze
   GUEST_HACKDIR = "#{GUEST_OPT_PREFIX}/share/nethack".freeze
 
   desc "Classic dungeon exploration game for Kandelo"
@@ -17,8 +18,8 @@ class Nethack < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "fae9423a95dfc99b4c0de67f0be8c2b9bde81533bab1a7f79e9508a1257ca7ee"
+    rebuild 2
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "c13bfbeebf44016f7eec36b618544eb64fc7f11175a9e4bbf0f021ac0e0b730d"
   end
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build

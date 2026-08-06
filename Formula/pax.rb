@@ -45,7 +45,7 @@ class Pax < Formula
       ENV["CPPFLAGS"] = [
         "-D_GNU_SOURCE",
         "-I#{musl_fts}/include",
-        '-DPAX_SAFE_PATH=\"/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin\"',
+        %(-DPAX_SAFE_PATH=\\"#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/bin:/usr/bin:/bin\\"),
       ].join(" ")
       ENV["LIBS"] = (musl_fts/"lib/libfts.a").to_s
       ENV["TARGET_OS"] = "Kandelo"

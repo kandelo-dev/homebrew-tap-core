@@ -32,7 +32,8 @@ class Ncurses < Formula
     kandelo_require_arch!("wasm32")
     root = Pathname(kandelo_require_root!)
     libcxx = formula_opt_prefix("kandelo-dev/tap-core/libcxx")
-    guest_opt_prefix = "/home/linuxbrew/.linuxbrew/opt/ncurses"
+    guest_opt_prefix =
+      "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/ncurses"
 
     host_build = buildpath/"host-build"
     host_tic = host_build/"progs/tic"
@@ -232,7 +233,8 @@ class Ncurses < Formula
   end
 
   test do
-    guest_opt_prefix = "/home/linuxbrew/.linuxbrew/opt/ncurses"
+    guest_opt_prefix =
+      "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/ncurses"
     assert_path_exists lib/"libncursesw.a"
     assert_path_exists lib/"libncursesw_g.a"
     assert_path_exists lib/"libncurses++w.a"
@@ -443,8 +445,8 @@ class Ncurses < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "72e6ffbbe7c81be820a79033d203a86a159f02a8a79954c433e99b2ffe571712"
+    rebuild 2
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "410553a865db2cedb85e3e86cf99e13f5ce57dbdeab314e046651ba632668c67"
   end
 
 end

@@ -10,6 +10,11 @@ class FileFormula < Formula
   sha256 "fc97f51029bb0e2c9f4e3bffefdaf678f0e039ee872b9de5c002a6d09c784d82"
   license "BSD-2-Clause-Darwin"
 
+  # WHY: F901 published rebuild-4 OCI bytes before its immutable handoff was
+  # sealed. Reserve a new Homebrew identity so recovery never overwrites or
+  # relabels those public bytes.
+  revision 1
+
   depends_on KandeloFormulaSupport::PkgconfRequirement => :build
   depends_on "kandelo-dev/tap-core/bzip2"
   depends_on "kandelo-dev/tap-core/libmagic"
@@ -139,7 +144,6 @@ class FileFormula < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 3
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "b4d928459d42d8d1b1c0f7d19c806f55f314fbd9219f2a55b41f2c04b13fef6a"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "a41bb07211b8d9e4f0f970391534b282de0d114bb6dd015b086f93c036eabeeb"
   end
 end

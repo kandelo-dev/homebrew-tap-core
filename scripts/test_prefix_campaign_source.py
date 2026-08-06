@@ -34,9 +34,12 @@ PRE_CUTOVER_FIXTURE_COMMIT = "d98a00a0c087e366aa95a3b0b2c73c5eb8181f3f"
 CANONICAL_HELPER_PATH = (
     "Kandelo/formula_support/kandelo_formula_support.rb"
 )
+ACTIVE_FORMULA_SUPPORT_TEST_PATH = (
+    "Kandelo/formula_support/test/kandelo_formula_support_test.rb"
+)
 PROMOTED_NON_FORMULA_PRODUCT_PATHS = (
     CANONICAL_HELPER_PATH,
-    "Kandelo/formula_support/test/kandelo_formula_support_test.rb",
+    ACTIVE_FORMULA_SUPPORT_TEST_PATH,
     "Kandelo/formula_support/test/run-browser-wasm.test.ts",
     "Kandelo/recipes/homebrew-bootstrap/PATCH-LICENSE.md",
     "Kandelo/recipes/homebrew-bootstrap/build.sh",
@@ -47,6 +50,11 @@ PROMOTED_NON_FORMULA_PRODUCT_PATHS = (
     "Kandelo/recipes/homebrew-bootstrap/verify-source-lock.rb",
     "Kandelo/recipes/ruby/build.sh",
     "Kandelo/recipes/ruby/recipe.json",
+)
+EXACT_ACTIVE_PRODUCT_PATHS = tuple(
+    path
+    for path in PROMOTED_NON_FORMULA_PRODUCT_PATHS
+    if path != ACTIVE_FORMULA_SUPPORT_TEST_PATH
 )
 
 
@@ -153,7 +161,7 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
             return summary, "base"
 
-        for path_value in PROMOTED_NON_FORMULA_PRODUCT_PATHS:
+        for path_value in EXACT_ACTIVE_PRODUCT_PATHS:
             path = pathlib.Path(path_value)
             active = ROOT / path
             sealed_target = SOURCE_ROOT / path

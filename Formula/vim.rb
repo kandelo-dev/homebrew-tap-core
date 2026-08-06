@@ -12,6 +12,11 @@ class Vim < Formula
   sha256 "7d460830e12082b541c34b0b96942ebface1ad9fa0b77245930717c0ccf8b664"
   license "Vim"
 
+  # WHY: F901 published rebuild-2 OCI bytes before its immutable handoff was
+  # sealed. Reserve a new Homebrew identity so recovery never overwrites or
+  # relabels those public bytes.
+  revision 1
+
   depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
   depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/dash" => :test
@@ -22,7 +27,8 @@ class Vim < Formula
   def install
     kandelo_require_arch!("wasm32")
     ncurses = formula_opt_prefix("kandelo-dev/tap-core/ncurses")
-    guest_brew_prefix = "/home/linuxbrew/.linuxbrew"
+    guest_brew_prefix =
+      KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
     guest_opt_prefix = "#{guest_brew_prefix}/opt/vim"
     guest_ncurses = "#{guest_brew_prefix}/opt/ncurses"
 
@@ -175,9 +181,10 @@ class Vim < Formula
   end
 
   test do
-    guest_brew_prefix = "/home/linuxbrew/.linuxbrew"
-    guest_opt_prefix = "/home/linuxbrew/.linuxbrew/opt/vim"
-    guest_ncurses = "/home/linuxbrew/.linuxbrew/opt/ncurses"
+    guest_brew_prefix =
+      KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+    guest_opt_prefix = "#{guest_brew_prefix}/opt/vim"
+    guest_ncurses = "#{guest_brew_prefix}/opt/ncurses"
     stable_source = "/usr/src/vim-#{version}"
     runtime = pkgshare/"vim92"
     assert_path_exists runtime/"syntax/c.vim"
@@ -188,7 +195,8 @@ class Vim < Formula
     assert_includes vim_bytes, guest_ncurses
     assert_includes vim_bytes, stable_source
     host_path_pattern = %r{/(?:private/tmp/|private/var/|Users/|home/runner/(?:_work|work)/|nix/store/)}
-    guest_cellar_pattern = %r{/home/linuxbrew/\.linuxbrew/Cellar/(?:vim|ncurses)/}
+    guest_cellar_pattern =
+      %r{#{Regexp.escape(guest_brew_prefix)}/Cellar/(?:vim|ncurses)/}
     [vim_bytes, File.binread(bin/"xxd")].each do |artifact|
       refute_match host_path_pattern, artifact
       refute_match guest_cellar_pattern, artifact
@@ -296,8 +304,7 @@ class Vim < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "491e88d76446ffeb66be85e8afb5315666b1abdbf579d914b7ae9310d69e2ad0"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "2ee5ae082ee1c510ed6b68669371f13ce0f0c1289f50508ab45d6414021a071d"
   end
 
 end

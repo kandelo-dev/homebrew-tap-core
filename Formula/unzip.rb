@@ -204,7 +204,7 @@ class Unzip < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
+    rebuild 3
     sha256 cellar: :any_skip_relocation, wasm32_kandelo: "21afe8917ea46b2df019fabc9c3c98265f3e56d442bcc1017d681721e9d82fa1"
   end
 

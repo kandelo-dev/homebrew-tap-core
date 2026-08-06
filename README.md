@@ -201,6 +201,12 @@ runner still validates and stages every declared guest path individually.
 
 ## Publication State
 
+Experimental ABI-specific VFS inputs are recorded under
+`Kandelo/selections/`. A selection is only a consumer dependency closure; it
+does not make publication atomic. Each Formula bottle stands on its own, so a
+failed sibling does not block publishing or using successful bottles for the
+same Kandelo ABI.
+
 Bottle metadata must be generated from the same trusted build that produces
 the bottle bytes. Do not hand-write placeholder hashes or reuse bottle data
 across Kandelo ABI versions. The repository-rooted native Homebrew Open

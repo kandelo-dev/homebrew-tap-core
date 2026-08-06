@@ -3,9 +3,11 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Diffutils < Formula
   include KandeloFormulaSupport
 
-  GUEST_COREUTILS_PR = "/home/linuxbrew/.linuxbrew/opt/coreutils/bin/pr".freeze
-  GUEST_DIFFUTILS_BIN = "/home/linuxbrew/.linuxbrew/opt/diffutils/bin".freeze
-  GUEST_ED = "/home/linuxbrew/.linuxbrew/opt/ed/bin/ed".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+  GUEST_COREUTILS_PR = "#{GUEST_HOMEBREW_PREFIX}/opt/coreutils/bin/pr".freeze
+  GUEST_DIFFUTILS_BIN = "#{GUEST_HOMEBREW_PREFIX}/opt/diffutils/bin".freeze
+  GUEST_ED = "#{GUEST_HOMEBREW_PREFIX}/opt/ed/bin/ed".freeze
 
   desc "GNU file comparison utilities for Kandelo"
   homepage "https://www.gnu.org/software/diffutils/"
@@ -136,8 +138,8 @@ class Diffutils < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "e0429807a455cac881779878506a095f63507ab0338c1e70cd0577b97ed42d41"
+    rebuild 2
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "3577d0d843f6e432989bace433313f7714a66190d8dd0e0e812b045135f3ae04"
   end
 
 end

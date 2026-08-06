@@ -18,7 +18,8 @@ class Openssl < Formula
   def install
     kandelo_require_arch!("wasm32", "wasm64")
     openssl_target = (kandelo_arch == "wasm64") ? "linux-generic64" : "linux-generic32"
-    guest_opt = "/home/linuxbrew/.linuxbrew/opt/openssl"
+    guest_opt =
+      "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/openssl"
     escaped_quote = %q(\")
 
     kandelo_wasm_build do
@@ -79,6 +80,8 @@ class Openssl < Formula
       refute binary.match?(%r{/Users/[^/]+/}), "#{archive} contains a builder home path"
     end
 
+    guest_openssl_prefix =
+      "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/openssl"
     source = testpath/"openssl-smoke.c"
     wasm = testpath/"openssl-smoke.wasm"
     source.write <<~C
@@ -109,9 +112,9 @@ class Openssl < Formula
         static const char expected_compiler[] = "compiler: #{kandelo_arch}posix-cc ";
         static const char expected_openssldir[] = "/etc/ssl";
         static const char expected_enginesdir[] =
-          "/home/linuxbrew/.linuxbrew/opt/openssl/lib/engines-3";
+          "#{guest_openssl_prefix}/lib/engines-3";
         static const char expected_modulesdir[] =
-          "/home/linuxbrew/.linuxbrew/opt/openssl/lib/ossl-modules";
+          "#{guest_openssl_prefix}/lib/ossl-modules";
         unsigned char digest[EVP_MAX_MD_SIZE];
         unsigned int digest_len = 0;
         const char *compiler = OpenSSL_version(OPENSSL_CFLAGS);
@@ -139,9 +142,8 @@ class Openssl < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "243eaed26b099aae8991e54686c710c84ba967d7723a7ddccff6546f9b42e36c"
-    sha256 cellar: :any_skip_relocation, wasm64_kandelo: "12fbc35909849550022b20a9d6355410f19d77fd5713b28dea9ad761e09824be"
+    rebuild 3
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "a5d806737125136348d6db61af18a396423cace3a092e9d574913d226062e025"
   end
 
 end

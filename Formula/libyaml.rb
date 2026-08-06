@@ -9,6 +9,11 @@ class Libyaml < Formula
   sha256 "c642ae9b75fee120b2d96c712538bd2cf283228d2337df2cf2988e3c02678ef4"
   license "MIT"
 
+  # WHY: C2 published revision-zero OCI bytes before its final handoff failed.
+  # Reserve a new Homebrew identity so recovery never overwrites or relabels
+  # those public bytes.
+  revision 1
+
   skip_clean "lib/libyaml.a"
 
   def install
@@ -77,4 +82,10 @@ class Libyaml < Formula
     assert_equal expected, kandelo_run_wasm(smoke_wasm, [])
     assert_equal expected, kandelo_run_browser_wasm(smoke_wasm, [], allow_stderr: false)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "a6100d3ed67a08ac04dce2366e430f62486a96570dc436dbc38c2a8a40f8b6ec"
+  end
+
 end
