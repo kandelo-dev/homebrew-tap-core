@@ -303,3 +303,29 @@ The target source remains unchanged: manifest
 `3359e8d45d6c04de2d3cac146c225a3bc54beb176b4018d082b337c7a49c298e`,
 source tree `17bcb5910fd3d403d861b695f9ee945f1ce14d30`, and target tree
 `f235ec029446883f067db5ea5d7e179710167dc6`.
+
+C12 verified all 40 reused tasks. Ruby/wasm32 run `31092671659` passed
+campaign admission, planning, signed native dependency installation, and
+Libyaml/Zlib handoff installation, then entered the isolated recipe runner.
+It failed before configure or compilation because archive-mode copying
+preserved the authenticated sysroot projection's sealed directory modes on
+Ruby's private sysroot, so the recipe uid could not add `include/yaml.h`. No
+Ruby bottle or handoff was published.
+
+The C12 terminal archive is
+`aborted-campaigns/f8268d7b236b0957a9e084654e807e335502fe2e4a7541e2505b45e862e3e9f7.json`,
+sealed as `d602d7173445d5cc2f8702d8bf6ddc489106b63831f092d735370ddd2405ed8f`.
+The successor scope `successor/f826-successor-scope.json` is sealed as
+`0708397e38c6ca4a3414c1b7a4d136269b0b0e529c523296460ba616c9d1ecc7`
+and selects the 40 exact C12 handoffs plus one fresh Ruby build against the
+unchanged canonical graph.
+
+The tap-only correction keeps the authenticated sysroot projection sealed. It
+copies those exact bytes without preserving root ownership, then restores
+owner write permission only on the isolated recipe-owned tree before adding
+Ruby's declared dependency headers. The corrected target is sealed by manifest
+`1de80fb5172240d9368f9053eb621befed35183217e91649617b01227b505f0b`,
+source tree `f9ec87e3b50beea1c71cede57abe160e639fb5d8`, and target tree
+`7d22236c4234fe91100d19f5bf72214e5f191c8a`. The exact Kandelo executor and
+rootfs generation remain the C12 values because no Kandelo or rootfs input
+changed.

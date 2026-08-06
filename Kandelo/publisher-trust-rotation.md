@@ -448,6 +448,70 @@ the new commit or relabel `G` inside this reviewed C12 tree. Publication and
 maintenance re-query `main`, so stale `M` fails closed even after the tap has
 selected it.
 
+### Complete terminal C12 with the corrected Ruby private sysroot
+
+The next successor starts from protected tap commit
+`54e115487584710196de5db770ef92a9be600bec`, which activated terminal C12
+campaign
+`f8268d7b236b0957a9e084654e807e335502fe2e4a7541e2505b45e862e3e9f7`.
+Its terminal ledger contains 40 publicly verified handoffs and failed
+Ruby/wasm32 run `31092671659` with no handoff. The run passed admission,
+planning, signed native dependency installation, and Libyaml/Zlib handoff
+installation. It failed before configure or compilation because archive-mode
+copying preserved the authenticated sysroot projection's sealed modes on the
+recipe-owned destination, so the isolated recipe uid could not add
+`include/yaml.h`.
+
+The exact terminal archive is
+`Kandelo/campaigns/prefix-v1/aborted-campaigns/f8268d7b236b0957a9e084654e807e335502fe2e4a7541e2505b45e862e3e9f7.json`,
+sealed as `d602d7173445d5cc2f8702d8bf6ddc489106b63831f092d735370ddd2405ed8f`.
+The 40-reuse/Ruby-build scope is
+`Kandelo/campaigns/prefix-v1/successor/f826-successor-scope.json`, sealed as
+`0708397e38c6ca4a3414c1b7a4d136269b0b0e529c523296460ba616c9d1ecc7`.
+The canonical 41-task graph remains sealed as
+`40a651d2ebe3a3aaab4bf9b65d91cf34db9908cb764a518437ac850747c4b139`.
+
+This correction is tap-only. It keeps the authenticated source projection
+sealed, copies its exact bytes without root ownership, and restores owner
+writes only on Ruby's isolated recipe-owned sysroot. The corrected target is
+sealed as manifest SHA-256
+`1de80fb5172240d9368f9053eb621befed35183217e91649617b01227b505f0b`,
+source tree Git OID `f9ec87e3b50beea1c71cede57abe160e639fb5d8`, and target tree Git OID
+`7d22236c4234fe91100d19f5bf72214e5f191c8a`.
+
+No executable trust or rootfs input changes. Retain exact:
+
+- `M=af80a443a6b4820e3b04845a64ab5cb8854638cd`; and
+- `G=package-generation-rootfs-wasm32-abi-v42-sha256-7ed33d5d51b7362c2ac04c0aca812a49c859bde25a2930d0e876f1c1e1aafcc9`.
+
+In one candidate tree, preview and apply `archive-active` with the exact C12
+archive, activation commit, and all three corrected target-source identities:
+
+```bash
+python3 -B scripts/transition-prefix-campaign-authority.py \
+  archive-active \
+  --archive \
+    Kandelo/campaigns/prefix-v1/aborted-campaigns/f8268d7b236b0957a9e084654e807e335502fe2e4a7541e2505b45e862e3e9f7.json \
+  --activation-commit 54e115487584710196de5db770ef92a9be600bec \
+  --successor-manifest-sha256 \
+    1de80fb5172240d9368f9053eb621befed35183217e91649617b01227b505f0b \
+  --successor-source-tree-git-oid \
+    f9ec87e3b50beea1c71cede57abe160e639fb5d8 \
+  --successor-target-tree-git-oid \
+    7d22236c4234fe91100d19f5bf72214e5f191c8a
+
+# Repeat the exact command with --apply only after reviewing its preview.
+```
+
+Do not run `rotate-publisher-trust`: both Kandelo pins already equal `M`, the
+production caller remains unchanged, and `G` remains the independently
+admitted rootfs generation. Commit the archive, finalized scope, corrected
+sealed target, campaign-release caller, authority, tests, and documentation
+together as `T_ARM`. After the content-addressed campaign is published from
+exact protected `T_ARM` and anonymously read back, activate only the successor
+campaign data with `f826-successor-scope.json`, exact `G`, and
+`source-tap-commit=T_ARM`.
+
 ### Historical one-time Libyaml bootstrap overlap
 
 An earlier migration stage overlapped its rootfs rebuild with the one-time

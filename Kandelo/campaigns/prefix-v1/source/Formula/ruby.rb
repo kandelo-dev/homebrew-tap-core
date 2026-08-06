@@ -43,7 +43,7 @@ class Ruby < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "5270f951e13b50d05f69121db066c3941bcee455246a6b0a1fe91d25698f27c1",
+      manifest_sha256: "7b9b4f2a94665b1a81bffe90452d4c28188d0ff325322b05c01c469126e507e2",
       script_env:      {
         "WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX,
         # Homebrew's gpatch Formula installs `patch` on Linux; only macOS

@@ -3569,6 +3569,12 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes recipe,
                     'find -P "$SRC_DIR" -type f -exec chmod u+rw {} +'
     assert_includes recipe,
+                    'cp -a --no-preserve=ownership "$SOURCE_SYSROOT/." "$SYSROOT/"'
+    assert_includes recipe,
+                    'find -P "$SYSROOT" -type d -exec chmod u+rwx {} +'
+    assert_includes recipe,
+                    'find -P "$SYSROOT" -type f -exec chmod u+rw {} +'
+    assert_includes recipe,
                     'ROOT_SPILL="${WASM_POSIX_LOCAL_ROOT_SPILL:?}"'
     assert_includes recipe,
                     'FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"'
@@ -3592,6 +3598,8 @@ class KandeloFormulaSupportTest < Minitest::Test
     refute_includes recipe, 'cd "$SOURCE_INPUT"'
     assert_operator recipe.index('cp -a --no-preserve=ownership'), :<,
                     recipe.index("# ─── Source patches for wasm32-posix")
+    assert_operator recipe.index('find -P "$SYSROOT" -type f'), :<,
+                    recipe.index('cp "$LIBYAML_PREFIX/include/yaml.h"')
   end
 
   def test_ruby_exercises_the_installed_guest_runtime_without_rubylib

@@ -404,10 +404,10 @@
       },
       "path": "Formula/ruby.rb",
       "target": {
-        "blob_git_oid": "ca85fb04ef280032e110679dc963f67797c891a2",
+        "blob_git_oid": "45af5745a94b1ad57fff3e94def8b63517db3c0b",
         "bytes": 10885,
         "mode": "100644",
-        "sha256": "9557d5f4d06652cab4c070ad83f4e7692ddf70f6cce7fe6b0dc675c80142c8f8"
+        "sha256": "ebb9286168c537e83dde10254266cd5fcb9ca39d8fcaee6eec0fc5346c98d00f"
       }
     },
     {
@@ -509,10 +509,10 @@
       },
       "path": "Kandelo/formula_support/test/kandelo_formula_support_test.rb",
       "target": {
-        "blob_git_oid": "616be3a4a6563627149d88e9723adb58fd4f6a7b",
-        "bytes": 193567,
+        "blob_git_oid": "62d6750b8c51e22c4e943d19af094ce4bd345d63",
+        "bytes": 194018,
         "mode": "100644",
-        "sha256": "b948f504ab20d78e9c0c2ac745ca99ea1c1ee6c9940bc28726da555506514eec"
+        "sha256": "d47a371c4a48a6ad3f07fc20be57d9db6b23c0b8bec6340b3a68f23677589a53"
       }
     },
     {
@@ -649,10 +649,10 @@
       },
       "path": "Kandelo/recipes/ruby/build.sh",
       "target": {
-        "blob_git_oid": "13802fc42e9b11e4a1f3a22396a06f10c0b62826",
-        "bytes": 52684,
+        "blob_git_oid": "4ea268730c046bd4f0e7cdaed050cea95c2e77bd",
+        "bytes": 53094,
         "mode": "100755",
-        "sha256": "ea8047adf679a95325a04fcf944cc6d914c9058377cfa3fb595d767365a91dfa"
+        "sha256": "337b01475a5e4ed4b2b4ac4f9a3f8629849a64cc5164d8927cfe41849ab20ce8"
       }
     },
     {
@@ -664,10 +664,10 @@
       },
       "path": "Kandelo/recipes/ruby/recipe.json",
       "target": {
-        "blob_git_oid": "978880fba46ef22979da98ce785990fcdf5240bd",
+        "blob_git_oid": "a470b4664a808cbc8948338f7b1bfa4dda37a151",
         "bytes": 887,
         "mode": "100644",
-        "sha256": "5270f951e13b50d05f69121db066c3941bcee455246a6b0a1fe91d25698f27c1"
+        "sha256": "7b9b4f2a94665b1a81bffe90452d4c28188d0ff325322b05c01c469126e507e2"
       }
     },
     {
@@ -714,5 +714,5 @@
   "kind": "kandelo-homebrew-prefix-campaign-source-overlay",
   "schema": 1,
   "source_root": "Kandelo/campaigns/prefix-v1/source",
-  "target_tree_git_oid": "f235ec029446883f067db5ea5d7e179710167dc6"
+  "target_tree_git_oid": "7d22236c4234fe91100d19f5bf72214e5f191c8a"
 }

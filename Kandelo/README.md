@@ -382,6 +382,36 @@ The tap target source does not change: it remains sealed by manifest SHA-256
 source tree Git OID `17bcb5910fd3d403d861b695f9ee945f1ce14d30`, and target tree Git OID
 `f235ec029446883f067db5ea5d7e179710167dc6`.
 
+C12 was activated at protected tap commit
+`54e115487584710196de5db770ef92a9be600bec` with campaign
+`homebrew-prefix-campaign-sha256-f8268d7b236b0957a9e084654e807e335502fe2e4a7541e2505b45e862e3e9f7`.
+It publicly verified all 40 reused tasks. Ruby/wasm32 run `31092671659`
+passed admission, planning, signed native dependency installation, and
+Libyaml/Zlib handoff installation, then entered the isolated recipe runner.
+It failed before configure or compilation because archive-mode copying
+preserved the authenticated sysroot projection's sealed modes on Ruby's
+private sysroot, preventing the recipe uid from adding `include/yaml.h`. It
+published no Ruby bottle or handoff.
+
+The C12 terminal archive is
+`Kandelo/campaigns/prefix-v1/aborted-campaigns/f8268d7b236b0957a9e084654e807e335502fe2e4a7541e2505b45e862e3e9f7.json`,
+sealed as `d602d7173445d5cc2f8702d8bf6ddc489106b63831f092d735370ddd2405ed8f`.
+Its successor scope is
+`Kandelo/campaigns/prefix-v1/successor/f826-successor-scope.json`, sealed as
+`0708397e38c6ca4a3414c1b7a4d136269b0b0e529c523296460ba616c9d1ecc7`.
+It preserves the 40 exact public C12 handoffs and selects only Ruby for a
+fresh build against the unchanged canonical graph.
+
+The tap-only correction keeps the authenticated sysroot projection sealed,
+copies its exact bytes without root ownership, and restores owner writes only
+on the isolated recipe-owned copy. The corrected target is sealed by manifest
+SHA-256 `1de80fb5172240d9368f9053eb621befed35183217e91649617b01227b505f0b`,
+source tree Git OID `f9ec87e3b50beea1c71cede57abe160e639fb5d8`, and target tree Git OID
+`7d22236c4234fe91100d19f5bf72214e5f191c8a`. Kandelo executor
+`af80a443a6b4820e3b04845a64ab5cb8854638cd` and rootfs generation
+`package-generation-rootfs-wasm32-abi-v42-sha256-7ed33d5d51b7362c2ac04c0aca812a49c859bde25a2930d0e876f1c1e1aafcc9`
+remain unchanged because the correction changes no Kandelo or rootfs input.
+
 After independently deriving the candidate from the newly merged armed
 commit `T_ARM` and recording its digest as `C`, dispatch only that exact
 tuple:
