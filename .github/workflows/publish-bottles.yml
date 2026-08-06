@@ -29,6 +29,10 @@ jobs:
       expected-cache-keys: ${{ github.event.client_payload.expected_cache_keys || '' }}
       force: ${{ github.event.client_payload.force || false }}
       dry-run: false
+      # A deferred run still builds, uploads, and verifies each selected bottle,
+      # but leaves the final Formula/selection commit to a separate reviewed
+      # per-bottle update instead of invoking the legacy whole-tap finalizer.
+      defer-tap-finalization: ${{ github.event.client_payload.defer_tap_finalization || false }}
       require-vfs-acceptance: ${{ github.event.client_payload.require_vfs_acceptance || false }}
       # WHY: this content-addressed, main-admitted generation is the immutable
       # package input for the bounded wasm32 rootfs lane. A preserved staging

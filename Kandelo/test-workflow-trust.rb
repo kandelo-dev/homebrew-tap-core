@@ -291,6 +291,9 @@ WRITE_PUBLISH_INPUTS = {
 }.freeze
 
 VFS_PUBLISH_INPUTS = WRITE_PUBLISH_INPUTS.merge({
+  "defer-tap-finalization" => expression(
+    "github.event.client_payload.defer_tap_finalization || false"
+  ),
   "require-vfs-acceptance" => expression(
     "github.event.client_payload.require_vfs_acceptance || false"
   ),
@@ -2416,6 +2419,12 @@ def self_test(
     mutated = deep_copy(current_callers)
     mutated.dig("publish", "jobs", "publish", "with")["require-vfs-acceptance"] =
       expression("github.event.client_payload.require_vfs_acceptance")
+    check_caller_profile(mutated, test_profiles)
+  end
+  expect_rejection("a changed deferred-finalization mapping") do
+    mutated = deep_copy(current_callers)
+    mutated.dig("publish", "jobs", "publish", "with")["defer-tap-finalization"] =
+      false
     check_caller_profile(mutated, test_profiles)
   end
   expect_rejection("the current publisher without its admitted rootfs generation") do
