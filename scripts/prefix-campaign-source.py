@@ -600,12 +600,13 @@ def materialize(
     authority_path: pathlib.Path,
     manifest_path: pathlib.Path,
     output: pathlib.Path,
+    require_live_base: bool = True,
 ) -> dict[str, Any]:
     summary = verify_source(
         root=root,
         authority_path=authority_path,
         manifest_path=manifest_path,
-        require_live_base=True,
+        require_live_base=require_live_base,
     )
     if output.exists() or output.is_symlink():
         fail("materialized output already exists")
