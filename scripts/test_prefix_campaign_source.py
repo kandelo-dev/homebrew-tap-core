@@ -12,7 +12,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -32,8 +31,11 @@ EXPECTED_SOURCE_TREE_GIT_OID = "f9ec87e3b50beea1c71cede57abe160e639fb5d8"
 EXPECTED_TARGET_TREE_GIT_OID = "7d22236c4234fe91100d19f5bf72214e5f191c8a"
 EXPECTED_BASE_COMMIT = "2e192c8cf318044078e5426d39717636131cec60"
 PRE_CUTOVER_FIXTURE_COMMIT = "d98a00a0c087e366aa95a3b0b2c73c5eb8181f3f"
+CANONICAL_HELPER_PATH = (
+    "Kandelo/formula_support/kandelo_formula_support.rb"
+)
 PROMOTED_NON_FORMULA_PRODUCT_PATHS = (
-    "Kandelo/formula_support/kandelo_formula_support.rb",
+    CANONICAL_HELPER_PATH,
     "Kandelo/formula_support/test/kandelo_formula_support_test.rb",
     "Kandelo/formula_support/test/run-browser-wasm.test.ts",
     "Kandelo/recipes/homebrew-bootstrap/PATCH-LICENSE.md",
@@ -49,7 +51,7 @@ PROMOTED_NON_FORMULA_PRODUCT_PATHS = (
 
 
 class PrefixCampaignSourceTests(unittest.TestCase):
-    def post_cutover_fixture(
+    def partial_cutover_fixture(
         self,
         directory: str,
     ) -> pathlib.Path:
@@ -106,48 +108,79 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
         return root
 
-    def materialize_post_cutover(
+    def record_matches(
         self,
-        *,
-        root: pathlib.Path,
+        path: pathlib.Path,
+        record: dict[str, object],
+    ) -> bool:
+        try:
+            SOURCE.verify_record(path, record, str(path))
+        except SOURCE.SourceError:
+            return False
+        return True
+
+    def materialize_current_checkout(
+        self,
         output: pathlib.Path,
-    ) -> dict[str, object]:
-        return SOURCE.materialize(
-            root=root,
-            authority_path=root / AUTHORITY.relative_to(ROOT),
-            manifest_path=root / MANIFEST.relative_to(ROOT),
+    ) -> tuple[dict[str, object], str]:
+        manifest, _payload = SOURCE.load_manifest(MANIFEST)
+        records = {
+            file_record["path"]: file_record
+            for file_record in manifest["files"]
+        }
+        helper_record = records[CANONICAL_HELPER_PATH]
+        active_helper = ROOT / CANONICAL_HELPER_PATH
+        helper_is_base = self.record_matches(
+            active_helper,
+            helper_record["base"],
+        )
+        helper_is_target = self.record_matches(
+            active_helper,
+            helper_record["target"],
+        )
+        if helper_is_base == helper_is_target:
+            self.fail(
+                "active canonical Formula support is neither the exact "
+                "sealed base nor the exact sealed target"
+            )
+
+        if helper_is_base:
+            summary = SOURCE.materialize(
+                root=ROOT,
+                authority_path=AUTHORITY,
+                manifest_path=MANIFEST,
+                output=output,
+            )
+            return summary, "base"
+
+        for path_value in PROMOTED_NON_FORMULA_PRODUCT_PATHS:
+            path = pathlib.Path(path_value)
+            active = ROOT / path
+            sealed_target = SOURCE_ROOT / path
+            self.assertEqual(
+                active.read_bytes(),
+                sealed_target.read_bytes(),
+                path_value,
+            )
+            SOURCE.verify_record(
+                active,
+                records[path_value]["target"],
+                f"active post-cutover path {path_value}",
+            )
+        summary = SOURCE.materialize(
+            root=ROOT,
+            authority_path=AUTHORITY,
+            manifest_path=MANIFEST,
             output=output,
             require_live_base=False,
         )
+        return summary, "target"
 
-    def assert_promoted_product_support_is_exact(
-        self,
-        root: pathlib.Path,
-    ) -> None:
-        for path_value in PROMOTED_NON_FORMULA_PRODUCT_PATHS:
-            path = pathlib.Path(path_value)
-            self.assertEqual(
-                (root / path).read_bytes(),
-                (
-                    root
-                    / SOURCE_ROOT.relative_to(ROOT)
-                    / path
-                ).read_bytes(),
-                path_value,
-            )
-        active_helper = (
-            root / "Kandelo/formula_support/kandelo_formula_support.rb"
-        ).read_text(encoding="utf-8")
-        self.assertIn(
-            'KANDELO_GUEST_HOMEBREW_PREFIX = "/opt/kandelo/homebrew"',
-            active_helper,
-        )
-
-    def test_materialization_requires_live_base_by_default(
+    def test_cutover_requires_explicit_post_cutover_mode(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = self.post_cutover_fixture(directory)
+            root = self.partial_cutover_fixture(directory)
             output = pathlib.Path(directory) / "target"
             with self.assertRaisesRegex(
                 SOURCE.SourceError,
@@ -159,17 +192,28 @@ class PrefixCampaignSourceTests(unittest.TestCase):
                     manifest_path=root / MANIFEST.relative_to(ROOT),
                     output=output,
                 )
+            post_cutover_output = pathlib.Path(directory) / "post-target"
+            summary = SOURCE.materialize(
+                root=root,
+                authority_path=root / AUTHORITY.relative_to(ROOT),
+                manifest_path=root / MANIFEST.relative_to(ROOT),
+                output=post_cutover_output,
+                require_live_base=False,
+            )
+            self.assertEqual(
+                summary["target_tree_git_oid"],
+                EXPECTED_TARGET_TREE_GIT_OID,
+            )
 
-    def test_post_cutover_materialization_is_exact_reviewed_target_tree(
+    def test_current_checkout_materializes_exact_reviewed_target_tree(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = self.post_cutover_fixture(directory)
             output = pathlib.Path(directory) / "target"
-            summary = self.materialize_post_cutover(
-                root=root,
-                output=output,
+            summary, lifecycle = self.materialize_current_checkout(
+                output,
             )
+            self.assertIn(lifecycle, ("base", "target"))
             self.assertEqual(summary["files"], 48)
             self.assertEqual(summary["base_commit"], EXPECTED_BASE_COMMIT)
             self.assertEqual(
@@ -180,7 +224,6 @@ class PrefixCampaignSourceTests(unittest.TestCase):
                 summary["target_tree_git_oid"],
                 EXPECTED_TARGET_TREE_GIT_OID,
             )
-            self.assert_promoted_product_support_is_exact(root)
             self.assertEqual(
                 SOURCE.source_tree_oid(output),
                 EXPECTED_TARGET_TREE_GIT_OID,
@@ -220,11 +263,9 @@ class PrefixCampaignSourceTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = self.post_cutover_fixture(directory)
             target = pathlib.Path(directory) / "target"
-            self.materialize_post_cutover(
-                root=root,
-                output=target,
+            self.materialize_current_checkout(
+                target,
             )
             commands = [
                 [
@@ -276,6 +317,25 @@ class PrefixCampaignSourceTests(unittest.TestCase):
                     f"{command[0]} contract failed:\n{result.stdout}",
                 )
 
+    def test_materialize_rejects_falsey_non_boolean_live_base_modes(
+        self,
+    ) -> None:
+        for value in (None, 0, ""):
+            with self.subTest(value=value):
+                with tempfile.TemporaryDirectory() as directory:
+                    output = pathlib.Path(directory) / "target"
+                    with self.assertRaisesRegex(
+                        SOURCE.SourceError,
+                        "require_live_base must be a boolean",
+                    ):
+                        SOURCE.materialize(
+                            root=ROOT,
+                            authority_path=AUTHORITY,
+                            manifest_path=MANIFEST,
+                            output=output,
+                            require_live_base=value,
+                        )
+
     def test_authority_rejects_a_different_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             temporary = pathlib.Path(directory)
@@ -300,6 +360,10 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             campaign = temporary / "Kandelo/campaigns/prefix-v1"
             shutil.copytree(SOURCE_ROOT, campaign / "source")
             shutil.copyfile(MANIFEST, campaign / "manifest.json")
+            (campaign / "source/extra").write_text(
+                "not sealed\n",
+                encoding="utf-8",
+            )
             authority = json.loads(
                 AUTHORITY.read_text(encoding="utf-8")
             )
@@ -311,16 +375,9 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             )
             authority_path.parent.mkdir(parents=True, exist_ok=True)
             authority_path.write_bytes(SOURCE.canonical_json(authority))
-            (campaign / "source/extra").write_text(
-                "not sealed\n",
-                encoding="utf-8",
-            )
-            with (
-                mock.patch.object(SOURCE, "verify_target_tree"),
-                self.assertRaisesRegex(
-                    SOURCE.SourceError,
-                    "authority differs|unsealed",
-                ),
+            with self.assertRaisesRegex(
+                SOURCE.SourceError,
+                "campaign source contains unsealed files",
             ):
                 SOURCE.verify_source(
                     root=temporary,
