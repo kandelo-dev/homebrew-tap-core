@@ -205,7 +205,7 @@ independent clean checkouts for the current source, predecessor recovery
 archive, historical bottle tap, and reviewed native Homebrew. It derives
 and rechecks the campaign in the Kandelo dev shell before it uploads
 inert content-addressed bytes. Publication stops unless the bytes equal
-the supplied digest. The C9 selected task graph must be exactly 40 C8
+the supplied digest. The C10 selected task graph must be exactly 40 C9
 predecessor handoffs plus a fresh Ruby build. The narrow write job
 downloads and validates only that handoff. It checks out the exact Kandelo
 helper and protected source again. It then invokes the unchanged immutable-release
@@ -260,7 +260,7 @@ authenticated native tool keg and its exact target-Cellar proxy a 4 GiB
 aggregate bound. It retains the 1 GiB per-file bound and the existing 2 GiB
 bounds for true target dependencies, recipe source, and recipe output.
 
-The checked-in C9 arm starts from active C8 tap commit
+The historical C9 arm started from active C8 tap commit
 `9bbdbd334e4f45bf780e4d139cda1dc865a21419`, whose terminal campaign is
 `homebrew-prefix-campaign-sha256-a516aa5e61f4b7513c18c3e5b279a6a1f2d8b07e6a7348706238bc261a63ada4`.
 That campaign publicly verified 40 of 41 wasm32 tasks. Ruby run
@@ -286,7 +286,7 @@ are revalidated before that one keg is excluded from the ordinary
 target-Cellar containment rule. Unregistered, redirected, writable, or
 otherwise changed bridges still fail closed.
 
-The C9 arm is finalized against the live protected Kandelo authority and its
+The C9 arm was finalized against the live protected Kandelo authority and its
 independently, anonymously verified rootfs generation:
 
 - `45a45fed06ff053ee4dd2cc2bb6564a99d5ce106`; and
@@ -296,6 +296,37 @@ These exact identities must remain equal across every rotation-owned
 executable, trust, authority, and documentation slot. A PR head, synthetic
 merge, predecessor executor, mutable package tag, or merely expected future
 identity is not a substitute.
+
+The C9 campaign was activated at protected tap commit
+`47c232b5332ff2acad25c301ef6ba5f3f1e883b1` with campaign tag
+`homebrew-prefix-campaign-sha256-f3f4cb4cda613c5cb6bbc73ec1a6952d3454971bfa92a31c9a10f9526b7308c3`.
+It publicly preserved all 40 predecessor handoffs. Ruby/wasm32 run
+`31062254998` passed campaign admission and planning, materialized the sealed
+tap source, installed the required C9 Libyaml and Zlib handoffs, and entered
+the separated unprivileged tap-recipe runner. It then failed before compiling
+Ruby because the staged `Kandelo/recipes/ruby/build.sh` still required
+`HOMEBREW_KANDELO_ROOT`, a publisher checkout variable that is intentionally
+absent from the isolated recipe environment. The run produced no Ruby bottle
+or immutable handoff.
+
+The C10 successor archive is
+`Kandelo/campaigns/prefix-v1/aborted-campaigns/f3f4cb4cda613c5cb6bbc73ec1a6952d3454971bfa92a31c9a10f9526b7308c3.json`,
+sealed as `a451e756879e38dea3834ee873d445fbfff8777ecd6812a9876c0129dd65dce8`. Its successor scope is
+`Kandelo/campaigns/prefix-v1/successor/f3f4-successor-scope.json`, sealed as
+`4cfbb756def4280f4a9b74d330ba1f4c34298308da88dd0f1b0730764a7ec8b1`. It selects the same exact 40 public C9
+handoffs and rebuilds only Ruby against the unchanged canonical 41-task graph.
+
+The correction is tap-only and stays inside the sealed target source. The
+Ruby recipe is staged explicitly, consumes the authenticated
+`WASM_POSIX_LOCAL_ROOT_SPILL` and `WASM_POSIX_FORK_INSTRUMENT` inputs instead
+of reaching through a publisher checkout root, and copies the authenticated
+source into its writable work directory before applying patches. Its pending
+sealed identities are manifest SHA-256 `48f2f519beba22237d857b7b6860d5eccb57d5cb8abad2d7733f10b424fb34bf`, source
+tree Git OID `7917903175fb2f75714ec2bc6fa0ab603efb6975`, and target tree Git OID
+`af6215547bcd9fb2703e5f358721f7283b97eaee`. The Kandelo executor and rootfs inputs do not
+change: they remain
+`45a45fed06ff053ee4dd2cc2bb6564a99d5ce106` and
+`package-generation-rootfs-wasm32-abi-v42-sha256-e3701277b519832435260e183b83ca7e1e82b12f84de6c24605db03552719e40`.
 
 After independently deriving the candidate from the newly merged armed
 commit `T_ARM` and recording its digest as `C`, dispatch only that exact
