@@ -127,7 +127,8 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     attr_accessor :build_path, :dependency_formulae, :formula_full_name, :formula_name, :formula_path,
                   :formula_version, :formula_binary_cache_root, :formula_checker_path,
-                  :formula_resolver_repo_root, :homebrew_prefix_path, :nix_path, :prefix_path,
+                  :formula_resolver_repo_root, :formula_vite_cli, :homebrew_prefix_path,
+                  :nix_path, :prefix_path,
                   :root_path, :runtime_formulae, :shell_result, :stable_spec, :test_path,
                   :tier2_runtime, :resources
     attr_reader :command, :expected_status, :pty_config, :pty_config_mode, :pty_config_path,
@@ -194,6 +195,13 @@ class KandeloFormulaSupportTest < Minitest::Test
       return formula_resolver_repo_root unless formula_resolver_repo_root.nil?
 
       super
+    end
+
+    def kandelo_formula_vite_cli
+      return formula_vite_cli unless formula_vite_cli.nil?
+      return super unless tier2_runtime.nil?
+
+      Pathname(kandelo_require_root!)/"node_modules/vite/bin/vite.js"
     end
 
     def prefix
@@ -1110,6 +1118,23 @@ class KandeloFormulaSupportTest < Minitest::Test
       harness.define_singleton_method(:deps) { [target, runtime_only, native] }
 
       assert_equal [native_keg.to_s], harness.kandelo_tap_recipe_native_build_roots
+    end
+  end
+
+  def test_tap_recipe_path_prioritizes_declared_native_kegs
+    Dir.mktmpdir("kandelo-native-build-path") do |dir|
+      base = Pathname(dir)
+      root = base/"platform"
+      native_bin = base/"Cellar/gpatch/2.8/bin"
+      native_bin.mkpath
+      harness = Harness.new
+      runtime = { "trusted_env" => {} }
+
+      entries = harness.kandelo_tap_recipe_runner_path(
+        root, [native_bin.parent], runtime
+      ).split(File::PATH_SEPARATOR)
+
+      assert_operator entries.index(native_bin.to_s), :<, entries.index("/usr/bin")
     end
   end
 
@@ -3576,16 +3601,42 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_equal [%Q(  version "3.6.7"\n)], version_declarations
   end
 
-  def test_changed_tier2_formulae_keep_the_reviewed_abi42_bottle_identity
-    # These Formulae already consumed rebuild 1 when their Tier-2 isolation
-    # fixes were finalized. ABI 42 must use the next identity because GHCR's
-    # Homebrew references do not include the Kandelo ABI.
-    %w[bc fbdoom lsof modeset netcat posix-utils-lite].each do |name|
+  def test_closed_recipe_formulae_reserve_successor_bottle_identities
+    # WHY: These Formulae now bind sealed tap recipes, so their payload inputs
+    # differ from the registry-built bottles already published at the retained
+    # last-green identities. GHCR references are immutable; publication must
+    # use each exact successor instead of attempting to replace existing bytes.
+    {
+      "bc"               => 3,
+      "fbdoom"           => 3,
+      "lsof"             => 3,
+      "modeset"          => 3,
+      "netcat"           => 3,
+      "nethack"          => 2,
+      "posix-utils-lite" => 3,
+    }.each do |name, rebuild|
       formula = File.read(File.expand_path("../../../Formula/#{name}.rb", __dir__))
       rebuild_declarations = formula.lines.grep(/^\s*rebuild /)
 
-      assert_equal [%Q(    rebuild 2\n)], rebuild_declarations, name
+      assert_equal [%Q(    rebuild #{rebuild}\n)], rebuild_declarations, name
     end
+  end
+
+  def test_closed_recipes_do_not_request_the_complete_kandelo_checkout
+    # WHY: the privileged runner projects specific sealed tools, sources,
+    # sysroot, and glue paths. A recipe that reaches back through the broad
+    # checkout root silently defeats that closed input contract.
+    recipe_root =
+      Pathname(File.expand_path("../../../Kandelo/recipes", __dir__))
+    offenders = recipe_root.glob("**/*").filter_map do |path|
+      next unless path.file?
+      next unless path.extname == ".sh"
+      next unless path.binread.match?(/\b(?:HOMEBREW_KANDELO_ROOT|REPO_ROOT)\b/)
+
+      path.relative_path_from(recipe_root).to_s
+    end
+
+    assert_empty offenders
   end
 
   def test_sdk_activation_cannot_reintroduce_the_global_homebrew_path
@@ -3714,10 +3765,12 @@ class KandeloFormulaSupportTest < Minitest::Test
       test_path = Pathname(dir)/"formula test"
       checker = root/"target/host triple/release/xtask"
       binary_cache_root = root/KandeloFormulaSupport::KANDELO_PORTABLE_BINARY_CACHE_BASENAME
+      vite_cli = root/"node_modules/vite/bin/vite.js"
       [root, test_path, checker.dirname, binary_cache_root/"programs"].each(&:mkpath)
       checker.binwrite("sealed checker\n")
       checker.chmod(0555)
       ENV["HOMEBREW_KANDELO_XTASK_BIN"] = "/caller/mutable/xtask"
+      ENV["KANDELO_FORMULA_VITE_CLI"] = "/caller/raw/vite.js"
       ENV["WASM_POSIX_BINARY_CACHE_ROOT"] = "/caller/raw/cache"
       ENV["WASM_POSIX_BINARY_RESOLVER_REPO_ROOT"] = "/caller/raw/root"
       ENV["WASM_POSIX_XTASK_BIN"] = "/caller/raw/xtask"
@@ -3728,6 +3781,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       harness.formula_binary_cache_root = binary_cache_root.to_s.freeze
       harness.formula_checker_path = checker.to_s.freeze
       harness.formula_resolver_repo_root = root.to_s.freeze
+      harness.formula_vite_cli = vite_cli.freeze
       invocations = {
         "default Node runner" => lambda do
           harness.shell_result = "runtime-ok\n"
@@ -3788,8 +3842,44 @@ class KandeloFormulaSupportTest < Minitest::Test
         refute_includes harness.command, "/caller/raw/cache", label
         refute_includes harness.command, "/caller/raw/root", label
         refute_includes harness.command, "/caller/raw/xtask", label
+        vite_assignments = Shellwords.shellsplit(harness.command).grep(
+          /\AKANDELO_FORMULA_VITE_CLI=/,
+        )
+        if label.include?("Chromium")
+          assert_equal ["KANDELO_FORMULA_VITE_CLI=#{vite_cli}"], vite_assignments, label
+        else
+          assert_empty vite_assignments, label
+        end
+        refute_includes harness.command, "/caller/raw/vite.js", label
       end
     end
+  ensure
+    ENV.replace(original) if original
+  end
+
+  def test_browser_runner_derives_vite_from_frozen_runtime_authority
+    original = ENV.to_hash
+    harness = Harness.new
+    trusted_root = Pathname("/sealed/formula runtime")
+    harness.tier2_runtime = {
+      "trusted_env" => {
+        "HOMEBREW_KANDELO_ROOT" => trusted_root.to_s.freeze,
+      }.freeze,
+    }.freeze
+    ENV["HOMEBREW_KANDELO_ROOT"] = "/caller/mutable/root"
+    ENV["KANDELO_FORMULA_VITE_CLI"] = "/caller/mutable/vite.js"
+
+    assert_equal(
+      trusted_root/"node_modules/vite/bin/vite.js",
+      harness.kandelo_formula_vite_cli,
+    )
+    expected_vite_cli = Shellwords.escape(
+      trusted_root/"node_modules/vite/bin/vite.js",
+    )
+    assert_equal(
+      "KANDELO_FORMULA_VITE_CLI=#{expected_vite_cli} ",
+      harness.kandelo_browser_runner_environment,
+    )
   ensure
     ENV.replace(original) if original
   end
@@ -4063,6 +4153,11 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_includes harness.command, "timeoutMs"
       assert_includes harness.command, "modeset"
       assert_includes harness.command, "--demo"
+      expected_vite_cli = (root/"node_modules/vite/bin/vite.js").to_s.shellescape
+      assert_includes(
+        harness.command,
+        "KANDELO_FORMULA_VITE_CLI=#{expected_vite_cli}",
+      )
       refute_path_exists host_dist
     end
   end
@@ -4098,6 +4193,11 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_includes harness.command, "minNonBlankPixels"
       assert_includes harness.command, "2000"
       assert_includes harness.command, "4000"
+      expected_vite_cli = (root/"node_modules/vite/bin/vite.js").to_s.shellescape
+      assert_includes(
+        harness.command,
+        "KANDELO_FORMULA_VITE_CLI=#{expected_vite_cli}",
+      )
       refute_path_exists host_dist
     end
   end
@@ -4360,6 +4460,11 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_includes harness.command, "mergeStderr"
       assert_includes harness.command, "node"
       assert_includes harness.command, 'guestProgram\":\"/opt/node/bin/node'
+      expected_vite_cli = (root/"node_modules/vite/bin/vite.js").to_s.shellescape
+      assert_includes(
+        harness.command,
+        "KANDELO_FORMULA_VITE_CLI=#{expected_vite_cli}",
+      )
       manifest = harness.test_path/"node.browser-guest-files.json"
       assert_equal({ "/opt/formula/format.dat" => guest_file.to_s }, JSON.parse(manifest.read))
       assert_includes harness.command, manifest.to_s.shellescape

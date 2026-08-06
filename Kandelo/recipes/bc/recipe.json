@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "dependencies": [
+
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 5794,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "792766f8d1dcbf1858595d6c4618e6771437af6b32701ec1e632bb8463cfaa44"
+    },
+    {
+      "bytes": 910,
+      "mode": "0644",
+      "path": "fix-libmath-h.py",
+      "sha256": "3300763d81bc48be7d8afa37fe53fe600a70b56f6a2b4f04e188e38e02067f8b"
+    }
+  ]
+}
