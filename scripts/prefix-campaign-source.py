@@ -602,6 +602,8 @@ def materialize(
     output: pathlib.Path,
     require_live_base: bool = True,
 ) -> dict[str, Any]:
+    if type(require_live_base) is not bool:
+        fail("require_live_base must be a boolean")
     summary = verify_source(
         root=root,
         authority_path=authority_path,
