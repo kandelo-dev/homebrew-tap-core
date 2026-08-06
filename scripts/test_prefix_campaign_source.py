@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -50,12 +51,24 @@ PROMOTED_NON_FORMULA_PRODUCT_PATHS = (
     "Kandelo/recipes/homebrew-bootstrap/verify-source-lock.rb",
     "Kandelo/recipes/ruby/build.sh",
     "Kandelo/recipes/ruby/recipe.json",
+    "scripts/test_homebrew_bootstrap_formula_migration.py",
 )
 EXACT_ACTIVE_PRODUCT_PATHS = tuple(
     path
     for path in PROMOTED_NON_FORMULA_PRODUCT_PATHS
     if path != ACTIVE_FORMULA_SUPPORT_TEST_PATH
 )
+
+
+GENERATED_BOTTLE_BLOCK = re.compile(
+    r"\n  bottle do[ \t]*\n(?:    [^\n]*\n|\n)*  end[ \t]*\n(?:\n)?",
+    re.MULTILINE,
+)
+
+
+def formula_source_without_generated_bottle(source: str) -> str:
+    """Remove only a generated bottle block while preserving Formula suffixes."""
+    return GENERATED_BOTTLE_BLOCK.sub("", source, count=1)
 
 
 class PrefixCampaignSourceTests(unittest.TestCase):
@@ -175,6 +188,21 @@ class PrefixCampaignSourceTests(unittest.TestCase):
                 records[path_value]["target"],
                 f"active post-cutover path {path_value}",
             )
+        formula_paths = sorted(
+            record["path"]
+            for record in records.values()
+            if record["path"].startswith("Formula/")
+        )
+        self.assertEqual(32, len(formula_paths))
+        for path_value in formula_paths:
+            path = pathlib.Path(path_value)
+            active = formula_source_without_generated_bottle(
+                (ROOT / path).read_text(encoding="utf-8")
+            )
+            reviewed_target = formula_source_without_generated_bottle(
+                (SOURCE_ROOT / path).read_text(encoding="utf-8")
+            )
+            self.assertEqual(active, reviewed_target, path_value)
         summary = SOURCE.materialize(
             root=ROOT,
             authority_path=AUTHORITY,
@@ -183,6 +211,33 @@ class PrefixCampaignSourceTests(unittest.TestCase):
             require_live_base=False,
         )
         return summary, "target"
+
+    def test_formula_normalization_preserves_post_bottle_content(
+        self,
+    ) -> None:
+        reviewed_target = """class Example < Formula
+  bottle do
+    sha256 cellar: :any, wasm32_kandelo: \"reviewed\"
+  end
+
+  def post_bottle_contract
+    \"reviewed\"
+  end
+end
+"""
+        drifted_active = reviewed_target.replace(
+            '    "reviewed"\n  end\nend\n',
+            '    "drifted"\n  end\nend\n',
+        )
+
+        self.assertNotEqual(
+            formula_source_without_generated_bottle(drifted_active),
+            formula_source_without_generated_bottle(reviewed_target),
+        )
+        self.assertIn(
+            "post_bottle_contract",
+            formula_source_without_generated_bottle(reviewed_target),
+        )
 
     def test_cutover_requires_explicit_post_cutover_mode(
         self,
@@ -276,6 +331,14 @@ class PrefixCampaignSourceTests(unittest.TestCase):
                 target,
             )
             commands = [
+                [
+                    sys.executable,
+                    str(
+                        ROOT
+                        / "scripts/"
+                        "test_homebrew_bootstrap_formula_migration.py"
+                    ),
+                ],
                 [
                     sys.executable,
                     str(

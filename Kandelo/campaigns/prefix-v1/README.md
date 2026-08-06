@@ -1,8 +1,10 @@
 # Prefix campaign target source
 
-This directory stages the reviewed `/opt/kandelo/homebrew` cutover without
-changing the tap's active Formulae, helper, bootstrap recipe, metadata, or
-bottle selections.
+This directory preserves the reviewed historical `/opt/kandelo/homebrew`
+cutover source. The live tap has completed that cutover: the experimental
+flat-selection lane uses
+`Kandelo/selections/experimental-abi42-reuse40-wasm32.json` as its sole bottle
+selection, and each selected bottle stands alone.
 
 `source/` mirrors the 48 files that differ between the protected base
 recorded in `manifest.json` and the reviewed target tree. The manifest
@@ -11,9 +13,10 @@ ID, and SHA-256. The caller authority additionally binds the canonical
 manifest bytes, the complete `source/` Git tree, and the reconstructed
 target tree.
 
-The staged tree is data, not a second public tap. Validation requires all live
-destinations to remain at their recorded base identities. A build or finalizer
-may materialize the overlay only in a separate output directory:
+The staged tree is historical data, not a second public tap or a dependency of
+the active flat-selection lane. Before cutover, validation required live
+destinations to remain at their recorded base identities and materialized the
+overlay only in a separate output directory:
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/prefix-campaign-source.py \
@@ -21,12 +24,9 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/prefix-campaign-source.py \
   --out /absolute/path/to/new-empty-directory
 ```
 
-Do not copy individual staged files into the live tap. The caller authority
-must remain non-active while the campaign is prepared: `inert` before its
-executor is fixed and `armed` after the protected workflow tree is installed.
-Only an anonymously verified campaign may activate the authority, and only the
-campaign finalizer may replace the active files together with all selected
-Formula bottle blocks and generated catalog metadata in one atomic tap commit.
+Do not treat this historical materialization path as an active publication
+contract. Legacy campaign, seal, handoff, and provenance records do not govern
+the experimental flat-selection lane.
 
 The publication workflow handles one `(Formula, architecture)` variant
 at a time. A build selected for wasm32 uses the exact rootfs package

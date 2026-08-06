@@ -100,10 +100,11 @@ Formula source currently present in this repository includes:
   built directly from the checksum-pinned upstream source; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
 
-These seven exact-shell Formulae and Ruby intentionally use the transitional
-`kandelo_build_package` bridge for their first bottle proof. Their Formulae pin
-source identity, declare native and target dependencies, retain every current
-shell output, validate final Wasm artifacts, and run through Kandelo.
+These seven exact-shell Formulae intentionally use the transitional
+`kandelo_build_package` bridge for their first bottle proof. Ruby instead uses
+its closed `kandelo_build_tap_recipe` recipe. Their Formulae pin source
+identity, declare native and target dependencies, retain every current shell
+output, validate final Wasm artifacts, and run through Kandelo.
 The six recipes that accept already-extracted source isolate Homebrew's
 checksum-verified tree from sibling caller-owned work and output roots; neither
 the verified source nor the reviewed Kandelo checkout is a build destination.
@@ -120,7 +121,7 @@ itself is a Wasm executable. The separate Node and Chromium guest lifecycle
 must still execute it with real Ruby before in-guest Homebrew is accepted.
 
 NetHack compiles and tests its data lookup against
-`/home/linuxbrew/.linuxbrew/opt/nethack/share/nethack`, so a composed image must
+`/opt/kandelo/homebrew/opt/nethack/share/nethack`, so a composed image must
 link both its executable and installed share tree at the poured guest opt path.
 Decomposing their registry scripts into idiomatic Formula build steps remains
 explicit follow-up work rather than a hidden change to the proof's scope.
@@ -131,6 +132,13 @@ the trusted publisher writes its generated `bottle do` block and matching
 `Kandelo/` sidecars. Use those generated files and the
 [post-publication acceptance procedure](Kandelo/README.md#post-publication-acceptance),
 not this source inventory, to decide whether a bottle is live.
+
+The experimental ABI-42 flat-selection lane is the exception: its sole
+selection authority is
+`Kandelo/selections/experimental-abi42-reuse40-wasm32.json`, and each selected
+bottle stands alone. Pending later quarantine, legacy `Kandelo/metadata.json`
+and Formula, link, and provenance sidecars are non-authoritative for that lane;
+do not regenerate those 40 legacy sidecars.
 
 The SDK is not yet a Homebrew dependency. Trusted builds supply an
 `HOMEBREW_KANDELO_ROOT` checkout containing the SDK, sysroot, kernel, and Node

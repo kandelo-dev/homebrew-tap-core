@@ -6,6 +6,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -13,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FORMULA = ROOT / "Formula" / "homebrew-bootstrap.rb"
 RECIPE_ROOT = ROOT / "Kandelo" / "recipes" / "homebrew-bootstrap"
 LOCK = RECIPE_ROOT / "source-lock.json"
+VERIFY = RECIPE_ROOT / "verify-source-lock.rb"
 EXPECTED_RECIPE_FILES = [
     "PATCH-LICENSE.md",
     "build.sh",
@@ -33,6 +36,8 @@ FORBIDDEN_AUTHORITY = (
     "scripts/dev-shell.sh",
     "/nix/store",
 )
+KANDELO_GUEST_PREFIX = b"/opt/kandelo/homebrew"
+RETIRED_GUEST_PREFIX = b"/home/linuxbrew/.linuxbrew"
 
 
 def sha256(path: Path) -> str:
@@ -49,6 +54,13 @@ def reject_all(source: str, needles: tuple[str, ...], owner: Path) -> None:
         assert needle not in source, f"{owner} retains forbidden {needle!r}"
 
 
+def reject_retired_guest_prefix(source: bytes, owner: Path) -> None:
+    assert RETIRED_GUEST_PREFIX not in source, (
+        f"{owner} retains retired guest prefix "
+        f"{RETIRED_GUEST_PREFIX.decode()!r}"
+    )
+
+
 def assert_formula_contract() -> None:
     source = FORMULA.read_text()
     reject_all(source, FORBIDDEN_AUTHORITY, FORMULA)
@@ -58,9 +70,10 @@ def assert_formula_contract() -> None:
             "KANDELO_TAP_RECIPE = true",
             'KANDELO_BOTTLE_TEST_CONTRACT = "support-data".freeze',
             'url "https://github.com/Homebrew/brew/archive/'
-            'd6c1be418446eec7de09fc72441ba4462282a142.tar.gz"',
-            'version "6.0.4-3-gd6c1be4"',
-            'sha256 "d3a38612b71eba6ab297a67c06b367829b96250fef48bc0a5088e832a659fc5c"',
+            'cf5bc21c6b127e168ef7cfa982ba7db62874690e.tar.gz"',
+            'version "6.0.12-153-gcf5bc21"',
+            "revision 1",
+            'sha256 "18d3c5384b1a90e0dca3c044b31d8a2b61b500bc5b880a14b1e52a590088de40"',
             'license all_of: ["BSD-2-Clause", "GPL-2.0-or-later"]',
             'depends_on "git" => :build',
             'depends_on "ruby" => :build',
@@ -89,14 +102,15 @@ def assert_formula_contract() -> None:
     require_all(
         source,
         (
-            "96aafa1546d0f737b2242589dbd0e47decf2af8352a3069d0552638eb2ebe03b",
-            "assert_equal 5_046_915, archive.size",
+            "26ac98e328573244d3e7c0c149f30114ef5d9c8882200f5a22e56f97d2541482",
+            "assert_equal 5_251_369, archive.size",
             "HOMEBREW_NO_AUTO_UPDATE=1",
             "HOMEBREW_NO_INSTALL_FROM_API=1",
             "HOMEBREW_KANDELO_BOTTLE_TAG=wasm32_kandelo",
             'system formula_opt_bin("unzip")/"unzip", "-q", archive',
             'assert_predicate extracted/"bin/brew", :executable?',
             'assert_path_exists extracted/"LICENSE.txt"',
+            "KANDELO_GUEST_HOMEBREW_PREFIX",
             "Retain its `homebrew-` prefix",
             "Process.spawn",
         ),
@@ -121,6 +135,29 @@ def assert_recipe_contract() -> None:
         if path.is_file()
     }
     assert actual_files == expected_files
+
+    # WHY: this recipe is the source of the guest Homebrew tree. Checking every
+    # sealed input prevents a future patch refresh from silently restoring the
+    # host-only Linux default as Kandelo's product-visible package layout.
+    for relative in sorted(expected_files):
+        reject_retired_guest_prefix(
+            (RECIPE_ROOT / relative).read_bytes(),
+            RECIPE_ROOT / relative,
+        )
+    patch = RECIPE_ROOT / "patches/0001-add-kandelo-wasm-bottle-tags.patch"
+    assert KANDELO_GUEST_PREFIX in patch.read_bytes()
+
+    # Exercise the rejecting branch so this contract cannot become a no-op
+    # while the checked-in recipe happens to remain clean.
+    try:
+        reject_retired_guest_prefix(
+            b"prefix=/home/linuxbrew/.linuxbrew",
+            Path("<adversarial-recipe>"),
+        )
+    except AssertionError as error:
+        assert "retired guest prefix" in str(error)
+    else:
+        raise AssertionError("retired guest prefix guard accepted its fixture")
 
     for record in records:
         assert list(record) == ["bytes", "mode", "path", "sha256"]
@@ -149,6 +186,7 @@ def assert_recipe_contract() -> None:
             'RECIPE_DIR="${WASM_POSIX_DEP_RECIPE_DIR:-}"',
             'WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:-}"',
             'OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:-}"',
+            'PACKAGE_VERSION="${WASM_POSIX_DEP_PKG_VERSION:-}"',
             'RUBY="${HOMEBREW_BOOTSTRAP_RUBY:-}"',
             "GIT_CONFIG_GLOBAL=/dev/null",
             "GIT_CONFIG_NOSYSTEM=1",
@@ -172,6 +210,7 @@ def assert_recipe_contract() -> None:
         ),
         entrypoint_path,
     )
+    assert 'PACKAGE_VERSION="${WASM_POSIX_DEP_VERSION:-}"' not in entrypoint
 
     zipper = (RECIPE_ROOT / "create-deterministic-zip.sh").read_text()
     require_all(
@@ -205,15 +244,11 @@ def assert_source_lock_contract() -> None:
     assert lock["kind"] == "kandelo-homebrew-bootstrap-tap-recipe-lock"
     assert lock["package"] == {
         "name": "homebrew-bootstrap",
-        "version": "6.0.4-3-gd6c1be4",
+        "version": "6.0.12-153-gcf5bc21_1",
         "arch": "wasm32",
     }
-    assert lock["source"]["revision"] == (
-        "d6c1be418446eec7de09fc72441ba4462282a142"
-    )
-    assert lock["source"]["tree_git_oid"] == (
-        "3f8819e0d323511fdc15c1f6132849ed3b64aebe"
-    )
+    assert lock["source"]["revision"] == "cf5bc21c6b127e168ef7cfa982ba7db62874690e"
+    assert lock["source"]["tree_git_oid"] == "df4aa7ac462564d14c713e0a6e07e33cbd0a4f8a"
     assert lock["patch"]["sha256"] == sha256(
         RECIPE_ROOT / "patches" / "0001-add-kandelo-wasm-bottle-tags.patch"
     )
@@ -222,13 +257,13 @@ def assert_source_lock_contract() -> None:
         RECIPE_ROOT / "PATCH-LICENSE.md"
     )
     assert lock["prepared"]["patched_tree_git_oid"] == (
-        "aa63e300318064a4d0801723574ff7c9430f12ce"
+        "ae657d9bdebaa2218527f3e3a6b8b51e6907d365"
     )
     assert lock["prepared"]["archive_format"] == "kandelo-deterministic-zip-v1"
     assert lock["outputs"]["archive"] == {
         "path": "homebrew-bootstrap.zip",
-        "sha256": "96aafa1546d0f737b2242589dbd0e47decf2af8352a3069d0552638eb2ebe03b",
-        "bytes": 5_046_915,
+        "sha256": "26ac98e328573244d3e7c0c149f30114ef5d9c8882200f5a22e56f97d2541482",
+        "bytes": 5_251_369,
     }
     assert lock["outputs"]["environment"] == {
         "path": "homebrew-brew.env",
@@ -237,10 +272,60 @@ def assert_source_lock_contract() -> None:
     }
 
 
+def run_lock_verifier(
+    lock: dict,
+    package_version: str,
+) -> subprocess.CompletedProcess[str]:
+    with tempfile.TemporaryDirectory() as directory:
+        candidate = Path(directory) / "source-lock.json"
+        candidate.write_text(json.dumps(lock, indent=2) + "\n")
+        return subprocess.run(
+            [
+                "ruby",
+                str(VERIFY),
+                "--lock",
+                str(candidate),
+                "--package-version",
+                package_version,
+            ],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+
+def assert_package_version_contract() -> None:
+    original = json.loads(LOCK.read_text())
+    base = "6.0.12-153-gcf5bc21"
+    for package_version in (base, f"{base}_1", f"{base}_27"):
+        candidate = json.loads(json.dumps(original))
+        candidate["package"]["version"] = package_version
+        result = run_lock_verifier(candidate, package_version)
+        assert result.returncode == 0, result.stdout
+
+    for package_version in (
+        f"{base}_0",
+        f"{base}_01",
+        f"{base}_1_2",
+        f"{base}_",
+    ):
+        candidate = json.loads(json.dumps(original))
+        candidate["package"]["version"] = package_version
+        result = run_lock_verifier(candidate, package_version)
+        assert result.returncode != 0, package_version
+        assert "package.version is invalid" in result.stdout
+
+    result = run_lock_verifier(original, base)
+    assert result.returncode != 0
+    assert "package-version mismatch" in result.stdout
+
+
 def main() -> None:
     assert_formula_contract()
     assert_recipe_contract()
     assert_source_lock_contract()
+    assert_package_version_contract()
     print("Homebrew bootstrap Formula migration contract: ok")
 
 

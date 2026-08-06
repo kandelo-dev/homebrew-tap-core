@@ -38,6 +38,12 @@ class KandeloFormulaSupportTest < Minitest::Test
     KandeloFormulaSupport::WabtRequirement     => ["wabt", "wasm-validate"],
   }.freeze
 
+  GENERATED_BOTTLE_BLOCK = /\n  bottle do[ \t]*\n(?:    [^\n]*\n|\n)*  end[ \t]*\n(?:\n)?/
+
+  def formula_source_without_generated_bottle(source)
+    source.sub(GENERATED_BOTTLE_BLOCK, "")
+  end
+
   def test_guest_homebrew_paths_use_kandelo_identity
     assert_equal(
       "/opt/kandelo/homebrew",
@@ -56,7 +62,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       # Bottle Cellar values are generated publication metadata. Formula build
       # and test code must use the shared source-level authority instead of
       # growing another literal that can drift during a future path migration.
-      recipe_source = path.binread.split(/^  bottle do\s*$/, 2).first
+      recipe_source = formula_source_without_generated_bottle(path.binread)
       refute_includes(
         recipe_source,
         "/home/linuxbrew/.linuxbrew",
@@ -68,6 +74,30 @@ class KandeloFormulaSupportTest < Minitest::Test
         "#{path.basename} hardcodes the canonical guest prefix",
       )
     end
+  end
+
+  def test_formula_source_normalization_preserves_post_bottle_content
+    reviewed_target = <<~RUBY
+      class Example < Formula
+        bottle do
+          sha256 cellar: :any, wasm32_kandelo: "reviewed"
+        end
+
+        def post_bottle_contract
+          "reviewed"
+        end
+      end
+    RUBY
+    drifted_active = reviewed_target.sub(
+      "  def post_bottle_contract\n    \"reviewed\"",
+      "  def post_bottle_contract\n    \"drifted\"",
+    )
+
+    refute_equal(
+      formula_source_without_generated_bottle(drifted_active),
+      formula_source_without_generated_bottle(reviewed_target),
+    )
+    assert_includes formula_source_without_generated_bottle(reviewed_target), "post_bottle_contract"
   end
 
   def test_native_requirements_have_the_closed_publisher_identity
