@@ -126,7 +126,13 @@ find -P "$SRC_DIR" -type f -exec chmod u+rw {} +
 # isolated caller-owned copy and never mutate the platform source.
 SYSROOT="$WORK_DIR/kandelo-ruby-sysroot"
 mkdir -p "$SYSROOT"
-cp -a "$SOURCE_SYSROOT/." "$SYSROOT/"
+cp -a --no-preserve=ownership "$SOURCE_SYSROOT/." "$SYSROOT/"
+# The authenticated sysroot projection is sealed mode 0555/0444. Preserve
+# those source bytes, but restore owner writes only on this recipe-owned copy
+# before adding libyaml and Ruby's compatibility files. Do not follow any
+# projected symlink while changing the private tree's modes.
+find -P "$SYSROOT" -type d -exec chmod u+rwx {} +
+find -P "$SYSROOT" -type f -exec chmod u+rw {} +
 export WASM_POSIX_SYSROOT="$SYSROOT"
 
 echo "==> zlib at $ZLIB_PREFIX"

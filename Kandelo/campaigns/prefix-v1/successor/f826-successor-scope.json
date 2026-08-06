@@ -1,0 +1,180 @@
+{
+  "build_tasks": [
+    {
+      "arch": "wasm32",
+      "formula": "ruby"
+    }
+  ],
+  "graph": {
+    "path": "Kandelo/campaigns/prefix-v1/successor/canonical-shell41-wasm32.json",
+    "sha256": "40a651d2ebe3a3aaab4bf9b65d91cf34db9908cb764a518437ac850747c4b139"
+  },
+  "kind": "kandelo-homebrew-prefix-successor-scope",
+  "predecessor_archive": {
+    "path": "Kandelo/campaigns/prefix-v1/aborted-campaigns/f8268d7b236b0957a9e084654e807e335502fe2e4a7541e2505b45e862e3e9f7.json",
+    "sha256": "d602d7173445d5cc2f8702d8bf6ddc489106b63831f092d735370ddd2405ed8f"
+  },
+  "reuse_tasks": [
+    {
+      "arch": "wasm32",
+      "formula": "bash"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "bc"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "bzip2"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "coreutils"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "curl"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "dash"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "diffutils"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "ed"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "fbdoom"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "file-formula"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "findutils"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "gawk"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "git"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "grep"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "gzip"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "homebrew-bootstrap"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "less"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "libcurl"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "libcxx"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "libmagic"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "libyaml"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "lsof"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "m4"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "make"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "modeset"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "nano"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "ncurses"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "netcat"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "nethack"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "openssl"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "posix-utils-lite"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "sed"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "tar"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "unzip"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "vim"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "wget"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "xz"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "zip"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "zlib"
+    },
+    {
+      "arch": "wasm32",
+      "formula": "zstd"
+    }
+  ],
+  "schema": 1
+}
