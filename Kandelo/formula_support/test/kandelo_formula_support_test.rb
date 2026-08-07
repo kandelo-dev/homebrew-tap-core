@@ -3731,6 +3731,11 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes formula, "err: error_write"
     assert_includes formula, "pgroup: true"
     assert_includes formula, 'chdir: "/tmp"'
+    # WHY: spawn_program is an interpolating heredoc. Keep the numeric
+    # captures escape-free so the transmitted guest program cannot silently
+    # turn Ruby's `\d` into the literal character `d`.
+    assert_includes formula, "pid_field = stdout[/^pid=([0-9]+)$/, 1]"
+    assert_includes formula, "pgrp_field = stdout[/^pgrp=([0-9]+)$/, 1]"
     assert_includes formula, "kandelo_run_wasm("
     assert_includes formula, "kandelo_run_browser_wasm("
     assert_includes formula, "exec_programs: spawn_exec_programs"

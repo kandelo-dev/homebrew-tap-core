@@ -218,8 +218,8 @@ class Ruby < Formula
       unless status.exitstatus == 23 && expected.all? { |line| lines.include?(line) }
         raise "unexpected Homebrew-shaped spawn result: %p %p" % [status, stdout]
       end
-      pid_field = stdout[/^pid=(\d+)$/, 1]
-      pgrp_field = stdout[/^pgrp=(\d+)$/, 1]
+      pid_field = stdout[/^pid=([0-9]+)$/, 1]
+      pgrp_field = stdout[/^pgrp=([0-9]+)$/, 1]
       unless pid_field && pid_field == pgrp_field
         raise "spawned process did not enter its own process group: %p" % stdout
       end
