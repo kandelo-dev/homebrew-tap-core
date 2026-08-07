@@ -87,7 +87,7 @@ RUBY_ACTION = "ruby/setup-ruby@d45b1a4e94b71acab930e56e79c6aa188764e7f9"
 # While split, credentialed callers retain their complete older tuple and
 # fail the publisher's current-main check. A full rotation converges both
 # pins only after a fresh generation is admitted.
-CURRENT_KANDELO_WORKFLOW_SHA = "00cc12970ecaa474cb25350390bb270d38630e0c"
+CURRENT_KANDELO_WORKFLOW_SHA = "665baf3e5dfe0bb087c9923e2bc530d6d8412406"
 CURRENT_KANDELO_CONSUMER_SHA = CURRENT_KANDELO_WORKFLOW_SHA
 DRY_RUN_KANDELO_WORKFLOW_SHA = "af80a443a6b4820e3b04845a64ab5cb8854638cd"
 # WHY: the lifecycle caller must remain pinned to reviewed Kandelo main. TA0,
@@ -98,7 +98,7 @@ MAIN_SHELL_MIRROR_TAP_CATALOG_SHA = "6ad0e3dbc60e5572c4288c86919238f71c1bc110"
 MAIN_SHELL_MIRROR_AUTHORITY_SHA =
   "08f8f32c94bee8d6fc2948e453e53ece29b1c8e1"
 MAIN_SHELL_MIRROR_CANARY_SHA = "d8bdda662f6d80cf3dcdbe8451edb12bb33bbafc"
-PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-817caab87fc9dfc7a87ce20bb5c43368ce83b43224538b5595a24c7ae45439a7"
+PACKAGE_GENERATION_WASM32_TAG = "package-generation-rootfs-wasm32-abi-v42-sha256-d5daefb7e7f28f824e16dfa6e5802ef99ea0a36f18deba2e54b08c96a59025fa"
 # WHY: a sealed campaign release binds its original Kandelo executor.
 # historical source authority remains valid while current executable
 # publishers advance, so keep the two trust roles independently
