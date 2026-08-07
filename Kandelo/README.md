@@ -1,4 +1,18 @@
-# Kandelo Sidecar Metadata
+# Kandelo Homebrew Tap Data
+
+The active shipping lane publishes each bottle independently through
+`.github/workflows/publish-bottles.yml`. Canonical files in
+`Kandelo/selections/` choose exact bottle bytes for VFS composition; they do
+not consume a campaign, aggregate seal, Formula bottle block, or legacy
+sidecar. `.github/workflows/selection-checks.yml` validates those selections.
+
+The campaign/trust workflows and enforcement tools are preserved under
+`deferred/campaign-trust-implementation/` and are not active contracts. The
+remaining campaign records and sections explicitly labeled historical below
+are retained only as migration history until the separate post-cutover archive
+change.
+
+## Legacy sidecar metadata
 
 Trusted publish workflows generate this directory in the
 `kandelo-dev/tap-core` tap in the `kandelo-dev/homebrew-tap-core` repository.
@@ -39,14 +53,12 @@ When present, `vfs-acceptance.json` and its referenced files are reviewed tap
 policy, not generated sidecars. The publisher reads them from the exact tap
 commit and never rewrites them.
 
-The tap currently has no checked-in VFS acceptance selection. The previous
-selection described the retired `/home/linuxbrew/.linuxbrew` guest prefix and
-Python 3.13.3, so retaining it would test a product Kandelo no longer ships.
-The normal publisher treats the policy as optional unless its caller requests
-the legacy dependency-closure acceptance rung. A future policy must describe
-the current `/opt/kandelo/homebrew` layout and be reviewed and proven before it
-is checked in. The mostly-lazy shell cutover instead proves its closed
-selection through the shell's Node and Chromium lifecycle tests.
+The tap has no checked-in legacy VFS-acceptance policy. Canonical flat
+selections under `Kandelo/selections/` replace that aggregate sidecar policy
+for the current `/opt/kandelo/homebrew` layout. The normal bottle publisher
+treats legacy dependency-closure acceptance as optional; Kandelo's flat VFS
+workflow proves an exact selected image through Node and Chromium lifecycle
+tests.
 
 ## Generation
 
@@ -118,8 +130,9 @@ transport receipts provide the registry proof.
 
 ## Historical first `libyaml` GHCR child
 
-`.github/workflows/repository-namespace-canary.yml` was the narrow bootstrap
-caller for the then-absent public `homebrew-tap-core/libyaml` package. It is
+`deferred/campaign-trust-implementation/workflows/repository-namespace-canary.yml`
+was the narrow bootstrap caller for the then-absent public
+`homebrew-tap-core/libyaml` package. It is
 fixed in reviewed YAML to Formula `libyaml`, architecture `wasm32`, this tap's
 exact protected-main commit, and one immutable Kandelo workflow commit. The
 workflow can run only through the separate `publish-first-homebrew-child`
@@ -165,7 +178,13 @@ string-valued evidence:
 }
 ```
 
-## Prefix-campaign activation
+## Deferred prefix-campaign implementation (historical)
+
+The workflows described below are preserved under
+`deferred/campaign-trust-implementation/workflows/`; they are not executable
+GitHub Actions workflows and do not govern the flat-selection lane.
+
+### Prefix-campaign activation
 
 A campaign has three explicit authority states:
 
@@ -432,7 +451,7 @@ token to imitate an Actions lock owner.
 Activation changes the authority to `active`, which permanently closes
 this descriptor-publication entry point for that campaign.
 
-## Prefix-campaign package bootstrap
+### Prefix-campaign package bootstrap
 
 A non-active prefix-campaign caller has a separate route for a reviewed new
 Formula whose package repository does not exist yet. The campaign manifest
@@ -479,7 +498,7 @@ artifacts before it receives package-write authority. Until those Kandelo-side
 contracts and their trust tests are present at the authority's immutable
 workflow commit, the campaign authority must remain non-active.
 
-## Prefix-campaign bottle reuse
+### Prefix-campaign bottle reuse
 
 Reusing bottle bytes avoids a rebuild, but it is not permission to skip normal
 Homebrew publication. A campaign reuse handoff is safe to consume only after
