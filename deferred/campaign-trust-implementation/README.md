@@ -7,9 +7,10 @@ current release contracts.
 
 The archive includes the obsolete campaign and contract-check workflows, the
 consumed first-package namespace canary, publisher-trust rotation/checking, and
-the old mirror finalizer that edited that checker. Active caller changes rely
-on ordinary code review while provenance enforcement is deferred; this lane
-does not claim a replacement trust-rotation contract.
+the campaign controller/source/authority-transition tools. It also contains the
+old mirror finalizer that edited the archived checker. Active caller changes
+rely on ordinary code review while provenance enforcement is deferred; this
+lane does not claim a replacement trust-rotation contract.
 
 The active lane treats each bottle as an independent published object.
 `.github/workflows/publish-bottles.yml` builds and publishes those objects. A
