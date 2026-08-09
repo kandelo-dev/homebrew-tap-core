@@ -461,7 +461,12 @@ def _observed_paths(name: str, formula_source: str) -> tuple[set[str], set[str]]
         kandelo.add(f"packages/registry/{package}")
     if "kandelo_build_tap_recipe" in formula_source:
         tap.add(f"Kandelo/recipes/{name}")
-    tap.update(re.findall(r"Kandelo/patches/[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+", formula_source))
+    for observed in re.findall(
+        r"Kandelo/(?:formula_support|patches)/[A-Za-z0-9_./-]+",
+        formula_source,
+    ):
+        if observed != "Kandelo/formula_support/kandelo_formula_support":
+            tap.add(observed)
     kandelo.update(
         match
         for match in re.findall(r'root/\"([^\"]+)\"', formula_source)

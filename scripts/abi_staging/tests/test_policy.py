@@ -106,6 +106,16 @@ class PolicyTests(unittest.TestCase):
         )
         catalog = generate_formula_capture_catalog(TAP_ROOT, policy)
         by_name = {entry["name"]: entry for entry in catalog["formulae"]}
+        for entry in catalog["formulae"]:
+            self.assertIn(
+                "Kandelo/formula_support/kandelo_formula_support.rb",
+                entry["tap_paths"],
+            )
+            self.assertNotIn("Kandelo/formula_support", entry["tap_paths"])
+        self.assertIn(
+            "Kandelo/formula_support/run-network-wasm.ts",
+            by_name["nginx"]["tap_paths"],
+        )
         for name in [
             "bc",
             "erlang",
