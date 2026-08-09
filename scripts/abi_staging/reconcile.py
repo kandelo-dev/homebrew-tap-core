@@ -48,7 +48,6 @@ class ReconciliationDecisionV1:
 class ReconciliationWorkScopeV1:
     allow_required: bool
     allow_background: bool
-    reset_failed_attempts: bool
 
 
 def reconciliation_work_scope(
@@ -56,11 +55,14 @@ def reconciliation_work_scope(
 ) -> ReconciliationWorkScopeV1:
     """Translate exact-head lifecycle into new-work permission only."""
 
-    if decision.action in {"observe-open", "observe-historical", "observe-merged"}:
-        return ReconciliationWorkScopeV1(True, True, False)
-    if decision.action == "resume-same-head":
-        return ReconciliationWorkScopeV1(True, True, True)
-    return ReconciliationWorkScopeV1(False, False, False)
+    if decision.action in {
+        "observe-open",
+        "observe-historical",
+        "observe-merged",
+        "resume-same-head",
+    }:
+        return ReconciliationWorkScopeV1(True, True)
+    return ReconciliationWorkScopeV1(False, False)
 
 
 def _validate_lifecycle(lifecycle: PullRequestLifecycleV1) -> None:

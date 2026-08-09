@@ -692,8 +692,10 @@ class SchedulingTests(unittest.TestCase):
             policy=POLICY,
             verification_tests=(DEFINITION,),
         )
-        intent = next(item for item in reopened.ready if item.subject == subject)
-        self.assertEqual(intent.attempt_ordinal, 0)
+        self.assertNotIn(subject, [item.subject for item in reopened.ready])
+        blocker = next(item for item in reopened.blocked if item.subject == subject)
+        self.assertEqual(blocker.next_action, "maintainer-action")
+        self.assertTrue(blocker.exhausted)
 
     def test_retry_wait_and_exhaustion_are_projected_without_sleeping(self) -> None:
         plan = _plan()

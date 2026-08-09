@@ -616,9 +616,6 @@ def schedule_ready_batch(
                 ]
                 if any(item.outcome == "success" for item in receipts):
                     continue
-                if scope.reset_failed_attempts:
-                    next_verification = (definition_sha256, host, _definition_id, 0)
-                    break
                 if not receipts:
                     next_verification = (definition_sha256, host, _definition_id, 0)
                     break
@@ -684,7 +681,7 @@ def schedule_ready_batch(
                 complete.append(subject)
             continue
 
-        attempts = [] if scope.reset_failed_attempts else [
+        attempts = [
             item
             for item in checked_records.attempts
             if item.request_sha256 == request_sha256
