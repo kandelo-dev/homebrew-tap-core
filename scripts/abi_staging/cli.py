@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -213,6 +214,11 @@ def _parser() -> argparse.ArgumentParser:
     publish_workflow.add_argument("--run-attempt", required=True, type=int)
     publish_workflow.add_argument("--head-sha", required=True)
     publish_workflow.add_argument("--work-id", required=True)
+    publish_workflow.add_argument("--coordination-artifact-id", required=True)
+    publish_workflow.add_argument("--coordination-artifact-digest", required=True)
+    publish_workflow.add_argument("--producer-conclusion", required=True)
+    publish_workflow.add_argument("--handoff-artifact-id", required=True)
+    publish_workflow.add_argument("--handoff-artifact-digest", required=True)
     publish_workflow.add_argument("--require-github-digest", action="store_true")
     publish_workflow.add_argument("--anonymous-readback", action="store_true")
     publish_workflow.add_argument("--immutable", action="store_true")
@@ -222,6 +228,11 @@ def _parser() -> argparse.ArgumentParser:
     publish_receipt.add_argument("--run-attempt", required=True, type=int)
     publish_receipt.add_argument("--head-sha", required=True)
     publish_receipt.add_argument("--work-id", required=True)
+    publish_receipt.add_argument("--coordination-artifact-id", required=True)
+    publish_receipt.add_argument("--coordination-artifact-digest", required=True)
+    publish_receipt.add_argument("--producer-conclusion", required=True)
+    publish_receipt.add_argument("--handoff-artifact-id", required=True)
+    publish_receipt.add_argument("--handoff-artifact-digest", required=True)
     publish_receipt.add_argument("--require-github-digest", action="store_true")
     publish_receipt.add_argument("--anonymous-readback", action="store_true")
     publish_receipt.add_argument("--immutable", action="store_true")
@@ -709,6 +720,40 @@ def _require_workflow_publication_guards(args: argparse.Namespace) -> None:
         )
 
 
+def _workflow_artifact_output(
+    client: GitHubWorkflowArtifactClientV1,
+    *,
+    artifact_id: str,
+    artifact_digest: str,
+    name: str,
+    required: bool,
+) -> Any:
+    present = (bool(artifact_id), bool(artifact_digest))
+    if present == (False, False) and not required:
+        return None
+    if present != (True, True) or not artifact_id.isdigit():
+        raise WorkflowPublicationError(
+            "protected upload outputs are incomplete or malformed"
+        )
+    try:
+        return client.artifact_by_id(
+            artifact_id=int(artifact_id),
+            name=name,
+            sha256=artifact_digest,
+        )
+    except WorkflowArtifactError:
+        raise
+
+
+def _workflow_job_from_needs(*, name: str, conclusion: str) -> WorkflowJobV1:
+    if conclusion not in {"cancelled", "failure", "skipped", "success"}:
+        raise WorkflowPublicationError("protected producer result is unsupported")
+    completed_at = datetime.now(timezone.utc).isoformat(
+        timespec="milliseconds"
+    ).replace("+00:00", "Z")
+    return WorkflowJobV1(name, conclusion, completed_at)
+
+
 def _recheck_workflow_activation(tap_root: Path) -> None:
     if (
         load_reconciliation_activation(
@@ -755,10 +800,12 @@ def _publish_workflow_candidate(args: argparse.Namespace) -> None:
     }
     with tempfile.TemporaryDirectory(prefix="kandelo-abi-staging-publisher-") as temporary:
         root = Path(temporary)
-        coordination_artifact = client.artifact_for_job(
+        coordination_artifact = _workflow_artifact_output(
+            client,
+            artifact_id=args.coordination_artifact_id,
+            artifact_digest=args.coordination_artifact_digest,
             name=f"abi-staging-coordination-{args.run_id}-{args.run_attempt}",
-            job_name="discover-plan",
-            allowed_conclusions=("success",),
+            required=True,
         )
         if coordination_artifact is None:
             raise WorkflowPublicationError("protected coordination artifact is absent")
@@ -806,25 +853,19 @@ def _publish_workflow_candidate(args: argparse.Namespace) -> None:
         )
         reconcile_request(discovered, lifecycle)
 
-        conclusions = (
-            "action_required",
-            "cancelled",
-            "failure",
-            "stale",
-            "startup_failure",
-            "success",
-            "timed_out",
-        )
-        job = client.job_for_name(
-            "build-candidate " + args.work_id,
-            allowed_conclusions=conclusions,
+        job = _workflow_job_from_needs(
+            name="build-candidate " + args.work_id,
+            conclusion=args.producer_conclusion,
         )
         service_failure = None
         try:
-            artifact = client.artifact_for_job(
-                name=work["artifact_name"],
-                job_name=job.name,
-                allowed_conclusions=conclusions,
+            artifact = _workflow_artifact_output(
+                client,
+                artifact_id=args.handoff_artifact_id,
+                artifact_digest=args.handoff_artifact_digest,
+                name=(
+                    f"{work['artifact_name']}-{args.run_id}-{args.run_attempt}"
+                ),
                 required=False,
             )
         except WorkflowArtifactServiceError as error:
@@ -945,7 +986,7 @@ def _publish_workflow_candidate(args: argparse.Namespace) -> None:
             "kind": "kandelo-abi-staging-workflow-candidate-publication",
             "work_id": work["work_id"],
             "job": {
-                "id": job.id,
+                "name": job.name,
                 "conclusion": job.conclusion,
                 "completed_at": job.completed_at,
             },
@@ -1064,23 +1105,16 @@ def _publish_workflow_receipt(args: argparse.Namespace) -> None:
         "run_attempt": args.run_attempt,
         "job": "verify-candidate",
     }
-    conclusions = (
-        "action_required",
-        "cancelled",
-        "failure",
-        "stale",
-        "startup_failure",
-        "success",
-        "timed_out",
-    )
     with tempfile.TemporaryDirectory(
         prefix="kandelo-abi-staging-receipt-publisher-"
     ) as temporary:
         root = Path(temporary)
-        coordination_artifact = client.artifact_for_job(
+        coordination_artifact = _workflow_artifact_output(
+            client,
+            artifact_id=args.coordination_artifact_id,
+            artifact_digest=args.coordination_artifact_digest,
             name=f"abi-staging-coordination-{args.run_id}-{args.run_attempt}",
-            job_name="discover-plan",
-            allowed_conclusions=("success",),
+            required=True,
         )
         if coordination_artifact is None:
             raise WorkflowPublicationError("protected coordination artifact is absent")
@@ -1113,16 +1147,19 @@ def _publish_workflow_receipt(args: argparse.Namespace) -> None:
             )
         definition = definitions[0]
         _recheck_coordinated_lifecycle(tap_root, policy, bundle)
-        job = client.job_for_name(
-            "verify-candidate " + args.work_id,
-            allowed_conclusions=conclusions,
+        job = _workflow_job_from_needs(
+            name="verify-candidate " + args.work_id,
+            conclusion=args.producer_conclusion,
         )
         service_failure = None
         try:
-            artifact = client.artifact_for_job(
-                name=work["artifact_name"],
-                job_name=job.name,
-                allowed_conclusions=conclusions,
+            artifact = _workflow_artifact_output(
+                client,
+                artifact_id=args.handoff_artifact_id,
+                artifact_digest=args.handoff_artifact_digest,
+                name=(
+                    f"{work['artifact_name']}-{args.run_id}-{args.run_attempt}"
+                ),
                 required=False,
             )
         except WorkflowArtifactServiceError as error:
@@ -1234,7 +1271,7 @@ def _publish_workflow_receipt(args: argparse.Namespace) -> None:
             "kind": "kandelo-abi-staging-workflow-receipt-publication",
             "work_id": work["work_id"],
             "job": {
-                "id": job.id,
+                "name": job.name,
                 "conclusion": job.conclusion,
                 "completed_at": job.completed_at,
             },

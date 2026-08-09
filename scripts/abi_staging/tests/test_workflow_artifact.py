@@ -16,7 +16,7 @@ RUN_ID = 808
 RUN_ATTEMPT = 2
 HEAD = "7" * 40
 WORK_ID = "a" * 64
-ARTIFACT_NAME = "abi-staging-build-" + WORK_ID
+ARTIFACT_NAME = f"abi-staging-build-{RUN_ID}-{RUN_ATTEMPT}-{WORK_ID}"
 WORKFLOW_REF = (
     "kandelo-dev/homebrew-tap-core/"
     ".github/workflows/abi-staging-reconcile.yml@refs/heads/main"
@@ -75,38 +75,14 @@ def _opener(archive: bytes, *, artifact_name: str = ARTIFACT_NAME):
                     "head_repository": {"full_name": REPOSITORY},
                 }
                 return Response(200, json.dumps(body).encode())
-            if parsed.path.endswith(
-                f"/actions/runs/{RUN_ID}/attempts/{RUN_ATTEMPT}/jobs"
-            ):
+            if parsed.path.endswith("/actions/artifacts/1001"):
                 body = {
-                    "total_count": 1,
-                    "jobs": [
-                        {
-                            "id": 909,
-                            "run_id": RUN_ID,
-                            "run_attempt": RUN_ATTEMPT,
-                            "head_sha": HEAD,
-                            "name": "build-candidate " + WORK_ID,
-                            "status": "completed",
-                            "conclusion": "success",
-                            "completed_at": "2026-08-09T10:00:00Z",
-                        }
-                    ],
-                }
-                return Response(200, json.dumps(body).encode())
-            if parsed.path.endswith(f"/actions/runs/{RUN_ID}/artifacts"):
-                body = {
-                    "total_count": 1,
-                    "artifacts": [
-                        {
-                            "id": 1001,
-                            "name": artifact_name,
-                            "size_in_bytes": len(archive),
-                            "expired": False,
-                            "digest": "sha256:" + digest,
-                            "workflow_run": {"id": RUN_ID, "head_sha": HEAD},
-                        }
-                    ],
+                    "id": 1001,
+                    "name": artifact_name,
+                    "size_in_bytes": len(archive),
+                    "expired": False,
+                    "digest": "sha256:" + digest,
+                    "workflow_run": {"id": RUN_ID, "head_sha": HEAD},
                 }
                 return Response(200, json.dumps(body).encode())
             if parsed.path.endswith("/actions/artifacts/1001/zip"):
@@ -133,7 +109,7 @@ class WorkflowArtifactTests(unittest.TestCase):
         def unavailable(request):
             parsed = urllib.parse.urlsplit(request.full_url)
             if parsed.hostname == "api.github.com" and parsed.path.endswith(
-                f"/actions/runs/{RUN_ID}/artifacts"
+                "/actions/artifacts/1001"
             ):
                 return Response(503, b"temporarily unavailable")
             return normal(request)
@@ -148,15 +124,15 @@ class WorkflowArtifactTests(unittest.TestCase):
             opener=unavailable,
         )
         with self.assertRaises(module.WorkflowArtifactServiceError) as raised:
-            client.artifact_for_job(
+            client.artifact_by_id(
+                artifact_id=1001,
                 name=ARTIFACT_NAME,
-                job_name="build-candidate " + WORK_ID,
-                allowed_conclusions=("success",),
+                sha256=hashlib.sha256(archive).hexdigest(),
             )
         self.assertEqual(raised.exception.kind, "artifact-service-unavailable")
         self.assertEqual(raised.exception.http_status, 503)
 
-    def test_exact_current_run_job_and_digest_are_required_before_safe_extraction(self) -> None:
+    def test_exact_needs_output_id_and_digest_are_required_before_safe_extraction(self) -> None:
         try:
             module = importlib.import_module("scripts.abi_staging.workflow_artifact")
         except ModuleNotFoundError:
@@ -173,13 +149,13 @@ class WorkflowArtifactTests(unittest.TestCase):
             workflow_ref=WORKFLOW_REF,
             opener=_opener(archive),
         )
-        artifact = client.artifact_for_job(
+        artifact = client.artifact_by_id(
+            artifact_id=1001,
             name=ARTIFACT_NAME,
-            job_name="build-candidate " + WORK_ID,
-            allowed_conclusions=("success",),
+            sha256=hashlib.sha256(archive).hexdigest(),
         )
         self.assertEqual(artifact.id, 1001)
-        self.assertEqual(artifact.job_completed_at, "2026-08-09T10:00:00.000Z")
+        self.assertFalse(hasattr(artifact, "job_id"))
         with tempfile.TemporaryDirectory() as temporary:
             inventory = client.extract_artifact(
                 artifact,
@@ -207,10 +183,10 @@ class WorkflowArtifactTests(unittest.TestCase):
             opener=_opener(archive, artifact_name="candidate-latest"),
         )
         with self.assertRaises(module.WorkflowArtifactError):
-            client.artifact_for_job(
+            client.artifact_by_id(
+                artifact_id=1001,
                 name=ARTIFACT_NAME,
-                job_name="build-candidate " + WORK_ID,
-                allowed_conclusions=("success",),
+                sha256=hashlib.sha256(archive).hexdigest(),
             )
 
         hostile = _archive({"result.json": b"{}\n"}, symlink="escape")
@@ -223,10 +199,10 @@ class WorkflowArtifactTests(unittest.TestCase):
             workflow_ref=WORKFLOW_REF,
             opener=_opener(hostile),
         )
-        artifact = client.artifact_for_job(
+        artifact = client.artifact_by_id(
+            artifact_id=1001,
             name=ARTIFACT_NAME,
-            job_name="build-candidate " + WORK_ID,
-            allowed_conclusions=("success",),
+            sha256=hashlib.sha256(hostile).hexdigest(),
         )
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaises(module.WorkflowArtifactError):

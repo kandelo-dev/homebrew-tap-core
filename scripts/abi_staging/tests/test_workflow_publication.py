@@ -41,6 +41,16 @@ class WorkflowPublicationTests(unittest.TestCase):
                         "7" * 40,
                         "--work-id",
                         "a" * 64,
+                        "--coordination-artifact-id",
+                        "501",
+                        "--coordination-artifact-digest",
+                        "d" * 64,
+                        "--producer-conclusion",
+                        "success",
+                        "--handoff-artifact-id",
+                        "1001",
+                        "--handoff-artifact-digest",
+                        "e" * 64,
                         "--require-github-digest",
                         "--anonymous-readback",
                         "--immutable",
@@ -67,6 +77,16 @@ class WorkflowPublicationTests(unittest.TestCase):
                         "7" * 40,
                         "--work-id",
                         "a" * 64,
+                        "--coordination-artifact-id",
+                        "501",
+                        "--coordination-artifact-digest",
+                        "d" * 64,
+                        "--producer-conclusion",
+                        "success",
+                        "--handoff-artifact-id",
+                        "1001",
+                        "--handoff-artifact-digest",
+                        "e" * 64,
                         "--require-github-digest",
                         "--anonymous-readback",
                         "--immutable",
@@ -88,18 +108,14 @@ class WorkflowPublicationTests(unittest.TestCase):
         work = bundle["workflow"]["build_work"][0]
         artifact = WorkflowArtifactV1(
             id=1001,
-            name=work["artifact_name"],
+            name=f"{work['artifact_name']}-808-2",
             sha256="b" * 64,
             size_in_bytes=1024,
-            job_id=909,
-            job_conclusion="success",
-            job_completed_at="2026-08-09T10:00:00.000Z",
         )
         record = module.build_protected_attempt_outcome(
             bundle=bundle,
             work=work,
             job=WorkflowJobV1(
-                909,
                 "build-candidate " + work["work_id"],
                 "success",
                 "2026-08-09T10:00:00.000Z",
@@ -116,7 +132,7 @@ class WorkflowPublicationTests(unittest.TestCase):
         self.assertEqual(
             attempt["handoff"], {"sha256": "b" * 64, "bytes": 1024}
         )
-        self.assertEqual(attempt["completed_at"], artifact.job_completed_at)
+        self.assertEqual(attempt["completed_at"], "2026-08-09T10:00:00.000Z")
 
     def test_missing_build_handoff_is_not_invented_as_transient_runner_loss(self) -> None:
         module = importlib.import_module("scripts.abi_staging.workflow_publication")
@@ -134,7 +150,6 @@ class WorkflowPublicationTests(unittest.TestCase):
                     bundle=bundle,
                     work=work,
                     job=WorkflowJobV1(
-                        909,
                         "build-candidate " + work["work_id"],
                         conclusion,
                         "2026-08-09T10:00:00.000Z",
@@ -150,7 +165,6 @@ class WorkflowPublicationTests(unittest.TestCase):
             bundle=bundle,
             work=work,
             job=WorkflowJobV1(
-                909,
                 "build-candidate " + work["work_id"],
                 "timed_out",
                 "2026-08-09T10:00:00.000Z",
@@ -169,7 +183,6 @@ class WorkflowPublicationTests(unittest.TestCase):
                 bundle=bundle,
                 work=work,
                 job=WorkflowJobV1(
-                    909,
                     "build-candidate " + work["work_id"],
                     "success",
                     "2026-08-09T10:00:00.000Z",
@@ -197,7 +210,6 @@ class WorkflowPublicationTests(unittest.TestCase):
                     bundle=bundle,
                     work=work,
                     job=WorkflowJobV1(
-                        910,
                         "verify-candidate " + work["work_id"],
                         conclusion,
                         "2026-08-09T10:00:00.000Z",
@@ -215,7 +227,6 @@ class WorkflowPublicationTests(unittest.TestCase):
             bundle=bundle,
             work=work,
             job=WorkflowJobV1(
-                910,
                 "verify-candidate " + work["work_id"],
                 "timed_out",
                 "2026-08-09T10:00:00.000Z",
@@ -237,7 +248,6 @@ class WorkflowPublicationTests(unittest.TestCase):
                 bundle=bundle,
                 work=work,
                 job=WorkflowJobV1(
-                    910,
                     "verify-candidate " + work["work_id"],
                     "success",
                     "2026-08-09T10:00:00.000Z",
@@ -256,7 +266,6 @@ class WorkflowPublicationTests(unittest.TestCase):
             bundle=bundle,
             work=work,
             job=WorkflowJobV1(
-                910,
                 "verify-candidate " + work["work_id"],
                 "success",
                 "2026-08-09T10:00:00.000Z",

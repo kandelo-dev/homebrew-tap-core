@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 import hashlib
 import io
 import json
-from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 import re
 import stat
@@ -23,21 +22,6 @@ GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 REDIRECTS = frozenset({301, 302, 303, 307, 308})
 API_MAXIMUM = 4 * 1024 * 1024
-ALLOWED_CONCLUSIONS = frozenset(
-    {
-        "action_required",
-        "cancelled",
-        "failure",
-        "neutral",
-        "skipped",
-        "stale",
-        "startup_failure",
-        "success",
-        "timed_out",
-    }
-)
-
-
 class WorkflowArtifactError(ValueError):
     """Raised when GitHub run metadata or inert artifact bytes are ambiguous."""
 
@@ -67,7 +51,6 @@ class WorkflowArtifactServiceError(WorkflowArtifactError):
 
 @dataclass(frozen=True)
 class WorkflowJobV1:
-    id: int
     name: str
     conclusion: str
     completed_at: str
@@ -79,9 +62,6 @@ class WorkflowArtifactV1:
     name: str
     sha256: str
     size_in_bytes: int
-    job_id: int
-    job_conclusion: str
-    job_completed_at: str
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -114,27 +94,8 @@ def _mapping(value: Any, field: str) -> Mapping[str, Any]:
     return value
 
 
-def _timestamp(value: Any, field: str) -> str:
-    text = _text(value, field, 64)
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError as error:
-        raise WorkflowArtifactError(f"{field} is not an RFC 3339 timestamp") from error
-    if parsed.tzinfo is None:
-        raise WorkflowArtifactError(f"{field} lacks a timezone")
-    return parsed.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace(
-        "+00:00", "Z"
-    )
-
-
-def _sequence(value: Any, field: str) -> Sequence[Any]:
-    if isinstance(value, (str, bytes, bytearray)) or not isinstance(value, Sequence):
-        raise WorkflowArtifactError(f"{field} must be an array")
-    return value
-
-
 class GitHubWorkflowArtifactClientV1:
-    """Read only artifacts produced by an exact job in the current protected run."""
+    """Read one exact artifact selected by protected same-workflow job outputs."""
 
     def __init__(
         self,
@@ -280,107 +241,40 @@ class GitHubWorkflowArtifactClientV1:
             raise WorkflowArtifactError("current run is not protected reconciliation")
         self._run_validated = True
 
-    def artifact_for_job(
+    def artifact_by_id(
         self,
         *,
+        artifact_id: int,
         name: str,
-        job_name: str,
-        allowed_conclusions: tuple[str, ...],
-        required: bool = True,
-    ) -> WorkflowArtifactV1 | None:
-        """Resolve one immutable artifact after verifying its exact producing job."""
+        sha256: str,
+    ) -> WorkflowArtifactV1:
+        """Resolve the immutable ID/digest emitted by one protected upload step."""
 
+        self._validate_current_run()
+        expected_id = _positive(artifact_id, "workflow artifact ID")
         expected_name = _text(name, "workflow artifact name", 512)
-        job = self.job_for_name(
-            job_name, allowed_conclusions=allowed_conclusions
+        if SHA256.fullmatch(sha256) is None:
+            raise WorkflowArtifactError("workflow artifact output digest is invalid")
+        artifact = self._api(
+            f"/repos/{self.repository}/actions/artifacts/{expected_id}"
         )
-        conclusion = job.conclusion
-        job_id = job.id
-        completed_at = job.completed_at
-        artifacts_value = self._api(
-            f"/repos/{self.repository}/actions/runs/{self.run_id}/artifacts?"
-            "per_page=100&name=" + urllib.parse.quote(expected_name, safe="")
-        )
-        artifacts = _sequence(artifacts_value.get("artifacts"), "workflow artifacts")
-        if artifacts_value.get("total_count") != len(artifacts) or len(artifacts) > 100:
-            raise WorkflowArtifactError("workflow artifact inventory is incomplete or unbounded")
-        matches = [
-            _mapping(artifact, "workflow artifact")
-            for artifact in artifacts
-            if artifact.get("name") == expected_name
-        ]
-        if not matches and not required:
-            return None
-        if len(matches) != 1:
-            raise WorkflowArtifactError("workflow does not contain one exact artifact")
-        artifact = matches[0]
         digest = artifact.get("digest")
         workflow_run = _mapping(artifact.get("workflow_run"), "artifact workflow run")
         if (
-            artifact.get("expired") is not False
-            or not isinstance(digest, str)
-            or not digest.startswith("sha256:")
-            or SHA256.fullmatch(digest[7:]) is None
+            artifact.get("id") != expected_id
+            or artifact.get("name") != expected_name
+            or artifact.get("expired") is not False
+            or digest != "sha256:" + sha256
             or workflow_run.get("id") != self.run_id
             or workflow_run.get("head_sha") != self.head_sha
         ):
             raise WorkflowArtifactError("workflow artifact metadata is not exact and immutable")
         size = _positive(artifact.get("size_in_bytes"), "workflow artifact size")
         return WorkflowArtifactV1(
-            id=_positive(artifact.get("id"), "workflow artifact ID"),
+            id=expected_id,
             name=expected_name,
-            sha256=digest[7:],
+            sha256=sha256,
             size_in_bytes=size,
-            job_id=job_id,
-            job_conclusion=str(conclusion),
-            job_completed_at=completed_at,
-        )
-
-    def job_for_name(
-        self,
-        job_name: str,
-        *,
-        allowed_conclusions: tuple[str, ...],
-    ) -> WorkflowJobV1:
-        """Resolve one exact completed job in the current protected attempt."""
-
-        self._validate_current_run()
-        expected_job = _text(job_name, "workflow job name", 1024)
-        if (
-            not allowed_conclusions
-            or len(set(allowed_conclusions)) != len(allowed_conclusions)
-            or not set(allowed_conclusions).issubset(ALLOWED_CONCLUSIONS)
-        ):
-            raise WorkflowArtifactError("allowed job conclusions are invalid")
-        jobs_value = self._api(
-            f"/repos/{self.repository}/actions/runs/{self.run_id}/attempts/"
-            f"{self.run_attempt}/jobs?per_page=100"
-        )
-        jobs = _sequence(jobs_value.get("jobs"), "workflow jobs")
-        if jobs_value.get("total_count") != len(jobs) or len(jobs) > 100:
-            raise WorkflowArtifactError("workflow job inventory is incomplete or unbounded")
-        matches = [
-            _mapping(job, "workflow job") for job in jobs if job.get("name") == expected_job
-        ]
-        if len(matches) != 1:
-            raise WorkflowArtifactError("workflow does not contain one exact producing job")
-        job = matches[0]
-        conclusion = job.get("conclusion")
-        if (
-            job.get("run_id") != self.run_id
-            or job.get("run_attempt") != self.run_attempt
-            or job.get("head_sha") != self.head_sha
-            or job.get("status") != "completed"
-            or conclusion not in allowed_conclusions
-        ):
-            raise WorkflowArtifactError("producing job identity or conclusion differs")
-        job_id = _positive(job.get("id"), "workflow job ID")
-        completed_at = _timestamp(job.get("completed_at"), "workflow job completion")
-        return WorkflowJobV1(
-            id=job_id,
-            name=expected_job,
-            conclusion=str(conclusion),
-            completed_at=completed_at,
         )
 
     def extract_artifact(
