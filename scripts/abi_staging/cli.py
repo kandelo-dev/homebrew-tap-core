@@ -1,4 +1,4 @@
-"""Command-line entrypoint for protected observe-only request reconciliation."""
+"""Command-line entrypoint for protected ABI-staging coordination."""
 
 from __future__ import annotations
 
@@ -9,6 +9,15 @@ import sys
 from typing import Any
 
 from .canonical import canonical_bytes
+from .contract import (
+    ContractError,
+    build_miniature_bottle_contract_fixture,
+    candidate_reuse_decision,
+    contract_from_build_context,
+    load_bottle_contract,
+    load_canonical_mapping,
+    make_candidate_reuse_record,
+)
 from .github_public import DiscoveredRequestV1, GitHubPublicClient, PublicGitHubError
 from .formula_inventory import FormulaInventoryError, write_formula_inventory_fixture
 from .plan import (
@@ -81,6 +90,19 @@ def _parser() -> argparse.ArgumentParser:
     plan_fixture = subcommands.add_parser("tap-plan-fixture")
     plan_fixture.add_argument("--tap-root", required=True)
     plan_fixture.add_argument("--out", required=True)
+    contract = subcommands.add_parser("contract")
+    contract.add_argument("--input", required=True)
+    contract.add_argument("--out", required=True)
+    reuse = subcommands.add_parser("reuse")
+    reuse.add_argument("--contract", required=True)
+    reuse.add_argument("--candidate", required=True)
+    reuse.add_argument("--expected-source-custody-sha256", required=True)
+    reuse.add_argument("--subject", required=True)
+    reuse.add_argument("--new-request", required=True)
+    reuse.add_argument("--out", required=True)
+    contract_fixture = subcommands.add_parser("bottle-contract-fixture")
+    contract_fixture.add_argument("--tap-root", required=True)
+    contract_fixture.add_argument("--out", required=True)
     fixture_check = subcommands.add_parser("fixture-check")
     fixture_check.add_argument("--fixture", required=True)
     return parser
@@ -95,6 +117,7 @@ def main(arguments: list[str] | None = None) -> int:
             "formula-inventory-fixture",
             "plan-request",
             "tap-plan-fixture",
+            "bottle-contract-fixture",
         }:
             tap_root = Path(args.tap_root).resolve(strict=True)
             if tap_root != TAP_ROOT.resolve(strict=True):
@@ -111,6 +134,16 @@ def main(arguments: list[str] | None = None) -> int:
                 if destination.resolve(strict=False) != expected.resolve(strict=False):
                     raise PlanError("tap plan fixture must use its protected path")
                 write_canonical_plan(destination, build_miniature_tap_plan_fixture(tap_root))
+            elif args.command == "bottle-contract-fixture":
+                destination = Path(args.out)
+                expected = tap_root / "Kandelo/staging/fixtures/bottle-contract.json"
+                if destination.resolve(strict=False) != expected.resolve(strict=False):
+                    raise ContractError(
+                        "bottle contract fixture must use its protected path"
+                    )
+                destination.write_bytes(
+                    canonical_bytes(build_miniature_bottle_contract_fixture())
+                )
             else:
                 staging_policy = load_tap_staging_policy(
                     tap_root / "Kandelo/staging/tap-policy.toml"
@@ -136,12 +169,51 @@ def main(arguments: list[str] | None = None) -> int:
                 )
                 write_canonical_plan(Path(args.out), planned)
             return 0
+        if args.command == "contract":
+            context = load_canonical_mapping(
+                Path(args.input).resolve(strict=True).read_bytes(),
+                "contract build context",
+            )
+            Path(args.out).write_bytes(canonical_bytes(contract_from_build_context(context)))
+            return 0
+        if args.command == "reuse":
+            contract = load_bottle_contract(
+                Path(args.contract).resolve(strict=True).read_bytes()
+            )
+            candidate = load_canonical_mapping(
+                Path(args.candidate).resolve(strict=True).read_bytes(),
+                "existing candidate",
+            )
+            decision = candidate_reuse_decision(
+                contract,
+                candidate,
+                expected_source_custody_sha256=args.expected_source_custody_sha256,
+            )
+            if decision["action"] != "reuse":
+                raise ContractError(
+                    f"candidate is not reusable: {decision['reason']}"
+                )
+            new_request = load_canonical_mapping(
+                Path(args.new_request).resolve(strict=True).read_bytes(),
+                "new request context",
+            )
+            record = make_candidate_reuse_record(
+                contract, args.subject, candidate, new_request
+            )
+            Path(args.out).write_bytes(canonical_bytes(record))
+            return 0
         if args.command == "fixture-check":
             fixture = Path(args.fixture).resolve(strict=True)
-            expected = TAP_ROOT / "Kandelo/staging/fixtures/tap-plan.json"
-            if fixture != expected.resolve(strict=True):
-                raise TapRecordError("fixture-check accepts only the protected tap-plan fixture")
-            load_tap_plan_record(fixture.read_bytes())
+            tap_plan = TAP_ROOT / "Kandelo/staging/fixtures/tap-plan.json"
+            bottle_contract = TAP_ROOT / "Kandelo/staging/fixtures/bottle-contract.json"
+            if fixture == tap_plan.resolve(strict=True):
+                load_tap_plan_record(fixture.read_bytes())
+            elif fixture == bottle_contract.resolve(strict=True):
+                load_bottle_contract(fixture.read_bytes())
+            else:
+                raise TapRecordError(
+                    "fixture-check accepts only protected ABI staging fixtures"
+                )
             return 0
         policy = load_request_issuer_policy(
             TAP_ROOT / "Kandelo/staging/request-issuers.toml",
@@ -166,6 +238,7 @@ def main(arguments: list[str] | None = None) -> int:
         PolicyError,
         FormulaInventoryError,
         PlanError,
+        ContractError,
         TapRecordError,
         PublicGitHubError,
         ReconciliationError,
