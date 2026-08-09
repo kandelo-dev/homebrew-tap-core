@@ -69,10 +69,12 @@ from .records import (
     build_source_custody_oci_plan,
     load_tap_plan_record,
 )
+from .product import ProductInputResolutionError, load_resolved_product_inputs
 from .reconcile import (
     PullRequestLifecycleV1,
     ReconciliationDecisionV1,
     ReconciliationError,
+    load_product_evidence_activation,
     load_reconciliation_activation,
     reconcile_request,
     select_reconciliation_cycle,
@@ -1616,10 +1618,15 @@ def main(arguments: list[str] | None = None) -> int:
             fixture = Path(args.fixture).resolve(strict=True)
             tap_plan = TAP_ROOT / "Kandelo/staging/fixtures/tap-plan.json"
             bottle_contract = TAP_ROOT / "Kandelo/staging/fixtures/bottle-contract.json"
+            product_inputs = (
+                TAP_ROOT / "Kandelo/staging/fixtures/product/resolved-inputs.json"
+            )
             if fixture == tap_plan.resolve(strict=True):
                 load_tap_plan_record(fixture.read_bytes())
             elif fixture == bottle_contract.resolve(strict=True):
                 load_bottle_contract(fixture.read_bytes())
+            elif fixture == product_inputs.resolve(strict=True):
+                load_resolved_product_inputs(fixture.read_bytes())
             else:
                 raise TapRecordError(
                     "fixture-check accepts only protected ABI staging fixtures"
@@ -1631,6 +1638,9 @@ def main(arguments: list[str] | None = None) -> int:
         )
         load_reconciliation_activation(
             TAP_ROOT / "Kandelo/staging/reconciliation-activation.toml"
+        )
+        load_product_evidence_activation(
+            TAP_ROOT / "Kandelo/staging/product-evidence-activation.toml"
         )
         client = GitHubPublicClient(policy)
         if args.command == "scan":
@@ -1662,6 +1672,7 @@ def main(arguments: list[str] | None = None) -> int:
         WorkflowPublicationError,
         VerificationError,
         CandidateReuseError,
+        ProductInputResolutionError,
     ) as error:
         print(f"abi-staging {args.command}: {error}", file=sys.stderr)
         return 1

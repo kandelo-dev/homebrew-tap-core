@@ -100,6 +100,28 @@ def load_reconciliation_activation(path: Path) -> str:
     return value["mode"]
 
 
+def load_product_evidence_activation(path: Path) -> str:
+    """Load the independent product-evidence rollout switch fail closed."""
+
+    try:
+        raw = path.read_bytes()
+        value = tomllib.loads(raw.decode("utf-8", errors="strict"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        raise ReconciliationError(f"product evidence activation is invalid: {error}") from error
+    if not raw or len(raw) > 4096:
+        raise ReconciliationError("product evidence activation size is invalid")
+    if set(value) != {"schema", "kind", "mode"}:
+        raise ReconciliationError("product evidence activation fields changed")
+    if (
+        isinstance(value["schema"], bool)
+        or value["schema"] != 1
+        or value["kind"] != "kandelo-vfs-product-evidence-activation"
+        or value["mode"] not in {"observe", "active"}
+    ):
+        raise ReconciliationError("product evidence activation is not schema 1")
+    return value["mode"]
+
+
 def reconcile_request(
     discovered: DiscoveredRequestV1,
     lifecycle: PullRequestLifecycleV1,
