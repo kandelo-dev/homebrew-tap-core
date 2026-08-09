@@ -1,0 +1,1252 @@
+"""Create and validate bounded uncredentialed bottle-build handoffs."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+import argparse
+from contextlib import contextmanager
+import hashlib
+import json
+import os
+from pathlib import Path
+import posixpath
+import re
+import shutil
+import stat
+import subprocess
+import tarfile
+from typing import Any
+
+from .canonical import CanonicalJsonError, canonical_bytes, parse_canonical_bytes
+from .contract import (
+    validate_capture_assessment,
+    load_bottle_contract,
+)
+from .plan import exact_formula_subject
+from .records import load_tap_plan_record
+
+
+MAX_JSON_BYTES = 4 * 1024 * 1024
+MAX_PATH_BYTES = 4096
+MAX_ARCHIVE_ENTRIES = 200_000
+MAX_DIAGNOSTIC_BYTES = 4 * 1024 * 1024
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+INVENTORY_KEYS = frozenset({"schema", "kind", "subject", "outcome", "files"})
+FILE_KEYS = frozenset({"path", "role", "sha256", "bytes"})
+RESULT_KEYS = frozenset(
+    {
+        "schema",
+        "kind",
+        "request_sha256",
+        "subject",
+        "outcome",
+        "exit_code",
+        "candidate",
+        "diagnostic_summary_sha256",
+    }
+)
+CANDIDATE_KEYS = frozenset(
+    {"bottle_contract_sha256", "bottle_layer", "bottle_metadata"}
+)
+LOCAL_ARTIFACT_KEYS = frozenset({"sha256", "bytes"})
+ALLOWED_DIRECTORIES = frozenset(
+    {"diagnostics", "source-custody", "source-custody/submodules"}
+)
+REQUIRED_COMMON_PATHS = frozenset(
+    {
+        "attempt-record.json",
+        "bottle-contract.json",
+        "build-result.json",
+        "diagnostics/summary.txt",
+        "source-custody/kandelo.bundle",
+        "source-custody/kandelo-tree.tar",
+        "source-custody/manifest.json",
+        "source-custody/tap.bundle",
+        "source-custody/tap-tree.tar",
+    }
+)
+SUCCESS_PATHS = frozenset({"bottle.tar.gz", "bottle-metadata.json"})
+SECRET_PATTERNS = (
+    re.compile(rb"gh[pousr]_[A-Za-z0-9_]{20,}"),
+    re.compile(rb"github_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(rb"AKIA[A-Z0-9]{16}"),
+    re.compile(rb"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"),
+)
+
+
+class HandoffError(ValueError):
+    """Raised when a candidate-produced handoff is unsafe or contradictory."""
+
+
+def _read_regular(path: Path, field: str, maximum: int = MAX_JSON_BYTES) -> bytes:
+    try:
+        metadata = path.lstat()
+    except OSError as error:
+        raise HandoffError(f"cannot inspect {field}: {error}") from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        raise HandoffError(f"{field} must be a regular non-symlink file")
+    if metadata.st_size < 1 or metadata.st_size > maximum:
+        raise HandoffError(f"{field} is outside its byte bound")
+    try:
+        body = path.read_bytes()
+    except OSError as error:
+        raise HandoffError(f"cannot read {field}: {error}") from error
+    if len(body) != metadata.st_size:
+        raise HandoffError(f"{field} changed while reading")
+    return body
+
+
+def _mapping(value: Any, field: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise HandoffError(f"{field} must be an object")
+    return value
+
+
+def _sequence(value: Any, field: str) -> Sequence[Any]:
+    if isinstance(value, (str, bytes, bytearray)) or not isinstance(value, Sequence):
+        raise HandoffError(f"{field} must be an array")
+    return value
+
+
+def _exact_keys(value: Mapping[str, Any], expected: frozenset[str], field: str) -> None:
+    actual = frozenset(value)
+    if actual != expected:
+        raise HandoffError(
+            f"{field} fields changed: missing={sorted(expected - actual)!r} "
+            f"extra={sorted(actual - expected)!r}"
+        )
+
+
+def _text(value: Any, field: str, maximum: int = 4096) -> str:
+    if not isinstance(value, str):
+        raise HandoffError(f"{field} must be a string")
+    try:
+        encoded = value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as error:
+        raise HandoffError(f"{field} is not UTF-8") from error
+    if not encoded or len(encoded) > maximum or "\0" in value:
+        raise HandoffError(f"{field} is outside its string bound")
+    return value
+
+
+def _digest(value: Any, field: str) -> str:
+    if not isinstance(value, str) or SHA256.fullmatch(value) is None:
+        raise HandoffError(f"{field} is not a lowercase SHA-256 digest")
+    return value
+
+
+def _integer(value: Any, field: str, *, positive: bool = False) -> int:
+    minimum = 1 if positive else 0
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= 2**64 - 1:
+        raise HandoffError(f"{field} is not a bounded integer")
+    return value
+
+
+def _subject(value: Any, field: str) -> str:
+    subject = _text(value, field, 512)
+    try:
+        parsed = _mapping(json.loads(subject), field)
+    except (json.JSONDecodeError, HandoffError) as error:
+        raise HandoffError(f"{field} is not exact subject JSON: {error}") from error
+    _exact_keys(parsed, frozenset({"architecture", "identity", "kind"}), field)
+    if parsed["kind"] != "formula":
+        raise HandoffError(f"{field} is not a Formula subject")
+    identity = _text(parsed["identity"], f"{field} identity", 128)
+    if STABLE_ID.fullmatch(identity) is None:
+        raise HandoffError(f"{field} identity is invalid")
+    architecture = parsed["architecture"]
+    if architecture not in {"wasm32", "wasm64"}:
+        raise HandoffError(f"{field} architecture is unsupported")
+    if subject != exact_formula_subject(identity, architecture):
+        raise HandoffError(f"{field} is not canonical")
+    return subject
+
+
+def _relative_path(value: Any, field: str) -> str:
+    path = _text(value, field, MAX_PATH_BYTES)
+    if (
+        path.startswith("/")
+        or "\\" in path
+        or any(part in {"", ".", ".."} for part in path.split("/"))
+    ):
+        raise HandoffError(f"{field} is not a normalized relative path")
+    return path
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _plain(child) for key, child in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_plain(child) for child in value]
+    return value
+
+
+def _canonical_mapping(body: bytes, field: str) -> dict[str, Any]:
+    try:
+        parsed = parse_canonical_bytes(body, maximum_bytes=MAX_JSON_BYTES)
+    except CanonicalJsonError as error:
+        raise HandoffError(f"{field} is not canonical JSON: {error}") from error
+    return dict(_mapping(_plain(parsed), field))
+
+
+def _local_artifact(value: Any, field: str) -> dict[str, Any]:
+    artifact = _mapping(value, field)
+    _exact_keys(artifact, LOCAL_ARTIFACT_KEYS, field)
+    return {
+        "sha256": _digest(artifact["sha256"], f"{field} digest"),
+        "bytes": _integer(artifact["bytes"], f"{field} bytes", positive=True),
+    }
+
+
+def _file_identity(path: Path) -> dict[str, Any]:
+    body = path.read_bytes()
+    return {"sha256": hashlib.sha256(body).hexdigest(), "bytes": len(body)}
+
+
+def validate_build_result(result: Mapping[str, Any]) -> None:
+    value = _mapping(result, "build result")
+    _exact_keys(value, RESULT_KEYS, "build result")
+    if value["schema"] != 1 or value["kind"] != "kandelo-abi-staging-build-result":
+        raise HandoffError("build result protocol is unsupported")
+    _digest(value["request_sha256"], "build result request")
+    _subject(value["subject"], "build result subject")
+    outcome = value["outcome"]
+    if outcome not in {"success", "failure"}:
+        raise HandoffError("build result outcome is unsupported")
+    exit_code = _integer(value["exit_code"], "build result exit code")
+    _digest(value["diagnostic_summary_sha256"], "diagnostic summary")
+    if outcome == "failure":
+        if exit_code == 0 or value["candidate"] is not None:
+            raise HandoffError("failed build result cannot claim a candidate")
+        return
+    if exit_code != 0 or value["candidate"] is None:
+        raise HandoffError("successful build result requires candidate identity")
+    candidate = _mapping(value["candidate"], "build result candidate")
+    _exact_keys(candidate, CANDIDATE_KEYS, "build result candidate")
+    _digest(candidate["bottle_contract_sha256"], "candidate bottle contract")
+    _local_artifact(candidate["bottle_layer"], "candidate bottle layer")
+    _local_artifact(candidate["bottle_metadata"], "candidate bottle metadata")
+
+
+def load_build_result(body: bytes) -> dict[str, Any]:
+    result = _canonical_mapping(body, "build result")
+    validate_build_result(result)
+    return result
+
+
+def validate_handoff_inventory(inventory: Mapping[str, Any]) -> None:
+    value = _mapping(inventory, "handoff inventory")
+    _exact_keys(value, INVENTORY_KEYS, "handoff inventory")
+    if value["schema"] != 1 or value["kind"] != "kandelo-abi-staging-build-handoff-inventory":
+        raise HandoffError("handoff inventory protocol is unsupported")
+    _subject(value["subject"], "handoff inventory subject")
+    if value["outcome"] not in {"success", "failure"}:
+        raise HandoffError("handoff inventory outcome is unsupported")
+    previous = ""
+    for index, candidate in enumerate(_sequence(value["files"], "handoff files")):
+        entry = _mapping(candidate, f"handoff file {index}")
+        _exact_keys(entry, FILE_KEYS, f"handoff file {index}")
+        path = _relative_path(entry["path"], f"handoff file path {index}")
+        if path == "inventory.json":
+            raise HandoffError("handoff inventory cannot include itself")
+        if path <= previous:
+            raise HandoffError("handoff files must be sorted and duplicate-free")
+        previous = path
+        expected_role = _role_for_path(path)
+        if entry["role"] != expected_role:
+            raise HandoffError(f"handoff file {path!r} has the wrong role")
+        _digest(entry["sha256"], f"handoff file digest {path}")
+        _integer(entry["bytes"], f"handoff file bytes {path}", positive=True)
+
+
+def load_handoff_inventory(body: bytes) -> dict[str, Any]:
+    inventory = _canonical_mapping(body, "handoff inventory")
+    validate_handoff_inventory(inventory)
+    return inventory
+
+
+def _role_for_path(path: str) -> str:
+    exact = {
+        "attempt-record.json": "attempt-record",
+        "bottle-contract.json": "bottle-contract",
+        "bottle-metadata.json": "bottle-metadata",
+        "bottle.tar.gz": "bottle-layer",
+        "build-result.json": "build-result",
+        "diagnostics/summary.txt": "diagnostic-summary",
+        "source-custody/manifest.json": "source-custody-manifest",
+        "source-custody/kandelo.bundle": "source-custody-bundle",
+        "source-custody/kandelo-tree.tar": "source-custody-tree",
+        "source-custody/tap.bundle": "source-custody-bundle",
+        "source-custody/tap-tree.tar": "source-custody-tree",
+    }
+    if path in exact:
+        return exact[path]
+    if path.startswith("diagnostics/"):
+        return "diagnostic"
+    match = re.fullmatch(
+        r"source-custody/submodules/([a-z0-9][a-z0-9._-]{0,127})(\.bundle|-tree\.tar)",
+        path,
+    )
+    if match is not None:
+        return "source-custody-bundle" if match.group(2) == ".bundle" else "source-custody-tree"
+    raise HandoffError(f"unexpected handoff file: {path}")
+
+
+def _scan_regular_files(root: Path) -> list[tuple[str, Path, os.stat_result]]:
+    try:
+        root_metadata = root.lstat()
+    except OSError as error:
+        raise HandoffError(f"cannot inspect handoff root: {error}") from error
+    if stat.S_ISLNK(root_metadata.st_mode) or not stat.S_ISDIR(root_metadata.st_mode):
+        raise HandoffError("handoff root must be a real directory")
+    entries: list[tuple[str, Path, os.stat_result]] = []
+    for candidate in sorted(root.rglob("*")):
+        relative = candidate.relative_to(root).as_posix()
+        _relative_path(relative, "handoff member path")
+        metadata = candidate.lstat()
+        if stat.S_ISDIR(metadata.st_mode):
+            if relative not in ALLOWED_DIRECTORIES:
+                raise HandoffError(f"unexpected handoff directory: {relative}")
+            continue
+        if stat.S_ISLNK(metadata.st_mode):
+            raise HandoffError(f"handoff member is a symlink: {relative}")
+        if not stat.S_ISREG(metadata.st_mode):
+            raise HandoffError(f"handoff member is not a regular file: {relative}")
+        if metadata.st_nlink != 1:
+            raise HandoffError(f"handoff member is hard-linked: {relative}")
+        entries.append((relative, candidate, metadata))
+    return entries
+
+
+@contextmanager
+def _open_member_nofollow(
+    root: Path, relative: str, expected: os.stat_result
+):
+    parts = relative.split("/")
+    root_flags = os.O_RDONLY | os.O_DIRECTORY
+    file_flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        root_flags |= os.O_CLOEXEC
+        file_flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        root_flags |= os.O_NOFOLLOW
+        file_flags |= os.O_NOFOLLOW
+    descriptors: list[int] = []
+    try:
+        current = os.open(root, root_flags)
+        descriptors.append(current)
+        for component in parts[:-1]:
+            current = os.open(component, root_flags, dir_fd=current)
+            descriptors.append(current)
+        member = os.open(parts[-1], file_flags, dir_fd=current)
+        descriptors.append(member)
+        actual = os.fstat(member)
+        if (
+            not stat.S_ISREG(actual.st_mode)
+            or actual.st_nlink != 1
+            or actual.st_dev != expected.st_dev
+            or actual.st_ino != expected.st_ino
+            or actual.st_size != expected.st_size
+        ):
+            raise HandoffError(f"handoff member changed while opening: {relative}")
+        with os.fdopen(os.dup(member), "rb", closefd=True) as stream:
+            yield stream
+    except OSError as error:
+        raise HandoffError(f"cannot open handoff member {relative!r}: {error}") from error
+    finally:
+        for descriptor in reversed(descriptors):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+
+def _read_member_nofollow(
+    root: Path, relative: str, expected: os.stat_result, maximum: int
+) -> bytes:
+    if expected.st_size < 1 or expected.st_size > maximum:
+        raise HandoffError(f"handoff member {relative!r} is outside its byte bound")
+    with _open_member_nofollow(root, relative, expected) as stream:
+        body = stream.read(maximum + 1)
+    if len(body) != expected.st_size:
+        raise HandoffError(f"handoff member changed while reading: {relative}")
+    return body
+
+
+def _hash_member_nofollow(
+    root: Path, relative: str, expected: os.stat_result
+) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    observed = 0
+    with _open_member_nofollow(root, relative, expected) as stream:
+        while True:
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
+            observed += len(chunk)
+            digest.update(chunk)
+    if observed != expected.st_size:
+        raise HandoffError(f"handoff member changed while hashing: {relative}")
+    return digest.hexdigest(), observed
+
+
+def _validate_path_set(paths: set[str], outcome: str) -> None:
+    expected = set(REQUIRED_COMMON_PATHS)
+    if outcome == "success":
+        expected.update(SUCCESS_PATHS)
+    elif paths.intersection(SUCCESS_PATHS):
+        raise HandoffError("failed handoff contains candidate bottle files")
+    missing = expected - paths
+    if missing:
+        raise HandoffError(f"handoff is missing required files: {sorted(missing)!r}")
+    submodule_members: dict[str, set[str]] = {}
+    for path in paths:
+        match = re.fullmatch(
+            r"source-custody/submodules/([a-z0-9][a-z0-9._-]{0,127})(\.bundle|-tree\.tar)",
+            path,
+        )
+        if match is not None:
+            submodule_members.setdefault(match.group(1), set()).add(match.group(2))
+    for identity, suffixes in submodule_members.items():
+        if suffixes != {".bundle", "-tree.tar"}:
+            raise HandoffError(f"source-custody submodule {identity!r} is incomplete")
+
+
+def build_handoff_inventory(
+    root: Path, *, subject: str, outcome: str
+) -> dict[str, Any]:
+    checked_subject = _subject(subject, "handoff inventory subject")
+    if outcome not in {"success", "failure"}:
+        raise HandoffError("handoff inventory outcome is unsupported")
+    files = []
+    for relative, path, metadata in _scan_regular_files(root):
+        if relative == "inventory.json":
+            continue
+        role = _role_for_path(relative)
+        body = path.read_bytes()
+        if len(body) != metadata.st_size or not body:
+            raise HandoffError(f"handoff member changed while hashing: {relative}")
+        files.append(
+            {
+                "path": relative,
+                "role": role,
+                "sha256": hashlib.sha256(body).hexdigest(),
+                "bytes": len(body),
+            }
+        )
+    _validate_path_set({entry["path"] for entry in files}, outcome)
+    inventory = {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-build-handoff-inventory",
+        "subject": checked_subject,
+        "outcome": outcome,
+        "files": files,
+    }
+    validate_handoff_inventory(inventory)
+    return inventory
+
+
+def write_handoff_inventory(root: Path, *, subject: str, outcome: str) -> None:
+    inventory = build_handoff_inventory(root, subject=subject, outcome=outcome)
+    destination = root / "inventory.json"
+    temporary = root / ".inventory.json.tmp"
+    if temporary.exists() or temporary.is_symlink():
+        raise HandoffError("temporary inventory path already exists")
+    temporary.write_bytes(canonical_bytes(inventory))
+    os.replace(temporary, destination)
+
+
+def _normalize_archive_path(value: str, field: str) -> str:
+    path = _text(value.rstrip("/"), field, MAX_PATH_BYTES)
+    while path.startswith("./"):
+        path = path[2:]
+    if (
+        not path
+        or path.startswith("/")
+        or "\\" in path
+        or any(part in {"", ".", ".."} for part in path.split("/"))
+    ):
+        raise HandoffError(f"archive member is unsafe: {value!r}")
+    return path
+
+
+def _inspect_archive(root: Path, relative: str, expected: os.stat_result) -> None:
+    try:
+        with _open_member_nofollow(root, relative, expected) as stream:
+            with tarfile.open(fileobj=stream, mode="r|*") as archive:
+                for index, member in enumerate(archive, start=1):
+                    if index > MAX_ARCHIVE_ENTRIES:
+                        raise HandoffError("archive member count exceeds its bound")
+                    normalized = _normalize_archive_path(member.name, "archive member")
+                    if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
+                        raise HandoffError(f"archive member has unsupported type: {normalized}")
+                    if member.issym() or member.islnk():
+                        target = _text(member.linkname, "archive link target", MAX_PATH_BYTES)
+                        if target.startswith("/") or "\\" in target:
+                            raise HandoffError("archive link target is unsafe")
+                        resolved = posixpath.normpath(
+                            target
+                            if member.islnk()
+                            else posixpath.join(posixpath.dirname(normalized), target)
+                        )
+                        if (
+                            resolved == ".."
+                            or resolved.startswith("../")
+                            or resolved.startswith("/")
+                        ):
+                            raise HandoffError("archive link target escapes its archive")
+    except (tarfile.TarError, OSError) as error:
+        raise HandoffError(f"cannot inspect archive {relative!r}: {error}") from error
+
+
+def _validate_diagnostics(
+    root: Path,
+    inventory: Mapping[str, Any],
+    scanned_by_path: Mapping[str, tuple[Path, os.stat_result]],
+) -> None:
+    for entry in inventory["files"]:
+        if not entry["path"].startswith("diagnostics/"):
+            continue
+        body = _read_member_nofollow(
+            root,
+            entry["path"],
+            scanned_by_path[entry["path"]][1],
+            MAX_DIAGNOSTIC_BYTES,
+        )
+        if any(pattern.search(body) is not None for pattern in SECRET_PATTERNS):
+            raise HandoffError(f"diagnostic contains a secret-shaped value: {entry['path']}")
+
+
+def validate_handoff(root: Path, *, max_files: int, max_bytes: int) -> dict[str, Any]:
+    if max_files < 1 or max_files > 65_536 or max_bytes < 1 or max_bytes > 2**63 - 1:
+        raise HandoffError("handoff limits are invalid")
+    scanned = _scan_regular_files(root)
+    scanned_by_path = {relative: (path, metadata) for relative, path, metadata in scanned}
+    if "inventory.json" not in scanned_by_path:
+        raise HandoffError("handoff inventory is missing")
+    inventory = load_handoff_inventory(
+        _read_member_nofollow(
+            root,
+            "inventory.json",
+            scanned_by_path["inventory.json"][1],
+            MAX_JSON_BYTES,
+        )
+    )
+    if len(scanned) > max_files:
+        raise HandoffError("handoff file count exceeds its bound")
+    total_bytes = sum(metadata.st_size for _, metadata in scanned_by_path.values())
+    if total_bytes > max_bytes:
+        raise HandoffError("handoff byte count exceeds its bound")
+    expected_entries = {entry["path"]: entry for entry in inventory["files"]}
+    actual_paths = set(scanned_by_path) - {"inventory.json"}
+    if actual_paths != set(expected_entries):
+        raise HandoffError(
+            "handoff contains unlisted or missing files: "
+            f"unlisted={sorted(actual_paths - set(expected_entries))!r} "
+            f"missing={sorted(set(expected_entries) - actual_paths)!r}"
+        )
+    _validate_path_set(actual_paths, inventory["outcome"])
+    for relative, entry in expected_entries.items():
+        _, metadata = scanned_by_path[relative]
+        digest, observed = _hash_member_nofollow(root, relative, metadata)
+        if observed != entry["bytes"]:
+            raise HandoffError(f"handoff byte count differs from inventory: {relative}")
+        if digest != entry["sha256"]:
+            raise HandoffError(f"handoff digest differs from inventory: {relative}")
+
+    _validate_diagnostics(root, inventory, scanned_by_path)
+    result = load_build_result(
+        _read_member_nofollow(
+            root,
+            "build-result.json",
+            scanned_by_path["build-result.json"][1],
+            MAX_JSON_BYTES,
+        )
+    )
+    if result["outcome"] != inventory["outcome"] or result["subject"] != inventory["subject"]:
+        raise HandoffError("build result differs from inventory identity")
+    diagnostic_digest = expected_entries["diagnostics/summary.txt"]["sha256"]
+    if result["diagnostic_summary_sha256"] != diagnostic_digest:
+        raise HandoffError("build result diagnostic digest differs from exact bytes")
+    contract_body = _read_member_nofollow(
+        root,
+        "bottle-contract.json",
+        scanned_by_path["bottle-contract.json"][1],
+        16 * 1024 * 1024,
+    )
+    contract = load_bottle_contract(contract_body)
+    contract_digest = hashlib.sha256(contract_body).hexdigest()
+    parsed_subject = json.loads(inventory["subject"])
+    if (
+        contract["formula"]["name"] != parsed_subject["identity"]
+        or contract["target"]["architecture"] != parsed_subject["architecture"]
+    ):
+        raise HandoffError("bottle contract differs from exact handoff subject")
+    if result["candidate"] is not None:
+        candidate = result["candidate"]
+        if candidate["bottle_contract_sha256"] != contract_digest:
+            raise HandoffError("candidate contract digest differs from exact bytes")
+        for field, filename in (
+            ("bottle_layer", "bottle.tar.gz"),
+            ("bottle_metadata", "bottle-metadata.json"),
+        ):
+            if candidate[field] != _file_identity(root / filename):
+                raise HandoffError(f"candidate {field} differs from exact bytes")
+    for entry in inventory["files"]:
+        if entry["role"] in {"bottle-layer", "source-custody-tree"}:
+            _inspect_archive(root, entry["path"], scanned_by_path[entry["path"]][1])
+    return {
+        "schema": 1,
+        "kind": "kandelo-validated-build-handoff",
+        "request_sha256": result["request_sha256"],
+        "subject": inventory["subject"],
+        "outcome": inventory["outcome"],
+        "candidate": result["candidate"],
+        "inventory_sha256": hashlib.sha256(
+            _read_member_nofollow(
+                root,
+                "inventory.json",
+                scanned_by_path["inventory.json"][1],
+                MAX_JSON_BYTES,
+            )
+        ).hexdigest(),
+    }
+
+
+def _git_identity(root: Path, field: str) -> tuple[str, str]:
+    try:
+        metadata = root.lstat()
+    except OSError as error:
+        raise HandoffError(f"cannot inspect {field} checkout: {error}") from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise HandoffError(f"{field} checkout must be a real directory")
+    command = [
+        "git",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "credential.helper=",
+        "-c",
+        "protocol.file.allow=never",
+        "-C",
+        str(root),
+        "rev-parse",
+        "HEAD",
+        "HEAD^{tree}",
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            env={
+                "PATH": os.environ.get("PATH", ""),
+                "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_CONFIG_GLOBAL": "/dev/null",
+                "GIT_TERMINAL_PROMPT": "0",
+            },
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise HandoffError(f"cannot inspect {field} Git identity: {error}") from error
+    values = result.stdout.decode("ascii", errors="strict").splitlines()
+    if result.returncode != 0 or len(values) != 2:
+        detail = result.stderr.decode("utf-8", errors="replace")[:1024]
+        raise HandoffError(f"cannot resolve {field} Git identity: {detail}")
+    if any(re.fullmatch(r"[0-9a-f]{40}", value) is None for value in values):
+        raise HandoffError(f"{field} Git identity is not exact")
+    return values[0], values[1]
+
+
+def _validate_capture_authorization(
+    authorization: Mapping[str, Any],
+    *,
+    request_sha256: str,
+    subject: str,
+    tap_repository: str,
+    contract: Mapping[str, Any],
+) -> None:
+    value = _mapping(authorization, "capture authorization")
+    _exact_keys(
+        value,
+        frozenset({"schema", "kind", "common", "capture_authorization"}),
+        "capture authorization",
+    )
+    if (
+        value["schema"] != 1
+        or value["kind"] != "kandelo-abi-staging-capture-override-authorization"
+    ):
+        raise HandoffError("capture authorization protocol is unsupported")
+    common = _mapping(value["common"], "capture authorization common")
+    if common.get("request_sha256") != request_sha256:
+        raise HandoffError("capture authorization names a different request")
+    common_subject = _mapping(common.get("subject"), "capture authorization subject")
+    parsed_subject = json.loads(subject)
+    expected_common_subject = {
+        "kind": "formula",
+        "identity": f"{tap_repository}/{parsed_subject['identity']}",
+        "architecture": parsed_subject["architecture"],
+    }
+    if common_subject != expected_common_subject:
+        raise HandoffError("capture authorization names a different exact subject")
+    if common.get("guard_codes") != ["build_input_capture_incomplete"]:
+        raise HandoffError("capture authorization names a different guard")
+    if common.get("artifact_class") != "none" or common.get("artifact") is not None:
+        raise HandoffError("pre-build capture authorization cannot guess an artifact")
+    payload = _mapping(value["capture_authorization"], "capture authorization payload")
+    formula = _mapping(payload.get("formula"), "capture authorization Formula")
+    if formula != {
+        "tap": tap_repository,
+        "formula": parsed_subject["identity"],
+        "architecture": parsed_subject["architecture"],
+        "target_abi": contract["target"]["abi"],
+        "bottle_contract_sha256": hashlib.sha256(canonical_bytes(contract)).hexdigest(),
+    }:
+        raise HandoffError("capture authorization Formula identity differs")
+    if payload.get("guard_code") != "build_input_capture_incomplete":
+        raise HandoffError("capture authorization payload guard differs")
+    maintainer = _mapping(payload.get("maintainer"), "capture authorization maintainer")
+    if maintainer.get("permission") not in {"maintain", "admin"}:
+        raise HandoffError("capture authorization lacks maintainer authority")
+    _text(maintainer.get("login"), "capture authorization maintainer login", 128)
+    _text(
+        maintainer.get("authorization_reference"),
+        "capture authorization reference",
+        4096,
+    )
+    _text(payload.get("justification"), "capture authorization justification", 2048)
+    policy = _mapping(payload.get("policy"), "capture authorization policy")
+    _integer(policy.get("policy_version"), "capture authorization policy version", positive=True)
+    _digest(policy.get("policy_sha256"), "capture authorization policy")
+    _integer(
+        policy.get("guard_registry_version"),
+        "capture authorization guard version",
+        positive=True,
+    )
+    _digest(policy.get("guard_registry_sha256"), "capture authorization guard registry")
+
+
+def prepare_build_context(
+    *,
+    kandelo_root: Path,
+    tap_root: Path,
+    request_path: Path,
+    tap_plan_path: Path,
+    formula_plan_path: Path,
+    dependency_root: Path,
+) -> dict[str, Any]:
+    request_body = _read_regular(request_path, "ABI staging request")
+    request = _canonical_mapping(request_body, "ABI staging request")
+    _exact_keys(
+        request,
+        frozenset(
+            {
+                "schema",
+                "kind",
+                "pull_request",
+                "build_source",
+                "target_abi",
+                "requirements",
+                "issuance",
+                "informational_context",
+            }
+        ),
+        "ABI staging request",
+    )
+    if request["schema"] != 1 or request["kind"] != "kandelo-abi-staging-request":
+        raise HandoffError("ABI staging request protocol is unsupported")
+    request_digest = hashlib.sha256(request_body).hexdigest()
+    plan = load_tap_plan_record(_read_regular(tap_plan_path, "tap plan"))
+    if plan["request_digest"] != request_digest:
+        raise HandoffError("tap plan names a different exact request")
+    formula_plan = _canonical_mapping(
+        _read_regular(formula_plan_path, "Formula plan"), "Formula plan"
+    )
+    if sum(candidate == formula_plan for candidate in plan["formulae"]) != 1:
+        raise HandoffError("Formula plan is not one exact member of the tap plan")
+    identity = _mapping(formula_plan.get("identity"), "Formula plan identity")
+    formula = _text(identity.get("name"), "Formula plan name", 128)
+    architecture = identity.get("architecture")
+    subject = exact_formula_subject(formula, architecture)
+    contract_digest = formula_plan.get("contract_sha256")
+    _digest(contract_digest, "Formula plan bottle contract")
+
+    build_source = _mapping(request["build_source"], "request build source")
+    kandelo_commit, kandelo_tree = _git_identity(kandelo_root, "Kandelo")
+    if (
+        build_source.get("commit") != kandelo_commit
+        or build_source.get("tree") != kandelo_tree
+    ):
+        raise HandoffError("Kandelo checkout differs from the exact PR head")
+    tap_source = _mapping(plan["tap_source"], "tap plan source")
+    tap_commit, tap_tree = _git_identity(tap_root, "tap")
+    if tap_source.get("commit") != tap_commit or tap_source.get("tree") != tap_tree:
+        raise HandoffError("tap checkout differs from the exact tap plan")
+
+    try:
+        dependency_metadata = dependency_root.lstat()
+    except OSError as error:
+        raise HandoffError(f"cannot inspect dependency root: {error}") from error
+    if stat.S_ISLNK(dependency_metadata.st_mode) or not stat.S_ISDIR(dependency_metadata.st_mode):
+        raise HandoffError("dependency root must be a real directory")
+    contract_path = dependency_root / "contracts" / f"sha256-{contract_digest}.json"
+    contract_body = _read_regular(contract_path, "bottle contract", 16 * 1024 * 1024)
+    if hashlib.sha256(contract_body).hexdigest() != contract_digest:
+        raise HandoffError("content-addressed bottle contract digest differs")
+    contract = load_bottle_contract(contract_body)
+    target = _mapping(plan["target_abi"], "tap plan target ABI")
+    if (
+        contract["formula"]["name"] != formula
+        or contract["formula"]["version"] != identity["version"]
+        or contract["formula"]["revision"] != identity["revision"]
+        or contract["formula"]["rebuild"] != identity["rebuild"]
+        or contract["target"]["architecture"] != architecture
+        or contract["target"]["abi"] != target["version"]
+        or contract["target"]["snapshot_sha256"] != target["snapshot_sha256"]
+    ):
+        raise HandoffError("bottle contract differs from exact Formula/tap plan")
+
+    assessment_path = dependency_root / "contracts" / f"sha256-{contract_digest}.capture.json"
+    assessment = _canonical_mapping(
+        _read_regular(assessment_path, "capture assessment"), "capture assessment"
+    )
+    try:
+        validate_capture_assessment(assessment)
+    except ValueError as error:
+        raise HandoffError(f"capture assessment is invalid: {error}") from error
+    if assessment["subject"] != subject:
+        raise HandoffError("capture assessment names a different exact subject")
+    authorization_digest = None
+    if not assessment["complete"]:
+        authorization_path = (
+            dependency_root
+            / "contracts"
+            / f"sha256-{contract_digest}.authorization.json"
+        )
+        authorization_body = _read_regular(
+            authorization_path, "capture authorization"
+        )
+        authorization = _canonical_mapping(
+            authorization_body, "capture authorization"
+        )
+        _validate_capture_authorization(
+            authorization,
+            request_sha256=request_digest,
+            subject=subject,
+            tap_repository=tap_source["repository"],
+            contract=contract,
+        )
+        authorization_digest = hashlib.sha256(authorization_body).hexdigest()
+
+    planned_dependencies = {
+        (dependency["formula"], dependency["architecture"]): dependency
+        for dependency in formula_plan["direct_dependencies"]
+    }
+    contract_dependencies = {
+        (dependency["formula"], dependency["architecture"]): dependency
+        for dependency in contract["direct_dependencies"]
+    }
+    if set(planned_dependencies) != set(contract_dependencies):
+        raise HandoffError("bottle contract dependency set differs from Formula plan")
+    layers = []
+    for key in sorted(contract_dependencies):
+        dependency = contract_dependencies[key]
+        planned = planned_dependencies[key]
+        if (
+            dependency["materialization_policy_sha256"]
+            != planned["materialization_policy_sha256"]
+        ):
+            raise HandoffError("dependency materialization policy differs from tap plan")
+        digest = dependency["bottle_layer_sha256"]
+        path = dependency_root / "layers" / f"sha256-{digest}.tar.gz"
+        body = _read_regular(path, f"dependency layer {key[0]}", 2**32)
+        if len(body) != dependency["bottle_layer_bytes"]:
+            raise HandoffError(f"dependency layer byte count differs for {key[0]}")
+        if hashlib.sha256(body).hexdigest() != digest:
+            raise HandoffError(f"dependency layer digest differs for {key[0]}")
+        layers.append(
+            {
+                "formula": key[0],
+                "architecture": key[1],
+                "sha256": digest,
+                "bytes": len(body),
+                "source_path": str(path.resolve(strict=True)),
+            }
+        )
+
+    repository = _text(tap_source["repository"], "tap repository", 256)
+    context = {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-build-context",
+        "request_sha256": request_digest,
+        "request_source": dict(build_source),
+        "tap_source": dict(tap_source),
+        "subject": subject,
+        "formula": formula,
+        "architecture": architecture,
+        "target_abi": contract["target"]["abi"],
+        "bottle_contract_sha256": contract_digest,
+        "bottle_contract_path": str(contract_path.resolve(strict=True)),
+        "capture_assessment_sha256": hashlib.sha256(
+            _read_regular(assessment_path, "capture assessment")
+        ).hexdigest(),
+        "capture_authorization_sha256": authorization_digest,
+        "dependency_layers": layers,
+        "bottle_root_url": f"https://ghcr.io/v2/{repository.lower()}",
+    }
+    return json.loads(canonical_bytes(context))
+
+
+def _copy_regular(source: Path, destination: Path, field: str) -> None:
+    body = _read_regular(source, field, 2**32)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(body)
+
+
+def _attempt_record(
+    context: Mapping[str, Any],
+    *,
+    outcome: str,
+    exit_code: int,
+    source_capsule_sha256: str,
+    source_capsule_bytes: int,
+    candidate: Mapping[str, Any] | None,
+    diagnostic_sha256: str,
+) -> dict[str, Any]:
+    formula = {
+        "tap": context["tap_source"]["repository"],
+        "formula": context["formula"],
+        "architecture": context["architecture"],
+        "target_abi": context["target_abi"],
+        "bottle_contract_sha256": context["bottle_contract_sha256"],
+    }
+    bottle_artifact = None
+    if candidate is not None:
+        layer = candidate["bottle_layer"]
+        bottle_artifact = {
+            **layer,
+            "immutable_reference": (
+                "handoff:bottle.tar.gz@sha256:" + layer["sha256"]
+            ),
+        }
+    guard_codes = [] if outcome == "success" else ["build_failed"]
+    blockers = (
+        []
+        if outcome == "success"
+        else [
+            {
+                "guard_code": "build_failed",
+                "subject_kind": "formula",
+                "subject": context["subject"],
+            }
+        ]
+    )
+    common = {
+        "request_sha256": context["request_sha256"],
+        "subject": {
+            "kind": "formula",
+            "identity": f"{context['tap_source']['repository']}/{context['formula']}",
+            "architecture": context["architecture"],
+        },
+        "source": context["request_source"],
+        "run": {
+            "repository": context["tap_source"]["repository"],
+            "workflow_ref": "local/abi-staging-build-bottle",
+            "run_id": 1,
+            "run_attempt": 1,
+            "job": "build-candidate",
+        },
+        "guard_codes": guard_codes,
+        "work_state": "complete",
+        "outcome": outcome,
+        "artifact_class": "candidate" if candidate is not None else "none",
+        "promotion_state": "eligible" if candidate is not None else "ineligible",
+        "retry_state": {
+            "attempts": 1,
+            "eligible": False,
+            "exhausted": False,
+            "next_action": "none",
+        },
+        "blockers": blockers,
+    }
+    if bottle_artifact is not None:
+        common["artifact"] = bottle_artifact
+    return {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-attempt",
+        "common": common,
+        "attempt": {
+            "formula": formula,
+            "source_capsule": {
+                "sha256": source_capsule_sha256,
+                "bytes": source_capsule_bytes,
+                "immutable_reference": (
+                    "handoff:source-custody@sha256:" + source_capsule_sha256
+                ),
+            },
+            "build": {
+                "runner_image": "uncredentialed-candidate",
+                "command_sha256": hashlib.sha256(canonical_bytes(context)).hexdigest(),
+                "result_sha256": diagnostic_sha256,
+                "diagnostics": [],
+            },
+            "retry_ordinal": 0,
+            **({"candidate": bottle_artifact} if bottle_artifact is not None else {}),
+        },
+    }
+
+
+def assemble_handoff(
+    *, context_path: Path, raw_output: Path, handoff: Path, exit_code: int
+) -> dict[str, Any]:
+    context = _canonical_mapping(
+        _read_regular(context_path, "build context"), "build context"
+    )
+    if context.get("schema") != 1 or context.get("kind") != "kandelo-abi-staging-build-context":
+        raise HandoffError("build context protocol is unsupported")
+    if exit_code < 0 or exit_code > 255:
+        raise HandoffError("builder exit code is invalid")
+    if handoff.exists() or handoff.is_symlink():
+        if handoff.is_symlink() or not handoff.is_dir() or any(handoff.iterdir()):
+            raise HandoffError("handoff output must be a new or empty real directory")
+    else:
+        handoff.mkdir(parents=True)
+    _copy_regular(
+        Path(context["bottle_contract_path"]),
+        handoff / "bottle-contract.json",
+        "bottle contract",
+    )
+    custody_root = raw_output / "source-custody"
+    required_custody = (
+        "manifest.json",
+        "kandelo.bundle",
+        "kandelo-tree.tar",
+        "tap.bundle",
+        "tap-tree.tar",
+    )
+    for relative in required_custody:
+        _copy_regular(
+            custody_root / relative,
+            handoff / "source-custody" / relative,
+            f"source custody {relative}",
+        )
+    submodules = custody_root / "submodules"
+    if submodules.exists():
+        for candidate in sorted(submodules.iterdir()):
+            _copy_regular(
+                candidate,
+                handoff / "source-custody/submodules" / candidate.name,
+                f"source custody submodule {candidate.name}",
+            )
+    summary_source = raw_output / "diagnostics/summary.txt"
+    _copy_regular(summary_source, handoff / "diagnostics/summary.txt", "build summary")
+
+    outcome = "success" if exit_code == 0 else "failure"
+    candidate_identity = None
+    if outcome == "success":
+        bottles = raw_output / "bottles"
+        archives = sorted(bottles.glob("*.tar.gz"))
+        metadata_files = sorted(bottles.glob("*.bottle.json"))
+        if len(archives) != 1 or len(metadata_files) != 1:
+            raise HandoffError("successful normal build must emit one bottle and metadata file")
+        _copy_regular(archives[0], handoff / "bottle.tar.gz", "bottle archive")
+        _copy_regular(
+            metadata_files[0],
+            handoff / "bottle-metadata.json",
+            "bottle metadata",
+        )
+        candidate_identity = {
+            "bottle_contract_sha256": context["bottle_contract_sha256"],
+            "bottle_layer": _file_identity(handoff / "bottle.tar.gz"),
+            "bottle_metadata": _file_identity(handoff / "bottle-metadata.json"),
+        }
+    diagnostic_sha256 = hashlib.sha256(
+        (handoff / "diagnostics/summary.txt").read_bytes()
+    ).hexdigest()
+    result = {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-build-result",
+        "request_sha256": context["request_sha256"],
+        "subject": context["subject"],
+        "outcome": outcome,
+        "exit_code": exit_code,
+        "candidate": candidate_identity,
+        "diagnostic_summary_sha256": diagnostic_sha256,
+    }
+    validate_build_result(result)
+    (handoff / "build-result.json").write_bytes(canonical_bytes(result))
+    custody_manifest = _read_regular(
+        handoff / "source-custody/manifest.json", "source custody manifest"
+    )
+    attempt = _attempt_record(
+        context,
+        outcome=outcome,
+        exit_code=exit_code,
+        source_capsule_sha256=hashlib.sha256(custody_manifest).hexdigest(),
+        source_capsule_bytes=len(custody_manifest),
+        candidate=candidate_identity,
+        diagnostic_sha256=diagnostic_sha256,
+    )
+    (handoff / "attempt-record.json").write_bytes(canonical_bytes(attempt))
+    write_handoff_inventory(handoff, subject=context["subject"], outcome=outcome)
+    return validate_handoff(handoff, max_files=256, max_bytes=4_294_967_296)
+
+
+def materialize_dependency_layers(*, context_path: Path, output: Path) -> None:
+    context = _canonical_mapping(
+        _read_regular(context_path, "build context"), "build context"
+    )
+    if context.get("schema") != 1 or context.get("kind") != "kandelo-abi-staging-build-context":
+        raise HandoffError("build context protocol is unsupported")
+    if output.exists() or output.is_symlink():
+        raise HandoffError("declared dependency output must not already exist")
+    output.mkdir(parents=True)
+    for candidate in _sequence(context.get("dependency_layers"), "dependency layers"):
+        layer = _mapping(candidate, "dependency layer")
+        digest = _digest(layer.get("sha256"), "dependency layer digest")
+        size = _integer(layer.get("bytes"), "dependency layer bytes", positive=True)
+        source = Path(_text(layer.get("source_path"), "dependency layer source"))
+        body = _read_regular(source, "dependency layer", 2**32)
+        if len(body) != size or hashlib.sha256(body).hexdigest() != digest:
+            raise HandoffError("dependency layer changed after build planning")
+        destination = output / f"sha256-{digest}.tar.gz"
+        destination.write_bytes(body)
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="python3 -m scripts.abi_staging.handoff")
+    commands = parser.add_subparsers(dest="command", required=True)
+    prepare = commands.add_parser("prepare-build")
+    prepare.add_argument("--kandelo-root", required=True)
+    prepare.add_argument("--tap-root", required=True)
+    prepare.add_argument("--request", required=True)
+    prepare.add_argument("--tap-plan", required=True)
+    prepare.add_argument("--formula-plan", required=True)
+    prepare.add_argument("--dependency-root", required=True)
+    prepare.add_argument("--out", required=True)
+    assemble = commands.add_parser("assemble")
+    assemble.add_argument("--context", required=True)
+    assemble.add_argument("--raw-output", required=True)
+    assemble.add_argument("--handoff", required=True)
+    assemble.add_argument("--exit-code", required=True, type=int)
+    materialize = commands.add_parser("materialize-dependencies")
+    materialize.add_argument("--context", required=True)
+    materialize.add_argument("--out", required=True)
+    validate = commands.add_parser("validate")
+    validate.add_argument("--handoff", required=True)
+    validate.add_argument("--max-files", required=True, type=int)
+    validate.add_argument("--max-bytes", required=True, type=int)
+    return parser
+
+
+def main(arguments: list[str] | None = None) -> int:
+    args = _parser().parse_args(arguments)
+    try:
+        if args.command == "prepare-build":
+            context = prepare_build_context(
+                kandelo_root=Path(args.kandelo_root).resolve(strict=True),
+                tap_root=Path(args.tap_root).resolve(strict=True),
+                request_path=Path(args.request).resolve(strict=True),
+                tap_plan_path=Path(args.tap_plan).resolve(strict=True),
+                formula_plan_path=Path(args.formula_plan).resolve(strict=True),
+                dependency_root=Path(args.dependency_root).resolve(strict=True),
+            )
+            Path(args.out).write_bytes(canonical_bytes(context))
+        elif args.command == "assemble":
+            assemble_handoff(
+                context_path=Path(args.context).resolve(strict=True),
+                raw_output=Path(args.raw_output).resolve(strict=True),
+                handoff=Path(args.handoff).resolve(strict=False),
+                exit_code=args.exit_code,
+            )
+        elif args.command == "materialize-dependencies":
+            materialize_dependency_layers(
+                context_path=Path(args.context).resolve(strict=True),
+                output=Path(args.out).resolve(strict=False),
+            )
+        else:
+            validated = validate_handoff(
+                Path(args.handoff).resolve(strict=True),
+                max_files=args.max_files,
+                max_bytes=args.max_bytes,
+            )
+            print(canonical_bytes(validated).decode("utf-8"), end="")
+        return 0
+    except (HandoffError, OSError, ValueError) as error:
+        print(f"abi-staging handoff {args.command}: {error}", file=os.sys.stderr)
+        return 1
+
+
+def build_miniature_build_result_fixture(
+    *,
+    request_sha256: str = "a" * 64,
+    subject: str | None = None,
+    outcome: str = "success",
+    root: Path | None = None,
+) -> dict[str, Any]:
+    exact_subject = subject or exact_formula_subject("mini-tool", "wasm32")
+    if root is None:
+        contract = {"sha256": "b" * 64, "bytes": 128}
+        bottle = {"sha256": "c" * 64, "bytes": 256}
+        metadata = {"sha256": "d" * 64, "bytes": 64}
+        diagnostic_digest = "e" * 64
+    else:
+        contract = _file_identity(root / "bottle-contract.json")
+        bottle = _file_identity(root / "bottle.tar.gz") if outcome == "success" else None
+        metadata = _file_identity(root / "bottle-metadata.json") if outcome == "success" else None
+        diagnostic_digest = hashlib.sha256((root / "diagnostics/summary.txt").read_bytes()).hexdigest()
+    result = {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-build-result",
+        "request_sha256": request_sha256,
+        "subject": exact_subject,
+        "outcome": outcome,
+        "exit_code": 0 if outcome == "success" else 1,
+        "candidate": (
+            {
+                "bottle_contract_sha256": contract["sha256"],
+                "bottle_layer": bottle,
+                "bottle_metadata": metadata,
+            }
+            if outcome == "success"
+            else None
+        ),
+        "diagnostic_summary_sha256": diagnostic_digest,
+    }
+    validate_build_result(result)
+    return result
+
+
+def build_miniature_handoff_inventory_fixture() -> dict[str, Any]:
+    paths = [
+        ("attempt-record.json", "attempt-record", "1", 64),
+        ("bottle-contract.json", "bottle-contract", "2", 128),
+        ("bottle-metadata.json", "bottle-metadata", "3", 64),
+        ("bottle.tar.gz", "bottle-layer", "4", 256),
+        ("build-result.json", "build-result", "5", 128),
+        ("diagnostics/summary.txt", "diagnostic-summary", "6", 32),
+        ("source-custody/kandelo-tree.tar", "source-custody-tree", "7", 256),
+        ("source-custody/kandelo.bundle", "source-custody-bundle", "8", 256),
+        ("source-custody/manifest.json", "source-custody-manifest", "9", 128),
+        ("source-custody/tap-tree.tar", "source-custody-tree", "a", 256),
+        ("source-custody/tap.bundle", "source-custody-bundle", "b", 256),
+    ]
+    inventory = {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-build-handoff-inventory",
+        "subject": exact_formula_subject("mini-tool", "wasm32"),
+        "outcome": "success",
+        "files": [
+            {"path": path, "role": role, "sha256": character * 64, "bytes": size}
+            for path, role, character, size in sorted(paths)
+        ],
+    }
+    validate_handoff_inventory(inventory)
+    return inventory
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
