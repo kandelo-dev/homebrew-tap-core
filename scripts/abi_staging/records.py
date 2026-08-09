@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import hashlib
+import json
 from pathlib import Path
 import re
 import stat
@@ -13,7 +14,7 @@ from typing import Any
 from .canonical import CanonicalJsonError, canonical_bytes, parse_canonical_bytes
 from .contract import load_bottle_contract, load_canonical_mapping
 from .custody import load_source_custody_manifest
-from .plan import PlanError, validate_tap_plan
+from .plan import PlanError, exact_formula_subject, validate_tap_plan
 
 
 MAX_TAP_PLAN_BYTES = 32 * 1024 * 1024
@@ -42,6 +43,9 @@ BOTTLE_CONTRACT_MEDIA_TYPE = (
     "application/vnd.kandelo.homebrew.bottle.contract.v1+json"
 )
 ATTEMPT_RECORD_MEDIA_TYPE = "application/vnd.kandelo.abi-staging.attempt.v1+json"
+ATTEMPT_OUTCOME_MEDIA_TYPE = (
+    "application/vnd.kandelo.abi-staging.attempt.outcome.v1+json"
+)
 GIT_BUNDLE_MEDIA_TYPE = "application/vnd.kandelo.git.bundle.v1"
 GIT_TREE_MEDIA_TYPE = "application/vnd.kandelo.git.tree.v1+tar"
 
@@ -754,6 +758,172 @@ def validate_candidate_record(record: Mapping[str, Any]) -> None:
         raise TapRecordError("candidate normalized custody differs from source record")
     if len(canonical_bytes(value)) > MAX_RECORD_BYTES:
         raise TapRecordError("candidate record exceeds its byte bound")
+
+
+def _attempt_subject(value: Any) -> str:
+    subject = _text(value, "attempt outcome subject", 512)
+    try:
+        parsed = json.loads(subject)
+    except json.JSONDecodeError as error:
+        raise TapRecordError("attempt outcome subject is not JSON") from error
+    if not isinstance(parsed, Mapping) or set(parsed) != {
+        "architecture",
+        "identity",
+        "kind",
+    }:
+        raise TapRecordError("attempt outcome subject fields changed")
+    if parsed["kind"] != "formula":
+        raise TapRecordError("attempt outcome subject is not a Formula")
+    try:
+        expected = exact_formula_subject(parsed["identity"], parsed["architecture"])
+    except ValueError as error:
+        raise TapRecordError(f"attempt outcome subject is invalid: {error}") from error
+    if subject != expected:
+        raise TapRecordError("attempt outcome subject is not canonical")
+    return subject
+
+
+def _timestamp(value: Any, field: str) -> str:
+    result = _text(value, field, 64)
+    if re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z",
+        result,
+    ) is None:
+        raise TapRecordError(f"{field} is not millisecond UTC RFC 3339")
+    return result
+
+
+def validate_attempt_outcome_record(record: Mapping[str, Any]) -> None:
+    value = _mapping(record, "attempt outcome record")
+    _exact_keys(
+        value,
+        frozenset({"schema", "kind", "attempt"}),
+        "attempt outcome record",
+    )
+    if value["schema"] != 1 or value["kind"] != "kandelo-abi-staging-attempt-outcome":
+        raise TapRecordError("attempt outcome protocol is unsupported")
+    attempt = _mapping(value["attempt"], "attempt outcome")
+    _exact_keys(
+        attempt,
+        frozenset(
+            {
+                "request_sha256",
+                "subject",
+                "contract_sha256",
+                "retry_ordinal",
+                "outcome",
+                "guard_code",
+                "completed_at",
+                "run",
+                "handoff",
+                "candidate_record_sha256",
+            }
+        ),
+        "attempt outcome",
+    )
+    _digest(attempt["request_sha256"], "attempt outcome request")
+    _attempt_subject(attempt["subject"])
+    _digest(attempt["contract_sha256"], "attempt outcome contract")
+    ordinal = _nonnegative_integer(attempt["retry_ordinal"], "attempt outcome ordinal")
+    if ordinal > 3:
+        raise TapRecordError("automatic attempt outcome ordinal exceeds three retries")
+    outcome = attempt["outcome"]
+    if outcome not in {"success", "failure", "timeout", "canceled"}:
+        raise TapRecordError("attempt outcome is unsupported")
+    guard = attempt["guard_code"]
+    candidate = attempt["candidate_record_sha256"]
+    if outcome == "success":
+        if guard is not None or candidate is None:
+            raise TapRecordError("successful attempt outcome is contradictory")
+        _digest(candidate, "successful attempt candidate record")
+    else:
+        if candidate is not None or guard is None:
+            raise TapRecordError("unsuccessful attempt outcome is contradictory")
+        _stable_id(guard, "attempt outcome guard")
+    _timestamp(attempt["completed_at"], "attempt outcome completion")
+    _run(attempt["run"], "attempt outcome run")
+    handoff = attempt["handoff"]
+    if handoff is not None:
+        handoff = _mapping(handoff, "attempt outcome handoff")
+        _exact_keys(
+            handoff,
+            frozenset({"sha256", "bytes"}),
+            "attempt outcome handoff",
+        )
+        _digest(handoff["sha256"], "attempt outcome handoff digest")
+        _positive_integer(handoff["bytes"], "attempt outcome handoff bytes")
+    if len(canonical_bytes(value)) > MAX_RECORD_BYTES:
+        raise TapRecordError("attempt outcome record exceeds its byte bound")
+
+
+def build_attempt_outcome_record(
+    *,
+    request_sha256: str,
+    subject: str,
+    contract_sha256: str,
+    retry_ordinal: int,
+    outcome: str,
+    guard_code: str | None,
+    completed_at: str,
+    run: Mapping[str, Any],
+    handoff: Mapping[str, Any] | None,
+    candidate_record_sha256: str | None,
+) -> dict[str, Any]:
+    record = {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-attempt-outcome",
+        "attempt": {
+            "request_sha256": request_sha256,
+            "subject": subject,
+            "contract_sha256": contract_sha256,
+            "retry_ordinal": retry_ordinal,
+            "outcome": outcome,
+            "guard_code": guard_code,
+            "completed_at": completed_at,
+            "run": dict(run),
+            "handoff": None if handoff is None else dict(handoff),
+            "candidate_record_sha256": candidate_record_sha256,
+        },
+    }
+    validate_attempt_outcome_record(record)
+    return json.loads(canonical_bytes(record))
+
+
+def build_attempt_outcome_oci_plan(
+    record: Mapping[str, Any], *, repository: str
+) -> OciRecordPlanV1:
+    validate_attempt_outcome_record(record)
+    checked_repository = _repository(repository, "attempt outcome repository")
+    body = canonical_bytes(record)
+    attempt = _mapping(record["attempt"], "attempt outcome")
+    return OciRecordPlanV1(
+        repository=checked_repository,
+        artifact_type=ATTEMPT_OUTCOME_MEDIA_TYPE,
+        config=OciBlobV1(
+            role="attempt-outcome",
+            media_type=ATTEMPT_OUTCOME_MEDIA_TYPE,
+            body=body,
+            title="attempt-outcome.json",
+        ),
+        layers=(
+            OciBlobV1(
+                role="immutable-record-bytes",
+                media_type=ATTEMPT_OUTCOME_MEDIA_TYPE,
+                body=body,
+                title="attempt-outcome.json",
+            ),
+        ),
+        annotations={
+            "dev.kandelo.abi-staging.classification": "protected-attempt-outcome",
+            "dev.kandelo.abi-staging.completed-at": str(attempt["completed_at"]),
+            "dev.kandelo.abi-staging.kind": "attempt-outcome",
+            "dev.kandelo.abi-staging.request-sha256": str(
+                attempt["request_sha256"]
+            ),
+            "org.opencontainers.image.source": "https://github.com/"
+            + str(_mapping(attempt["run"], "attempt outcome run")["repository"]),
+        },
+    )
 
 
 def _plain(value: Any) -> Any:

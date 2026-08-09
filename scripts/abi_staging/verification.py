@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
 import hashlib
 import os
 from pathlib import Path
@@ -44,6 +45,9 @@ VERIFICATION_RECEIPT_MEDIA_TYPE = (
 )
 VERIFICATION_RESULT_MEDIA_TYPE = (
     "application/vnd.kandelo.abi-staging.verification.result.v1+json"
+)
+PROTECTED_VERIFICATION_OUTCOME_MEDIA_TYPE = (
+    "application/vnd.kandelo.abi-staging.verification.protected-outcome.v1+json"
 )
 SECRET_PATTERNS = (
     re.compile(rb"gh[pousr]_[A-Za-z0-9_]{20,}"),
@@ -96,6 +100,22 @@ def _integer(value: Any, field: str, *, positive: bool = False) -> int:
     ):
         raise VerificationError(f"{field} is not a bounded integer")
     return value
+
+
+def _timestamp(value: Any, field: str) -> str:
+    result = _text(value, field, 64)
+    if re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z",
+        result,
+    ) is None:
+        raise VerificationError(f"{field} is not millisecond UTC RFC 3339")
+    try:
+        datetime.strptime(result, "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError as error:
+        raise VerificationError(f"{field} is not a real UTC timestamp") from error
+    return result
 
 
 def _relative_path(value: Any, field: str) -> str:
@@ -416,28 +436,232 @@ def receipt_repository(candidate_repository: str, test_id: str, host: str) -> st
     return f"{candidate_repository}/receipts/{test_id}/{host}"
 
 
+def validate_verification_receipt_record(value: Mapping[str, Any]) -> None:
+    """Validate the durable facts required to reconstruct scheduler state."""
+
+    receipt = _exact(
+        value,
+        frozenset({"schema", "kind", "common", "verification"}),
+        "verification receipt",
+    )
+    if receipt["schema"] != 1 or receipt["kind"] != "kandelo-abi-staging-verification":
+        raise VerificationError("verification receipt protocol is unsupported")
+    common = _exact(
+        receipt["common"],
+        frozenset(
+            {
+                "request_sha256",
+                "subject",
+                "source",
+                "run",
+                "guard_codes",
+                "work_state",
+                "outcome",
+                "artifact_class",
+                "promotion_state",
+                "retry_state",
+                "blockers",
+            }
+        ),
+        "verification receipt common",
+    )
+    _digest(common["request_sha256"], "verification receipt request")
+    subject = _exact(
+        common["subject"],
+        frozenset({"kind", "identity"}),
+        "verification receipt subject",
+    )
+    if subject["kind"] != "candidate":
+        raise VerificationError("verification receipt subject is not a candidate")
+    subject_identity = _digest(
+        subject["identity"], "verification receipt candidate subject"
+    )
+    _source(common["source"], "verification receipt source")
+    _run(common["run"], "verification receipt run")
+
+    verification = _exact(
+        receipt["verification"],
+        frozenset(
+            {
+                "candidate_record_sha256",
+                "candidate_layer",
+                "test_definition_sha256",
+                "host",
+                "attempt_ordinal",
+                "diagnostics",
+            }
+        )
+        | frozenset(
+            key
+            for key in ("kernel", "host_runtime", "vfs")
+            if key in _exact_or_mapping(receipt["verification"], "verification receipt payload")
+        ),
+        "verification receipt payload",
+    )
+    candidate_record = _digest(
+        verification["candidate_record_sha256"],
+        "verification receipt candidate record",
+    )
+    if subject_identity != candidate_record:
+        raise VerificationError("verification receipt subject differs from its candidate")
+    _artifact(verification["candidate_layer"], "verification receipt candidate layer")
+    _digest(
+        verification["test_definition_sha256"],
+        "verification receipt test definition",
+    )
+    if verification["host"] not in {"build", "node", "browser"}:
+        raise VerificationError("verification receipt host is unsupported")
+    attempt_ordinal = _integer(
+        verification["attempt_ordinal"], "verification receipt attempt ordinal"
+    )
+    if attempt_ordinal > 3:
+        raise VerificationError("verification receipt attempt ordinal exceeds retry policy")
+
+    diagnostics = _sequence(
+        verification["diagnostics"], "verification receipt diagnostics"
+    )
+    previous = ("", "")
+    for index, candidate in enumerate(diagnostics):
+        diagnostic = _exact(
+            candidate,
+            frozenset({"record_sha256", "immutable_reference"}),
+            f"verification receipt diagnostic {index}",
+        )
+        digest = _digest(
+            diagnostic["record_sha256"],
+            f"verification receipt diagnostic {index} digest",
+        )
+        reference = _text(
+            diagnostic["immutable_reference"],
+            f"verification receipt diagnostic {index} reference",
+        )
+        if any(character.isspace() for character in reference) or not reference.endswith(
+            "@sha256:" + digest
+        ):
+            raise VerificationError("verification receipt diagnostic reference is not exact")
+        identity = (digest, reference)
+        if identity <= previous:
+            raise VerificationError(
+                "verification receipt diagnostics must be sorted and duplicate-free"
+            )
+        previous = identity
+    for key in ("kernel", "host_runtime", "vfs"):
+        if key in verification:
+            _artifact(verification[key], f"verification receipt {key}")
+
+    outcome = common["outcome"]
+    allowed_guards = {
+        "success": {None},
+        "failure": {
+            "verification_failed",
+            "transient_infrastructure_failure",
+            "candidate_integrity_mismatch",
+        },
+        "timeout": {
+            "verification_timeout",
+            "transient_infrastructure_failure",
+        },
+        "canceled": {"transient_infrastructure_failure"},
+    }
+    if outcome not in allowed_guards:
+        raise VerificationError("verification receipt outcome is unsupported")
+    guards = list(
+        _sequence(common["guard_codes"], "verification receipt guards")
+    )
+    if len(guards) > 1 or any(
+        not isinstance(guard, str) for guard in guards
+    ):
+        raise VerificationError("verification receipt guards are invalid")
+    guard = None if not guards else guards[0]
+    if guard not in allowed_guards[outcome]:
+        raise VerificationError("verification receipt outcome and guard contradict")
+    blockers = _sequence(common["blockers"], "verification receipt blockers")
+    expected_blockers = (
+        []
+        if guard is None
+        else [
+            {
+                "guard_code": guard,
+                "subject_kind": "candidate",
+                "subject": candidate_record,
+            }
+        ]
+    )
+    retry = _exact(
+        common["retry_state"],
+        frozenset({"attempts", "eligible", "exhausted", "next_action"}),
+        "verification receipt retry state",
+    )
+    if (
+        list(blockers) != expected_blockers
+        or common["work_state"] != "complete"
+        or common["artifact_class"] != "none"
+        or common["promotion_state"]
+        != ("eligible" if guard is None else "ineligible")
+        or retry
+        != {
+            "attempts": attempt_ordinal + 1,
+            "eligible": False,
+            "exhausted": False,
+            "next_action": "none",
+        }
+    ):
+        raise VerificationError("verification receipt state is contradictory")
+    if len(canonical_bytes(receipt)) > MAX_RESULT_BYTES:
+        raise VerificationError("verification receipt exceeds its byte bound")
+
+
+def _exact_or_mapping(value: Any, field: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise VerificationError(f"{field} must be an object")
+    return value
+
+
 def _receipt_record(
     *,
     candidate: Mapping[str, Any],
     candidate_record_sha256: str,
     result: Mapping[str, Any],
     repository: str,
+    guard_code: str | None,
+    include_result: bool,
 ) -> tuple[dict[str, Any], tuple[OciBlobV1, ...]]:
     outcome = result["outcome"]
-    guard = {
-        "success": None,
-        "failure": "verification_failed",
-        "timeout": "verification_timeout",
-    }[outcome]
+    guard = guard_code
     diagnostics = []
-    layers = [
-        OciBlobV1(
-            role="verification-result",
-            media_type=VERIFICATION_RESULT_MEDIA_TYPE,
-            body=result["_bodies"]["result.json"],
-            title="verification-result.json",
+    layers = []
+    if include_result:
+        layers.append(
+            OciBlobV1(
+                role="verification-result",
+                media_type=VERIFICATION_RESULT_MEDIA_TYPE,
+                body=result["_bodies"]["result.json"],
+                title="verification-result.json",
+            )
         )
-    ]
+    else:
+        layers.append(
+            OciBlobV1(
+                role="protected-verification-outcome",
+                media_type=PROTECTED_VERIFICATION_OUTCOME_MEDIA_TYPE,
+                body=canonical_bytes(
+                    {
+                        "schema": 1,
+                        "kind": "kandelo-abi-staging-protected-verification-outcome",
+                        "request_sha256": result["request_sha256"],
+                        "candidate_record_sha256": candidate_record_sha256,
+                        "test_definition": result["test_definition"],
+                        "source": result["source"],
+                        "run": result["run"],
+                        "attempt_ordinal": result["attempt_ordinal"],
+                        "outcome": outcome,
+                        "guard_code": guard,
+                        "runtime_artifacts": result["runtime_artifacts"],
+                    }
+                ),
+                title="protected-verification-outcome.json",
+            )
+        )
     for index, diagnostic in enumerate(result["diagnostics"]):
         body = result["_bodies"][diagnostic["path"]]
         reference = f"ghcr.io/{repository}@sha256:{diagnostic['sha256']}"
@@ -502,28 +726,15 @@ def _receipt_record(
     return receipt, tuple(layers)
 
 
-def publish_verification_receipt(
-    result_root: Path,
-    *,
-    candidate_locator: Mapping[str, object],
-    test_definition: VerificationTestDefinitionV1,
-    tap_policy: TapStagingPolicyV1,
-    expected_run: Mapping[str, Any],
-    expected_runtime_artifacts: Mapping[str, object | None],
-    transport: OciTransportV1,
-    expected_source_repository: str,
-) -> PublishedRecordLocatorV1:
-    _definition_identity(test_definition)
-    result = load_verification_result(result_root)
-    expected_run_value = _run(expected_run, "expected verification run")
-    if result["run"] != expected_run_value:
-        raise VerificationError("verification result run differs from protected job facts")
+def _checked_runtime_artifacts(
+    value: Mapping[str, object | None],
+) -> dict[str, object | None]:
     protected_runtime = _exact(
-        expected_runtime_artifacts,
+        value,
         frozenset({"kernel", "host_runtime", "vfs"}),
         "protected verification runtime artifacts",
     )
-    checked_runtime = {
+    return {
         key: None
         if protected_runtime[key] is None
         else _artifact(
@@ -531,10 +742,21 @@ def publish_verification_receipt(
         )
         for key in ("kernel", "host_runtime", "vfs")
     }
-    if result["runtime_artifacts"] != checked_runtime:
-        raise VerificationError(
-            "verification runtime artifacts differ from protected job inputs"
-        )
+
+
+def _public_candidate(
+    candidate_locator: Mapping[str, object],
+    *,
+    tap_policy: TapStagingPolicyV1,
+    transport: OciTransportV1,
+    expected_source_repository: str,
+) -> tuple[
+    dict[str, str],
+    Mapping[str, Any],
+    str,
+    str,
+    Mapping[str, Any],
+]:
     try:
         checked_locator = parse_public_record_locator(candidate_locator)
         fetched = fetch_public_record(
@@ -544,7 +766,9 @@ def publish_verification_receipt(
             required_layer_roles=("bottle-layer",),
         )
     except OciPublicationError as error:
-        raise VerificationError(f"cannot re-fetch exact public candidate: {error}") from error
+        raise VerificationError(
+            f"cannot re-fetch exact public candidate: {error}"
+        ) from error
     try:
         candidate = load_canonical_mapping(fetched.config.body, "candidate record")
         validate_candidate_record(candidate)
@@ -569,12 +793,106 @@ def publish_verification_receipt(
         )
     record_sha256 = checked_locator["digest"].removeprefix("sha256:")
     candidate_layer = candidate["candidate"]["bottle_layer"]
+    if len(fetched.layers) != 1:
+        raise VerificationError("public candidate lacks one exact bottle layer")
     fetched_layer = fetched.layers[0]
     if (
         fetched_layer.role != "bottle-layer"
         or fetched_layer.digest != "sha256:" + candidate_layer["sha256"]
         or fetched_layer.size != candidate_layer["bytes"]
-        or result["candidate_record"] != checked_locator
+    ):
+        raise VerificationError("public candidate bottle layer differs from its record")
+    return (
+        checked_locator,
+        candidate,
+        actual_candidate_repository,
+        record_sha256,
+        candidate_layer,
+    )
+
+
+def _publish_receipt_plan(
+    *,
+    repository: str,
+    receipt: Mapping[str, Any],
+    layers: tuple[OciBlobV1, ...],
+    completed_at: str,
+    host: str,
+    outcome: str,
+    candidate_record_sha256: str,
+    test_definition_sha256: str,
+    transport: OciTransportV1,
+    expected_source_repository: str,
+) -> PublishedRecordLocatorV1:
+    plan = OciRecordPlanV1(
+        repository=repository,
+        artifact_type=VERIFICATION_RECEIPT_MEDIA_TYPE,
+        config=OciBlobV1(
+            role="verification-receipt",
+            media_type=VERIFICATION_RECEIPT_MEDIA_TYPE,
+            body=canonical_bytes(receipt),
+            title="verification-receipt.json",
+        ),
+        layers=layers,
+        annotations={
+            "dev.kandelo.abi-staging.candidate-record-sha256": candidate_record_sha256,
+            "dev.kandelo.abi-staging.classification": "factual-verification-receipt",
+            "dev.kandelo.abi-staging.completed-at": completed_at,
+            "dev.kandelo.abi-staging.host": host,
+            "dev.kandelo.abi-staging.kind": "verification-receipt",
+            "dev.kandelo.abi-staging.outcome": outcome,
+            "dev.kandelo.abi-staging.test-definition-sha256": test_definition_sha256,
+            "org.opencontainers.image.source": "https://github.com/"
+            + expected_source_repository,
+        },
+    )
+    try:
+        return publish_record(
+            plan,
+            transport=transport,
+            expected_source_repository=expected_source_repository,
+        )
+    except OciPublicationError as error:
+        raise VerificationError(f"cannot publish verification receipt: {error}") from error
+
+
+def publish_verification_receipt(
+    result_root: Path,
+    *,
+    candidate_locator: Mapping[str, object],
+    test_definition: VerificationTestDefinitionV1,
+    tap_policy: TapStagingPolicyV1,
+    expected_run: Mapping[str, Any],
+    expected_runtime_artifacts: Mapping[str, object | None],
+    completed_at: str,
+    transport: OciTransportV1,
+    expected_source_repository: str,
+) -> PublishedRecordLocatorV1:
+    _definition_identity(test_definition)
+    completed = _timestamp(completed_at, "verification completion")
+    result = load_verification_result(result_root)
+    expected_run_value = _run(expected_run, "expected verification run")
+    if result["run"] != expected_run_value:
+        raise VerificationError("verification result run differs from protected job facts")
+    checked_runtime = _checked_runtime_artifacts(expected_runtime_artifacts)
+    if result["runtime_artifacts"] != checked_runtime:
+        raise VerificationError(
+            "verification runtime artifacts differ from protected job inputs"
+        )
+    (
+        checked_locator,
+        candidate,
+        actual_candidate_repository,
+        record_sha256,
+        candidate_layer,
+    ) = _public_candidate(
+        candidate_locator,
+        tap_policy=tap_policy,
+        transport=transport,
+        expected_source_repository=expected_source_repository,
+    )
+    if (
+        result["candidate_record"] != checked_locator
         or result["candidate_layer"] != candidate_layer
         or result["request_sha256"] != candidate["common"]["request_sha256"]
         or result["source"] != candidate["common"]["source"]
@@ -595,33 +913,114 @@ def publish_verification_receipt(
         candidate_record_sha256=record_sha256,
         result=result,
         repository=repository,
+        guard_code={
+            "success": None,
+            "failure": "verification_failed",
+            "timeout": "verification_timeout",
+        }[result["outcome"]],
+        include_result=True,
     )
-    plan = OciRecordPlanV1(
+    validate_verification_receipt_record(receipt)
+    return _publish_receipt_plan(
         repository=repository,
-        artifact_type=VERIFICATION_RECEIPT_MEDIA_TYPE,
-        config=OciBlobV1(
-            role="verification-receipt",
-            media_type=VERIFICATION_RECEIPT_MEDIA_TYPE,
-            body=canonical_bytes(receipt),
-            title="verification-receipt.json",
-        ),
+        receipt=receipt,
         layers=layers,
-        annotations={
-            "dev.kandelo.abi-staging.candidate-record-sha256": record_sha256,
-            "dev.kandelo.abi-staging.classification": "factual-verification-receipt",
-            "dev.kandelo.abi-staging.host": selected["host"],
-            "dev.kandelo.abi-staging.kind": "verification-receipt",
-            "dev.kandelo.abi-staging.outcome": result["outcome"],
-            "dev.kandelo.abi-staging.test-definition-sha256": test_definition.sha256,
-            "org.opencontainers.image.source": "https://github.com/"
-            + expected_source_repository,
-        },
+        completed_at=completed,
+        host=selected["host"],
+        outcome=result["outcome"],
+        candidate_record_sha256=record_sha256,
+        test_definition_sha256=test_definition.sha256,
+        transport=transport,
+        expected_source_repository=expected_source_repository,
     )
-    try:
-        return publish_record(
-            plan,
-            transport=transport,
-            expected_source_repository=expected_source_repository,
-        )
-    except OciPublicationError as error:
-        raise VerificationError(f"cannot publish verification receipt: {error}") from error
+
+
+def publish_protected_verification_outcome(
+    *,
+    candidate_locator: Mapping[str, object],
+    test_definition: VerificationTestDefinitionV1,
+    host: str,
+    tap_policy: TapStagingPolicyV1,
+    expected_run: Mapping[str, Any],
+    expected_runtime_artifacts: Mapping[str, object | None],
+    completed_at: str,
+    attempt_ordinal: int,
+    outcome: str,
+    guard_code: str,
+    transport: OciTransportV1,
+    expected_source_repository: str,
+) -> PublishedRecordLocatorV1:
+    """Publish an exact protected job outcome when no verifier output exists."""
+
+    _definition_identity(test_definition)
+    if host not in test_definition.hosts:
+        raise VerificationError("protected verification host is not in its definition")
+    completed = _timestamp(completed_at, "verification completion")
+    run = _run(expected_run, "expected verification run")
+    runtime = _checked_runtime_artifacts(expected_runtime_artifacts)
+    ordinal = _integer(attempt_ordinal, "verification attempt ordinal")
+    if ordinal > 3:
+        raise VerificationError("verification attempt ordinal exceeds retry policy")
+    allowed = {
+        "failure": {
+            "transient_infrastructure_failure",
+            "candidate_integrity_mismatch",
+        },
+        "timeout": {
+            "verification_timeout",
+            "transient_infrastructure_failure",
+        },
+        "canceled": {"transient_infrastructure_failure"},
+    }
+    if outcome not in allowed or guard_code not in allowed[outcome]:
+        raise VerificationError("protected verification outcome and guard contradict")
+    (
+        _checked_locator,
+        candidate,
+        actual_candidate_repository,
+        record_sha256,
+        _candidate_layer,
+    ) = _public_candidate(
+        candidate_locator,
+        tap_policy=tap_policy,
+        transport=transport,
+        expected_source_repository=expected_source_repository,
+    )
+    repository = receipt_repository(
+        actual_candidate_repository, test_definition.id, host
+    )
+    synthetic_result = {
+        "request_sha256": candidate["common"]["request_sha256"],
+        "source": candidate["common"]["source"],
+        "run": run,
+        "attempt_ordinal": ordinal,
+        "outcome": outcome,
+        "runtime_artifacts": runtime,
+        "test_definition": {
+            "id": test_definition.id,
+            "sha256": test_definition.sha256,
+            "host": host,
+        },
+        "diagnostics": [],
+    }
+    receipt, layers = _receipt_record(
+        candidate=candidate,
+        candidate_record_sha256=record_sha256,
+        result=synthetic_result,
+        repository=repository,
+        guard_code=guard_code,
+        include_result=False,
+    )
+    validate_verification_receipt_record(receipt)
+    return _publish_receipt_plan(
+        repository=repository,
+        receipt=receipt,
+        layers=layers,
+        completed_at=completed,
+        host=host,
+        outcome=outcome,
+        candidate_record_sha256=record_sha256,
+        test_definition_sha256=test_definition.sha256,
+        transport=transport,
+        expected_source_repository=expected_source_repository,
+    )

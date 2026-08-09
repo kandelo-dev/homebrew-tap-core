@@ -10,6 +10,7 @@ import unittest
 from scripts.abi_staging.canonical import canonical_bytes
 from scripts.abi_staging.policy import (
     PolicyError,
+    attempt_repository,
     candidate_repository,
     check_policy_files,
     generate_formula_capture_catalog,
@@ -25,6 +26,13 @@ TAP_ROOT = Path(__file__).resolve().parents[3]
 
 
 class PolicyTests(unittest.TestCase):
+    def test_attempt_repository_is_nested_under_generic_candidate_subject(self) -> None:
+        policy = load_tap_staging_policy(TAP_ROOT / "Kandelo/staging/tap-policy.toml")
+        self.assertEqual(
+            attempt_repository(policy, 8, formula="mini-tool"),
+            "kandelo-dev/homebrew-tap-core-abi-8-candidates/mini-tool/attempts",
+        )
+
     def setUp(self) -> None:
         self.staging = TAP_ROOT / "Kandelo/staging"
 
@@ -216,3 +224,4 @@ class PolicyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+    attempt_repository,

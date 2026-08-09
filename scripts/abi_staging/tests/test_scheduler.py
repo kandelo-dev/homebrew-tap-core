@@ -10,6 +10,7 @@ import sys
 import unittest
 
 TAP_ROOT = Path(os.environ["KANDELO_TAP_ROOT"])
+KANDELO_ROOT = Path(os.environ["KANDELO_ROOT"])
 sys.path.insert(0, str(TAP_ROOT))
 
 from scripts.abi_staging.policy import (
@@ -37,7 +38,7 @@ from scripts.abi_staging.scheduler import (
 
 FIXTURE = TAP_ROOT / "Kandelo/staging/fixtures/tap-plan.json"
 RETRY_VECTORS = (
-    Path(os.environ.get("KANDELO_REPOSITORY_ROOT", Path.cwd()))
+    KANDELO_ROOT
     / "tools/xtask/tests/fixtures/abi-staging/retry-vectors.json"
 )
 POLICY = load_tap_staging_policy(TAP_ROOT / "Kandelo/staging/tap-policy.toml")
@@ -134,6 +135,7 @@ def _complete(
         test_definition_sha256=DEFINITION.sha256,
         host="build",
         outcome="success",
+        guard_code=None,
         attempt_ordinal=0,
         completed_at="2026-08-09T09:00:00.000Z",
         record_sha256=_digest("receipt:" + candidate_digest),
@@ -313,6 +315,105 @@ class FailureClassifierTests(unittest.TestCase):
 
 
 class SchedulingTests(unittest.TestCase):
+    def test_duplicate_attempts_converge_with_deterministic_application_failure_dominance(self) -> None:
+        plan = _plan()
+        subject = plan["required_subjects"][0]
+        contract = _formula(plan, subject)["contract_sha256"]
+        transient = AttemptFactV1(
+            request_sha256=plan["request_digest"],
+            subject=subject,
+            contract_sha256=contract,
+            retry_ordinal=0,
+            outcome="canceled",
+            guard_code="transient_infrastructure_failure",
+            completed_at="2026-08-09T09:00:00.000Z",
+            record_sha256=_digest("duplicate-transient-build"),
+        )
+        application = replace(
+            transient,
+            outcome="failure",
+            guard_code="build_failed",
+            completed_at="2026-08-09T09:00:01.000Z",
+            record_sha256=_digest("duplicate-application-build"),
+        )
+        decision = schedule_ready_batch(
+            plan,
+            _records(transient, application),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        blocker = next(item for item in decision.blocked if item.subject == subject)
+        self.assertEqual(blocker.guard_code, "build_failed")
+        self.assertEqual(blocker.next_action, "not-retryable")
+
+    def test_duplicate_verifiers_preserve_success_and_application_failure_dominance(self) -> None:
+        plan = _plan()
+        subject = plan["required_subjects"][0]
+        candidate, success = _complete(plan, subject)
+        transient = replace(
+            success,
+            outcome="canceled",
+            guard_code="transient_infrastructure_failure",
+            record_sha256=_digest("duplicate-transient-verification"),
+        )
+        application = replace(
+            transient,
+            outcome="failure",
+            guard_code="verification_failed",
+            completed_at="2026-08-09T09:00:01.000Z",
+            record_sha256=_digest("duplicate-application-verification"),
+        )
+        passed = schedule_ready_batch(
+            plan,
+            _records(candidate, transient, success),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        self.assertIn(subject, passed.complete)
+        failed = schedule_ready_batch(
+            plan,
+            _records(candidate, transient, application),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        blocker = next(item for item in failed.blocked if item.subject == subject)
+        self.assertEqual(blocker.guard_code, "verification_failed")
+        self.assertEqual(blocker.next_action, "not-retryable")
+
+    def test_transient_verification_receipt_advances_the_bounded_retry_ordinal(self) -> None:
+        plan = _plan()
+        subject = plan["required_subjects"][0]
+        candidate, _receipt = _complete(plan, subject)
+        transient = VerificationFactV1(
+            request_sha256=plan["request_digest"],
+            subject=subject,
+            candidate_record_sha256=candidate.record_sha256,
+            test_definition_sha256=DEFINITION.sha256,
+            host="build",
+            outcome="canceled",
+            guard_code="transient_infrastructure_failure",
+            attempt_ordinal=0,
+            completed_at="2026-08-09T09:00:00.000Z",
+            record_sha256=_digest("transient-verification"),
+        )
+        decision = schedule_ready_batch(
+            plan,
+            _records(candidate, transient),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        intent = next(item for item in decision.ready if item.subject == subject)
+        self.assertEqual(intent.action, "verify-candidate")
+        self.assertEqual(intent.attempt_ordinal, 1)
+
     def test_required_work_precedes_independent_background_and_batch_is_bounded(self) -> None:
         plan = _plan()
         decision = schedule_ready_batch(
@@ -414,6 +515,39 @@ class SchedulingTests(unittest.TestCase):
         )
         rebuild = next(item for item in invalidated.ready if item.subject == subject)
         self.assertEqual(rebuild.action, "build-candidate")
+
+    def test_at_least_once_candidate_publication_converges_by_exact_layer(self) -> None:
+        plan = _plan()
+        subject = plan["required_subjects"][0]
+        first, _ = _complete(plan, subject)
+        duplicate = replace(first, record_sha256=_digest("duplicate-run"))
+        decision = schedule_ready_batch(
+            plan,
+            _records(first, duplicate),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        intent = next(item for item in decision.ready if item.subject == subject)
+        self.assertEqual(intent.action, "verify-candidate")
+        self.assertEqual(
+            intent.candidate_record_sha256,
+            min(first.record_sha256, duplicate.record_sha256),
+        )
+
+        conflicting = replace(
+            duplicate, bottle_layer_sha256=_digest("different-layer")
+        )
+        with self.assertRaises(SchedulingError):
+            schedule_ready_batch(
+                plan,
+                _records(first, conflicting),
+                _decision(plan),
+                now=NOW,
+                policy=POLICY,
+                verification_tests=(DEFINITION,),
+            )
 
     def test_reverse_dependants_invalidate_only_after_dependency_layer_change(self) -> None:
         plan = _plan()
@@ -517,8 +651,18 @@ class SchedulingTests(unittest.TestCase):
             policy=POLICY,
             verification_tests=(DEFINITION,),
         )
-        self.assertTrue(merged.ready)
-        self.assertTrue(all(item.work_class == "background" for item in merged.ready))
+        open_request = schedule_ready_batch(
+            plan,
+            _records(),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        self.assertEqual(merged.ready, open_request.ready)
+        self.assertEqual(
+            {item.work_class for item in merged.ready}, {"required", "background"}
+        )
 
         subject = plan["required_subjects"][0]
         exhausted = AttemptFactV1(

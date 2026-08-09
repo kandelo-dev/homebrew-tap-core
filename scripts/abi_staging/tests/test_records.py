@@ -15,11 +15,16 @@ from scripts.abi_staging.records import (
     BOTTLE_LAYER_MEDIA_TYPE,
     BOTTLE_METADATA_MEDIA_TYPE,
     CANDIDATE_RECORD_MEDIA_TYPE,
+    ATTEMPT_OUTCOME_MEDIA_TYPE,
     OCI_MANIFEST_MEDIA_TYPE,
     SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
+    TapRecordError,
     build_candidate_oci_plan,
+    build_attempt_outcome_oci_plan,
+    build_attempt_outcome_record,
     build_source_custody_oci_plan,
     validate_candidate_record,
+    validate_attempt_outcome_record,
 )
 
 
@@ -179,6 +184,33 @@ class CandidateRecordTests(unittest.TestCase):
             "run_attempt": 1,
             "job": "publish-candidate",
         }
+
+    def test_protected_attempt_outcome_carries_retry_clock_and_exact_work(self) -> None:
+        record = build_attempt_outcome_record(
+            request_sha256=REQUEST,
+            subject=SUBJECT,
+            contract_sha256="b" * 64,
+            retry_ordinal=2,
+            outcome="failure",
+            guard_code="build_failed",
+            completed_at="2026-08-09T10:00:00.000Z",
+            run=self.publication_run,
+            handoff={"sha256": "c" * 64, "bytes": 1024},
+            candidate_record_sha256=None,
+        )
+        validate_attempt_outcome_record(record)
+        plan = build_attempt_outcome_oci_plan(
+            record, repository=CANDIDATE_REPOSITORY + "/attempts"
+        )
+        self.assertEqual(plan.artifact_type, ATTEMPT_OUTCOME_MEDIA_TYPE)
+        self.assertEqual(
+            plan.annotations["dev.kandelo.abi-staging.completed-at"],
+            "2026-08-09T10:00:00.000Z",
+        )
+        changed = json.loads(canonical_bytes(record))
+        changed["attempt"]["guard_code"] = None
+        with self.assertRaises(TapRecordError):
+            validate_attempt_outcome_record(changed)
 
     def _plans(self):
         source = build_source_custody_oci_plan(

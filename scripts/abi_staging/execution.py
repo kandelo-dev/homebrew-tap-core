@@ -1,0 +1,981 @@
+"""Fail-closed preparation for uncredentialed ABI-staging work."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping, Sequence
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import tempfile
+from typing import Any
+
+from .canonical import CanonicalJsonError, canonical_bytes, canonical_sha256, parse_canonical_bytes
+from .coordination import CoordinationError, validate_coordination_bundle
+from .handoff import HandoffError, load_build_run
+from .oci import UrllibOciTransportV1, fetch_public_record
+from .plan import exact_formula_subject
+from .plan import snapshot_tap_source
+from .policy import TapStagingPolicyV1
+from .records import CANDIDATE_RECORD_MEDIA_TYPE, validate_candidate_record
+
+
+MAX_COORDINATION_BYTES = 64 * 1024 * 1024
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+class ExecutionError(ValueError):
+    """Raised when protected work cannot be tied to exact coordinated inputs."""
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _plain(child) for key, child in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_plain(child) for child in value]
+    return value
+
+
+def _mapping(value: Any, field: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ExecutionError(f"{field} must be an object")
+    return value
+
+
+def _digest(value: Any, field: str) -> str:
+    if not isinstance(value, str) or SHA256.fullmatch(value) is None:
+        raise ExecutionError(f"{field} is not a lowercase SHA-256 digest")
+    return value
+
+
+def load_coordination_bundle(
+    path: Path, *, policy: TapStagingPolicyV1
+) -> dict[str, Any]:
+    """Load one canonical active coordination bundle within protected bounds."""
+
+    try:
+        metadata = path.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise ExecutionError("coordination bundle must be a regular non-symlink file")
+        body = path.read_bytes()
+        parsed = parse_canonical_bytes(body, maximum_bytes=MAX_COORDINATION_BYTES)
+        bundle = dict(_mapping(_plain(parsed), "coordination bundle"))
+        validate_coordination_bundle(
+            bundle, max_ready_subjects=policy.max_ready_subjects_per_cycle
+        )
+    except (OSError, CanonicalJsonError, CoordinationError) as error:
+        if isinstance(error, ExecutionError):
+            raise
+        raise ExecutionError(f"coordination bundle is invalid: {error}") from error
+    if bundle["mode"] != "active":
+        raise ExecutionError("observe-only coordination cannot execute work")
+    return bundle
+
+
+def _formula_for_subject(
+    bundle: Mapping[str, Any], subject: str
+) -> Mapping[str, Any]:
+    matches = []
+    for candidate in bundle["tap_plan"]["formulae"]:
+        identity = candidate["identity"]
+        if exact_formula_subject(identity["name"], identity["architecture"]) == subject:
+            matches.append(candidate)
+    if len(matches) != 1:
+        raise ExecutionError("build work does not name one exact Formula plan")
+    return matches[0]
+
+
+def _expected_build_work_id(bundle: Mapping[str, Any], work: Mapping[str, Any]) -> str:
+    return canonical_sha256(
+        {
+            "action": "build-candidate",
+            "attempt_ordinal": work["attempt_ordinal"],
+            "candidate_record_sha256": None,
+            "contract_sha256": work["contract_sha256"],
+            "host": None,
+            "request_sha256": bundle["request_sha256"],
+            "subject": json.loads(work["subject"]),
+            "test_definition_sha256": None,
+        }
+    )
+
+
+def select_build_work(
+    bundle: Mapping[str, Any], work_id: str
+) -> dict[str, Any]:
+    """Select one content-addressed build item and rebind all of its inputs."""
+
+    _digest(work_id, "build work ID")
+    workflow = _mapping(bundle.get("workflow"), "coordination workflow")
+    matches = [item for item in workflow.get("build_work", ()) if item.get("work_id") == work_id]
+    if len(matches) != 1:
+        raise ExecutionError("coordination bundle does not contain the exact build work ID")
+    work = dict(_mapping(matches[0], "build work"))
+    if work.get("action") != "build-candidate" or _expected_build_work_id(bundle, work) != work_id:
+        raise ExecutionError("build work identity differs from its coordinated inputs")
+    formula = _formula_for_subject(bundle, work["subject"])
+    if (
+        canonical_sha256(formula) != work["formula_plan_sha256"]
+        or formula.get("contract_sha256") != work["contract_sha256"]
+    ):
+        raise ExecutionError("build work differs from its exact Formula plan")
+    contracts = _mapping(bundle.get("contracts"), "coordination contracts")
+    assessments = _mapping(
+        bundle.get("capture_assessments"), "coordination capture assessments"
+    )
+    contract = _mapping(contracts.get(work["subject"]), "build contract")
+    assessment = _mapping(assessments.get(work["subject"]), "capture assessment")
+    if canonical_sha256(contract) != work["contract_sha256"] or not assessment.get(
+        "complete"
+    ):
+        raise ExecutionError("build work lacks one complete exact bottle contract")
+    return work
+
+
+def _create_output_directory(path: Path) -> Path:
+    try:
+        if path.exists() or path.is_symlink():
+            metadata = path.lstat()
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+                raise ExecutionError("build input destination must be a real directory")
+            if any(path.iterdir()):
+                raise ExecutionError("build input destination must be empty")
+        else:
+            path.mkdir(parents=True)
+        (path / "contracts").mkdir()
+        (path / "layers").mkdir()
+    except OSError as error:
+        raise ExecutionError(f"cannot prepare build input destination: {error}") from error
+    return path
+
+
+def _matching_dependency(
+    bundle: Mapping[str, Any], dependency: Mapping[str, Any]
+) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+    candidates = _mapping(bundle["candidates"], "coordination candidates")
+    records = _mapping(candidates["records"], "coordination candidate records")
+    locators = _mapping(candidates["locators"], "coordination candidate locators")
+    matches: list[tuple[str, Mapping[str, Any], Mapping[str, Any]]] = []
+    for record_sha256, candidate_value in records.items():
+        candidate = _mapping(candidate_value, "dependency candidate")
+        payload = _mapping(candidate.get("candidate"), "dependency candidate payload")
+        formula = _mapping(payload.get("formula"), "dependency candidate Formula")
+        layer = _mapping(payload.get("bottle_layer"), "dependency candidate layer")
+        common = _mapping(candidate.get("common"), "dependency candidate common")
+        if (
+            common.get("request_sha256") == bundle["request_sha256"]
+            and formula.get("tap") == bundle["tap_plan"]["tap_source"]["repository"]
+            and formula.get("formula") == dependency["formula"]
+            and formula.get("architecture") == dependency["architecture"]
+            and formula.get("target_abi") == bundle["tap_plan"]["target_abi"]["version"]
+            and layer.get("sha256") == dependency["bottle_layer_sha256"]
+            and layer.get("bytes") == dependency["bottle_layer_bytes"]
+        ):
+            locator = _mapping(locators.get(record_sha256), "dependency candidate locator")
+            matches.append((record_sha256, candidate, locator))
+    if not matches:
+        raise ExecutionError("contract dependency lacks its exact public candidate")
+    matches.sort(key=lambda item: item[0])
+    _, record, locator = matches[0]
+    return record, locator
+
+
+def _fetched_layer(
+    fetched: Any,
+    *,
+    record: Mapping[str, Any],
+    locator: Mapping[str, Any],
+    dependency: Mapping[str, Any],
+) -> bytes:
+    record_digest = canonical_sha256(record)
+    if (
+        getattr(fetched, "artifact_type", None) != CANDIDATE_RECORD_MEDIA_TYPE
+        or getattr(fetched, "digest", None) != "sha256:" + record_digest
+        or getattr(fetched, "immutable_reference", None)
+        != locator.get("immutable_reference")
+    ):
+        raise ExecutionError("fetched dependency record differs from its exact locator")
+    config = getattr(fetched, "config", None)
+    if config is None or getattr(config, "body", None) != canonical_bytes(record):
+        raise ExecutionError("fetched dependency config differs from its public record")
+    layers = tuple(getattr(fetched, "layers", ()))
+    if len(layers) != 1 or getattr(layers[0], "role", None) != "bottle-layer":
+        raise ExecutionError("fetched dependency lacks one exact bottle layer")
+    layer = layers[0]
+    body = getattr(layer, "body", None)
+    if (
+        not isinstance(body, bytes)
+        or hashlib.sha256(body).hexdigest() != dependency["bottle_layer_sha256"]
+        or len(body) != dependency["bottle_layer_bytes"]
+        or getattr(layer, "digest", None)
+        != "sha256:" + dependency["bottle_layer_sha256"]
+    ):
+        raise ExecutionError("fetched dependency layer differs from its contract")
+    return body
+
+
+def prepare_build_inputs(
+    bundle: Mapping[str, Any],
+    work: Mapping[str, Any],
+    *,
+    destination: Path,
+    run: Mapping[str, Any],
+    fetch_candidate: Callable[[Mapping[str, Any]], Any],
+) -> dict[str, Any]:
+    """Materialize only the contract-declared inputs for one build subprocess."""
+
+    selected = select_build_work(bundle, str(work.get("work_id", "")))
+    if canonical_bytes(selected) != canonical_bytes(work):
+        raise ExecutionError("caller-supplied build work differs from coordination")
+    try:
+        checked_run = load_build_run(
+            canonical_bytes(run),
+            expected_repository=bundle["tap_plan"]["tap_source"]["repository"],
+        )
+    except HandoffError as error:
+        raise ExecutionError(f"protected build run is invalid: {error}") from error
+    root = _create_output_directory(destination)
+    formula = dict(_formula_for_subject(bundle, selected["subject"]))
+    contract = dict(bundle["contracts"][selected["subject"]])
+    assessment = dict(bundle["capture_assessments"][selected["subject"]])
+    contract_sha256 = selected["contract_sha256"]
+
+    documents = {
+        root / "request.json": bundle["request"],
+        root / "tap-plan.json": bundle["tap_plan"],
+        root / "formula-plan.json": formula,
+        root / "run.json": checked_run,
+        root / "contracts" / f"sha256-{contract_sha256}.json": contract,
+        root / "contracts" / f"sha256-{contract_sha256}.capture.json": assessment,
+    }
+    try:
+        for path, value in documents.items():
+            path.write_bytes(canonical_bytes(value))
+        for dependency in contract["direct_dependencies"]:
+            record, locator = _matching_dependency(bundle, dependency)
+            validate_candidate_record(record)
+            body = _fetched_layer(
+                fetch_candidate(locator),
+                record=record,
+                locator=locator,
+                dependency=dependency,
+            )
+            layer_path = root / "layers" / (
+                f"sha256-{dependency['bottle_layer_sha256']}.tar.gz"
+            )
+            if layer_path.exists() and layer_path.read_bytes() != body:
+                raise ExecutionError("dependency layer digest collision changed bytes")
+            layer_path.write_bytes(body)
+    except OSError as error:
+        raise ExecutionError(f"cannot materialize exact build inputs: {error}") from error
+    return {
+        "root": root,
+        "formula_plan": formula,
+        "contract_sha256": contract_sha256,
+        "request": root / "request.json",
+        "tap_plan": root / "tap-plan.json",
+        "formula_plan_path": root / "formula-plan.json",
+        "run": root / "run.json",
+        "dependency_root": root,
+    }
+
+
+def _credential_name(name: str) -> bool:
+    exact = {
+        "HOMEBREW_GITHUB_API_TOKEN",
+        "HOMEBREW_GITHUB_PACKAGES_TOKEN",
+        "NPM_TOKEN",
+        "NODE_AUTH_TOKEN",
+        "SSH_AUTH_SOCK",
+        "SSH_AGENT_PID",
+    }
+    prefixes = (
+        "GITHUB_",
+        "GH_",
+        "GHCR_",
+        "AWS_",
+        "AZURE_",
+        "GOOGLE_",
+        "GCP_",
+        "CLOUDSDK_AUTH_",
+        "ACTIONS_ID_TOKEN_",
+        "CI_JOB_JWT",
+    )
+    return name in exact or name.startswith(prefixes)
+
+
+def _uncredentialed_environment(source: Mapping[str, str]) -> dict[str, str]:
+    return {name: value for name, value in source.items() if not _credential_name(name)}
+
+
+def execute_build_work(
+    *,
+    coordination_path: Path,
+    work_id: str,
+    kandelo_root: Path,
+    tap_root: Path,
+    run: Mapping[str, Any],
+    handoff: Path,
+    snapshot_source: Callable[[Path, str], Mapping[str, Any]] = snapshot_tap_source,
+    run_process: Callable[..., Any] = subprocess.run,
+    environment: Mapping[str, str] | None = None,
+) -> int:
+    """Execute one exact build through the Kandelo adapter without credentials."""
+
+    try:
+        tap = tap_root.resolve(strict=True)
+        kandelo = kandelo_root.resolve(strict=True)
+    except OSError as error:
+        raise ExecutionError(f"candidate source checkout is unavailable: {error}") from error
+    policy_path = tap / "Kandelo/staging/tap-policy.toml"
+    from .policy import load_tap_staging_policy
+
+    policy = load_tap_staging_policy(policy_path)
+    source_path = coordination_path
+    if source_path.is_dir():
+        source_path = source_path / "coordination.json"
+    bundle = load_coordination_bundle(source_path, policy=policy)
+    work = select_build_work(bundle, work_id)
+    expected_tap = bundle["tap_plan"]["tap_source"]
+    expected_kandelo = bundle["request"]["build_source"]
+    if dict(snapshot_source(tap, policy.tap_repository)) != expected_tap:
+        raise ExecutionError("tap checkout differs from protected coordinated source")
+    if dict(snapshot_source(kandelo, policy.kandelo_repository)) != expected_kandelo:
+        raise ExecutionError("Kandelo checkout differs from exact requested source")
+    adapter = kandelo / "scripts/abi-staging-build-bottle.sh"
+    if adapter.is_symlink() or not adapter.is_file():
+        raise ExecutionError("exact-head Kandelo build adapter is unavailable")
+    transport = UrllibOciTransportV1(username="", token="")
+
+    def fetch_candidate(locator: Mapping[str, Any]) -> Any:
+        return fetch_public_record(
+            locator,
+            transport=transport,
+            expected_artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
+            required_layer_roles=("bottle-layer",),
+        )
+
+    with tempfile.TemporaryDirectory(prefix="kandelo-abi-staging-inputs-") as temporary:
+        prepared = prepare_build_inputs(
+            bundle,
+            work,
+            destination=Path(temporary) / "inputs",
+            run=run,
+            fetch_candidate=fetch_candidate,
+        )
+        command = [
+            str(adapter),
+            "--request",
+            str(prepared["request"]),
+            "--tap-plan",
+            str(prepared["tap_plan"]),
+            "--formula-plan",
+            str(prepared["formula_plan_path"]),
+            "--dependency-root",
+            str(prepared["dependency_root"]),
+            "--run",
+            str(prepared["run"]),
+            "--retry-ordinal",
+            str(work["attempt_ordinal"]),
+            "--handoff",
+            str(handoff),
+        ]
+        child_environment = _uncredentialed_environment(
+            os.environ if environment is None else environment
+        )
+        result = run_process(command, cwd=tap, env=child_environment, check=False)
+    returncode = getattr(result, "returncode", None)
+    if isinstance(returncode, bool) or not isinstance(returncode, int):
+        raise ExecutionError("candidate build process returned no exact status")
+    return returncode if 0 <= returncode <= 255 else 1
+
+
+def _expected_verification_work_id(
+    bundle: Mapping[str, Any], work: Mapping[str, Any]
+) -> str:
+    return canonical_sha256(
+        {
+            "action": "verify-candidate",
+            "attempt_ordinal": work["attempt_ordinal"],
+            "candidate_record_sha256": work["candidate_record_sha256"],
+            "contract_sha256": work["contract_sha256"],
+            "host": work["host"],
+            "request_sha256": bundle["request_sha256"],
+            "subject": json.loads(work["subject"]),
+            "test_definition_sha256": work["test_definition_sha256"],
+        }
+    )
+
+
+def _candidate_repository_name(
+    tap_repository: str, target_abi: int, formula: str
+) -> str:
+    if (
+        not isinstance(tap_repository, str)
+        or tap_repository != tap_repository.lower()
+        or not re.fullmatch(r"[a-z0-9._-]+/[a-z0-9._-]+", tap_repository)
+        or isinstance(target_abi, bool)
+        or not isinstance(target_abi, int)
+        or not 1 <= target_abi <= 2**32 - 1
+        or not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", formula)
+    ):
+        raise ExecutionError("candidate namespace inputs are invalid")
+    return f"ghcr.io/{tap_repository}-abi-{target_abi}-candidates/{formula}"
+
+
+def _candidate_entry(
+    bundle: Mapping[str, Any], record_sha256: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    digest = _digest(record_sha256, "candidate record")
+    candidates = _mapping(bundle.get("candidates"), "coordination candidates")
+    records = _mapping(candidates.get("records"), "coordination candidate records")
+    locators = _mapping(candidates.get("locators"), "coordination candidate locators")
+    record = dict(_mapping(records.get(digest), "candidate record"))
+    locator = dict(_mapping(locators.get(digest), "candidate locator"))
+    try:
+        validate_candidate_record(record)
+    except ValueError as error:
+        raise ExecutionError(f"candidate record is invalid: {error}") from error
+    expected_repository = _candidate_repository_name(
+        str(bundle["tap_plan"]["tap_source"]["repository"]),
+        int(record["candidate"]["formula"]["target_abi"]),
+        str(record["candidate"]["formula"]["formula"]),
+    )
+    if (
+        locator.get("repository") != expected_repository
+        or locator.get("digest") != "sha256:" + digest
+        or locator.get("immutable_reference")
+        != f"{expected_repository}@sha256:{digest}"
+    ):
+        raise ExecutionError("candidate locator differs from protected namespace identity")
+    common = _mapping(record.get("common"), "candidate common")
+    formula = _mapping(record["candidate"].get("formula"), "candidate Formula")
+    if (
+        common.get("request_sha256") != bundle["request_sha256"]
+        or common.get("source") != bundle["request"]["build_source"]
+        or formula.get("tap") != bundle["tap_plan"]["tap_source"]["repository"]
+        or formula.get("target_abi") != bundle["tap_plan"]["target_abi"]["version"]
+    ):
+        raise ExecutionError("candidate differs from exact coordinated authority")
+    return record, locator
+
+
+def _verification_definition(
+    bundle: Mapping[str, Any], work: Mapping[str, Any]
+) -> dict[str, Any]:
+    matches = []
+    for candidate in bundle.get("verification_tests", ()):
+        definition = _mapping(candidate, "verification test definition")
+        if (
+            definition.get("sha256") == work["test_definition_sha256"]
+            and work["host"] in definition.get("hosts", ())
+        ):
+            matches.append(dict(definition))
+    if len(matches) != 1:
+        raise ExecutionError("verification work lacks one exact protected test definition")
+    definition = matches[0]
+    identity = {key: definition[key] for key in ("hosts", "id", "kandelo_paths", "policy")}
+    if canonical_sha256(identity) != definition["sha256"]:
+        raise ExecutionError("verification test definition digest drifted")
+    return identity
+
+
+def select_verification_work(
+    bundle: Mapping[str, Any], work_id: str
+) -> dict[str, Any]:
+    """Select one exact verification item and bind candidate, contract, and test."""
+
+    _digest(work_id, "verification work ID")
+    workflow = _mapping(bundle.get("workflow"), "coordination workflow")
+    matches = [
+        item
+        for item in workflow.get("verify_work", ())
+        if item.get("work_id") == work_id
+    ]
+    if len(matches) != 1:
+        raise ExecutionError(
+            "coordination bundle does not contain the exact verification work ID"
+        )
+    work = dict(_mapping(matches[0], "verification work"))
+    if (
+        work.get("action") != "verify-candidate"
+        or _expected_verification_work_id(bundle, work) != work_id
+        or work.get("host") not in {"build", "node", "browser"}
+    ):
+        raise ExecutionError("verification work identity differs from coordinated inputs")
+    formula_plan = _formula_for_subject(bundle, work["subject"])
+    contract = _mapping(
+        _mapping(bundle.get("contracts"), "coordination contracts").get(work["subject"]),
+        "verification bottle contract",
+    )
+    if (
+        canonical_sha256(formula_plan) != work["formula_plan_sha256"]
+        or formula_plan.get("contract_sha256") != work["contract_sha256"]
+        or canonical_sha256(contract) != work["contract_sha256"]
+    ):
+        raise ExecutionError("verification work differs from its Formula contract")
+    candidate, locator = _candidate_entry(bundle, work["candidate_record_sha256"])
+    formula = candidate["candidate"]["formula"]
+    expected_dependencies = []
+    for dependency in contract.get("direct_dependencies", ()):
+        dependency_formula = dependency["formula"]
+        dependency_digest = dependency["bottle_layer_sha256"]
+        dependency_repository = _candidate_repository_name(
+            str(formula["tap"]), int(formula["target_abi"]), dependency_formula
+        )
+        expected_dependencies.append(
+            {
+                "artifact": {
+                    "bytes": dependency["bottle_layer_bytes"],
+                    "immutable_reference": (
+                        f"{dependency_repository}@sha256:{dependency_digest}"
+                    ),
+                    "sha256": dependency_digest,
+                },
+                "id": f"{dependency_formula}-{dependency['architecture']}",
+            }
+        )
+    expected_dependencies.sort(key=lambda item: item["id"])
+    if (
+        locator != work["candidate_locator"]
+        or exact_formula_subject(formula["formula"], formula["architecture"])
+        != work["subject"]
+        or formula["bottle_contract_sha256"] != work["contract_sha256"]
+        or candidate["candidate"]["direct_dependency_layers"]
+        != expected_dependencies
+    ):
+        raise ExecutionError("verification work differs from its exact candidate")
+    _verification_definition(bundle, work)
+    return work
+
+
+def _dependency_candidate(
+    bundle: Mapping[str, Any], direct: Mapping[str, Any]
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    artifact = _mapping(direct.get("artifact"), "candidate dependency artifact")
+    direct_id = direct.get("id")
+    matches: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+    records = _mapping(bundle["candidates"]["records"], "candidate records")
+    for record_sha256 in sorted(records):
+        record, locator = _candidate_entry(bundle, record_sha256)
+        payload = record["candidate"]
+        formula = payload["formula"]
+        if (
+            direct_id == f"{formula['formula']}-{formula['architecture']}"
+            and payload["bottle_layer"] == artifact
+        ):
+            matches.append((record_sha256, record, locator))
+    if not matches:
+        raise ExecutionError("candidate dependency lacks its exact public record")
+    return matches[0]
+
+
+def _candidate_closure(
+    bundle: Mapping[str, Any], work: Mapping[str, Any]
+) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
+    root_digest = work["candidate_record_sha256"]
+    root_record, root_locator = _candidate_entry(bundle, root_digest)
+    by_formula: dict[str, tuple[str, dict[str, Any], dict[str, Any]]] = {}
+    visiting: set[str] = set()
+
+    def visit(
+        record_sha256: str,
+        record: dict[str, Any],
+        locator: dict[str, Any],
+    ) -> None:
+        if record_sha256 in visiting:
+            raise ExecutionError("candidate dependency closure contains a cycle")
+        formula = record["candidate"]["formula"]["formula"]
+        prior = by_formula.get(formula)
+        if prior is not None:
+            if prior[1]["candidate"]["bottle_layer"] != record["candidate"]["bottle_layer"]:
+                raise ExecutionError("candidate dependency closure conflicts by Formula")
+            return
+        visiting.add(record_sha256)
+        for direct in record["candidate"]["direct_dependency_layers"]:
+            visit(*_dependency_candidate(bundle, direct))
+        visiting.remove(record_sha256)
+        by_formula[formula] = (record_sha256, record, locator)
+
+    visit(root_digest, root_record, root_locator)
+    if len(by_formula) > 256:
+        raise ExecutionError("candidate dependency closure exceeds its bound")
+    return [by_formula[name] for name in sorted(by_formula)]
+
+
+def _verification_run(value: Mapping[str, Any], repository: str) -> dict[str, Any]:
+    run = dict(_mapping(value, "verification run"))
+    if frozenset(run) != frozenset(
+        {"repository", "workflow_ref", "run_id", "run_attempt", "job"}
+    ):
+        raise ExecutionError("verification run fields changed")
+    if (
+        run.get("repository") != repository
+        or run.get("job") != "verify-candidate"
+        or not isinstance(run.get("workflow_ref"), str)
+        or not run["workflow_ref"]
+        or len(run["workflow_ref"].encode()) > 2048
+        or isinstance(run.get("run_id"), bool)
+        or not isinstance(run.get("run_id"), int)
+        or run["run_id"] <= 0
+        or isinstance(run.get("run_attempt"), bool)
+        or not isinstance(run.get("run_attempt"), int)
+        or run["run_attempt"] <= 0
+    ):
+        raise ExecutionError("verification run identity is invalid")
+    return run
+
+
+def _fetched_candidate_material(
+    fetched: Any,
+    *,
+    record_sha256: str,
+    record: Mapping[str, Any],
+    locator: Mapping[str, Any],
+) -> tuple[bytes, bytes]:
+    if (
+        getattr(fetched, "artifact_type", None) != CANDIDATE_RECORD_MEDIA_TYPE
+        or getattr(fetched, "digest", None) != "sha256:" + record_sha256
+        or getattr(fetched, "immutable_reference", None)
+        != locator["immutable_reference"]
+        or getattr(getattr(fetched, "config", None), "body", None)
+        != canonical_bytes(record)
+    ):
+        raise ExecutionError("fetched candidate differs from its exact public record")
+    layers = tuple(getattr(fetched, "layers", ()))
+    if [getattr(layer, "role", None) for layer in layers] != [
+        "bottle-layer",
+        "bottle-metadata",
+    ]:
+        raise ExecutionError("fetched candidate lacks exact bottle and metadata layers")
+    bottle = record["candidate"]["bottle_layer"]
+    metadata_matches = [
+        item["artifact"]
+        for item in record["candidate"]["normalized_components"]
+        if item["id"] == "bottle-metadata"
+    ]
+    if len(metadata_matches) != 1:
+        raise ExecutionError("candidate record lacks one bottle metadata identity")
+    metadata = metadata_matches[0]
+    identities = ((layers[0], bottle), (layers[1], metadata))
+    for layer, identity in identities:
+        body = getattr(layer, "body", None)
+        if (
+            not isinstance(body, bytes)
+            or len(body) != identity["bytes"]
+            or hashlib.sha256(body).hexdigest() != identity["sha256"]
+            or getattr(layer, "digest", None) != "sha256:" + identity["sha256"]
+            or getattr(layer, "size", None) != identity["bytes"]
+        ):
+            raise ExecutionError("fetched candidate layer differs from its record")
+    try:
+        parse_canonical_bytes(layers[1].body, maximum_bytes=4 * 1024 * 1024)
+    except CanonicalJsonError as error:
+        raise ExecutionError(f"candidate bottle metadata is not canonical: {error}") from error
+    return layers[0].body, layers[1].body
+
+
+def prepare_verification_inputs(
+    bundle: Mapping[str, Any],
+    work: Mapping[str, Any],
+    *,
+    destination: Path,
+    run: Mapping[str, Any],
+    fetch_candidate: Callable[[Mapping[str, Any]], Any],
+) -> dict[str, Any]:
+    """Materialize an exact target plus its full public dependency closure."""
+
+    selected = select_verification_work(bundle, str(work.get("work_id", "")))
+    if canonical_bytes(selected) != canonical_bytes(work):
+        raise ExecutionError("caller-supplied verification work differs from coordination")
+    checked_run = _verification_run(
+        run, str(bundle["tap_plan"]["tap_source"]["repository"])
+    )
+    root = _create_output_directory(destination)
+    candidate_root = root / "candidates"
+    candidate_root.mkdir()
+    sysroot = root / "sysroot"
+    sysroot.mkdir()
+    closure = _candidate_closure(bundle, selected)
+    prepared_candidates: list[dict[str, Any]] = []
+    for record_sha256, record, locator in closure:
+        bottle, metadata = _fetched_candidate_material(
+            fetch_candidate(locator),
+            record_sha256=record_sha256,
+            record=record,
+            locator=locator,
+        )
+        formula = record["candidate"]["formula"]
+        formula_root = candidate_root / formula["formula"]
+        formula_root.mkdir()
+        bottle_path = formula_root / "bottle.tar.gz"
+        metadata_path = formula_root / "bottle-metadata.json"
+        bottle_path.write_bytes(bottle)
+        metadata_path.write_bytes(metadata)
+        prepared_candidates.append(
+            {
+                "formula": formula["formula"],
+                "architecture": formula["architecture"],
+                "target_abi": formula["target_abi"],
+                "tap_repository": formula["tap"],
+                "record_sha256": record_sha256,
+                "locator": locator,
+                "bottle_layer": record["candidate"]["bottle_layer"],
+                "bottle": bottle_path,
+                "metadata": metadata_path,
+            }
+        )
+    target = next(
+        (
+            candidate
+            for candidate in prepared_candidates
+            if candidate["record_sha256"] == selected["candidate_record_sha256"]
+        ),
+        None,
+    )
+    if target is None:
+        raise ExecutionError("verification closure omitted its target candidate")
+    dependencies = [
+        {
+            "artifact": candidate["bottle_layer"],
+            "formula": candidate["formula"],
+        }
+        for candidate in prepared_candidates
+        if candidate is not target
+    ]
+    dependency_contract = {
+        "architecture": target["architecture"],
+        "dependency_layers": dependencies,
+        "kind": "kandelo-abi-staging-dependency-layers",
+        "schema": 1,
+        "tap_repository": bundle["tap_plan"]["tap_source"]["repository"],
+        "target_abi": target["target_abi"],
+    }
+    definition = _verification_definition(bundle, selected)
+    documents = {
+        root / "candidate-locator.json": target["locator"],
+        root / "test-definition.json": definition,
+        root / "run.json": checked_run,
+        root / "dependency-provenance.json": dependency_contract,
+    }
+    try:
+        for path, value in documents.items():
+            path.write_bytes(canonical_bytes(value))
+    except OSError as error:
+        raise ExecutionError(f"cannot write verification inputs: {error}") from error
+    return {
+        "root": root,
+        "candidates": prepared_candidates,
+        "target": target,
+        "candidate_locator": root / "candidate-locator.json",
+        "test_definition": root / "test-definition.json",
+        "test_definition_sha256": selected["test_definition_sha256"],
+        "run": root / "run.json",
+        "dependency_provenance": root / "dependency-provenance.json",
+        "sysroot": sysroot,
+    }
+
+
+def compose_candidate_tap(
+    *,
+    tap_root: Path,
+    kandelo_root: Path,
+    destination: Path,
+    candidates: Sequence[Mapping[str, Any]],
+) -> Path:
+    """Clone the exact tap commit and compose only exact candidate bottle blocks."""
+
+    if destination.exists() or destination.is_symlink():
+        raise ExecutionError("candidate tap destination must not already exist")
+    try:
+        clone = subprocess.run(
+            ["git", "clone", "--quiet", "--no-hardlinks", str(tap_root), str(destination)],
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except OSError as error:
+        raise ExecutionError(f"cannot clone exact candidate tap: {error}") from error
+    if clone.returncode != 0:
+        detail = clone.stderr.decode("utf-8", errors="replace")[:4096]
+        raise ExecutionError(f"cannot clone exact candidate tap: {detail}")
+    expected_head = subprocess.run(
+        ["git", "-C", str(tap_root), "rev-parse", "HEAD"],
+        check=True,
+        stdout=subprocess.PIPE,
+    ).stdout.decode("ascii").strip()
+    actual_head = subprocess.run(
+        ["git", "-C", str(destination), "rev-parse", "HEAD"],
+        check=True,
+        stdout=subprocess.PIPE,
+    ).stdout.decode("ascii").strip()
+    if actual_head != expected_head:
+        raise ExecutionError("candidate tap clone differs from exact protected commit")
+    merge = kandelo_root / "scripts/homebrew-merge-bottle-json.sh"
+    if merge.is_symlink() or not merge.is_file():
+        raise ExecutionError("exact-head candidate Formula composer is unavailable")
+    for candidate in candidates:
+        try:
+            metadata = parse_canonical_bytes(
+                Path(candidate["metadata"]).read_bytes(), maximum_bytes=4 * 1024 * 1024
+            )
+            entry = _mapping(
+                _mapping(metadata, "candidate bottle metadata").get(candidate["formula"]),
+                "candidate bottle metadata entry",
+            )
+            bottle = _mapping(entry.get("bottle"), "candidate bottle metadata bottle")
+        except (OSError, CanonicalJsonError) as error:
+            raise ExecutionError(f"cannot read candidate bottle metadata: {error}") from error
+        command = [
+            str(merge),
+            "--tap-root",
+            str(destination),
+            "--tap-repository",
+            str(candidate["tap_repository"]),
+        ]
+        command.extend(
+            [
+                "--formula",
+                str(candidate["formula"]),
+                "--arch",
+                str(candidate["architecture"]),
+                "--release-tag",
+                f"bottles-abi-v{candidate['target_abi']}",
+                "--bottle-json",
+                str(candidate["metadata"]),
+                "--expected-sha256",
+                str(candidate["bottle_layer"]["sha256"]),
+                "--expected-root-url",
+                str(bottle.get("root_url", "")),
+                "--expected-cellar",
+                str(bottle.get("cellar", "")),
+                "--staging-candidate-abi",
+                str(candidate["target_abi"]),
+            ]
+        )
+        result = subprocess.run(
+            command,
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.decode("utf-8", errors="replace")[:4096]
+            raise ExecutionError(
+                f"cannot compose exact candidate Formula {candidate['formula']}: {detail}"
+            )
+    allowed = {f"Formula/{candidate['formula']}.rb" for candidate in candidates}
+    status = subprocess.run(
+        ["git", "-C", str(destination), "status", "--short", "--untracked-files=all"],
+        check=True,
+        stdout=subprocess.PIPE,
+    ).stdout.decode("utf-8", errors="strict").splitlines()
+    for line in status:
+        if not line.startswith(" M ") or line[3:] not in allowed:
+            raise ExecutionError("candidate composition changed an undeclared tap path")
+    return destination.resolve(strict=True)
+
+
+def execute_verification_work(
+    *,
+    coordination_path: Path,
+    work_id: str,
+    kandelo_root: Path,
+    tap_root: Path,
+    run: Mapping[str, Any],
+    output: Path,
+    snapshot_source: Callable[[Path, str], Mapping[str, Any]] = snapshot_tap_source,
+    fetch_candidate: Callable[[Mapping[str, Any]], Any] | None = None,
+    compose_tap: Callable[..., Path] = compose_candidate_tap,
+    run_process: Callable[..., Any] = subprocess.run,
+    environment: Mapping[str, str] | None = None,
+) -> int:
+    """Verify one exact public candidate without credentials or rebuilding."""
+
+    try:
+        tap = tap_root.resolve(strict=True)
+        kandelo = kandelo_root.resolve(strict=True)
+    except OSError as error:
+        raise ExecutionError(f"verification source checkout is unavailable: {error}") from error
+    from .policy import load_tap_staging_policy
+
+    policy = load_tap_staging_policy(tap / "Kandelo/staging/tap-policy.toml")
+    source_path = coordination_path
+    if source_path.is_dir():
+        source_path = source_path / "coordination.json"
+    bundle = load_coordination_bundle(source_path, policy=policy)
+    work = select_verification_work(bundle, work_id)
+    if dict(snapshot_source(tap, policy.tap_repository)) != bundle["tap_plan"]["tap_source"]:
+        raise ExecutionError("tap checkout differs from protected coordinated source")
+    if dict(snapshot_source(kandelo, policy.kandelo_repository)) != bundle["request"]["build_source"]:
+        raise ExecutionError("Kandelo checkout differs from exact requested source")
+    adapter = kandelo / "scripts/abi-staging-verify-bottle.sh"
+    if adapter.is_symlink() or not adapter.is_file():
+        raise ExecutionError("exact-head Kandelo verification adapter is unavailable")
+    if fetch_candidate is None:
+        transport = UrllibOciTransportV1(username="", token="")
+
+        def fetch_candidate(locator: Mapping[str, Any]) -> Any:
+            return fetch_public_record(
+                locator,
+                transport=transport,
+                expected_artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
+                required_layer_roles=("bottle-layer", "bottle-metadata"),
+            )
+
+    with tempfile.TemporaryDirectory(prefix="kandelo-abi-staging-verification-") as temporary:
+        temporary_root = Path(temporary)
+        prepared = prepare_verification_inputs(
+            bundle,
+            work,
+            destination=temporary_root / "inputs",
+            run=run,
+            fetch_candidate=fetch_candidate,
+        )
+        composed_tap = compose_tap(
+            tap_root=tap,
+            kandelo_root=kandelo,
+            destination=temporary_root / "tap",
+            candidates=prepared["candidates"],
+        )
+        command = [
+            str(adapter),
+            "--candidate-locator",
+            str(prepared["candidate_locator"]),
+            "--test-definition",
+            str(prepared["test_definition"]),
+            "--test-definition-sha256",
+            str(prepared["test_definition_sha256"]),
+            "--host",
+            str(work["host"]),
+            "--attempt-ordinal",
+            str(work["attempt_ordinal"]),
+            "--run",
+            str(prepared["run"]),
+            "--tap-root",
+            str(composed_tap),
+            "--tap-commit",
+            str(bundle["tap_plan"]["tap_source"]["commit"]),
+            "--tap-checkout-commit",
+            str(bundle["tap_plan"]["tap_source"]["commit"]),
+            "--dependency-provenance",
+            str(prepared["dependency_provenance"]),
+            "--sysroot-build-root",
+            str(prepared["sysroot"]),
+        ]
+        for forbidden in sorted({str(kandelo), str(tap), str(prepared["root"])}):
+            command.extend(["--forbidden-root", forbidden])
+        command.extend(["--out", str(output)])
+        child_environment = _uncredentialed_environment(
+            os.environ if environment is None else environment
+        )
+        result = run_process(command, cwd=tap, env=child_environment, check=False)
+    returncode = getattr(result, "returncode", None)
+    if isinstance(returncode, bool) or not isinstance(returncode, int):
+        raise ExecutionError("candidate verification process returned no exact status")
+    return returncode if 0 <= returncode <= 255 else 1

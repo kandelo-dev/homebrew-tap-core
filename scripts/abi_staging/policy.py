@@ -304,6 +304,12 @@ def candidate_repository(
     )
 
 
+def attempt_repository(
+    policy: TapStagingPolicyV1, target_abi: int, *, formula: str
+) -> str:
+    return candidate_repository(policy, target_abi, formula=formula) + "/attempts"
+
+
 def source_custody_repository(policy: TapStagingPolicyV1, target_abi: int) -> str:
     abi = _integer(target_abi, "target ABI", 1, 2**32 - 1)
     return (

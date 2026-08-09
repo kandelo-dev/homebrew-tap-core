@@ -19,6 +19,10 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     Marshal.load(Marshal.dump(value))
   end
 
+  def last_run_step(workflow, job_name)
+    workflow.dig("jobs", job_name, "steps").reverse.find { |step| step.key?("run") }
+  end
+
   def assert_rejected(label)
     changed = copy
     yield changed
@@ -42,39 +46,165 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     AbiStagingWorkflowCheck.check_maintenance(@maintenance)
   end
 
+  def test_discovery_checks_out_the_exact_head_before_deriving_requirements
+    steps = @workflow.dig("jobs", "discover-plan", "steps")
+    kandelo_checkout = steps.find do |step|
+      step["uses"]&.start_with?(AbiStagingWorkflowCheck::CHECKOUT) &&
+        step.dig("with", "path") == "kandelo-source"
+    end
+    refute_nil kandelo_checkout
+    assert_equal "${{ steps.discover.outputs.kandelo_repository }}",
+                 kandelo_checkout.dig("with", "repository")
+    assert_equal "${{ steps.discover.outputs.kandelo_head }}",
+                 kandelo_checkout.dig("with", "ref")
+    discover_index = steps.index { |step| step["id"] == "discover" }
+    requirements_index = steps.index { |step| step["id"] == "requirements" }
+    coordinate_index = steps.index { |step| step["id"] == "coordinate" }
+    refute_nil discover_index
+    refute_nil requirements_index
+    refute_nil coordinate_index
+    assert_operator discover_index, :<, steps.index(kandelo_checkout)
+    assert_operator steps.index(kandelo_checkout), :<, requirements_index
+    assert_operator requirements_index, :<, coordinate_index
+  end
+
   def test_write_permission_is_rejected
     assert_rejected("write permission") do |workflow|
-      workflow.dig("jobs", "reconcile", "permissions")["contents"] = "write"
+      workflow.dig("jobs", "build-candidate", "permissions")["contents"] = "write"
+    end
+    assert_rejected("verification write permission") do |workflow|
+      workflow.dig("jobs", "verify-candidate", "permissions")["packages"] = "write"
     end
   end
 
   def test_secret_and_request_execution_are_rejected
     assert_rejected("secret") do |workflow|
-      workflow.dig("jobs", "reconcile")["env"] = {"TOKEN" => "${{ secrets.TOKEN }}"}
+      workflow.dig("jobs", "build-candidate")["env"] = {"TOKEN" => "${{ secrets.TOKEN }}"}
     end
     assert_rejected("request execution") do |workflow|
-      workflow.dig("jobs", "reconcile", "steps").last["run"] = 'bash "$REQUEST_ASSET_URL"'
+      last_run_step(workflow, "discover-plan")["run"] = 'bash "$REQUEST_ASSET_URL"'
     end
   end
 
   def test_request_cannot_select_checkout_or_coordinator
     assert_rejected("checkout ref") do |workflow|
-      checkout = workflow.dig("jobs", "reconcile", "steps").find { |step| step["uses"]&.start_with?(AbiStagingWorkflowCheck::CHECKOUT) }
+      checkout = workflow.dig("jobs", "discover-plan", "steps").find { |step| step["uses"]&.start_with?(AbiStagingWorkflowCheck::CHECKOUT) }
       checkout.fetch("with")["ref"] = "${{ inputs.request_asset_url }}"
     end
     assert_rejected("coordinator") do |workflow|
-      workflow.dig("jobs", "reconcile", "steps").last["run"] =
+      last_run_step(workflow, "discover-plan")["run"] =
         "python3 request-supplied-reconciler.py"
     end
   end
 
   def test_dispatch_and_pr_triggers_are_rejected
     assert_rejected("build dispatch") do |workflow|
-      workflow.dig("jobs", "reconcile", "steps").last["run"] += "\ngh workflow run build.yml"
+      last_run_step(workflow, "discover-plan")["run"] += "\ngh workflow run build.yml"
     end
     assert_rejected("repository dispatch") do |workflow|
       triggers = workflow.key?("on") ? workflow["on"] : workflow[true]
       triggers["repository_dispatch"] = {}
+    end
+  end
+
+  def test_candidate_and_verifier_cannot_gain_writer_authority_or_secrets
+    %w[build-candidate verify-candidate].each do |job_name|
+      assert_rejected("#{job_name} package writer") do |workflow|
+        workflow.dig("jobs", job_name, "permissions")["packages"] = "write"
+      end
+      assert_rejected("#{job_name} secret inheritance") do |workflow|
+        workflow.dig("jobs", job_name)["secrets"] = "inherit"
+      end
+    end
+  end
+
+  def test_publishers_cannot_execute_candidate_handoffs_or_combine_roles
+    %w[publish-candidate publish-receipt].each do |job_name|
+      assert_rejected("#{job_name} candidate execution") do |workflow|
+        last_run_step(workflow, job_name)["run"] +=
+          "\nbash handoff/scripts/build.sh"
+      end
+    end
+    assert_rejected("combined build and publish") do |workflow|
+      workflow.dig("jobs", "build-candidate", "permissions")["packages"] = "write"
+      last_run_step(workflow, "build-candidate")["run"] +=
+        "\npython3 -m scripts.abi_staging.cli publish-candidate"
+    end
+  end
+
+  def test_matrices_and_timeouts_are_bounded()
+    %w[build-candidate publish-candidate verify-candidate publish-receipt].each do |job_name|
+      assert_rejected("#{job_name} unbounded matrix") do |workflow|
+        workflow.dig("jobs", job_name, "strategy").delete("max-parallel")
+      end
+    end
+    %w[build-candidate verify-candidate].each do |job_name|
+      assert_rejected("#{job_name} timeout") do |workflow|
+        workflow.dig("jobs", job_name)["timeout-minutes"] = 361
+      end
+    end
+  end
+
+  def test_artifact_identity_and_anonymous_readback_are_required()
+    assert_rejected("missing build artifact digest bridge") do |workflow|
+      step = last_run_step(workflow, "publish-candidate")
+      source = step.fetch("run")
+      step["run"] =
+        source.sub("--require-github-digest", "")
+    end
+    assert_rejected("missing receipt artifact digest bridge") do |workflow|
+      step = last_run_step(workflow, "publish-receipt")
+      source = step.fetch("run")
+      step["run"] =
+        source.sub("--require-github-digest", "")
+    end
+    assert_rejected("missing anonymous candidate readback") do |workflow|
+      step = last_run_step(workflow, "publish-candidate")
+      source = step.fetch("run")
+      step["run"] =
+        source.sub("--anonymous-readback", "")
+    end
+    assert_rejected("mutable candidate tag") do |workflow|
+      last_run_step(workflow, "publish-candidate")["run"] +=
+        "\noras push ghcr.io/example/candidate:latest handoff.tar"
+    end
+  end
+
+  def test_each_publisher_retains_its_exact_result_locator()
+    %w[publish-candidate publish-receipt].each do |job_name|
+      assert_rejected("#{job_name} missing result locator") do |workflow|
+        workflow.dig("jobs", job_name, "steps").reject! do |step|
+          step["uses"]&.start_with?(AbiStagingWorkflowCheck::UPLOAD_ARTIFACT)
+        end
+      end
+    end
+  end
+
+  def test_candidate_execution_binds_run_facts_and_preserves_failed_handoffs
+    assert_rejected("missing build run identity") do |workflow|
+      step = last_run_step(workflow, "build-candidate")
+      step["run"] = step.fetch("run").sub('--run-id "$GITHUB_RUN_ID"', "")
+    end
+    assert_rejected("nested coordination download") do |workflow|
+      download = workflow.dig("jobs", "build-candidate", "steps").find do |step|
+        step["uses"]&.start_with?(AbiStagingWorkflowCheck::DOWNLOAD_ARTIFACT)
+      end
+      download.fetch("with").delete("merge-multiple")
+    end
+    assert_rejected("lost failed build handoff") do |workflow|
+      upload = workflow.dig("jobs", "build-candidate", "steps").find do |step|
+        step["uses"]&.start_with?(AbiStagingWorkflowCheck::UPLOAD_ARTIFACT)
+      end
+      upload.delete("if")
+    end
+  end
+
+  def test_background_failure_does_not_gate_required_work_and_no_job_sleeps()
+    assert_rejected("background gate") do |workflow|
+      workflow.dig("jobs", "verify-candidate")["needs"] << "background-complete"
+    end
+    assert_rejected("sleeping retry") do |workflow|
+      last_run_step(workflow, "discover-plan")["run"] += "\nsleep 60"
     end
   end
 
