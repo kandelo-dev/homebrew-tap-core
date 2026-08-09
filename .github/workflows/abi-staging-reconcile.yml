@@ -1,0 +1,111 @@
+name: Observe ABI staging requests
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      request_asset_url:
+        description: "One exact public request asset URL; empty scans the feed"
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: abi-staging-reconcile-${{ github.event_name }}-${{ inputs.request_asset_url || 'scan' }}
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out protected tap main
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: refs/heads/main
+          fetch-depth: 1
+          persist-credentials: false
+          path: tap-authority
+
+      - name: Set up declared Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Reconcile through protected observe-only code
+        working-directory: tap-authority
+        env:
+          REQUEST_ASSET_URL: ${{ inputs.request_asset_url }}
+        run: |
+          set -euo pipefail
+          result="$RUNNER_TEMP/abi-staging-reconciliation.json"
+          if [[ -n $REQUEST_ASSET_URL ]]; then
+            python3 -m scripts.abi_staging.cli reconcile \
+              --request-asset-url "$REQUEST_ASSET_URL" >"$result"
+          else
+            python3 -m scripts.abi_staging.cli scan >"$result"
+          fi
+          result_bytes=$(wc -c <"$result" | tr -d ' ')
+          (( result_bytes >= 1 && result_bytes <= 4194304 ))
+
+          python3 - "$result" "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          MAX_DECISIONS = 4096
+          MAX_SUMMARY_DECISIONS = 256
+          MAX_FIELD = 8192
+
+          result_path, summary_path = map(pathlib.Path, sys.argv[1:])
+          payload = json.loads(result_path.read_bytes())
+          if set(payload) != {"decisions", "mode"} or payload["mode"] != "observe":
+              raise SystemExit("reconciliation output identity changed")
+          decisions = payload["decisions"]
+          if not isinstance(decisions, list) or len(decisions) > MAX_DECISIONS:
+              raise SystemExit("reconciliation decision inventory is invalid")
+
+          def field(value):
+              rendered = str(value)
+              if not rendered or len(rendered.encode()) > MAX_FIELD:
+                  raise SystemExit("reconciliation summary field is invalid")
+              return rendered.replace("\\", "\\\\").replace("|", "\\|").replace("\n", " ")
+
+          lines = [
+              "## ABI staging reconciliation (observe only)",
+              "",
+              "| request | exact head | current | lifecycle | blockers | public asset |",
+              "|---|---|---|---|---|---|",
+          ]
+          for decision in decisions[:MAX_SUMMARY_DECISIONS]:
+              required = {
+                  "request_digest", "exact_head", "current_for_pull_request",
+                  "lifecycle", "blockers", "asset_url",
+              }
+              if not required.issubset(decision):
+                  raise SystemExit("reconciliation summary decision is incomplete")
+              lifecycle = decision["lifecycle"]
+              blockers = json.dumps(decision["blockers"], separators=(",", ":"), sort_keys=True)
+              classification = "current" if decision["current_for_pull_request"] else "historical"
+              lines.append(
+                  "| " + " | ".join([
+                      field(decision["request_digest"]),
+                      field(decision["exact_head"]),
+                      field(classification),
+                      field(lifecycle["state"]),
+                      field(blockers),
+                      field(decision["asset_url"]),
+                  ]) + " |"
+              )
+          if len(decisions) > MAX_SUMMARY_DECISIONS:
+              lines.extend(["", f"{len(decisions) - MAX_SUMMARY_DECISIONS} additional decisions omitted from this bounded summary."])
+          summary = "\n".join(lines) + "\n"
+          if len(summary.encode()) > 1048576:
+              raise SystemExit("reconciliation job summary exceeds 1 MiB")
+          with summary_path.open("a", encoding="utf-8") as output:
+              output.write(summary)
+          PY
