@@ -22,6 +22,12 @@ from .contract import (
     validate_capture_assessment,
     load_bottle_contract,
 )
+from .custody import (
+    CustodyError,
+    create_source_custody,
+    load_source_custody_manifest,
+    validate_source_custody,
+)
 from .plan import exact_formula_subject
 from .records import load_tap_plan_record
 
@@ -518,7 +524,16 @@ def _validate_diagnostics(
             raise HandoffError(f"diagnostic contains a secret-shaped value: {entry['path']}")
 
 
-def validate_handoff(root: Path, *, max_files: int, max_bytes: int) -> dict[str, Any]:
+def validate_handoff(
+    root: Path,
+    *,
+    max_files: int,
+    max_bytes: int,
+    expected_request_sha256: str,
+    expected_subject: str,
+    expected_kandelo_source: Mapping[str, Any],
+    expected_tap_source: Mapping[str, Any],
+) -> dict[str, Any]:
     if max_files < 1 or max_files > 65_536 or max_bytes < 1 or max_bytes > 2**63 - 1:
         raise HandoffError("handoff limits are invalid")
     scanned = _scan_regular_files(root)
@@ -566,6 +581,29 @@ def validate_handoff(root: Path, *, max_files: int, max_bytes: int) -> dict[str,
     )
     if result["outcome"] != inventory["outcome"] or result["subject"] != inventory["subject"]:
         raise HandoffError("build result differs from inventory identity")
+    if result["request_sha256"] != _digest(
+        expected_request_sha256, "expected handoff request"
+    ):
+        raise HandoffError("build result refers to a different exact request")
+    if result["subject"] != _subject(expected_subject, "expected handoff subject"):
+        raise HandoffError("build result refers to a different exact Formula subject")
+    custody_manifest_body = _read_member_nofollow(
+        root,
+        "source-custody/manifest.json",
+        scanned_by_path["source-custody/manifest.json"][1],
+        MAX_JSON_BYTES,
+    )
+    try:
+        custody_manifest = load_source_custody_manifest(custody_manifest_body)
+        validate_source_custody(
+            root=root / "source-custody",
+            expected_request_sha256=expected_request_sha256,
+            expected_subject=expected_subject,
+            expected_kandelo_source=expected_kandelo_source,
+            expected_tap_source=expected_tap_source,
+        )
+    except CustodyError as error:
+        raise HandoffError(f"source custody is invalid: {error}") from error
     diagnostic_digest = expected_entries["diagnostics/summary.txt"]["sha256"]
     if result["diagnostic_summary_sha256"] != diagnostic_digest:
         raise HandoffError("build result diagnostic digest differs from exact bytes")
@@ -603,6 +641,7 @@ def validate_handoff(root: Path, *, max_files: int, max_bytes: int) -> dict[str,
         "subject": inventory["subject"],
         "outcome": inventory["outcome"],
         "candidate": result["candidate"],
+        "source_capsule_sha256": custody_manifest["capsule_sha256"],
         "inventory_sha256": hashlib.sha256(
             _read_member_nofollow(
                 root,
@@ -906,6 +945,32 @@ def _copy_regular(source: Path, destination: Path, field: str) -> None:
     destination.write_bytes(body)
 
 
+def create_context_source_custody(
+    *,
+    context_path: Path,
+    kandelo_root: Path,
+    tap_root: Path,
+    output: Path,
+) -> dict[str, Any]:
+    context = _canonical_mapping(
+        _read_regular(context_path, "build context"), "build context"
+    )
+    if context.get("schema") != 1 or context.get("kind") != "kandelo-abi-staging-build-context":
+        raise HandoffError("build context protocol is unsupported")
+    try:
+        return create_source_custody(
+            kandelo_root=kandelo_root,
+            tap_root=tap_root,
+            kandelo_source=_mapping(context.get("request_source"), "request source"),
+            tap_source=_mapping(context.get("tap_source"), "tap source"),
+            request_sha256=_digest(context.get("request_sha256"), "request digest"),
+            subject=_subject(context.get("subject"), "build context subject"),
+            output=output,
+        )
+    except CustodyError as error:
+        raise HandoffError(f"cannot preserve exact source custody: {error}") from error
+
+
 def _attempt_record(
     context: Mapping[str, Any],
     *,
@@ -1000,7 +1065,12 @@ def _attempt_record(
 
 
 def assemble_handoff(
-    *, context_path: Path, raw_output: Path, handoff: Path, exit_code: int
+    *,
+    context_path: Path,
+    raw_output: Path,
+    source_custody: Path,
+    handoff: Path,
+    exit_code: int,
 ) -> dict[str, Any]:
     context = _canonical_mapping(
         _read_regular(context_path, "build context"), "build context"
@@ -1019,28 +1089,29 @@ def assemble_handoff(
         handoff / "bottle-contract.json",
         "bottle contract",
     )
-    custody_root = raw_output / "source-custody"
-    required_custody = (
-        "manifest.json",
-        "kandelo.bundle",
-        "kandelo-tree.tar",
-        "tap.bundle",
-        "tap-tree.tar",
-    )
-    for relative in required_custody:
+    try:
+        custody_manifest = validate_source_custody(
+            root=source_custody,
+            expected_request_sha256=context["request_sha256"],
+            expected_subject=context["subject"],
+            expected_kandelo_source=context["request_source"],
+            expected_tap_source=context["tap_source"],
+        )
+    except CustodyError as error:
+        raise HandoffError(
+            f"source custody is invalid after candidate execution: {error}"
+        ) from error
+    custody_members = ["manifest.json"]
+    for source in custody_manifest["sources"]:
+        custody_members.extend((source["bundle"]["path"], source["tree_archive"]["path"]))
+    for submodule in custody_manifest["submodules"]:
+        custody_members.extend((submodule["bundle"]["path"], submodule["tree_archive"]["path"]))
+    for relative in sorted(custody_members):
         _copy_regular(
-            custody_root / relative,
+            source_custody / relative,
             handoff / "source-custody" / relative,
             f"source custody {relative}",
         )
-    submodules = custody_root / "submodules"
-    if submodules.exists():
-        for candidate in sorted(submodules.iterdir()):
-            _copy_regular(
-                candidate,
-                handoff / "source-custody/submodules" / candidate.name,
-                f"source custody submodule {candidate.name}",
-            )
     summary_source = raw_output / "diagnostics/summary.txt"
     _copy_regular(summary_source, handoff / "diagnostics/summary.txt", "build summary")
 
@@ -1078,21 +1149,34 @@ def assemble_handoff(
     }
     validate_build_result(result)
     (handoff / "build-result.json").write_bytes(canonical_bytes(result))
-    custody_manifest = _read_regular(
+    custody_manifest_body = _read_regular(
         handoff / "source-custody/manifest.json", "source custody manifest"
+    )
+    source_capsule_bytes = len(custody_manifest_body) + sum(
+        member["bytes"]
+        for owner in (*custody_manifest["sources"], *custody_manifest["submodules"])
+        for member in (owner["bundle"], owner["tree_archive"])
     )
     attempt = _attempt_record(
         context,
         outcome=outcome,
         exit_code=exit_code,
-        source_capsule_sha256=hashlib.sha256(custody_manifest).hexdigest(),
-        source_capsule_bytes=len(custody_manifest),
+        source_capsule_sha256=custody_manifest["capsule_sha256"],
+        source_capsule_bytes=source_capsule_bytes,
         candidate=candidate_identity,
         diagnostic_sha256=diagnostic_sha256,
     )
     (handoff / "attempt-record.json").write_bytes(canonical_bytes(attempt))
     write_handoff_inventory(handoff, subject=context["subject"], outcome=outcome)
-    return validate_handoff(handoff, max_files=256, max_bytes=4_294_967_296)
+    return validate_handoff(
+        handoff,
+        max_files=256,
+        max_bytes=4_294_967_296,
+        expected_request_sha256=context["request_sha256"],
+        expected_subject=context["subject"],
+        expected_kandelo_source=context["request_source"],
+        expected_tap_source=context["tap_source"],
+    )
 
 
 def materialize_dependency_layers(*, context_path: Path, output: Path) -> None:
@@ -1116,6 +1200,31 @@ def materialize_dependency_layers(*, context_path: Path, output: Path) -> None:
         destination.write_bytes(body)
 
 
+def _load_handoff_validation_expectations(
+    *, request_path: Path, tap_plan_path: Path, formula_plan_path: Path
+) -> dict[str, Any]:
+    request_body = _read_regular(request_path, "ABI staging request")
+    request = _canonical_mapping(request_body, "ABI staging request")
+    if request.get("schema") != 1 or request.get("kind") != "kandelo-abi-staging-request":
+        raise HandoffError("ABI staging request protocol is unsupported")
+    request_sha256 = hashlib.sha256(request_body).hexdigest()
+    tap_plan = load_tap_plan_record(_read_regular(tap_plan_path, "tap plan"))
+    if tap_plan["request_digest"] != request_sha256:
+        raise HandoffError("tap plan names a different exact request")
+    formula_plan = _canonical_mapping(
+        _read_regular(formula_plan_path, "Formula plan"), "Formula plan"
+    )
+    if sum(candidate == formula_plan for candidate in tap_plan["formulae"]) != 1:
+        raise HandoffError("Formula plan is not one exact member of the tap plan")
+    identity = _mapping(formula_plan.get("identity"), "Formula plan identity")
+    return {
+        "request_sha256": request_sha256,
+        "subject": exact_formula_subject(identity.get("name"), identity.get("architecture")),
+        "kandelo_source": _mapping(request.get("build_source"), "request build source"),
+        "tap_source": _mapping(tap_plan.get("tap_source"), "tap plan source"),
+    }
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python3 -m scripts.abi_staging.handoff")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -1130,13 +1239,22 @@ def _parser() -> argparse.ArgumentParser:
     assemble = commands.add_parser("assemble")
     assemble.add_argument("--context", required=True)
     assemble.add_argument("--raw-output", required=True)
+    assemble.add_argument("--source-custody", required=True)
     assemble.add_argument("--handoff", required=True)
     assemble.add_argument("--exit-code", required=True, type=int)
+    custody = commands.add_parser("create-custody")
+    custody.add_argument("--context", required=True)
+    custody.add_argument("--kandelo-root", required=True)
+    custody.add_argument("--tap-root", required=True)
+    custody.add_argument("--out", required=True)
     materialize = commands.add_parser("materialize-dependencies")
     materialize.add_argument("--context", required=True)
     materialize.add_argument("--out", required=True)
     validate = commands.add_parser("validate")
     validate.add_argument("--handoff", required=True)
+    validate.add_argument("--request", required=True)
+    validate.add_argument("--tap-plan", required=True)
+    validate.add_argument("--formula-plan", required=True)
     validate.add_argument("--max-files", required=True, type=int)
     validate.add_argument("--max-bytes", required=True, type=int)
     return parser
@@ -1159,8 +1277,16 @@ def main(arguments: list[str] | None = None) -> int:
             assemble_handoff(
                 context_path=Path(args.context).resolve(strict=True),
                 raw_output=Path(args.raw_output).resolve(strict=True),
+                source_custody=Path(args.source_custody).resolve(strict=True),
                 handoff=Path(args.handoff).resolve(strict=False),
                 exit_code=args.exit_code,
+            )
+        elif args.command == "create-custody":
+            create_context_source_custody(
+                context_path=Path(args.context).resolve(strict=True),
+                kandelo_root=Path(args.kandelo_root).resolve(strict=True),
+                tap_root=Path(args.tap_root).resolve(strict=True),
+                output=Path(args.out).resolve(strict=False),
             )
         elif args.command == "materialize-dependencies":
             materialize_dependency_layers(
@@ -1168,10 +1294,19 @@ def main(arguments: list[str] | None = None) -> int:
                 output=Path(args.out).resolve(strict=False),
             )
         else:
+            expectations = _load_handoff_validation_expectations(
+                request_path=Path(args.request).resolve(strict=True),
+                tap_plan_path=Path(args.tap_plan).resolve(strict=True),
+                formula_plan_path=Path(args.formula_plan).resolve(strict=True),
+            )
             validated = validate_handoff(
                 Path(args.handoff).resolve(strict=True),
                 max_files=args.max_files,
                 max_bytes=args.max_bytes,
+                expected_request_sha256=expectations["request_sha256"],
+                expected_subject=expectations["subject"],
+                expected_kandelo_source=expectations["kandelo_source"],
+                expected_tap_source=expectations["tap_source"],
             )
             print(canonical_bytes(validated).decode("utf-8"), end="")
         return 0
@@ -1197,7 +1332,9 @@ def build_miniature_build_result_fixture(
         contract = _file_identity(root / "bottle-contract.json")
         bottle = _file_identity(root / "bottle.tar.gz") if outcome == "success" else None
         metadata = _file_identity(root / "bottle-metadata.json") if outcome == "success" else None
-        diagnostic_digest = hashlib.sha256((root / "diagnostics/summary.txt").read_bytes()).hexdigest()
+        diagnostic_digest = hashlib.sha256(
+            (root / "diagnostics/summary.txt").read_bytes()
+        ).hexdigest()
     result = {
         "schema": 1,
         "kind": "kandelo-abi-staging-build-result",
