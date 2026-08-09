@@ -475,6 +475,23 @@ def _observed_paths(name: str, formula_source: str) -> tuple[set[str], set[str]]
     return kandelo, tap
 
 
+def _observed_architectures(name: str, formula_source: str) -> tuple[str, ...]:
+    calls = re.findall(r"kandelo_require_arch!\(([^)]*)\)", formula_source)
+    if len(calls) > 1:
+        raise PolicyError(f"Formula {name} has ambiguous architecture declarations")
+    if calls:
+        architectures = tuple(sorted(set(re.findall(r'\"(wasm(?:32|64))\"', calls[0]))))
+        if not architectures:
+            raise PolicyError(f"Formula {name} has an unreadable architecture declaration")
+        return architectures
+    bottle_architectures = tuple(
+        sorted(set(re.findall(r"\b(wasm(?:32|64))_kandelo\b", formula_source)))
+    )
+    if not bottle_architectures:
+        raise PolicyError(f"Formula {name} has no explicit supported architecture evidence")
+    return bottle_architectures
+
+
 def generate_formula_capture_catalog(
     tap_root: Path, policy: FormulaBuildInputPolicyV1
 ) -> dict[str, Any]:
@@ -503,6 +520,12 @@ def generate_formula_capture_catalog(
             source = formula_file.read_text(encoding="utf-8", errors="strict")
         except (OSError, UnicodeDecodeError) as error:
             raise PolicyError(f"cannot audit Formula {entry.name}: {error}") from error
+        observed_architectures = _observed_architectures(entry.name, source)
+        if entry.architectures != observed_architectures:
+            raise PolicyError(
+                f"Formula {entry.name} capture architectures {entry.architectures!r} "
+                f"differ from source evidence {observed_architectures!r}"
+            )
         observed_kandelo, observed_tap = _observed_paths(entry.name, source)
         for architecture in entry.architectures:
             for repository, observed, captured in (

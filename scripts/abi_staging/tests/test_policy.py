@@ -81,8 +81,22 @@ class PolicyTests(unittest.TestCase):
         formula_files = sorted(path.stem for path in (TAP_ROOT / "Formula").glob("*.rb"))
         self.assertEqual([entry.name for entry in policy.formulae], formula_files)
         self.assertEqual(len(set(formula_files)), len(policy.formulae))
+        dual_architecture = {
+            "curl",
+            "libcurl",
+            "libcxx",
+            "musl-fts",
+            "openssl",
+            "sqlite",
+            "zlib",
+        }
         for entry in policy.formulae:
-            self.assertEqual(entry.architectures, ("wasm32",))
+            expected = (
+                ("wasm32", "wasm64")
+                if entry.name in dual_architecture
+                else ("wasm32",)
+            )
+            self.assertEqual(entry.architectures, expected)
             self.assertTrue(entry.profiles)
             self.assertEqual(tuple(sorted(entry.profiles)), entry.profiles)
 
