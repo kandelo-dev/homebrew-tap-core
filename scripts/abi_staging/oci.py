@@ -18,8 +18,14 @@ from urllib.parse import quote, urlencode, urljoin, urlsplit
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from .canonical import canonical_bytes, canonical_sha256
+from .canonical import (
+    CanonicalJsonError,
+    canonical_bytes,
+    canonical_sha256,
+    parse_canonical_bytes,
+)
 from .records import (
+    MAX_BLOB_BYTES,
     MAX_RECORD_BYTES,
     OCI_MANIFEST_MEDIA_TYPE,
     OciBlobV1,
@@ -61,6 +67,27 @@ class PublishedRecordLocatorV1:
     anonymous_readback_sha256: str
 
 
+@dataclass(frozen=True)
+class FetchedOciBlobV1:
+    role: str
+    media_type: str
+    digest: str
+    size: int
+    title: str
+    body: bytes
+
+
+@dataclass(frozen=True)
+class FetchedOciRecordV1:
+    repository: str
+    digest: str
+    immutable_reference: str
+    artifact_type: str
+    manifest: bytes
+    config: FetchedOciBlobV1
+    layers: tuple[FetchedOciBlobV1, ...]
+
+
 class OciPublicationError(ValueError):
     """Publication failure carrying the registered staging guard and retry fact."""
 
@@ -100,6 +127,278 @@ def build_oci_manifest(plan: OciRecordPlanV1) -> bytes:
             guard_code="namespace_bootstrap_failed",
         )
     return body
+
+
+def _plain(value):
+    if isinstance(value, Mapping):
+        return {key: _plain(child) for key, child in value.items()}
+    if isinstance(value, tuple):
+        return [_plain(child) for child in value]
+    return value
+
+
+def _exact_keys(value: object, expected: frozenset[str], field: str) -> Mapping[str, object]:
+    if not isinstance(value, Mapping) or frozenset(value) != expected:
+        raise OciPublicationError(
+            f"{field} fields changed",
+            guard_code="candidate_integrity_mismatch",
+        )
+    return value
+
+
+def _sha256_digest(value: object, field: str) -> str:
+    if (
+        not isinstance(value, str)
+        or not value.startswith("sha256:")
+        or re.fullmatch(r"[0-9a-f]{64}", value[len("sha256:") :]) is None
+    ):
+        raise OciPublicationError(
+            f"{field} is not an exact SHA-256 digest",
+            guard_code="candidate_integrity_mismatch",
+        )
+    return value
+
+
+def parse_public_record_locator(value: Mapping[str, object]) -> dict[str, str]:
+    locator = _exact_keys(
+        value,
+        frozenset({"repository", "digest", "immutable_reference"}),
+        "public OCI locator",
+    )
+    repository = locator["repository"]
+    if (
+        not isinstance(repository, str)
+        or not repository.startswith("ghcr.io/")
+        or re.fullmatch(
+            r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+",
+            repository[len("ghcr.io/") :],
+        )
+        is None
+    ):
+        raise OciPublicationError(
+            "public OCI locator repository is invalid",
+            guard_code="candidate_integrity_mismatch",
+        )
+    digest = _sha256_digest(locator["digest"], "public OCI locator digest")
+    immutable_reference = locator["immutable_reference"]
+    if immutable_reference != f"{repository}@{digest}":
+        raise OciPublicationError(
+            "public OCI locator is not an exact digest reference",
+            guard_code="candidate_integrity_mismatch",
+        )
+    return {
+        "repository": repository,
+        "digest": digest,
+        "immutable_reference": immutable_reference,
+    }
+
+
+def _manifest_descriptor(value: object, field: str) -> dict[str, object]:
+    descriptor = _exact_keys(
+        value,
+        frozenset({"mediaType", "digest", "size", "annotations"}),
+        field,
+    )
+    media_type = descriptor["mediaType"]
+    if (
+        not isinstance(media_type, str)
+        or re.fullmatch(
+            r"[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/"
+            r"[a-z0-9][a-z0-9!#$&^_.+-]{0,126}",
+            media_type,
+        )
+        is None
+    ):
+        raise OciPublicationError(
+            f"{field} media type is invalid",
+            guard_code="candidate_integrity_mismatch",
+        )
+    digest = _sha256_digest(descriptor["digest"], f"{field} digest")
+    size = descriptor["size"]
+    if isinstance(size, bool) or not isinstance(size, int) or not 1 <= size <= MAX_BLOB_BYTES:
+        raise OciPublicationError(
+            f"{field} size is outside its bound",
+            guard_code="candidate_integrity_mismatch",
+        )
+    annotations = _exact_keys(
+        descriptor["annotations"],
+        frozenset(
+            {
+                "dev.kandelo.abi-staging.role",
+                "org.opencontainers.image.title",
+            }
+        ),
+        f"{field} annotations",
+    )
+    role = annotations["dev.kandelo.abi-staging.role"]
+    title = annotations["org.opencontainers.image.title"]
+    if (
+        not isinstance(role, str)
+        or re.fullmatch(r"[a-z0-9][a-z0-9@+._-]{0,255}", role) is None
+        or not isinstance(title, str)
+        or not title
+        or title.startswith("/")
+        or "\\" in title
+        or any(part in {"", ".", ".."} for part in title.split("/"))
+    ):
+        raise OciPublicationError(
+            f"{field} identity is invalid",
+            guard_code="candidate_integrity_mismatch",
+        )
+    return {
+        "role": role,
+        "media_type": media_type,
+        "digest": digest,
+        "size": size,
+        "title": title,
+    }
+
+
+def _fetch_descriptor(
+    repository: str,
+    descriptor: Mapping[str, object],
+    transport: OciTransportV1,
+) -> FetchedOciBlobV1:
+    response = _request(
+        transport,
+        "GET",
+        _registry_url(repository, "blobs", str(descriptor["digest"])),
+        authenticated=False,
+        guard_code="candidate_public_readback_failed",
+        maximum_bytes=int(descriptor["size"]),
+    )
+    if response.status != 200:
+        raise OciPublicationError(
+            f"public OCI blob {descriptor['role']} returned HTTP {response.status}",
+            guard_code="candidate_public_readback_failed",
+        )
+    body = response.body
+    if (
+        len(body) != descriptor["size"]
+        or "sha256:" + hashlib.sha256(body).hexdigest() != descriptor["digest"]
+    ):
+        raise OciPublicationError(
+            f"public OCI blob {descriptor['role']} differs from its descriptor",
+            guard_code="candidate_integrity_mismatch",
+        )
+    header_digest = _header(response, "docker-content-digest")
+    if header_digest not in {None, descriptor["digest"]}:
+        raise OciPublicationError(
+            f"public OCI blob {descriptor['role']} reported a different digest",
+            guard_code="candidate_integrity_mismatch",
+        )
+    return FetchedOciBlobV1(body=body, **descriptor)
+
+
+def fetch_public_record(
+    locator: Mapping[str, object],
+    *,
+    transport: OciTransportV1,
+    expected_artifact_type: str,
+    required_layer_roles: tuple[str, ...],
+) -> FetchedOciRecordV1:
+    """Fetch one immutable public manifest plus only the exact required blobs."""
+
+    checked = parse_public_record_locator(locator)
+    repository = checked["repository"][len("ghcr.io/") :]
+    response = _request(
+        transport,
+        "GET",
+        _registry_url(repository, "manifests", checked["digest"]),
+        authenticated=False,
+        guard_code="candidate_public_readback_failed",
+        headers={"accept": MANIFEST_ACCEPT},
+        maximum_bytes=MAX_RECORD_BYTES,
+    )
+    if response.status != 200:
+        raise OciPublicationError(
+            f"public OCI manifest returned HTTP {response.status}",
+            guard_code="candidate_public_readback_failed",
+        )
+    manifest_body = response.body
+    if "sha256:" + hashlib.sha256(manifest_body).hexdigest() != checked["digest"]:
+        raise OciPublicationError(
+            "public OCI manifest differs from its immutable digest",
+            guard_code="candidate_integrity_mismatch",
+        )
+    try:
+        manifest = _plain(
+            parse_canonical_bytes(manifest_body, maximum_bytes=MAX_RECORD_BYTES)
+        )
+    except CanonicalJsonError as error:
+        raise OciPublicationError(
+            f"public OCI manifest is not canonical: {error}",
+            guard_code="candidate_integrity_mismatch",
+        ) from error
+    manifest = _exact_keys(
+        manifest,
+        frozenset(
+            {
+                "schemaVersion",
+                "mediaType",
+                "artifactType",
+                "config",
+                "layers",
+                "annotations",
+            }
+        ),
+        "public OCI manifest",
+    )
+    if (
+        manifest["schemaVersion"] != 2
+        or manifest["mediaType"] != OCI_MANIFEST_MEDIA_TYPE
+        or manifest["artifactType"] != expected_artifact_type
+        or not isinstance(manifest["annotations"], Mapping)
+    ):
+        raise OciPublicationError(
+            "public OCI manifest identity is unsupported",
+            guard_code="candidate_integrity_mismatch",
+        )
+    config_descriptor = _manifest_descriptor(manifest["config"], "OCI config")
+    if config_descriptor["media_type"] != expected_artifact_type:
+        raise OciPublicationError(
+            "public OCI config media type differs from its artifact type",
+            guard_code="candidate_integrity_mismatch",
+        )
+    raw_layers = manifest["layers"]
+    if not isinstance(raw_layers, list) or not raw_layers or len(raw_layers) > 65_536:
+        raise OciPublicationError(
+            "public OCI layers are outside their bound",
+            guard_code="candidate_integrity_mismatch",
+        )
+    descriptors = tuple(
+        _manifest_descriptor(value, f"OCI layer {index}")
+        for index, value in enumerate(raw_layers)
+    )
+    roles = [str(config_descriptor["role"]), *(str(item["role"]) for item in descriptors)]
+    if len(roles) != len(set(roles)):
+        raise OciPublicationError(
+            "public OCI descriptor roles are not unique",
+            guard_code="candidate_integrity_mismatch",
+        )
+    if len(required_layer_roles) != len(set(required_layer_roles)) or any(
+        role not in roles[1:] for role in required_layer_roles
+    ):
+        raise OciPublicationError(
+            "public OCI record lacks a required layer role",
+            guard_code="candidate_integrity_mismatch",
+        )
+    config = _fetch_descriptor(repository, config_descriptor, transport)
+    required = set(required_layer_roles)
+    layers = tuple(
+        _fetch_descriptor(repository, descriptor, transport)
+        for descriptor in descriptors
+        if descriptor["role"] in required
+    )
+    return FetchedOciRecordV1(
+        repository=checked["repository"],
+        digest=checked["digest"],
+        immutable_reference=checked["immutable_reference"],
+        artifact_type=str(manifest["artifactType"]),
+        manifest=manifest_body,
+        config=config,
+        layers=layers,
+    )
 
 
 def _header(response: HttpResponseV1, name: str) -> str | None:
