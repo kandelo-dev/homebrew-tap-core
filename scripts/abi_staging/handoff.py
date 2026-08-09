@@ -29,6 +29,7 @@ from .custody import (
     validate_source_custody,
 )
 from .plan import exact_formula_subject
+from .policy import candidate_repository, load_tap_staging_policy
 from .records import load_tap_plan_record
 
 
@@ -917,6 +918,17 @@ def prepare_build_context(
         )
 
     repository = _text(tap_source["repository"], "tap repository", 256)
+    try:
+        staging_policy = load_tap_staging_policy(
+            tap_root / "Kandelo/staging/tap-policy.toml"
+        )
+        if staging_policy.tap_repository != repository:
+            raise HandoffError("tap staging policy names a different repository")
+        candidate_root = candidate_repository(
+            staging_policy, contract["target"]["abi"], formula=formula
+        )
+    except ValueError as error:
+        raise HandoffError(f"tap staging policy is invalid: {error}") from error
     context = {
         "schema": 1,
         "kind": "kandelo-abi-staging-build-context",
@@ -934,7 +946,7 @@ def prepare_build_context(
         ).hexdigest(),
         "capture_authorization_sha256": authorization_digest,
         "dependency_layers": layers,
-        "bottle_root_url": f"https://ghcr.io/v2/{repository.lower()}",
+        "bottle_root_url": f"https://ghcr.io/v2/{candidate_root}",
     }
     return json.loads(canonical_bytes(context))
 
