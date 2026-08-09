@@ -13,7 +13,7 @@ kandelo_paths = [
   "scripts/run-wasm-fork-instrument.sh",
   "sdk",
 ]
-tap_paths = ["Kandelo/formula_support"]
+tap_paths = ["Kandelo/formula_support/kandelo_formula_support.rb"]
 environment_policy = "kandelo-homebrew-build-v1"
 
 [[formulae]]
@@ -329,7 +329,7 @@ name = "nginx"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
 kandelo_paths = []
-tap_paths = []
+tap_paths = ["Kandelo/formula_support/run-network-wasm.ts"]
 
 [[formulae]]
 name = "openssl"
