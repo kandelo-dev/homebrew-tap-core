@@ -8,23 +8,35 @@ import unittest
 
 from scripts.abi_staging.canonical import canonical_bytes
 from scripts.abi_staging.cli import _local_locator, _publication_result
+from scripts.abi_staging.contract import (
+    build_bottle_contract,
+    make_candidate_reuse_record,
+)
 from scripts.abi_staging.custody import source_capsule_digest
 from scripts.abi_staging.oci import build_oci_manifest
+from scripts.abi_staging.plan import exact_formula_subject
 from scripts.abi_staging.records import (
     BOTTLE_CONTRACT_MEDIA_TYPE,
     BOTTLE_LAYER_MEDIA_TYPE,
     BOTTLE_METADATA_MEDIA_TYPE,
     CANDIDATE_RECORD_MEDIA_TYPE,
+    CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
     ATTEMPT_OUTCOME_MEDIA_TYPE,
     OCI_MANIFEST_MEDIA_TYPE,
     SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
     TapRecordError,
     build_candidate_oci_plan,
+    build_candidate_reuse_oci_plan,
     build_attempt_outcome_oci_plan,
     build_attempt_outcome_record,
     build_source_custody_oci_plan,
     validate_candidate_record,
     validate_attempt_outcome_record,
+)
+from scripts.abi_staging.tests.test_contract import (
+    _candidate as _reusable_candidate,
+    _inputs as _contract_inputs,
+    _new_request_context,
 )
 
 
@@ -211,6 +223,25 @@ class CandidateRecordTests(unittest.TestCase):
         changed["attempt"]["guard_code"] = None
         with self.assertRaises(TapRecordError):
             validate_attempt_outcome_record(changed)
+
+    def test_candidate_reuse_is_an_independent_immutable_record(self) -> None:
+        contract = build_bottle_contract(_contract_inputs())
+        record = make_candidate_reuse_record(
+            contract,
+            exact_formula_subject("curl", "wasm32"),
+            _reusable_candidate(contract),
+            _new_request_context(),
+        )
+        plan = build_candidate_reuse_oci_plan(
+            record, repository=CANDIDATE_REPOSITORY + "/reuse"
+        )
+        self.assertEqual(plan.artifact_type, CANDIDATE_REUSE_RECORD_MEDIA_TYPE)
+        self.assertEqual([layer.role for layer in plan.layers], ["immutable-record-bytes"])
+        self.assertEqual(plan.config.body, canonical_bytes(record))
+        self.assertEqual(
+            plan.annotations["dev.kandelo.abi-staging.classification"],
+            "public-candidate-reuse-not-endorsement",
+        )
 
     def _plans(self):
         source = build_source_custody_oci_plan(

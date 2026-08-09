@@ -864,6 +864,8 @@ def publish_verification_receipt(
     tap_policy: TapStagingPolicyV1,
     expected_run: Mapping[str, Any],
     expected_runtime_artifacts: Mapping[str, object | None],
+    expected_request_sha256: str,
+    expected_source: Mapping[str, Any],
     completed_at: str,
     transport: OciTransportV1,
     expected_source_repository: str,
@@ -875,6 +877,10 @@ def publish_verification_receipt(
     if result["run"] != expected_run_value:
         raise VerificationError("verification result run differs from protected job facts")
     checked_runtime = _checked_runtime_artifacts(expected_runtime_artifacts)
+    bound_request = _digest(
+        expected_request_sha256, "protected verification request"
+    )
+    bound_source = _source(expected_source, "protected verification source")
     if result["runtime_artifacts"] != checked_runtime:
         raise VerificationError(
             "verification runtime artifacts differ from protected job inputs"
@@ -894,8 +900,8 @@ def publish_verification_receipt(
     if (
         result["candidate_record"] != checked_locator
         or result["candidate_layer"] != candidate_layer
-        or result["request_sha256"] != candidate["common"]["request_sha256"]
-        or result["source"] != candidate["common"]["source"]
+        or result["request_sha256"] != bound_request
+        or result["source"] != bound_source
     ):
         raise VerificationError("verification result differs from the exact public candidate")
     selected = result["test_definition"]
@@ -943,6 +949,8 @@ def publish_protected_verification_outcome(
     tap_policy: TapStagingPolicyV1,
     expected_run: Mapping[str, Any],
     expected_runtime_artifacts: Mapping[str, object | None],
+    expected_request_sha256: str,
+    expected_source: Mapping[str, Any],
     completed_at: str,
     attempt_ordinal: int,
     outcome: str,
@@ -958,6 +966,10 @@ def publish_protected_verification_outcome(
     completed = _timestamp(completed_at, "verification completion")
     run = _run(expected_run, "expected verification run")
     runtime = _checked_runtime_artifacts(expected_runtime_artifacts)
+    bound_request = _digest(
+        expected_request_sha256, "protected verification request"
+    )
+    bound_source = _source(expected_source, "protected verification source")
     ordinal = _integer(attempt_ordinal, "verification attempt ordinal")
     if ordinal > 3:
         raise VerificationError("verification attempt ordinal exceeds retry policy")
@@ -990,8 +1002,8 @@ def publish_protected_verification_outcome(
         actual_candidate_repository, test_definition.id, host
     )
     synthetic_result = {
-        "request_sha256": candidate["common"]["request_sha256"],
-        "source": candidate["common"]["source"],
+        "request_sha256": bound_request,
+        "source": bound_source,
         "run": run,
         "attempt_ordinal": ordinal,
         "outcome": outcome,

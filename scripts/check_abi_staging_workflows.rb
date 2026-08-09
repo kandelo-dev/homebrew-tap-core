@@ -140,7 +140,7 @@ module AbiStagingWorkflowCheck
                      "manual workflow gained another coordinator input")
 
     jobs = workflow.fetch("jobs")
-    expected_jobs = %w[discover-plan candidate verification]
+    expected_jobs = %w[discover-plan candidate verification reuse]
     require_contract(jobs.keys == expected_jobs,
                      "workflow job split changed")
 
@@ -267,9 +267,12 @@ module AbiStagingWorkflowCheck
     writer_permissions = {"actions" => "read", "contents" => "read", "packages" => "write"}
     candidate = jobs.fetch("candidate")
     verification = jobs.fetch("verification")
+    reuse = jobs.fetch("reuse")
     build_matrix = "${{ fromJSON(needs.discover-plan.outputs.build-matrix) }}"
+    reuse_matrix = "${{ fromJSON(needs.discover-plan.outputs.reuse-matrix) }}"
     verify_matrix = "${{ fromJSON(needs.discover-plan.outputs.verify-matrix) }}"
     require_matrix(candidate, build_matrix, "candidate")
+    require_matrix(reuse, reuse_matrix, "reuse")
     require_matrix(verification, verify_matrix, "verification")
     common_inputs = {
       "coordination-artifact-id" => "${{ needs.discover-plan.outputs.coordination-artifact-id }}",
@@ -292,6 +295,20 @@ module AbiStagingWorkflowCheck
                        !job.key?("steps"),
                        "reusable workflow caller changed authority or exact inputs")
     end
+    reuse_inputs = {
+      "coordination-artifact-id" => "${{ needs.discover-plan.outputs.coordination-artifact-id }}",
+      "coordination-artifact-digest" => "${{ needs.discover-plan.outputs.coordination-artifact-digest }}",
+      "tap-commit" => "${{ needs.discover-plan.outputs.tap-commit }}",
+      "work-id" => "${{ matrix.work_id }}"
+    }
+    require_contract(reuse.fetch("needs") == "discover-plan" &&
+                     reuse.fetch("if") == "needs.discover-plan.outputs.mode == 'active'" &&
+                     reuse.fetch("permissions") == writer_permissions &&
+                     reuse.fetch("uses") == "./.github/workflows/abi-staging-reuse.yml" &&
+                     reuse.fetch("with") == reuse_inputs &&
+                     !reuse.key?("secrets") && !reuse.key?("runs-on") &&
+                     !reuse.key?("steps"),
+                     "reuse caller changed authority or exact inputs")
 
     all_text = flatten(workflow).join("\n")
     require_contract(!all_text.match?(/\bsecrets\b/i),
@@ -303,6 +320,75 @@ module AbiStagingWorkflowCheck
     true
   rescue KeyError, NoMethodError => error
     raise Violation, "workflow structure is incomplete: #{error.message}"
+  end
+
+  def check_reuse(workflow)
+    require_contract(workflow.fetch("permissions") == {},
+                     "reuse workflow permissions must be empty")
+    event = triggers(workflow)
+    require_contract(event.keys == ["workflow_call"],
+                     "reuse workflow must be workflow_call only")
+    expected_inputs = %w[
+      coordination-artifact-id coordination-artifact-digest tap-commit work-id
+    ]
+    inputs = event.fetch("workflow_call").fetch("inputs")
+    require_contract(inputs.keys == expected_inputs && inputs.values.all? do |input|
+                       input == {"required" => true, "type" => "string"}
+                     end, "reuse workflow inputs changed")
+    jobs = workflow.fetch("jobs")
+    require_contract(jobs.keys == ["publish"],
+                     "reuse workflow must have one protected writer")
+    publisher = jobs.fetch("publish")
+    require_contract(publisher.fetch("runs-on") == "ubuntu-latest" &&
+                     publisher.fetch("timeout-minutes").between?(1, 30) &&
+                     publisher.fetch("name") == "publish-reuse ${{ inputs.work-id }}" &&
+                     publisher.fetch("permissions") == {
+                       "actions" => "read", "contents" => "read", "packages" => "write"
+                     } && !publisher.key?("environment") && !publisher.key?("secrets") &&
+                     publisher.fetch("steps").none? do |step|
+                       step["continue-on-error"] == true
+                     end, "reuse publisher authority changed")
+    check_actions(publisher)
+    require_protected_checkout(publisher, "reuse publisher")
+    setup = action_steps(publisher, SETUP_PYTHON)
+    require_contract(setup.length == 1 &&
+                     setup.fetch(0).dig("with", "python-version") == "3.13",
+                     "reuse publisher lacks declared Python")
+    commands = run_steps(publisher)
+    require_contract(commands.length == 1 &&
+                     commands.fetch(0).fetch("working-directory") == "tap-authority" &&
+                     commands.fetch(0).fetch("env") == {
+                       "COORDINATION_ARTIFACT_DIGEST" => "${{ inputs.coordination-artifact-digest }}",
+                       "COORDINATION_ARTIFACT_ID" => "${{ inputs.coordination-artifact-id }}",
+                       "GITHUB_TOKEN" => "${{ github.token }}",
+                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
+                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
+                       "TAP_COMMIT" => "${{ inputs.tap-commit }}",
+                       "WORK_ID" => "${{ inputs.work-id }}"
+                     }, "reuse publisher inputs changed")
+    source = commands.fetch(0).fetch("run")
+    required_flags = [
+      '--coordination-artifact-id "$COORDINATION_ARTIFACT_ID"',
+      '--coordination-artifact-digest "$COORDINATION_ARTIFACT_DIGEST"',
+      '--head-sha "$TAP_COMMIT"',
+      "--require-github-digest", "--anonymous-readback", "--immutable"
+    ]
+    require_contract(source.include?("python3 -m scripts.abi_staging.cli publish-workflow-reuse") &&
+                     required_flags.all? { |flag| source.include?(flag) },
+                     "reuse publisher lacks exact artifact/readback identity")
+    require_no_candidate_execution(source, "reuse publisher")
+    uploads = action_steps(publisher, UPLOAD_ARTIFACT)
+    require_contract(uploads.length == 1 &&
+                     uploads.fetch(0).dig("with", "if-no-files-found") == "error" &&
+                     uploads.fetch(0).dig("with", "compression-level") == 0,
+                     "reuse result locator is not retained exactly")
+    all_text = flatten(workflow).join("\n")
+    require_contract(!all_text.match?(/\bsecrets\b/i) &&
+                     !all_text.match?(/(?:^|\s)sleep(?:\s|$)/),
+                     "reuse workflow gains secrets or sleeps")
+    true
+  rescue KeyError, NoMethodError => error
+    raise Violation, "reuse workflow structure is incomplete: #{error.message}"
   end
 
   def check_reusable(workflow, kind)
@@ -541,6 +627,7 @@ if $PROGRAM_NAME == __FILE__
       [
         [File.join(root, ".github/workflows/abi-staging-reconcile.yml"), :check],
         [File.join(root, ".github/workflows/abi-staging-candidate.yml"), :candidate],
+        [File.join(root, ".github/workflows/abi-staging-reuse.yml"), :check_reuse],
         [File.join(root, ".github/workflows/abi-staging-verification.yml"), :verification],
         [File.join(root, ".github/workflows/abi-staging-maintenance.yml"), :check_maintenance]
       ]
@@ -549,6 +636,7 @@ if $PROGRAM_NAME == __FILE__
         method = case File.basename(path)
         when "abi-staging-maintenance.yml" then :check_maintenance
         when "abi-staging-candidate.yml" then :candidate
+        when "abi-staging-reuse.yml" then :check_reuse
         when "abi-staging-verification.yml" then :verification
         else :check
         end

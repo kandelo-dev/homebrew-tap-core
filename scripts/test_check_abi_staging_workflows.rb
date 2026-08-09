@@ -19,6 +19,7 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
   def setup
     @workflow = load_workflow("abi-staging-reconcile.yml")
     @candidate = load_workflow("abi-staging-candidate.yml")
+    @reuse = load_workflow("abi-staging-reuse.yml")
     @verification = load_workflow("abi-staging-verification.yml")
     @maintenance = load_workflow("abi-staging-maintenance.yml")
   end
@@ -59,9 +60,19 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     refute_empty error.message
   end
 
+  def assert_reuse_rejected(label)
+    changed = copy(@reuse)
+    yield changed
+    error = assert_raises(AbiStagingWorkflowCheck::Violation, label) do
+      AbiStagingWorkflowCheck.check_reuse(changed)
+    end
+    refute_empty error.message
+  end
+
   def test_reviewed_workflows_pass
     AbiStagingWorkflowCheck.check(@workflow)
     AbiStagingWorkflowCheck.check_reusable(@candidate, :candidate)
+    AbiStagingWorkflowCheck.check_reuse(@reuse)
     AbiStagingWorkflowCheck.check_reusable(@verification, :verification)
     AbiStagingWorkflowCheck.check_maintenance(@maintenance)
   end
@@ -88,6 +99,10 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       "candidate" => [
         "./.github/workflows/abi-staging-candidate.yml",
         "${{ fromJSON(needs.discover-plan.outputs.build-matrix) }}"
+      ],
+      "reuse" => [
+        "./.github/workflows/abi-staging-reuse.yml",
+        "${{ fromJSON(needs.discover-plan.outputs.reuse-matrix) }}"
       ],
       "verification" => [
         "./.github/workflows/abi-staging-verification.yml",
@@ -121,6 +136,18 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
           0, {"uses" => "./kandelo-source/.github/actions/setup-nix"}
         )
       end
+    end
+  end
+
+  def test_reuse_writer_cannot_execute_candidate_or_accept_mutable_coordination
+    assert_reuse_rejected("candidate execution") do |workflow|
+      last_run_step(workflow, "publish")["run"] << "\nbash handoff/run.sh\n"
+    end
+    assert_reuse_rejected("missing digest") do |workflow|
+      last_run_step(workflow, "publish")["run"] =
+        last_run_step(workflow, "publish")["run"].gsub(
+          '--coordination-artifact-digest "$COORDINATION_ARTIFACT_DIGEST"', ""
+        )
     end
   end
 

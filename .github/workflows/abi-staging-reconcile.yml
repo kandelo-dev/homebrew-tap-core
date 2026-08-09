@@ -25,6 +25,7 @@ jobs:
     outputs:
       mode: ${{ steps.coordinate.outputs.mode || steps.discover.outputs.mode }}
       build-matrix: ${{ steps.coordinate.outputs.build_matrix || steps.discover.outputs.build_matrix }}
+      reuse-matrix: ${{ steps.coordinate.outputs.reuse_matrix || steps.discover.outputs.reuse_matrix }}
       verify-matrix: ${{ steps.coordinate.outputs.verify_matrix || steps.discover.outputs.verify_matrix }}
       coordination-artifact-id: ${{ steps.upload.outputs.artifact-id }}
       coordination-artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
@@ -178,5 +179,24 @@ jobs:
       kandelo-head: ${{ needs.discover-plan.outputs.kandelo-head }}
       kandelo-policy-commit: ${{ needs.discover-plan.outputs.kandelo-policy-commit }}
       kandelo-repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
+      tap-commit: ${{ needs.discover-plan.outputs.tap-commit }}
+      work-id: ${{ matrix.work_id }}
+
+  reuse:
+    name: reuse ${{ matrix.work_id }}
+    needs: discover-plan
+    if: needs.discover-plan.outputs.mode == 'active'
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.discover-plan.outputs.reuse-matrix) }}
+    uses: ./.github/workflows/abi-staging-reuse.yml
+    with:
+      coordination-artifact-id: ${{ needs.discover-plan.outputs.coordination-artifact-id }}
+      coordination-artifact-digest: ${{ needs.discover-plan.outputs.coordination-artifact-digest }}
       tap-commit: ${{ needs.discover-plan.outputs.tap-commit }}
       work-id: ${{ matrix.work_id }}

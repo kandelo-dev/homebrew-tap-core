@@ -34,6 +34,7 @@ from .execution import (
     execute_verification_work,
     load_coordination_bundle,
     select_build_work,
+    select_reuse_work,
     select_verification_work,
 )
 from .github_public import DiscoveredRequestV1, GitHubPublicClient, PublicGitHubError
@@ -77,6 +78,7 @@ from .reconcile import (
     select_reconciliation_cycle,
 )
 from .request import RequestValidationError, load_request_issuer_policy, validate_request
+from .reuse import CandidateReuseError, publish_candidate_reuse
 from .policy import (
     PolicyError,
     attempt_repository,
@@ -237,6 +239,17 @@ def _parser() -> argparse.ArgumentParser:
     publish_receipt.add_argument("--anonymous-readback", action="store_true")
     publish_receipt.add_argument("--immutable", action="store_true")
     publish_receipt.add_argument("--out", required=True)
+    publish_reuse = subcommands.add_parser("publish-workflow-reuse")
+    publish_reuse.add_argument("--run-id", required=True, type=int)
+    publish_reuse.add_argument("--run-attempt", required=True, type=int)
+    publish_reuse.add_argument("--head-sha", required=True)
+    publish_reuse.add_argument("--work-id", required=True)
+    publish_reuse.add_argument("--coordination-artifact-id", required=True)
+    publish_reuse.add_argument("--coordination-artifact-digest", required=True)
+    publish_reuse.add_argument("--require-github-digest", action="store_true")
+    publish_reuse.add_argument("--anonymous-readback", action="store_true")
+    publish_reuse.add_argument("--immutable", action="store_true")
+    publish_reuse.add_argument("--out", required=True)
     return parser
 
 
@@ -316,6 +329,7 @@ def _discover_workflow_request(args: argparse.Namespace) -> None:
     outputs = {
         "build_matrix": '{"include":[]}',
         "mode": "observe",
+        "reuse_matrix": '{"include":[]}',
         "selected": "false",
         "tap_commit": tap_source["commit"],
         "verify_matrix": '{"include":[]}',
@@ -478,6 +492,11 @@ def _prepare_workflow(args: argparse.Namespace) -> None:
                 bundle["workflow"]["build_matrix"], separators=(",", ":"), sort_keys=True
             ),
             "mode": mode,
+            "reuse_matrix": json.dumps(
+                bundle["workflow"]["reuse_matrix"],
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
             "verify_matrix": json.dumps(
                 bundle["workflow"]["verify_matrix"], separators=(",", ":"), sort_keys=True
             ),
@@ -1029,6 +1048,97 @@ def _recheck_coordinated_lifecycle(
     reconcile_request(discovered, lifecycle)
 
 
+def _publish_workflow_reuse(args: argparse.Namespace) -> None:
+    """Publish an explicit binding without executing or rewriting a candidate."""
+
+    _require_workflow_publication_guards(args)
+    tap_root = TAP_ROOT.resolve(strict=True)
+    policy = load_tap_staging_policy(tap_root / "Kandelo/staging/tap-policy.toml")
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    workflow_ref = os.environ.get("GITHUB_WORKFLOW_REF", "")
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if repository != policy.tap_repository:
+        raise WorkflowPublicationError(
+            "current workflow repository differs from tap policy"
+        )
+    tap_source = snapshot_tap_source(tap_root, policy.tap_repository)
+    if tap_source["commit"] != args.head_sha:
+        raise WorkflowPublicationError(
+            "protected reuse checkout differs from workflow head"
+        )
+    _recheck_workflow_activation(tap_root)
+    client = GitHubWorkflowArtifactClientV1(
+        repository,
+        token,
+        run_id=args.run_id,
+        run_attempt=args.run_attempt,
+        head_sha=args.head_sha,
+        workflow_ref=workflow_ref,
+    )
+    publication_run = {
+        "repository": repository,
+        "workflow_ref": workflow_ref,
+        "run_id": args.run_id,
+        "run_attempt": args.run_attempt,
+        "job": "publish-reuse",
+    }
+    with tempfile.TemporaryDirectory(
+        prefix="kandelo-abi-staging-reuse-publisher-"
+    ) as temporary:
+        root = Path(temporary)
+        coordination_artifact = _workflow_artifact_output(
+            client,
+            artifact_id=args.coordination_artifact_id,
+            artifact_digest=args.coordination_artifact_digest,
+            name=f"abi-staging-coordination-{args.run_id}-{args.run_attempt}",
+            required=True,
+        )
+        if coordination_artifact is None:
+            raise WorkflowPublicationError(
+                "protected coordination artifact is absent"
+            )
+        coordination_root = root / "coordination"
+        client.extract_artifact(
+            coordination_artifact,
+            coordination_root,
+            max_files=32,
+            max_bytes=64 * 1024 * 1024,
+        )
+        bundle = load_coordination_bundle(
+            coordination_root / "coordination.json", policy=policy
+        )
+        work = select_reuse_work(bundle, args.work_id)
+        if bundle["tap_plan"]["tap_source"] != tap_source:
+            raise WorkflowPublicationError(
+                "protected reuse source differs from coordinated tap source"
+            )
+        _recheck_coordinated_lifecycle(tap_root, policy, bundle)
+        _recheck_workflow_activation(tap_root)
+        username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
+        package_token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
+        with isolated_oras_transport(
+            username=username, token=package_token
+        ) as transport:
+            record, published = publish_candidate_reuse(
+                bundle,
+                work["work_id"],
+                publication_run=publication_run,
+                policy=policy,
+                transport=transport,
+            )
+        Path(args.out).write_bytes(
+            canonical_bytes(
+                {
+                    "schema": 1,
+                    "kind": "kandelo-abi-staging-workflow-reuse-publication",
+                    "work_id": work["work_id"],
+                    "reuse_record": record,
+                    "reuse_locator": asdict(published),
+                }
+            )
+        )
+
+
 def _verification_result_matches_work(
     result: Mapping[str, Any],
     *,
@@ -1052,7 +1162,7 @@ def _verification_result_matches_work(
         result.get("candidate_record") == work["candidate_locator"]
         and result.get("candidate_layer") == payload.get("bottle_layer")
         and result.get("request_sha256") == bundle["request_sha256"]
-        and result.get("source") == common.get("source")
+        and result.get("source") == bundle["request"]["build_source"]
         and result.get("run") == run
         and result.get("attempt_ordinal") == work["attempt_ordinal"]
         and result.get("runtime_artifacts")
@@ -1243,6 +1353,8 @@ def _publish_workflow_receipt(args: argparse.Namespace) -> None:
                         "host_runtime": None,
                         "vfs": None,
                     },
+                    expected_request_sha256=bundle["request_sha256"],
+                    expected_source=bundle["request"]["build_source"],
                     completed_at=job.completed_at,
                     attempt_ordinal=work["attempt_ordinal"],
                     outcome=outcome["outcome"],
@@ -1262,6 +1374,8 @@ def _publish_workflow_receipt(args: argparse.Namespace) -> None:
                         "host_runtime": None,
                         "vfs": None,
                     },
+                    expected_request_sha256=bundle["request_sha256"],
+                    expected_source=bundle["request"]["build_source"],
                     completed_at=job.completed_at,
                     transport=transport,
                     expected_source_repository=policy.tap_repository,
@@ -1308,6 +1422,9 @@ def main(arguments: list[str] | None = None) -> int:
             return 0
         if args.command == "publish-workflow-receipt":
             _publish_workflow_receipt(args)
+            return 0
+        if args.command == "publish-workflow-reuse":
+            _publish_workflow_reuse(args)
             return 0
         if args.command == "publish-candidate":
             _publish_candidate(args)
@@ -1452,6 +1569,7 @@ def main(arguments: list[str] | None = None) -> int:
         WorkflowArtifactError,
         WorkflowPublicationError,
         VerificationError,
+        CandidateReuseError,
     ) as error:
         print(f"abi-staging {args.command}: {error}", file=sys.stderr)
         return 1
