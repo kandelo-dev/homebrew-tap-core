@@ -16,6 +16,11 @@ from .reconcile import (
     reconcile_request,
 )
 from .request import RequestValidationError, load_request_issuer_policy
+from .policy import (
+    PolicyError,
+    check_policy_files,
+    write_formula_capture_catalog,
+)
 
 
 TAP_ROOT = Path(__file__).resolve().parents[2]
@@ -48,12 +53,26 @@ def _parser() -> argparse.ArgumentParser:
     subcommands.add_parser("scan")
     reconcile = subcommands.add_parser("reconcile")
     reconcile.add_argument("--request-asset-url", required=True)
+    policy_check = subcommands.add_parser("policy-check")
+    policy_check.add_argument("--tap-root", required=True)
+    policy_generate = subcommands.add_parser("policy-generate")
+    policy_generate.add_argument("--tap-root", required=True)
+    policy_generate.add_argument("--out", required=True)
     return parser
 
 
 def main(arguments: list[str] | None = None) -> int:
     args = _parser().parse_args(arguments)
     try:
+        if args.command in {"policy-check", "policy-generate"}:
+            tap_root = Path(args.tap_root).resolve(strict=True)
+            if tap_root != TAP_ROOT.resolve(strict=True):
+                raise PolicyError("--tap-root must name this protected tap checkout")
+            if args.command == "policy-check":
+                check_policy_files(tap_root)
+            else:
+                write_formula_capture_catalog(tap_root, Path(args.out))
+            return 0
         policy = load_request_issuer_policy(
             TAP_ROOT / "Kandelo/staging/request-issuers.toml",
             expected_tap="kandelo-dev/homebrew-tap-core",
@@ -73,8 +92,13 @@ def main(arguments: list[str] | None = None) -> int:
             decisions.append(_decision_mapping(request, reconcile_request(request, lifecycle)))
         sys.stdout.buffer.write(canonical_bytes({"decisions": decisions, "mode": "observe"}))
         return 0
-    except (PublicGitHubError, ReconciliationError, RequestValidationError) as error:
-        print(f"abi-staging reconcile: {error}", file=sys.stderr)
+    except (
+        PolicyError,
+        PublicGitHubError,
+        ReconciliationError,
+        RequestValidationError,
+    ) as error:
+        print(f"abi-staging {args.command}: {error}", file=sys.stderr)
         return 1
 
 
