@@ -301,6 +301,7 @@ class ProductInputResolverTests(unittest.TestCase):
                 "bytes": 100 + len(name),
                 "immutable_reference": f"{candidate_repository}@sha256:{layer_sha256}",
             }
+            bottle_metadata_sha256 = _digest(f"bottle-metadata-{subject}")
             candidate = {
                 "schema": 1,
                 "kind": "kandelo-abi-staging-candidate",
@@ -354,6 +355,16 @@ class ProductInputResolverTests(unittest.TestCase):
                                 "bytes": 64,
                                 "immutable_reference": (
                                     f"{candidate_repository}@sha256:{contract_sha256}"
+                                ),
+                            },
+                        },
+                        {
+                            "id": "bottle-metadata",
+                            "artifact": {
+                                "sha256": bottle_metadata_sha256,
+                                "bytes": 80 + len(name),
+                                "immutable_reference": (
+                                    f"{candidate_repository}@sha256:{bottle_metadata_sha256}"
                                 ),
                             },
                         },
@@ -672,6 +683,11 @@ class ProductInputResolverTests(unittest.TestCase):
         )
         self.assertEqual(curl["effective_materialization"], "lazy-reference")
         self.assertNotIn("path", curl)
+        self.assertEqual(
+            set(curl["descriptor"]),
+            {"bytes", "path", "reference", "sha256"},
+        )
+        self.assertIn("-metadata-sha256-", curl["descriptor"]["path"])
         libcurl = next(
             item
             for item in alpha_inputs.values()
@@ -719,6 +735,16 @@ class ProductInputResolverTests(unittest.TestCase):
         stale = copy.deepcopy(self.candidate_records)
         next(iter(stale.values()))["common"]["source"]["tree"] = "f" * 40
         cases["stale custody"] = {"candidate_records": stale}
+        missing_metadata = copy.deepcopy(self.candidate_records)
+        first_missing = next(iter(missing_metadata.values()))
+        first_missing["candidate"]["normalized_components"] = [
+            item
+            for item in first_missing["candidate"]["normalized_components"]
+            if item["id"] != "bottle-metadata"
+        ]
+        cases["missing bottle metadata"] = {
+            "candidate_records": missing_metadata
+        }
         stale_capsule = copy.deepcopy(self.source_custody_records)
         first_capsule = next(iter(stale_capsule.values()))
         next(
