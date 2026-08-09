@@ -30,6 +30,7 @@ def _ready() -> SchedulingDecisionV1:
     required = exact_formula_subject("libcxx", "wasm32")
     background = exact_formula_subject("asa", "wasm32")
     verified = exact_formula_subject("openssl", "wasm32")
+    reused = exact_formula_subject("zlib", "wasm32")
     return SchedulingDecisionV1(
         request_sha256=PLAN["request_digest"],
         ready=(
@@ -51,6 +52,14 @@ def _ready() -> SchedulingDecisionV1:
                 host="node",
             ),
             ReadyWorkV1(
+                reused,
+                "required",
+                "reuse-candidate",
+                0,
+                _digest("6"),
+                candidate_record_sha256=_digest("7"),
+            ),
+            ReadyWorkV1(
                 background,
                 "background",
                 "build-candidate",
@@ -69,6 +78,7 @@ def _planned() -> dict[str, object]:
     contracts = {
         exact_formula_subject("libcxx", "wasm32"): _digest("1"),
         exact_formula_subject("openssl", "wasm32"): _digest("2"),
+        exact_formula_subject("zlib", "wasm32"): _digest("6"),
         exact_formula_subject("asa", "wasm32"): _digest("5"),
     }
     for formula in plan["formulae"]:
@@ -80,13 +90,13 @@ def _planned() -> dict[str, object]:
     return plan
 
 
-def _locator() -> dict[str, str]:
+def _locator(digest: str = _digest("3"), formula: str = "openssl") -> dict[str, str]:
     return {
-        "repository": "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/openssl",
-        "digest": "sha256:" + _digest("3"),
+        "repository": f"ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/{formula}",
+        "digest": "sha256:" + digest,
         "immutable_reference": (
-            "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/openssl@sha256:"
-            + _digest("3")
+            f"ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/{formula}@sha256:"
+            + digest
         ),
     }
 
@@ -101,7 +111,10 @@ class WorkflowManifestTests(unittest.TestCase):
             lifecycle={"state": "open", "current_head": REQUEST["build_source"]["commit"], "merged_commit": None},
             tap_plan=_planned(),
             scheduling=_ready(),
-            candidate_locators={_digest("3"): _locator()},
+            candidate_locators={
+                _digest("3"): _locator(),
+                _digest("7"): _locator(_digest("7"), "zlib"),
+            },
             max_ready_subjects=16,
         )
 
@@ -113,6 +126,7 @@ class WorkflowManifestTests(unittest.TestCase):
             ["required", "background"],
         )
         self.assertEqual(len(manifest["verify_work"]), 1)
+        self.assertEqual(len(manifest["reuse_work"]), 1)
         self.assertEqual(
             manifest["build_matrix"],
             {"include": [{"work_id": item["work_id"]} for item in manifest["build_work"]]},
@@ -121,7 +135,15 @@ class WorkflowManifestTests(unittest.TestCase):
             manifest["verify_matrix"],
             {"include": [{"work_id": manifest["verify_work"][0]["work_id"]}]},
         )
-        for item in [*manifest["build_work"], *manifest["verify_work"]]:
+        self.assertEqual(
+            manifest["reuse_matrix"],
+            {"include": [{"work_id": manifest["reuse_work"][0]["work_id"]}]},
+        )
+        for item in [
+            *manifest["build_work"],
+            *manifest["verify_work"],
+            *manifest["reuse_work"],
+        ]:
             self.assertRegex(item["work_id"], r"^[0-9a-f]{64}$")
             self.assertNotIn("abi-8", item["artifact_name"])
 
@@ -129,8 +151,10 @@ class WorkflowManifestTests(unittest.TestCase):
         manifest = self.manifest("observe")
         self.assertEqual(len(manifest["build_work"]), 2)
         self.assertEqual(len(manifest["verify_work"]), 1)
+        self.assertEqual(len(manifest["reuse_work"]), 1)
         self.assertEqual(manifest["build_matrix"], {"include": []})
         self.assertEqual(manifest["verify_matrix"], {"include": []})
+        self.assertEqual(manifest["reuse_matrix"], {"include": []})
 
     def test_duplicate_scheduled_runs_converge_to_identical_work_identity(self) -> None:
         first = self.manifest()
@@ -147,7 +171,10 @@ class WorkflowManifestTests(unittest.TestCase):
                 lifecycle={"state": "open", "current_head": REQUEST["build_source"]["commit"], "merged_commit": None},
                 tap_plan=_planned(),
                 scheduling=_ready(),
-                candidate_locators={_digest("3"): {**_locator(), "digest": "sha256:" + _digest("9")}},
+                candidate_locators={
+                    _digest("3"): {**_locator(), "digest": "sha256:" + _digest("9")},
+                    _digest("7"): _locator(_digest("7"), "zlib"),
+                },
                 max_ready_subjects=16,
             )
         duplicate = self.manifest()

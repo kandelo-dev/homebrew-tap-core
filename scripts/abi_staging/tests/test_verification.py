@@ -123,6 +123,8 @@ class VerificationReceiptTests(unittest.TestCase):
         outcome: str = "success",
         attempt_ordinal: int = 0,
         run: dict[str, object] | None = None,
+        request_sha256: str | None = None,
+        source: dict[str, str] | None = None,
     ) -> Path:
         root = self.root / name
         diagnostics = root / "diagnostics"
@@ -133,7 +135,8 @@ class VerificationReceiptTests(unittest.TestCase):
         result = {
             "schema": 1,
             "kind": "kandelo-abi-staging-verification-result",
-            "request_sha256": self.candidate["common"]["request_sha256"],
+            "request_sha256": request_sha256
+            or self.candidate["common"]["request_sha256"],
             "candidate_record": {
                 "repository": self.candidate_locator.repository,
                 "digest": self.candidate_locator.digest,
@@ -145,7 +148,7 @@ class VerificationReceiptTests(unittest.TestCase):
                 "sha256": TEST_DEFINITION.sha256,
                 "host": "build",
             },
-            "source": self.candidate["common"]["source"],
+            "source": source or self.candidate["common"]["source"],
             "run": run or VERIFIER_RUN,
             "attempt_ordinal": attempt_ordinal,
             "outcome": outcome,
@@ -195,6 +198,8 @@ class VerificationReceiptTests(unittest.TestCase):
             tap_policy=self.tap_policy,
             expected_run=VERIFIER_RUN,
             expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+            expected_request_sha256=self.candidate["common"]["request_sha256"],
+            expected_source=self.candidate["common"]["source"],
             completed_at="2026-08-09T10:00:00.000Z",
             transport=self.transport,
             expected_source_repository=SOURCE_ASSOCIATION,
@@ -231,6 +236,8 @@ class VerificationReceiptTests(unittest.TestCase):
                 tap_policy=self.tap_policy,
                 expected_run=run,
                 expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+                expected_request_sha256=self.candidate["common"]["request_sha256"],
+                expected_source=self.candidate["common"]["source"],
                 completed_at=f"2026-08-09T10:00:0{ordinal}.000Z",
                 transport=self.transport,
                 expected_source_repository=SOURCE_ASSOCIATION,
@@ -279,6 +286,8 @@ class VerificationReceiptTests(unittest.TestCase):
             tap_policy=self.tap_policy,
             expected_run=VERIFIER_RUN,
             expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+            expected_request_sha256=self.candidate["common"]["request_sha256"],
+            expected_source=self.candidate["common"]["source"],
             completed_at="2026-08-09T10:00:00.000Z",
             attempt_ordinal=1,
             outcome="canceled",
@@ -334,6 +343,8 @@ class VerificationReceiptTests(unittest.TestCase):
             tap_policy=self.tap_policy,
             expected_run=second_run,
             expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+            expected_request_sha256=self.candidate["common"]["request_sha256"],
+            expected_source=self.candidate["common"]["source"],
             completed_at="2026-08-09T10:00:01.000Z",
             transport=self.transport,
             expected_source_repository=SOURCE_ASSOCIATION,
@@ -348,6 +359,43 @@ class VerificationReceiptTests(unittest.TestCase):
         self.assertEqual(
             self.candidate_locator.digest,
             "sha256:" + hashlib.sha256(self.candidate_manifest).hexdigest(),
+        )
+
+    def test_historical_candidate_receipt_binds_current_request_without_rewriting_producer(self) -> None:
+        current_request = "f" * 64
+        current_source = {
+            "repository": "Automattic/kandelo",
+            "commit": "8" * 40,
+            "tree": "9" * 40,
+        }
+        root = self._write_result(
+            "historical-candidate-current-request",
+            request_sha256=current_request,
+            source=current_source,
+        )
+        locator = publish_verification_receipt(
+            root,
+            candidate_locator={
+                "repository": self.candidate_locator.repository,
+                "digest": self.candidate_locator.digest,
+                "immutable_reference": self.candidate_locator.immutable_reference,
+            },
+            test_definition=TEST_DEFINITION,
+            tap_policy=self.tap_policy,
+            expected_run=VERIFIER_RUN,
+            expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+            expected_request_sha256=current_request,
+            expected_source=current_source,
+            completed_at="2026-08-09T10:00:00.000Z",
+            transport=self.transport,
+            expected_source_repository=SOURCE_ASSOCIATION,
+        )
+        _manifest, receipt = self._receipt(locator)
+        self.assertEqual(receipt["common"]["request_sha256"], current_request)
+        self.assertEqual(receipt["common"]["source"], current_source)
+        self.assertNotEqual(
+            self.candidate["candidate"]["producer"]["request_sha256"],
+            current_request,
         )
 
     def test_candidate_definition_run_and_inventory_mismatches_fail_closed(self) -> None:
@@ -408,6 +456,8 @@ class VerificationReceiptTests(unittest.TestCase):
                     tap_policy=policy,
                     expected_run=expected_run,
                     expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+                    expected_request_sha256=self.candidate["common"]["request_sha256"],
+                    expected_source=self.candidate["common"]["source"],
                     completed_at="2026-08-09T10:00:00.000Z",
                     transport=self.transport,
                     expected_source_repository=SOURCE_ASSOCIATION,

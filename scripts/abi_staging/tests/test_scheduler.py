@@ -516,6 +516,80 @@ class SchedulingTests(unittest.TestCase):
         rebuild = next(item for item in invalidated.ready if item.subject == subject)
         self.assertEqual(rebuild.action, "build-candidate")
 
+    def test_identical_historical_candidate_is_verified_then_explicitly_reused(self) -> None:
+        plan = _plan()
+        subject = plan["required_subjects"][0]
+        candidate, receipt = _complete(plan, subject)
+        historical_request = _digest("historical-request")
+        candidate = replace(
+            candidate,
+            request_sha256=historical_request,
+            binding_record_sha256=candidate.record_sha256,
+        )
+        receipt = replace(receipt, request_sha256=historical_request)
+
+        needs_verification = schedule_ready_batch(
+            plan,
+            _records(candidate),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        verify = next(item for item in needs_verification.ready if item.subject == subject)
+        self.assertEqual(verify.action, "verify-candidate")
+        self.assertEqual(verify.candidate_record_sha256, candidate.record_sha256)
+
+        reusable = schedule_ready_batch(
+            plan,
+            _records(candidate, receipt),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        reuse = next(item for item in reusable.ready if item.subject == subject)
+        self.assertEqual(reuse.action, "reuse-candidate")
+        self.assertEqual(reuse.candidate_record_sha256, candidate.record_sha256)
+
+        reuse_binding = replace(
+            candidate,
+            request_sha256=plan["request_digest"],
+            binding_record_sha256=_digest("reuse-binding"),
+        )
+        complete = schedule_ready_batch(
+            plan,
+            _records(candidate, reuse_binding, receipt),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        self.assertIn(subject, complete.complete)
+
+    def test_historical_candidates_with_conflicting_layers_fail_closed(self) -> None:
+        plan = _plan()
+        subject = plan["required_subjects"][0]
+        first, _ = _complete(plan, subject)
+        first = replace(first, request_sha256=_digest("old-one"))
+        second = replace(
+            first,
+            request_sha256=_digest("old-two"),
+            record_sha256=_digest("second-candidate"),
+            bottle_layer_sha256=_digest("different-layer"),
+        )
+        with self.assertRaisesRegex(
+            SchedulingError, "conflicting candidate bottle layers"
+        ):
+            schedule_ready_batch(
+                plan,
+                _records(first, second),
+                _decision(plan),
+                now=NOW,
+                policy=POLICY,
+                verification_tests=(DEFINITION,),
+            )
+
     def test_at_least_once_candidate_publication_converges_by_exact_layer(self) -> None:
         plan = _plan()
         subject = plan["required_subjects"][0]

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from .contract import load_canonical_mapping
+from .contract import load_canonical_mapping, validate_candidate_reuse_record
 from .oci import (
     OciPublicationError,
     OciTransportV1,
@@ -19,10 +19,12 @@ from .policy import (
     VerificationTestDefinitionV1,
     attempt_repository,
     candidate_repository,
+    candidate_reuse_repository,
 )
 from .records import (
     ATTEMPT_OUTCOME_MEDIA_TYPE,
     CANDIDATE_RECORD_MEDIA_TYPE,
+    CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
     validate_attempt_outcome_record,
     validate_candidate_record,
 )
@@ -51,21 +53,45 @@ class CandidateInventoryV1:
 
 
 @dataclass(frozen=True)
+class VerificationInventoryV1:
+    facts: tuple[VerificationFactV1, ...]
+    locators: Mapping[str, Mapping[str, str]]
+    records: Mapping[str, Mapping[str, Any]]
+
+
+@dataclass(frozen=True)
+class CandidateReuseInventoryV1:
+    facts: tuple[CandidateFactV1, ...]
+    locators: Mapping[str, Mapping[str, str]]
+    records: Mapping[str, Mapping[str, Any]]
+
+
+@dataclass(frozen=True)
 class PublicSchedulingInventoryV1:
     records: SchedulingRecordsV1
     candidate_locators: Mapping[str, Mapping[str, str]]
     candidate_records: Mapping[str, Mapping[str, Any]]
+    verification_locators: Mapping[str, Mapping[str, str]] = field(
+        default_factory=dict
+    )
+    verification_records: Mapping[str, Mapping[str, Any]] = field(
+        default_factory=dict
+    )
+    reuse_locators: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
+    reuse_records: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
 
-def scan_verification_repository(
+def inspect_verification_repository(
     repository: str,
     *,
     candidates: Mapping[str, Mapping[str, Any]],
     transport: OciTransportV1,
-) -> tuple[VerificationFactV1, ...]:
+) -> VerificationInventoryV1:
     """Read factual receipts and bind their candidate subjects externally."""
 
     facts: list[VerificationFactV1] = []
+    locators: dict[str, dict[str, str]] = {}
+    records: dict[str, dict[str, Any]] = {}
     try:
         for locator in list_public_record_locators(repository, transport=transport):
             fetched = fetch_public_record(
@@ -104,9 +130,10 @@ def scan_verification_repository(
                     "verification receipt names an unknown candidate record"
                 )
             if (
-                candidate.get("request_sha256") != common["request_sha256"]
-                or annotations["dev.kandelo.abi-staging.candidate-record-sha256"]
+                annotations["dev.kandelo.abi-staging.candidate-record-sha256"]
                 != candidate_record
+                or verification["candidate_layer"]
+                != candidate.get("bottle_layer")
                 or annotations["dev.kandelo.abi-staging.classification"]
                 != "factual-verification-receipt"
                 or annotations["dev.kandelo.abi-staging.kind"]
@@ -124,6 +151,9 @@ def scan_verification_repository(
             subject = candidate.get("subject")
             if not isinstance(subject, str):
                 raise InventoryError("candidate inventory lacks an exact subject")
+            record_sha256 = fetched.digest.removeprefix("sha256:")
+            if record_sha256 in locators:
+                raise InventoryError("verification inventory repeats a record digest")
             facts.append(
                 VerificationFactV1(
                     request_sha256=common["request_sha256"],
@@ -143,15 +173,36 @@ def scan_verification_repository(
                     completed_at=annotations[
                         "dev.kandelo.abi-staging.completed-at"
                     ],
-                    record_sha256=fetched.digest.removeprefix("sha256:"),
+                    record_sha256=record_sha256,
                 )
             )
+            records[record_sha256] = dict(record)
+            locators[record_sha256] = {
+                "repository": fetched.repository,
+                "digest": fetched.digest,
+                "immutable_reference": fetched.immutable_reference,
+            }
     except (OciPublicationError, ValueError) as error:
         if isinstance(error, InventoryError):
             raise
         raise InventoryError(f"verification inventory is invalid: {error}") from error
     facts.sort(key=lambda item: item.record_sha256)
-    return tuple(facts)
+    return VerificationInventoryV1(
+        tuple(facts),
+        {key: locators[key] for key in sorted(locators)},
+        {key: records[key] for key in sorted(records)},
+    )
+
+
+def scan_verification_repository(
+    repository: str,
+    *,
+    candidates: Mapping[str, Mapping[str, Any]],
+    transport: OciTransportV1,
+) -> tuple[VerificationFactV1, ...]:
+    return inspect_verification_repository(
+        repository, candidates=candidates, transport=transport
+    ).facts
 
 
 def scan_attempt_repository(
@@ -253,6 +304,201 @@ def inspect_candidate_repository(
     )
 
 
+def inspect_candidate_reuse_repository(
+    repository: str,
+    *,
+    candidates: Mapping[str, Mapping[str, Any]],
+    candidate_locators: Mapping[str, Mapping[str, str]],
+    verifications: Mapping[str, VerificationFactV1],
+    verification_locators: Mapping[str, Mapping[str, str]],
+    transport: OciTransportV1,
+) -> CandidateReuseInventoryV1:
+    """Validate explicit request bindings to unchanged factual candidates."""
+
+    facts: list[CandidateFactV1] = []
+    locators: dict[str, dict[str, str]] = {}
+    records: dict[str, dict[str, Any]] = {}
+    try:
+        for locator in list_public_record_locators(repository, transport=transport):
+            fetched = fetch_public_record(
+                locator,
+                transport=transport,
+                expected_artifact_type=CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
+                required_layer_roles=("immutable-record-bytes",),
+            )
+            record = load_canonical_mapping(
+                fetched.config.body, "candidate reuse record"
+            )
+            validate_candidate_reuse_record(record)
+            if fetched.layers[0].body != fetched.config.body:
+                raise InventoryError("candidate reuse immutable bytes differ")
+            manifest = load_canonical_mapping(
+                fetched.manifest, "candidate reuse OCI manifest"
+            )
+            annotations = manifest.get("annotations")
+            expected_annotation_keys = frozenset(
+                {
+                    "dev.kandelo.abi-staging.bottle-contract-sha256",
+                    "dev.kandelo.abi-staging.classification",
+                    "dev.kandelo.abi-staging.kind",
+                    "dev.kandelo.abi-staging.request-sha256",
+                    "org.opencontainers.image.source",
+                }
+            )
+            if (
+                not isinstance(annotations, Mapping)
+                or frozenset(annotations) != expected_annotation_keys
+            ):
+                raise InventoryError("candidate reuse annotations changed")
+
+            common = record["common"]
+            reuse = record["candidate_reuse"]
+            formula = reuse["formula"]
+            existing = reuse["existing_candidate"]
+            candidate_digest = existing["record_sha256"]
+            candidate = candidates.get(candidate_digest)
+            candidate_locator = candidate_locators.get(candidate_digest)
+            if candidate is None or candidate_locator is None:
+                raise InventoryError("candidate reuse names an unknown candidate")
+            payload = candidate["candidate"]
+            candidate_formula = payload["formula"]
+            source_components = [
+                item["artifact"]
+                for item in payload["normalized_components"]
+                if item["id"] == "source-custody"
+            ]
+            if len(source_components) != 1:
+                raise InventoryError("reused candidate lacks one source-custody record")
+            source = source_components[0]
+            expected_source = {
+                "record_sha256": source["sha256"],
+                "immutable_reference": source["immutable_reference"],
+            }
+            expected_existing = {
+                "record_sha256": candidate_digest,
+                "immutable_reference": candidate_locator["immutable_reference"],
+            }
+            expected_formula = {
+                "tap": candidate_formula["tap"],
+                "formula": candidate_formula["formula"],
+                "architecture": candidate_formula["architecture"],
+                "target_abi": candidate_formula["target_abi"],
+                "bottle_contract_sha256": candidate_formula[
+                    "bottle_contract_sha256"
+                ],
+            }
+            receipt_digests = [
+                item["record_sha256"] for item in reuse["qualifying_receipts"]
+            ]
+            for link in reuse["qualifying_receipts"]:
+                receipt = verifications.get(link["record_sha256"])
+                receipt_locator = verification_locators.get(link["record_sha256"])
+                if receipt is None and receipt_locator is None:
+                    immutable_reference = link["immutable_reference"]
+                    marker = "@sha256:"
+                    if marker not in immutable_reference:
+                        raise InventoryError(
+                            "candidate reuse receipt reference is not immutable"
+                        )
+                    repository_name, digest = immutable_reference.rsplit(marker, 1)
+                    if digest != link["record_sha256"]:
+                        raise InventoryError(
+                            "candidate reuse receipt reference differs from its digest"
+                        )
+                    fetched_receipt = fetch_public_record(
+                        {
+                            "repository": repository_name,
+                            "digest": "sha256:" + digest,
+                            "immutable_reference": immutable_reference,
+                        },
+                        transport=transport,
+                        expected_artifact_type=VERIFICATION_RECEIPT_MEDIA_TYPE,
+                        required_layer_roles=(),
+                    )
+                    historical = load_canonical_mapping(
+                        fetched_receipt.config.body,
+                        "historical candidate reuse receipt",
+                    )
+                    validate_verification_receipt_record(historical)
+                    historical_verification = historical["verification"]
+                    if (
+                        historical_verification["candidate_record_sha256"]
+                        != candidate_digest
+                        or historical_verification["candidate_layer"]
+                        != payload["bottle_layer"]
+                        or historical["common"]["outcome"] != "success"
+                    ):
+                        raise InventoryError(
+                            "candidate reuse names a nonqualifying historical receipt"
+                        )
+                    continue
+                if (
+                    receipt is None
+                    or receipt_locator is None
+                    or receipt.candidate_record_sha256 != candidate_digest
+                    or receipt.outcome != "success"
+                    or link["immutable_reference"]
+                    != receipt_locator["immutable_reference"]
+                ):
+                    raise InventoryError(
+                        "candidate reuse names a nonqualifying verification receipt"
+                    )
+            if (
+                reuse["formula"] != expected_formula
+                or reuse["existing_candidate"] != expected_existing
+                or reuse["bottle_layer"] != payload["bottle_layer"]
+                or reuse["source_custody"] != expected_source
+                or reuse["original_producer"] != payload["producer"]
+                or annotations[
+                    "dev.kandelo.abi-staging.bottle-contract-sha256"
+                ]
+                != candidate_formula["bottle_contract_sha256"]
+                or annotations["dev.kandelo.abi-staging.classification"]
+                != "public-candidate-reuse-not-endorsement"
+                or annotations["dev.kandelo.abi-staging.kind"]
+                != "candidate-reuse"
+                or annotations["dev.kandelo.abi-staging.request-sha256"]
+                != common["request_sha256"]
+                or annotations["org.opencontainers.image.source"]
+                != "https://github.com/" + candidate_formula["tap"]
+                or len(receipt_digests) != len(set(receipt_digests))
+            ):
+                raise InventoryError("candidate reuse contradicts protected facts")
+            record_sha256 = fetched.digest.removeprefix("sha256:")
+            if record_sha256 in locators:
+                raise InventoryError("candidate reuse inventory repeats a digest")
+            facts.append(
+                CandidateFactV1(
+                    request_sha256=common["request_sha256"],
+                    subject=exact_formula_subject(
+                        formula["formula"], formula["architecture"]
+                    ),
+                    contract_sha256=formula["bottle_contract_sha256"],
+                    record_sha256=candidate_digest,
+                    bottle_layer_sha256=reuse["bottle_layer"]["sha256"],
+                    binding_record_sha256=record_sha256,
+                )
+            )
+            records[record_sha256] = dict(record)
+            locators[record_sha256] = {
+                "repository": fetched.repository,
+                "digest": fetched.digest,
+                "immutable_reference": fetched.immutable_reference,
+            }
+    except (OciPublicationError, ValueError) as error:
+        if isinstance(error, InventoryError):
+            raise
+        raise InventoryError(f"candidate reuse inventory is invalid: {error}") from error
+    facts.sort(
+        key=lambda item: item.binding_record_sha256 or item.record_sha256
+    )
+    return CandidateReuseInventoryV1(
+        tuple(facts),
+        {key: locators[key] for key in sorted(locators)},
+        {key: records[key] for key in sorted(records)},
+    )
+
+
 def scan_scheduling_inventory(
     tap_plan: Mapping[str, Any],
     *,
@@ -273,6 +519,10 @@ def scan_scheduling_inventory(
     locators: dict[str, Mapping[str, str]] = {}
     candidate_records: dict[str, Mapping[str, Any]] = {}
     candidate_subjects: dict[str, dict[str, str]] = {}
+    verification_locators: dict[str, Mapping[str, str]] = {}
+    verification_records: dict[str, Mapping[str, Any]] = {}
+    reuse_locators: dict[str, Mapping[str, str]] = {}
+    reuse_records: dict[str, Mapping[str, Any]] = {}
 
     for name in names:
         repository = candidate_repository(policy, target_abi, formula=name)
@@ -294,19 +544,51 @@ def scan_scheduling_inventory(
             candidate_subjects[fact.record_sha256] = {
                 "request_sha256": fact.request_sha256,
                 "subject": fact.subject,
+                "bottle_layer": inspected.records[fact.record_sha256][
+                    "candidate"
+                ]["bottle_layer"],
             }
 
     for name in names:
         base = candidate_repository(policy, target_abi, formula=name)
         for definition in verification_tests:
             for host in definition.hosts:
-                verifications.extend(
-                    scan_verification_repository(
-                        receipt_repository(base, definition.id, host),
-                        candidates=candidate_subjects,
-                        transport=transport,
-                    )
+                inspected = inspect_verification_repository(
+                    receipt_repository(base, definition.id, host),
+                    candidates=candidate_subjects,
+                    transport=transport,
                 )
+                verifications.extend(inspected.facts)
+                for digest in inspected.locators:
+                    if digest in verification_locators:
+                        raise InventoryError(
+                            "verification digest appears in multiple repositories"
+                        )
+                    verification_locators[digest] = inspected.locators[digest]
+                    verification_records[digest] = inspected.records[digest]
+
+    verification_facts = {
+        fact.record_sha256: fact for fact in verifications
+    }
+    if len(verification_facts) != len(verifications):
+        raise InventoryError("verification inventory repeats a record digest")
+    for name in names:
+        inspected = inspect_candidate_reuse_repository(
+            candidate_reuse_repository(policy, target_abi, formula=name),
+            candidates=candidate_records,
+            candidate_locators=locators,
+            verifications=verification_facts,
+            verification_locators=verification_locators,
+            transport=transport,
+        )
+        candidates.extend(inspected.facts)
+        for digest in inspected.locators:
+            if digest in reuse_locators:
+                raise InventoryError(
+                    "candidate reuse digest appears in multiple repositories"
+                )
+            reuse_locators[digest] = inspected.locators[digest]
+            reuse_records[digest] = inspected.records[digest]
     return PublicSchedulingInventoryV1(
         records=SchedulingRecordsV1(
             attempts=tuple(attempts),
@@ -316,5 +598,19 @@ def scan_scheduling_inventory(
         candidate_locators={key: locators[key] for key in sorted(locators)},
         candidate_records={
             key: candidate_records[key] for key in sorted(candidate_records)
+        },
+        verification_locators={
+            key: verification_locators[key]
+            for key in sorted(verification_locators)
+        },
+        verification_records={
+            key: verification_records[key]
+            for key in sorted(verification_records)
+        },
+        reuse_locators={
+            key: reuse_locators[key] for key in sorted(reuse_locators)
+        },
+        reuse_records={
+            key: reuse_records[key] for key in sorted(reuse_records)
         },
     )

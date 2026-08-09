@@ -12,7 +12,11 @@ import stat
 from typing import Any
 
 from .canonical import CanonicalJsonError, canonical_bytes, parse_canonical_bytes
-from .contract import load_bottle_contract, load_canonical_mapping
+from .contract import (
+    load_bottle_contract,
+    load_canonical_mapping,
+    validate_candidate_reuse_record,
+)
 from .custody import load_source_custody_manifest
 from .plan import PlanError, exact_formula_subject, validate_tap_plan
 
@@ -31,6 +35,9 @@ MEDIA_TYPE = re.compile(r"^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*
 OCI_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
 CANDIDATE_RECORD_MEDIA_TYPE = (
     "application/vnd.kandelo.abi-staging.candidate.record.v1+json"
+)
+CANDIDATE_REUSE_RECORD_MEDIA_TYPE = (
+    "application/vnd.kandelo.abi-staging.candidate-reuse.record.v1+json"
 )
 SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE = (
     "application/vnd.kandelo.abi-staging.source-custody.manifest.v1+json"
@@ -922,6 +929,54 @@ def build_attempt_outcome_oci_plan(
             ),
             "org.opencontainers.image.source": "https://github.com/"
             + str(_mapping(attempt["run"], "attempt outcome run")["repository"]),
+        },
+    )
+
+
+def build_candidate_reuse_oci_plan(
+    record: Mapping[str, Any], *, repository: str
+) -> OciRecordPlanV1:
+    """Wrap one factual cross-request binding without inventing a build."""
+
+    try:
+        validate_candidate_reuse_record(record)
+    except ValueError as error:
+        raise TapRecordError(f"candidate reuse record is invalid: {error}") from error
+    checked_repository = _repository(repository, "candidate reuse repository")
+    body = canonical_bytes(record)
+    common = _mapping(record["common"], "candidate reuse common")
+    payload = _mapping(record["candidate_reuse"], "candidate reuse payload")
+    formula = _mapping(payload["formula"], "candidate reuse Formula")
+    return OciRecordPlanV1(
+        repository=checked_repository,
+        artifact_type=CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
+        config=OciBlobV1(
+            role="candidate-reuse-record",
+            media_type=CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
+            body=body,
+            title="candidate-reuse-record.json",
+        ),
+        layers=(
+            OciBlobV1(
+                role="immutable-record-bytes",
+                media_type=CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
+                body=body,
+                title="candidate-reuse-record.json",
+            ),
+        ),
+        annotations={
+            "dev.kandelo.abi-staging.bottle-contract-sha256": str(
+                formula["bottle_contract_sha256"]
+            ),
+            "dev.kandelo.abi-staging.classification": (
+                "public-candidate-reuse-not-endorsement"
+            ),
+            "dev.kandelo.abi-staging.kind": "candidate-reuse",
+            "dev.kandelo.abi-staging.request-sha256": str(
+                common["request_sha256"]
+            ),
+            "org.opencontainers.image.source": "https://github.com/"
+            + str(formula["tap"]),
         },
     )
 

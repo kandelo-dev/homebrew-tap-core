@@ -25,6 +25,36 @@ VERIFICATION_RUN = {**PUBLICATION_RUN, "job": "verify-candidate"}
 
 
 class WorkflowPublicationTests(unittest.TestCase):
+    def test_reuse_publisher_cli_requires_exact_coordination_and_readback_guards(self) -> None:
+        from scripts.abi_staging import cli
+
+        with tempfile.TemporaryDirectory() as temporary:
+            with patch.object(cli, "_publish_workflow_reuse") as publish:
+                status = cli.main(
+                    [
+                        "publish-workflow-reuse",
+                        "--run-id",
+                        "808",
+                        "--run-attempt",
+                        "2",
+                        "--head-sha",
+                        "7" * 40,
+                        "--work-id",
+                        "a" * 64,
+                        "--coordination-artifact-id",
+                        "501",
+                        "--coordination-artifact-digest",
+                        "d" * 64,
+                        "--require-github-digest",
+                        "--anonymous-readback",
+                        "--immutable",
+                        "--out",
+                        str(Path(temporary) / "publication.json"),
+                    ]
+                )
+        self.assertEqual(status, 0)
+        publish.assert_called_once()
+
     def test_receipt_publisher_cli_requires_the_exact_github_bridge_guards(self) -> None:
         from scripts.abi_staging import cli
 

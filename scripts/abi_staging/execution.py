@@ -577,16 +577,80 @@ def _candidate_entry(
         != f"{expected_repository}@sha256:{digest}"
     ):
         raise ExecutionError("candidate locator differs from protected namespace identity")
-    common = _mapping(record.get("common"), "candidate common")
     formula = _mapping(record["candidate"].get("formula"), "candidate Formula")
     if (
-        common.get("request_sha256") != bundle["request_sha256"]
-        or common.get("source") != bundle["request"]["build_source"]
-        or formula.get("tap") != bundle["tap_plan"]["tap_source"]["repository"]
+        formula.get("tap") != bundle["tap_plan"]["tap_source"]["repository"]
         or formula.get("target_abi") != bundle["tap_plan"]["target_abi"]["version"]
     ):
         raise ExecutionError("candidate differs from exact coordinated authority")
     return record, locator
+
+
+def _expected_reuse_work_id(
+    bundle: Mapping[str, Any], work: Mapping[str, Any]
+) -> str:
+    return canonical_sha256(
+        {
+            "action": "reuse-candidate",
+            "attempt_ordinal": work["attempt_ordinal"],
+            "candidate_record_sha256": work["candidate_record_sha256"],
+            "contract_sha256": work["contract_sha256"],
+            "host": None,
+            "request_sha256": bundle["request_sha256"],
+            "subject": json.loads(work["subject"]),
+            "test_definition_sha256": None,
+        }
+    )
+
+
+def select_reuse_work(
+    bundle: Mapping[str, Any], work_id: str
+) -> dict[str, Any]:
+    """Bind an explicit new-request record to one unchanged prior candidate."""
+
+    _digest(work_id, "reuse work ID")
+    workflow = _mapping(bundle.get("workflow"), "coordination workflow")
+    matches = [
+        item
+        for item in workflow.get("reuse_work", ())
+        if item.get("work_id") == work_id
+    ]
+    if len(matches) != 1:
+        raise ExecutionError(
+            "coordination bundle does not contain the exact reuse work ID"
+        )
+    work = dict(_mapping(matches[0], "reuse work"))
+    if (
+        work.get("action") != "reuse-candidate"
+        or work.get("attempt_ordinal") != 0
+        or _expected_reuse_work_id(bundle, work) != work_id
+    ):
+        raise ExecutionError("reuse work identity differs from coordinated inputs")
+    formula_plan = _formula_for_subject(bundle, work["subject"])
+    contract = _mapping(
+        _mapping(bundle.get("contracts"), "coordination contracts").get(
+            work["subject"]
+        ),
+        "reuse bottle contract",
+    )
+    if (
+        canonical_sha256(formula_plan) != work["formula_plan_sha256"]
+        or formula_plan.get("contract_sha256") != work["contract_sha256"]
+        or canonical_sha256(contract) != work["contract_sha256"]
+    ):
+        raise ExecutionError("reuse work differs from its Formula contract")
+    candidate, locator = _candidate_entry(
+        bundle, work["candidate_record_sha256"]
+    )
+    formula = candidate["candidate"]["formula"]
+    if (
+        locator != work["candidate_locator"]
+        or exact_formula_subject(formula["formula"], formula["architecture"])
+        != work["subject"]
+        or formula["bottle_contract_sha256"] != work["contract_sha256"]
+    ):
+        raise ExecutionError("reuse work differs from its exact candidate")
+    return work
 
 
 def _verification_definition(
@@ -883,6 +947,10 @@ def prepare_verification_inputs(
     definition = _verification_definition(bundle, selected)
     documents = {
         root / "candidate-locator.json": target["locator"],
+        root / "request-binding.json": {
+            "request_sha256": bundle["request_sha256"],
+            "source": bundle["request"]["build_source"],
+        },
         root / "test-definition.json": definition,
         root / "run.json": checked_run,
         root / "dependency-provenance.json": dependency_contract,
@@ -897,6 +965,7 @@ def prepare_verification_inputs(
         "candidates": prepared_candidates,
         "target": target,
         "candidate_locator": root / "candidate-locator.json",
+        "request_binding": root / "request-binding.json",
         "test_definition": root / "test-definition.json",
         "test_definition_sha256": selected["test_definition_sha256"],
         "run": root / "run.json",
@@ -1083,6 +1152,8 @@ def execute_verification_work(
             str(work["attempt_ordinal"]),
             "--run",
             str(prepared["run"]),
+            "--request-binding",
+            str(prepared["request_binding"]),
             "--tap-root",
             str(composed_tap),
             "--tap-commit",

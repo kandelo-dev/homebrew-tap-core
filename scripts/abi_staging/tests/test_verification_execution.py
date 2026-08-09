@@ -540,6 +540,7 @@ class VerificationExecutionTests(unittest.TestCase):
                 "--host",
                 "--attempt-ordinal",
                 "--run",
+                "--request-binding",
                 "--tap-root",
                 "--tap-commit",
                 "--dependency-provenance",
@@ -548,6 +549,14 @@ class VerificationExecutionTests(unittest.TestCase):
                 "--out",
             ):
                 self.assertIn(flag, command)
+            request_binding = Path(command[command.index("--request-binding") + 1])
+            self.assertEqual(
+                json.loads(request_binding.read_bytes()),
+                {
+                    "request_sha256": bundle["request_sha256"],
+                    "source": bundle["request"]["build_source"],
+                },
+            )
             return SimpleNamespace(returncode=7)
 
         with tempfile.TemporaryDirectory() as temporary, patch.object(

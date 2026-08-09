@@ -143,6 +143,7 @@ class CandidateFactV1:
     contract_sha256: str
     record_sha256: str
     bottle_layer_sha256: str
+    binding_record_sha256: str | None = None
 
     def __post_init__(self) -> None:
         _digest(self.request_sha256, "candidate request")
@@ -150,6 +151,8 @@ class CandidateFactV1:
         _digest(self.contract_sha256, "candidate contract")
         _digest(self.record_sha256, "candidate record")
         _digest(self.bottle_layer_sha256, "candidate bottle layer")
+        if self.binding_record_sha256 is not None:
+            _digest(self.binding_record_sha256, "candidate binding record")
 
 
 @dataclass(frozen=True)
@@ -234,7 +237,7 @@ class RetryDecisionV1:
 class ReadyWorkV1:
     subject: str
     work_class: Literal["required", "background"]
-    action: Literal["build-candidate", "verify-candidate"]
+    action: Literal["build-candidate", "verify-candidate", "reuse-candidate"]
     attempt_ordinal: int
     contract_sha256: str
     candidate_record_sha256: str | None = None
@@ -437,7 +440,11 @@ def _deduplicate_records(records: SchedulingRecordsV1) -> SchedulingRecordsV1:
     def unique(values: Sequence[object], field: str) -> tuple[object, ...]:
         seen: dict[str, object] = {}
         for value in values:
-            digest = getattr(value, "record_sha256", None)
+            digest = (
+                getattr(value, "binding_record_sha256", None)
+                if isinstance(value, CandidateFactV1)
+                else None
+            ) or getattr(value, "record_sha256", None)
             if not isinstance(digest, str):
                 raise SchedulingError(f"{field} contains an untyped record")
             if digest in seen and seen[digest] != value:
@@ -589,8 +596,7 @@ def schedule_ready_batch(
         candidates = [
             item
             for item in checked_records.candidates
-            if item.request_sha256 == request_sha256
-            and item.subject == subject
+            if item.subject == subject
             and item.contract_sha256 == contract
         ]
         if len({item.bottle_layer_sha256 for item in candidates}) > 1:
@@ -600,11 +606,18 @@ def schedule_ready_batch(
         # At-least-once runs may publish more than one factual producer record
         # for identical contract/layer bytes. Select one immutable record
         # deterministically; never treat a differing layer as equivalent.
-        candidate = (
-            min(candidates, key=lambda item: item.record_sha256)
-            if candidates
-            else None
+        current_candidates = [
+            item for item in candidates if item.request_sha256 == request_sha256
+        ]
+        candidate = min(
+            current_candidates or candidates,
+            key=lambda item: (
+                item.record_sha256,
+                item.binding_record_sha256 or item.record_sha256,
+            ),
+            default=None,
         )
+        candidate_is_bound = bool(current_candidates)
         if candidate is not None:
             next_verification: tuple[str, str, str, int] | None = None
             verification_blocker: BlockedSubjectV1 | None = None
@@ -679,9 +692,24 @@ def schedule_ready_batch(
             elif verification_blocker is not None:
                 state[subject] = "blocked"
                 blocked.append(verification_blocker)
-            else:
+            elif candidate_is_bound:
                 state[subject] = "complete"
                 complete.append(subject)
+            else:
+                state[subject] = "pending"
+                if allowed:
+                    ready.append(
+                        ReadyWorkV1(
+                            subject,
+                            work_class,
+                            "reuse-candidate",
+                            0,
+                            contract,
+                            candidate_record_sha256=candidate.record_sha256,
+                        )
+                    )
+                else:
+                    pending.append(subject)
             continue
 
         attempts = [

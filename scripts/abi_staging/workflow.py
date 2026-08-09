@@ -17,7 +17,9 @@ from .scheduler import SchedulingDecisionV1
 
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
-WORK_ARTIFACT = re.compile(r"^abi-staging-(?:build|verification)-[0-9a-f]{64}$")
+WORK_ARTIFACT = re.compile(
+    r"^abi-staging-(?:build|reuse|verification)-[0-9a-f]{64}$"
+)
 
 
 class WorkflowError(ValueError):
@@ -166,6 +168,7 @@ def build_workflow_manifest(
     }
     formulae = _formulae(tap_plan)
     build_work: list[dict[str, Any]] = []
+    reuse_work: list[dict[str, Any]] = []
     verify_work: list[dict[str, Any]] = []
     seen: set[str] = set()
     previous_class = "required"
@@ -251,6 +254,30 @@ def build_workflow_manifest(
                     "host": ready.host,
                 }
             )
+        elif ready.action == "reuse-candidate":
+            candidate_digest = _digest(
+                ready.candidate_record_sha256, "reuse candidate record"
+            )
+            if ready.test_definition_sha256 is not None or ready.host is not None:
+                raise WorkflowError("reuse work carries verification identity")
+            locator_value = candidate_locators.get(candidate_digest)
+            if locator_value is None:
+                raise WorkflowError("reuse work lacks an exact candidate locator")
+            try:
+                locator = parse_public_record_locator(locator_value)
+            except OciPublicationError as error:
+                raise WorkflowError(f"reuse candidate locator is invalid: {error}") from error
+            if locator["digest"] != "sha256:" + candidate_digest:
+                raise WorkflowError("reuse candidate locator differs from its record")
+            reuse_work.append(
+                {
+                    **common,
+                    "action": "reuse-candidate",
+                    "artifact_name": f"abi-staging-reuse-{work_id}",
+                    "candidate_record_sha256": candidate_digest,
+                    "candidate_locator": locator,
+                }
+            )
         else:
             raise WorkflowError("ready-work action is unsupported")
 
@@ -267,6 +294,7 @@ def build_workflow_manifest(
         "tap_source": copy.deepcopy(tap_plan["tap_source"]),
         "tap_plan_sha256": canonical_sha256(tap_plan),
         "build_work": build_work,
+        "reuse_work": reuse_work,
         "verify_work": verify_work,
         "build_matrix": {
             "include": []
@@ -277,6 +305,11 @@ def build_workflow_manifest(
             "include": []
             if mode == "observe"
             else [{"work_id": item["work_id"]} for item in verify_work]
+        },
+        "reuse_matrix": {
+            "include": []
+            if mode == "observe"
+            else [{"work_id": item["work_id"]} for item in reuse_work]
         },
         "blocked": [dict(item.__dict__) for item in scheduling.blocked],
         "complete": list(scheduling.complete),
@@ -300,8 +333,10 @@ def validate_workflow_manifest(
                 "tap_source",
                 "tap_plan_sha256",
                 "build_work",
+                "reuse_work",
                 "verify_work",
                 "build_matrix",
+                "reuse_matrix",
                 "verify_matrix",
                 "blocked",
                 "complete",
@@ -356,6 +391,7 @@ def validate_workflow_manifest(
     total = 0
     for field, action in (
         ("build_work", "build-candidate"),
+        ("reuse_work", "reuse-candidate"),
         ("verify_work", "verify-candidate"),
     ):
         entries = _sequence(manifest[field], field)
@@ -373,11 +409,16 @@ def validate_workflow_manifest(
                 "action",
                 "artifact_name",
             }
-            if action == "verify-candidate":
+            if action in {"reuse-candidate", "verify-candidate"}:
                 base.update(
                     {
                         "candidate_record_sha256",
                         "candidate_locator",
+                    }
+                )
+            if action == "verify-candidate":
+                base.update(
+                    {
                         "test_definition_sha256",
                         "host",
                     }
@@ -406,24 +447,26 @@ def validate_workflow_manifest(
                 or not work["artifact_name"].endswith(work_id)
             ):
                 raise WorkflowError(f"{field} artifact name is not content addressed")
-            if action == "verify-candidate":
+            if action in {"reuse-candidate", "verify-candidate"}:
                 candidate_digest = _digest(
-                    work["candidate_record_sha256"], "verification candidate"
+                    work["candidate_record_sha256"], f"{action} candidate"
                 )
-                _digest(work["test_definition_sha256"], "verification definition")
-                if work["host"] not in {"build", "node", "browser"}:
-                    raise WorkflowError("verification host is unsupported")
                 try:
                     locator = parse_public_record_locator(work["candidate_locator"])
                 except OciPublicationError as error:
-                    raise WorkflowError(f"verification locator is invalid: {error}") from error
+                    raise WorkflowError(f"candidate locator is invalid: {error}") from error
                 if locator["digest"] != "sha256:" + candidate_digest:
-                    raise WorkflowError("verification locator differs from candidate")
+                    raise WorkflowError(f"{action} locator differs from candidate")
+            if action == "verify-candidate":
+                _digest(work["test_definition_sha256"], "verification definition")
+                if work["host"] not in {"build", "node", "browser"}:
+                    raise WorkflowError("verification host is unsupported")
     if total > max_ready_subjects:
         raise WorkflowError("workflow plan exceeds the protected ready-work bound")
 
     for matrix_field, work_field in (
         ("build_matrix", "build_work"),
+        ("reuse_matrix", "reuse_work"),
         ("verify_matrix", "verify_work"),
     ):
         matrix = _exact(manifest[matrix_field], frozenset({"include"}), matrix_field)

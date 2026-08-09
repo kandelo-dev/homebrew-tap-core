@@ -15,6 +15,7 @@ from .contract import (
     assess_capture,
     build_bottle_contract,
     validate_capture_assessment,
+    validate_candidate_reuse_record,
 )
 from .inventory import PublicSchedulingInventoryV1
 from .oci import OciPublicationError, parse_public_record_locator
@@ -29,6 +30,7 @@ from .reconcile import ReconciliationDecisionV1
 from .records import validate_candidate_record
 from .scheduler import CandidateFactV1, schedule_ready_batch
 from .workflow import build_workflow_manifest, validate_workflow_manifest
+from .verification import validate_verification_receipt_record
 
 
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -538,6 +540,14 @@ def coordinate_planned_request(
             "locators": copy.deepcopy(dict(inventory.candidate_locators)),
             "records": copy.deepcopy(dict(inventory.candidate_records)),
         },
+        "verification_receipts": {
+            "locators": copy.deepcopy(dict(inventory.verification_locators)),
+            "records": copy.deepcopy(dict(inventory.verification_records)),
+        },
+        "reuse_bindings": {
+            "locators": copy.deepcopy(dict(inventory.reuse_locators)),
+            "records": copy.deepcopy(dict(inventory.reuse_records)),
+        },
         "verification_tests": definitions,
         "workflow": workflow,
     }
@@ -565,6 +575,8 @@ def validate_coordination_bundle(
             "contracts",
             "capture_assessments",
             "candidates",
+            "verification_receipts",
+            "reuse_bindings",
             "verification_tests",
             "workflow",
         }
@@ -652,6 +664,43 @@ def validate_coordination_bundle(
         validate_candidate_record(
             _mapping(records[digest], "coordination candidate record")
         )
+
+    for field, validator in (
+        ("verification_receipts", validate_verification_receipt_record),
+        ("reuse_bindings", validate_candidate_reuse_record),
+    ):
+        collection = _mapping(bundle[field], f"coordination {field}")
+        if frozenset(collection) != frozenset({"locators", "records"}):
+            raise CoordinationError(f"coordination {field} fields changed")
+        collection_locators = _mapping(
+            collection["locators"], f"coordination {field} locators"
+        )
+        collection_records = _mapping(
+            collection["records"], f"coordination {field} records"
+        )
+        if set(collection_locators) != set(collection_records):
+            raise CoordinationError(f"coordination {field} lacks records or locators")
+        for digest in sorted(collection_locators):
+            _digest(digest, f"coordination {field} record")
+            try:
+                locator = parse_public_record_locator(
+                    _mapping(
+                        collection_locators[digest],
+                        f"coordination {field} locator",
+                    )
+                )
+            except OciPublicationError as error:
+                raise CoordinationError(
+                    f"coordination {field} locator is invalid: {error}"
+                ) from error
+            if locator["digest"] != "sha256:" + digest:
+                raise CoordinationError(f"coordination {field} locator digest differs")
+            validator(
+                _mapping(
+                    collection_records[digest],
+                    f"coordination {field} record",
+                )
+            )
 
     definitions = _sequence(
         bundle["verification_tests"], "coordination verification tests"
