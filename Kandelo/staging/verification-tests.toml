@@ -1,0 +1,28 @@
+schema = 1
+kind = "kandelo-candidate-verification-tests"
+version = 1
+
+[[tests]]
+id = "bottle-structure"
+hosts = ["build"]
+kandelo_paths = [
+  "scripts/homebrew-inspect-bottle.py",
+  "scripts/test-homebrew-inspect-bottle.sh",
+]
+policy = "kandelo-bottle-structure-v1"
+
+[[tests]]
+id = "public-candidate-browser"
+hosts = ["browser"]
+kandelo_paths = [
+  "apps/browser-demos/test/homebrew-flat-vfs-shipping.spec.ts",
+]
+policy = "kandelo-public-candidate-browser-v1"
+
+[[tests]]
+id = "public-candidate-node"
+hosts = ["node"]
+kandelo_paths = [
+  "host/test/homebrew-public-bottle-verifier.test.ts",
+]
+policy = "kandelo-public-candidate-node-v1"

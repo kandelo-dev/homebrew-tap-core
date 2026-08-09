@@ -1,0 +1,25 @@
+schema = 1
+kind = "kandelo-tap-staging-policy"
+version = 1
+tap_repository = "kandelo-dev/homebrew-tap-core"
+kandelo_repository = "Automattic/kandelo"
+candidate_owner = "kandelo-dev"
+candidate_repository_prefix = "homebrew-tap-core-abi-"
+candidate_suffix = "-candidates"
+source_custody_suffix = "-source-custody"
+max_ready_subjects_per_cycle = 16
+max_formulae = 256
+max_edges = 4096
+max_handoff_files = 256
+max_handoff_bytes = 4294967296
+max_record_bytes = 4194304
+build_timeout_minutes = 360
+verification_timeout_minutes = 360
+automatic_retry_count = 3
+retry_base_ms = 60000
+retry_cap_ms = 900000
+candidate_retention_days_after_unmerged_close = 30
+
+[source_custody]
+required_git_roles = ["kandelo", "tap", "pinned-submodule"]
+external_source_bytes = "deferred"

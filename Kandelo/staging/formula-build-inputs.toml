@@ -1,0 +1,493 @@
+schema = 1
+kind = "kandelo-formula-build-inputs"
+version = 1
+
+[profiles.kandelo-common]
+profiles = []
+kandelo_paths = [
+  "crates/fork-instrument",
+  "flake.lock",
+  "flake.nix",
+  "libc",
+  "scripts/homebrew-bottle-build.sh",
+  "scripts/run-wasm-fork-instrument.sh",
+  "sdk",
+]
+tap_paths = ["Kandelo/formula_support"]
+environment_policy = "kandelo-homebrew-build-v1"
+
+[[formulae]]
+name = "asa"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "bash"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "bc"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = ["packages/registry/bc"]
+tap_paths = []
+
+[[formulae]]
+name = "binutils"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "bzip2"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "coreutils"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "ctags"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "curl"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "dash"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "diffutils"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "dinit"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "ed"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "erlang"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = ["packages/registry/erlang"]
+tap_paths = []
+
+[[formulae]]
+name = "fbdoom"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = ["packages/registry/fbdoom"]
+tap_paths = []
+
+[[formulae]]
+name = "file-formula"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "findutils"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "gawk"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "gencat"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "getconf"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "git"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = ["images/rootfs/etc/ssl/cert.pem"]
+tap_paths = []
+
+[[formulae]]
+name = "grep"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "gzip"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "homebrew-bootstrap"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/homebrew-bootstrap"]
+
+[[formulae]]
+name = "icu"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "less"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "libcurl"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "libcxx"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "libiconv"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "libmagic"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "libpng"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "libxml2"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "libyaml"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "libzip"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "lsof"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = ["packages/registry/lsof"]
+tap_paths = []
+
+[[formulae]]
+name = "m4"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "make"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "modeset"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = ["packages/registry/modeset"]
+tap_paths = []
+
+[[formulae]]
+name = "msmtpd"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "musl-fts"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "nano"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "ncompress"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "ncurses"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "netcat"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = ["packages/registry/netcat"]
+tap_paths = []
+
+[[formulae]]
+name = "nethack"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = ["packages/registry/nethack"]
+tap_paths = []
+
+[[formulae]]
+name = "nginx"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "openssl"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "patch"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "pax"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "pcre2"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "perl"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = ["Kandelo/patches/perl"]
+
+[[formulae]]
+name = "posix-utils-lite"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = ["packages/registry/posix-utils-lite"]
+tap_paths = []
+
+[[formulae]]
+name = "procps"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "python"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = ["packages/registry/cpython"]
+tap_paths = []
+
+[[formulae]]
+name = "redis"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "ruby"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/ruby"]
+
+[[formulae]]
+name = "sed"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "sqlite"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "tar"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "tcl"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "texlive"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "unzip"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "vim"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "wget"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = ["images/rootfs/etc/ssl/cert.pem"]
+tap_paths = []
+
+[[formulae]]
+name = "what"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "xz"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "zip"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "zlib"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
+
+[[formulae]]
+name = "zstd"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = []
