@@ -864,6 +864,19 @@ class ProductEvidenceRecordTests(ProductEvidenceFixture, unittest.TestCase):
         with self.assertRaises(ProductEvidenceError):
             validate_product_evidence_result(hostile)
 
+    def test_result_outcomes_require_their_exact_guard_code(self) -> None:
+        requirement = self.requirement("node", "mini-node")
+        for outcome, wrong_code in (
+            ("failure", "verification_timeout"),
+            ("timeout", "verification_failed"),
+        ):
+            hostile = self.result(requirement, outcome=outcome)
+            hostile["guard_codes"] = [wrong_code]
+            with self.subTest(outcome=outcome), self.assertRaises(
+                ProductEvidenceError
+            ):
+                validate_product_evidence_result(hostile)
+
     def test_checked_in_fixtures_are_accepted_by_cli(self) -> None:
         self.assertEqual(cli_main(["fixture-check", "--fixture", str(REPORT_FIXTURE)]), 0)
         self.assertEqual(cli_main(["fixture-check", "--fixture", str(EVIDENCE_FIXTURE)]), 0)
