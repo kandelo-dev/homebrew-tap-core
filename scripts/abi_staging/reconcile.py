@@ -43,6 +43,27 @@ class ReconciliationDecisionV1:
     blockers: tuple[MappingProxyType[str, Any], ...]
 
 
+@dataclass(frozen=True)
+class ReconciliationWorkScopeV1:
+    allow_required: bool
+    allow_background: bool
+    reset_failed_attempts: bool
+
+
+def reconciliation_work_scope(
+    decision: ReconciliationDecisionV1,
+) -> ReconciliationWorkScopeV1:
+    """Translate exact-head lifecycle into new-work permission only."""
+
+    if decision.action == "observe-open":
+        return ReconciliationWorkScopeV1(True, True, False)
+    if decision.action == "resume-same-head":
+        return ReconciliationWorkScopeV1(True, True, True)
+    if decision.action == "observe-merged":
+        return ReconciliationWorkScopeV1(False, True, False)
+    return ReconciliationWorkScopeV1(False, False, False)
+
+
 def _validate_lifecycle(lifecycle: PullRequestLifecycleV1) -> None:
     if lifecycle.state not in {"open", "merged", "closed"}:
         raise ReconciliationError("pull-request lifecycle state is unsupported")
