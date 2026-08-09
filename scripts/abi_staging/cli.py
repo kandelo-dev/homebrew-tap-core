@@ -9,6 +9,7 @@ from typing import Any
 
 from .canonical import canonical_bytes
 from .github_public import DiscoveredRequestV1, GitHubPublicClient, PublicGitHubError
+from .formula_inventory import FormulaInventoryError, write_formula_inventory_fixture
 from .reconcile import (
     ReconciliationDecisionV1,
     ReconciliationError,
@@ -58,20 +59,25 @@ def _parser() -> argparse.ArgumentParser:
     policy_generate = subcommands.add_parser("policy-generate")
     policy_generate.add_argument("--tap-root", required=True)
     policy_generate.add_argument("--out", required=True)
+    formula_fixture = subcommands.add_parser("formula-inventory-fixture")
+    formula_fixture.add_argument("--tap-root", required=True)
+    formula_fixture.add_argument("--out", required=True)
     return parser
 
 
 def main(arguments: list[str] | None = None) -> int:
     args = _parser().parse_args(arguments)
     try:
-        if args.command in {"policy-check", "policy-generate"}:
+        if args.command in {"policy-check", "policy-generate", "formula-inventory-fixture"}:
             tap_root = Path(args.tap_root).resolve(strict=True)
             if tap_root != TAP_ROOT.resolve(strict=True):
                 raise PolicyError("--tap-root must name this protected tap checkout")
             if args.command == "policy-check":
                 check_policy_files(tap_root)
-            else:
+            elif args.command == "policy-generate":
                 write_formula_capture_catalog(tap_root, Path(args.out))
+            else:
+                write_formula_inventory_fixture(tap_root, Path(args.out))
             return 0
         policy = load_request_issuer_policy(
             TAP_ROOT / "Kandelo/staging/request-issuers.toml",
@@ -94,6 +100,7 @@ def main(arguments: list[str] | None = None) -> int:
         return 0
     except (
         PolicyError,
+        FormulaInventoryError,
         PublicGitHubError,
         ReconciliationError,
         RequestValidationError,
