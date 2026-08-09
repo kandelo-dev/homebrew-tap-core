@@ -50,6 +50,13 @@ class ReconciliationWorkScopeV1:
     allow_background: bool
 
 
+@dataclass(frozen=True)
+class ProductEvidenceWorkScopeV1:
+    allow_required: bool
+    allow_background: bool
+    authoritative: bool
+
+
 def reconciliation_work_scope(
     decision: ReconciliationDecisionV1,
 ) -> ReconciliationWorkScopeV1:
@@ -63,6 +70,21 @@ def reconciliation_work_scope(
     }:
         return ReconciliationWorkScopeV1(True, True)
     return ReconciliationWorkScopeV1(False, False)
+
+
+def product_evidence_work_scope(
+    decision: ReconciliationDecisionV1, activation_mode: str
+) -> ProductEvidenceWorkScopeV1:
+    """Allow observe-mode proof while keeping it non-authoritative."""
+
+    if activation_mode not in {"observe", "active"}:
+        raise ReconciliationError("product evidence activation mode is unsupported")
+    lifecycle = reconciliation_work_scope(decision)
+    return ProductEvidenceWorkScopeV1(
+        allow_required=lifecycle.allow_required,
+        allow_background=lifecycle.allow_background,
+        authoritative=activation_mode == "active",
+    )
 
 
 def _validate_lifecycle(lifecycle: PullRequestLifecycleV1) -> None:

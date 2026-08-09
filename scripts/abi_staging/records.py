@@ -168,6 +168,17 @@ def _repository(value: Any, field: str) -> str:
     return result
 
 
+def validate_formula_candidate_repository(repository: str) -> str:
+    """Keep Formula records out of the reserved VFS product subtree."""
+
+    checked = _repository(repository, "Formula candidate repository")
+    if checked.endswith("/products") or "/products/" in checked:
+        raise TapRecordError(
+            "Formula candidate repository enters the reserved products subtree"
+        )
+    return checked
+
+
 def _media_type(value: Any, field: str) -> str:
     result = _text(value, field, 256)
     if MEDIA_TYPE.fullmatch(result) is None:
@@ -385,7 +396,7 @@ def build_candidate_oci_plan(
     source_manifest_bytes: bytes,
     publication_run: Mapping[str, Any],
 ) -> OciRecordPlanV1:
-    checked_repository = _repository(repository, "candidate repository")
+    checked_repository = validate_formula_candidate_repository(repository)
     source_locator = _source_record(source_record)
     source_digest = hashlib.sha256(source_manifest_bytes).hexdigest()
     if source_locator["digest"] != "sha256:" + source_digest:
