@@ -70,6 +70,11 @@ from .records import (
     load_tap_plan_record,
 )
 from .product import ProductInputResolutionError, load_resolved_product_inputs
+from .product_evidence import (
+    ProductEvidenceError,
+    validate_candidate_builder_report,
+    validate_product_evidence_record,
+)
 from .reconcile import (
     PullRequestLifecycleV1,
     ReconciliationDecisionV1,
@@ -1621,12 +1626,24 @@ def main(arguments: list[str] | None = None) -> int:
             product_inputs = (
                 TAP_ROOT / "Kandelo/staging/fixtures/product/resolved-inputs.json"
             )
+            product_report = (
+                TAP_ROOT / "Kandelo/staging/fixtures/product/builder-report.json"
+            )
+            product_evidence = (
+                TAP_ROOT / "Kandelo/staging/fixtures/product/evidence-record.json"
+            )
             if fixture == tap_plan.resolve(strict=True):
                 load_tap_plan_record(fixture.read_bytes())
             elif fixture == bottle_contract.resolve(strict=True):
                 load_bottle_contract(fixture.read_bytes())
             elif fixture == product_inputs.resolve(strict=True):
                 load_resolved_product_inputs(fixture.read_bytes())
+            elif fixture == product_report.resolve(strict=True):
+                validate_candidate_builder_report(fixture.read_bytes())
+            elif fixture == product_evidence.resolve(strict=True):
+                validate_product_evidence_record(
+                    load_canonical_mapping(fixture.read_bytes(), "product evidence fixture")
+                )
             else:
                 raise TapRecordError(
                     "fixture-check accepts only protected ABI staging fixtures"
@@ -1673,6 +1690,7 @@ def main(arguments: list[str] | None = None) -> int:
         VerificationError,
         CandidateReuseError,
         ProductInputResolutionError,
+        ProductEvidenceError,
     ) as error:
         print(f"abi-staging {args.command}: {error}", file=sys.stderr)
         return 1
