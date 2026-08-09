@@ -347,6 +347,9 @@ class _ClaimV1:
     bytes: int
     reference: str
     requests: tuple[ProductInputRequestV1, ...]
+    descriptor_sha256: str | None = None
+    descriptor_bytes: int | None = None
+    descriptor_reference: str | None = None
 
     @property
     def object_key(self) -> tuple[str, str, int]:
@@ -979,6 +982,9 @@ def _claim(
     bytes: int,
     reference: str,
     requests: tuple[ProductInputRequestV1, ...],
+    descriptor_sha256: str | None = None,
+    descriptor_bytes: int | None = None,
+    descriptor_reference: str | None = None,
 ) -> _ClaimV1:
     return _ClaimV1(
         product_id=product_id,
@@ -991,7 +997,35 @@ def _claim(
         bytes=bytes,
         reference=reference,
         requests=requests,
+        descriptor_sha256=descriptor_sha256,
+        descriptor_bytes=descriptor_bytes,
+        descriptor_reference=descriptor_reference,
     )
+
+
+def _candidate_bottle_metadata(record: Mapping[str, Any]) -> Mapping[str, Any]:
+    matches = [
+        item["artifact"]
+        for item in record["candidate"]["normalized_components"]
+        if item["id"] == "bottle-metadata"
+    ]
+    if len(matches) != 1:
+        raise ProductInputResolutionError(
+            "candidate lacks one authenticated bottle metadata component"
+        )
+    metadata = _exact(
+        matches[0],
+        frozenset({"sha256", "bytes", "immutable_reference"}),
+        "candidate bottle metadata",
+    )
+    _digest(metadata["sha256"], "candidate bottle metadata digest")
+    _integer(metadata["bytes"], "candidate bottle metadata bytes", positive=True)
+    _immutable_reference(
+        metadata["immutable_reference"],
+        metadata["sha256"],
+        "candidate bottle metadata reference",
+    )
+    return metadata
 
 
 def _check_exact_source_artifact(
@@ -1129,6 +1163,7 @@ def resolve_product_inputs(
             _fact, record = selected_candidates[subject]
             formula = record["candidate"]["formula"]["formula"]
             layer = record["candidate"]["bottle_layer"]
+            metadata = _candidate_bottle_metadata(record)
             requests = global_formula_uses[subject]
             declared = (
                 "embedded"
@@ -1159,6 +1194,9 @@ def resolve_product_inputs(
                     )
                     for item in requests
                 ),
+                descriptor_sha256=metadata["sha256"],
+                descriptor_bytes=metadata["bytes"],
+                descriptor_reference=metadata["immutable_reference"],
             )
             claims.append(claim)
             claims_by_product[product_id].append(claim)
@@ -1361,6 +1399,30 @@ def resolve_product_inputs(
             }
             if effective != "lazy-reference":
                 value["path"] = f"inputs/objects/{claim.input_id}-sha256-{claim.sha256}"
+            if claim.kind == "homebrew-bottle":
+                if (
+                    claim.descriptor_sha256 is None
+                    or claim.descriptor_bytes is None
+                    or claim.descriptor_reference is None
+                ):
+                    raise ProductInputResolutionError(
+                        "Homebrew input lacks authenticated composition metadata"
+                    )
+                value["descriptor"] = {
+                    "sha256": claim.descriptor_sha256,
+                    "bytes": claim.descriptor_bytes,
+                    "reference": _immutable_reference(
+                        claim.descriptor_reference,
+                        claim.descriptor_sha256,
+                        f"resolved {claim.input_id} descriptor reference",
+                        kind=claim.kind,
+                        target_abi=target_abi,
+                    ),
+                    "path": (
+                        f"inputs/objects/{claim.input_id}-metadata-sha256-"
+                        f"{claim.descriptor_sha256}"
+                    ),
+                }
             input_values.append(value)
             input_requests.extend(
                 ProductInputRequestV1(
@@ -1494,6 +1556,7 @@ def load_resolved_product_inputs(body: bytes) -> Mapping[str, Any]:
                 "role",
                 "architecture",
                 "declared_materialization",
+                "descriptor",
                 "effective_materialization",
                 "sha256",
                 "bytes",
@@ -1502,7 +1565,7 @@ def load_resolved_product_inputs(body: bytes) -> Mapping[str, Any]:
             }
         )
         item = _mapping(value, f"resolved input {index}")
-        required = permitted - frozenset({"reference", "path"})
+        required = permitted - frozenset({"descriptor", "reference", "path"})
         if not required.issubset(item) or not frozenset(item).issubset(permitted):
             raise ProductInputResolutionError(f"resolved input {index} fields changed")
         input_id = _stable_id(item["id"], f"resolved input {index} ID")
@@ -1535,6 +1598,60 @@ def load_resolved_product_inputs(body: bytes) -> Mapping[str, Any]:
             raise ProductInputResolutionError("resolved input materialization is contradictory")
         reference = item.get("reference")
         path = item.get("path")
+        descriptor = item.get("descriptor")
+        if kind == "homebrew-bottle":
+            checked_descriptor = _exact(
+                descriptor,
+                frozenset({"sha256", "bytes", "reference", "path"}),
+                f"resolved input {input_id} descriptor",
+            )
+            descriptor_sha256 = _digest(
+                checked_descriptor["sha256"],
+                f"resolved input {input_id} descriptor digest",
+            )
+            _integer(
+                checked_descriptor["bytes"],
+                f"resolved input {input_id} descriptor bytes",
+                positive=True,
+            )
+            descriptor_reference = checked_descriptor["reference"]
+            if root["reference_class"] == "candidate":
+                _immutable_reference(
+                    descriptor_reference,
+                    descriptor_sha256,
+                    f"resolved input {input_id} descriptor reference",
+                    kind=kind,
+                    target_abi=target_abi,
+                )
+            else:
+                _text(
+                    descriptor_reference,
+                    f"resolved input {input_id} descriptor reference",
+                )
+                if (
+                    f"sha256:{descriptor_sha256}" not in descriptor_reference
+                    and f"sha256={descriptor_sha256}" not in descriptor_reference
+                ):
+                    raise ProductInputResolutionError(
+                        "canonical descriptor reference does not bind its digest"
+                    )
+                if CANDIDATE_NAMESPACE.search(descriptor_reference):
+                    raise ProductInputResolutionError(
+                        "canonical descriptor enters candidate namespace"
+                    )
+            descriptor_path = _relative_path(
+                checked_descriptor["path"],
+                f"resolved input {input_id} descriptor path",
+            )
+            if descriptor_path in paths:
+                raise ProductInputResolutionError(
+                    "resolved inputs repeat a local descriptor path"
+                )
+            paths.add(descriptor_path)
+        elif descriptor is not None:
+            raise ProductInputResolutionError(
+                "resolved input descriptor is only valid for Homebrew bottles"
+            )
         if reference is not None:
             if root["reference_class"] == "candidate":
                 _immutable_reference(
