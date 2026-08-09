@@ -12,6 +12,25 @@ remaining campaign records and sections explicitly labeled historical below
 are retained only as migration history until the separate post-cutover archive
 change.
 
+## Observe-only ABI request data
+
+`staging/request-issuers.toml` is the tap-owned authority for accepting public
+Kandelo staging requests. It binds one issuer repository and immutable workflow
+path, this exact tap identity, canonical schema and kind, public GitHub hosts,
+and all input bounds. It does not select an ABI or grant candidate execution.
+`staging/reconciliation-activation.toml` currently accepts only `observe`.
+
+Protected code under `scripts/abi_staging/` treats request and GitHub response
+bytes as inert data. It rejects noncanonical or oversized requests, filename
+and digest drift, unauthorized issuers, wrong Release identities, redirect
+escapes, and unaddressed taps. The scheduled and manual workflow can report
+whether an exact issued head is current, historical, closed, reopened, or
+merged. Its permission map is read-only, and every decision permits no work.
+
+The reconciler revision is not yet on protected `main` and has no hosted
+canary evidence. No request is therefore a bottle admission, verification,
+endorsement, promotion, or current-ABI update.
+
 ## Legacy sidecar metadata
 
 Trusted publish workflows generate this directory in the
