@@ -1200,7 +1200,7 @@ def materialize_dependency_layers(*, context_path: Path, output: Path) -> None:
         destination.write_bytes(body)
 
 
-def _load_handoff_validation_expectations(
+def load_handoff_validation_expectations(
     *, request_path: Path, tap_plan_path: Path, formula_plan_path: Path
 ) -> dict[str, Any]:
     request_body = _read_regular(request_path, "ABI staging request")
@@ -1294,7 +1294,7 @@ def main(arguments: list[str] | None = None) -> int:
                 output=Path(args.out).resolve(strict=False),
             )
         else:
-            expectations = _load_handoff_validation_expectations(
+            expectations = load_handoff_validation_expectations(
                 request_path=Path(args.request).resolve(strict=True),
                 tap_plan_path=Path(args.tap_plan).resolve(strict=True),
                 formula_plan_path=Path(args.formula_plan).resolve(strict=True),
