@@ -118,17 +118,41 @@ class WorkflowPublicationTests(unittest.TestCase):
         )
         self.assertEqual(attempt["completed_at"], artifact.job_completed_at)
 
-    def test_missing_failed_job_artifact_is_classified_only_from_protected_facts(self) -> None:
+    def test_missing_build_handoff_is_not_invented_as_transient_runner_loss(self) -> None:
         module = importlib.import_module("scripts.abi_staging.workflow_publication")
         bundle = _active_bundle()
         work = bundle["workflow"]["build_work"][0]
-        record = module.build_protected_attempt_outcome(
+        for conclusion in (
+            "action_required",
+            "cancelled",
+            "failure",
+            "stale",
+            "startup_failure",
+        ):
+            with self.subTest(conclusion=conclusion):
+                record = module.build_protected_attempt_outcome(
+                    bundle=bundle,
+                    work=work,
+                    job=WorkflowJobV1(
+                        909,
+                        "build-candidate " + work["work_id"],
+                        conclusion,
+                        "2026-08-09T10:00:00.000Z",
+                    ),
+                    artifact=None,
+                    application_outcome=None,
+                    application_guard=None,
+                    candidate_record_sha256=None,
+                    publication_run=PUBLICATION_RUN,
+                )
+                self.assertEqual(record["attempt"]["guard_code"], "build_failed")
+        timed_out = module.build_protected_attempt_outcome(
             bundle=bundle,
             work=work,
             job=WorkflowJobV1(
                 909,
                 "build-candidate " + work["work_id"],
-                "cancelled",
+                "timed_out",
                 "2026-08-09T10:00:00.000Z",
             ),
             artifact=None,
@@ -137,10 +161,8 @@ class WorkflowPublicationTests(unittest.TestCase):
             candidate_record_sha256=None,
             publication_run=PUBLICATION_RUN,
         )
-        self.assertEqual(record["attempt"]["outcome"], "canceled")
-        self.assertEqual(
-            record["attempt"]["guard_code"], "transient_infrastructure_failure"
-        )
+        self.assertEqual(timed_out["attempt"]["outcome"], "timeout")
+        self.assertEqual(timed_out["attempt"]["guard_code"], "build_timeout")
         hostile = dict(PUBLICATION_RUN, job="build-candidate")
         with self.assertRaises(module.WorkflowPublicationError):
             module.build_protected_attempt_outcome(
@@ -159,17 +181,43 @@ class WorkflowPublicationTests(unittest.TestCase):
                 publication_run=hostile,
             )
 
-    def test_runner_loss_becomes_one_exact_retryable_verification_outcome(self) -> None:
+    def test_missing_verification_handoff_is_not_invented_as_runner_loss(self) -> None:
         module = importlib.import_module("scripts.abi_staging.workflow_publication")
         bundle, _fetched = _fixture()
         work = bundle["workflow"]["verify_work"][0]
-        result = module.build_protected_verification_outcome(
+        for conclusion in (
+            "action_required",
+            "cancelled",
+            "failure",
+            "stale",
+            "startup_failure",
+        ):
+            with self.subTest(conclusion=conclusion):
+                result = module.build_protected_verification_outcome(
+                    bundle=bundle,
+                    work=work,
+                    job=WorkflowJobV1(
+                        910,
+                        "verify-candidate " + work["work_id"],
+                        conclusion,
+                        "2026-08-09T10:00:00.000Z",
+                    ),
+                    artifact=None,
+                    application_outcome=None,
+                    application_guard=None,
+                    verification_run=VERIFICATION_RUN,
+                )
+                self.assertEqual(result["guard_code"], "verification_failed")
+                self.assertEqual(
+                    result["attempt_ordinal"], work["attempt_ordinal"]
+                )
+        timed_out = module.build_protected_verification_outcome(
             bundle=bundle,
             work=work,
             job=WorkflowJobV1(
                 910,
                 "verify-candidate " + work["work_id"],
-                "cancelled",
+                "timed_out",
                 "2026-08-09T10:00:00.000Z",
             ),
             artifact=None,
@@ -177,11 +225,8 @@ class WorkflowPublicationTests(unittest.TestCase):
             application_guard=None,
             verification_run=VERIFICATION_RUN,
         )
-        self.assertEqual(result["outcome"], "canceled")
-        self.assertEqual(
-            result["guard_code"], "transient_infrastructure_failure"
-        )
-        self.assertEqual(result["attempt_ordinal"], work["attempt_ordinal"])
+        self.assertEqual(timed_out["outcome"], "timeout")
+        self.assertEqual(timed_out["guard_code"], "verification_timeout")
 
     def test_valid_verification_application_cannot_be_detached_from_its_artifact(self) -> None:
         module = importlib.import_module("scripts.abi_staging.workflow_publication")
