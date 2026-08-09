@@ -1,0 +1,339 @@
+"""Bounded anonymous GitHub discovery for public ABI staging requests."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+import hashlib
+import json
+import re
+from types import MappingProxyType
+from typing import Any, Protocol
+import urllib.error
+import urllib.parse
+import urllib.request
+
+from .request import (
+    RequestIssuerPolicyV1,
+    RequestValidationError,
+    parse_request_asset_name,
+    validate_request,
+)
+
+
+REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+PR_TAG = re.compile(r"^abi-staging-pr-([1-9][0-9]*)$")
+
+
+class PublicGitHubError(ValueError):
+    """Raised when public GitHub metadata crosses a protected boundary."""
+
+
+class Response(Protocol):
+    status: int
+    headers: Any
+
+    def read(self, amount: int = -1) -> bytes: ...
+
+    def close(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class DiscoveredRequestV1:
+    request_digest: str
+    asset_name: str
+    asset_url: str
+    release_tag: str
+    request: MappingProxyType[str, Any]
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
+        return None
+
+
+def _default_opener() -> Callable[[urllib.request.Request], Response]:
+    opener = urllib.request.build_opener(_NoRedirect())
+
+    def open_request(request: urllib.request.Request) -> Response:
+        try:
+            return opener.open(request, timeout=30)
+        except urllib.error.HTTPError as error:
+            return error
+
+    return open_request
+
+
+def _header(headers: Any, name: str) -> str | None:
+    if hasattr(headers, "get"):
+        value = headers.get(name)
+        if value is None:
+            value = headers.get(name.lower())
+        return value
+    return None
+
+
+def _json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise PublicGitHubError(f"GitHub JSON contains duplicate field {key!r}")
+        value[key] = child
+    return value
+
+
+def _reject_json_number(value: str) -> None:
+    raise PublicGitHubError(f"GitHub JSON contains unsupported number {value}")
+
+
+def _parse_json(body: bytes, field: str) -> Any:
+    try:
+        return json.loads(
+            body.decode("utf-8", errors="strict"),
+            object_pairs_hook=_json_pairs,
+            parse_float=_reject_json_number,
+            parse_constant=_reject_json_number,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, PublicGitHubError) as error:
+        if isinstance(error, PublicGitHubError):
+            raise
+        raise PublicGitHubError(f"{field} is invalid JSON: {error}") from error
+
+
+def _positive_integer(value: Any, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1 or value > 2**64 - 1:
+        raise PublicGitHubError(f"{field} must be a positive integer")
+    return value
+
+
+def _bounded_text(value: Any, field: str, maximum: int) -> str:
+    if not isinstance(value, str):
+        raise PublicGitHubError(f"{field} must be a string")
+    try:
+        length = len(value.encode("utf-8", errors="strict"))
+    except UnicodeEncodeError as error:
+        raise PublicGitHubError(f"{field} is not UTF-8") from error
+    if length < 1 or length > maximum or "\0" in value:
+        raise PublicGitHubError(f"{field} exceeds its string bound")
+    return value
+
+
+class GitHubPublicClient:
+    def __init__(
+        self,
+        policy: RequestIssuerPolicyV1,
+        *,
+        opener: Callable[[urllib.request.Request], Response] | None = None,
+        page_size: int = 100,
+    ) -> None:
+        if page_size < 1 or page_size > 100:
+            raise PublicGitHubError("GitHub page size must be between 1 and 100")
+        self.policy = policy
+        self._opener = opener or _default_opener()
+        self.page_size = page_size
+
+    def _validate_transport_url(self, url: str) -> urllib.parse.SplitResult:
+        if not isinstance(url, str) or any(ord(character) <= 0x20 or ord(character) == 0x7F for character in url):
+            raise PublicGitHubError("public URL contains whitespace or a control character")
+        try:
+            parsed = urllib.parse.urlsplit(url)
+            port = parsed.port
+        except ValueError as error:
+            raise PublicGitHubError(f"public URL is invalid: {error}") from error
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname not in self.policy.allowed_release_hosts
+            or parsed.username is not None
+            or parsed.password is not None
+            or port is not None
+            or parsed.fragment
+        ):
+            raise PublicGitHubError("public URL escaped the HTTPS GitHub host boundary")
+        return parsed
+
+    def _read_response(self, response: Response, maximum: int, field: str) -> bytes:
+        content_length = _header(response.headers, "Content-Length")
+        declared: int | None = None
+        if content_length is not None:
+            if not content_length.isascii() or not content_length.isdigit():
+                raise PublicGitHubError(f"{field} has an invalid Content-Length")
+            declared = int(content_length, 10)
+            if declared > maximum:
+                raise PublicGitHubError(f"{field} exceeds its response-byte limit")
+        body = response.read(maximum + 1)
+        if len(body) > maximum:
+            raise PublicGitHubError(f"{field} exceeds its response-byte limit")
+        if declared is not None and declared != len(body):
+            raise PublicGitHubError(f"{field} Content-Length does not match received bytes")
+        return body
+
+    def _get(self, url: str, maximum: int, accept: str) -> bytes:
+        current = url
+        for redirect_count in range(self.policy.max_redirects + 1):
+            self._validate_transport_url(current)
+            request = urllib.request.Request(
+                current,
+                headers={"Accept": accept, "User-Agent": "kandelo-abi-staging/1"},
+                method="GET",
+            )
+            try:
+                response = self._opener(request)
+            except (OSError, urllib.error.URLError) as error:
+                raise PublicGitHubError(f"public GitHub request failed: {error}") from error
+            try:
+                status = int(response.status)
+                if status in REDIRECT_STATUSES:
+                    if redirect_count == self.policy.max_redirects:
+                        raise PublicGitHubError("public GitHub redirect limit exceeded")
+                    location = _header(response.headers, "Location")
+                    if location is None:
+                        raise PublicGitHubError("public GitHub redirect omitted Location")
+                    self._validate_transport_url(location)
+                    current = location
+                    continue
+                if status != 200:
+                    raise PublicGitHubError(f"public GitHub request returned HTTP {status}")
+                return self._read_response(response, maximum, "public GitHub response")
+            finally:
+                response.close()
+        raise PublicGitHubError("public GitHub redirect limit exceeded")
+
+    def _api_json(self, url: str) -> Any:
+        return _parse_json(
+            self._get(url, self.policy.max_api_response_bytes, "application/vnd.github+json"),
+            "GitHub API response",
+        )
+
+    def _pages(self, endpoint: str) -> tuple[Mapping[str, Any], ...]:
+        result: list[Mapping[str, Any]] = []
+        page_digests: set[str] = set()
+        for page in range(1, self.policy.max_release_pages + 1):
+            separator = "&" if "?" in endpoint else "?"
+            url = f"{endpoint}{separator}per_page={self.page_size}&page={page}"
+            body = self._get(url, self.policy.max_api_response_bytes, "application/vnd.github+json")
+            value = _parse_json(body, "GitHub API page")
+            if not isinstance(value, list) or len(value) > self.page_size:
+                raise PublicGitHubError("GitHub API page is not a bounded array")
+            digest = hashlib.sha256(body).hexdigest()
+            if value and digest in page_digests:
+                raise PublicGitHubError("GitHub API repeated an identical nonempty page")
+            page_digests.add(digest)
+            for item in value:
+                if not isinstance(item, Mapping):
+                    raise PublicGitHubError("GitHub API page contains a non-object item")
+                result.append(item)
+            if len(value) < self.page_size:
+                return tuple(result)
+        raise PublicGitHubError("GitHub API pagination exceeded its page bound")
+
+    def _parse_public_request_url(self, url: str) -> tuple[str, str, int]:
+        parsed = self._validate_transport_url(url)
+        if parsed.hostname != "github.com" or parsed.query:
+            raise PublicGitHubError("request asset URL is not an exact public GitHub Release URL")
+        prefix = f"/{self.policy.issuer_repository}/releases/download/"
+        if not parsed.path.startswith(prefix):
+            raise PublicGitHubError("request asset URL names an unauthorized repository")
+        remainder = parsed.path[len(prefix) :]
+        parts = remainder.split("/")
+        if len(parts) != 2:
+            raise PublicGitHubError("request asset URL has an invalid path")
+        tag, asset_name = parts
+        tag_match = PR_TAG.fullmatch(tag)
+        if tag_match is None or not tag.startswith(self.policy.request_release_tag_prefix):
+            raise PublicGitHubError("request asset URL has an invalid release tag")
+        parse_request_asset_name(asset_name)
+        return tag, asset_name, int(tag_match.group(1), 10)
+
+    def discover_url(self, url: str) -> DiscoveredRequestV1:
+        try:
+            tag, asset_name, pull_request_number = self._parse_public_request_url(url)
+            body = self._get(url, self.policy.max_request_bytes, "application/octet-stream")
+            request = validate_request(body, asset_name, self.policy)
+        except RequestValidationError as error:
+            raise PublicGitHubError(f"public request is invalid: {error}") from error
+        if request["pull_request"]["number"] != pull_request_number:
+            raise PublicGitHubError("request body and Release tag name different pull requests")
+        digest = hashlib.sha256(body).hexdigest()
+        return DiscoveredRequestV1(digest, asset_name, url, tag, request)
+
+    def scan(self) -> tuple[DiscoveredRequestV1, ...]:
+        repository = self.policy.issuer_repository
+        releases_endpoint = f"https://api.github.com/repos/{repository}/releases"
+        releases = self._pages(releases_endpoint)
+        seen_release_ids: set[int] = set()
+        seen_tags: set[str] = set()
+        discovered: list[DiscoveredRequestV1] = []
+        seen_assets: set[tuple[int, str, str]] = set()
+        for release in releases:
+            release_id = _positive_integer(release.get("id"), "Release id")
+            tag = _bounded_text(release.get("tag_name"), "Release tag", 256)
+            if release_id in seen_release_ids or tag in seen_tags:
+                raise PublicGitHubError("GitHub API returned a duplicate Release identity")
+            seen_release_ids.add(release_id)
+            seen_tags.add(tag)
+            if not tag.startswith(self.policy.request_release_tag_prefix):
+                continue
+            if PR_TAG.fullmatch(tag) is None:
+                raise PublicGitHubError("ABI staging Release tag has invalid grammar")
+            if release.get("prerelease") is not True or release.get("draft") is not False:
+                raise PublicGitHubError("ABI staging Release is not a public prerelease")
+            assets_endpoint = (
+                f"https://api.github.com/repos/{repository}/releases/{release_id}/assets"
+            )
+            assets = self._pages(assets_endpoint)
+            if len(assets) > self.policy.max_release_assets:
+                raise PublicGitHubError("ABI staging Release has too many assets")
+            for asset in assets:
+                asset_id = _positive_integer(asset.get("id"), "Release asset id")
+                name = _bounded_text(asset.get("name"), "Release asset name", 512)
+                url = _bounded_text(
+                    asset.get("browser_download_url"),
+                    "Release asset URL",
+                    self.policy.max_string_bytes,
+                )
+                identity = (asset_id, name, url)
+                if identity in seen_assets:
+                    raise PublicGitHubError("GitHub API returned a duplicate asset")
+                seen_assets.add(identity)
+                parse_request_asset_name(name)
+                candidate = self.discover_url(url)
+                if candidate.release_tag != tag or candidate.asset_name != name:
+                    raise PublicGitHubError("Release metadata and request URL disagree")
+                discovered.append(candidate)
+        ordered = sorted(
+            discovered,
+            key=lambda item: (item.request_digest, item.asset_name, item.asset_url),
+        )
+        identities = [(item.request_digest, item.asset_name, item.asset_url) for item in ordered]
+        if len(set(identities)) != len(identities):
+            raise PublicGitHubError("public discovery returned a duplicate request")
+        return tuple(ordered)
+
+    def pull_request_lifecycle(self, number: int) -> Any:
+        _positive_integer(number, "pull-request number")
+        repository = self.policy.issuer_repository
+        value = self._api_json(f"https://api.github.com/repos/{repository}/pulls/{number}")
+        if not isinstance(value, Mapping):
+            raise PublicGitHubError("pull-request API response is not an object")
+        state = value.get("state")
+        head = value.get("head")
+        if state not in {"open", "closed"} or not isinstance(head, Mapping):
+            raise PublicGitHubError("pull-request API response has invalid lifecycle fields")
+        head_sha = _bounded_text(head.get("sha"), "pull-request head", 40)
+        if re.fullmatch(r"[0-9a-f]{40}", head_sha) is None:
+            raise PublicGitHubError("pull-request head is not a full lowercase SHA")
+        merged_at = value.get("merged_at")
+        merge_commit = value.get("merge_commit_sha")
+        from .reconcile import PullRequestLifecycleV1
+
+        if state == "open":
+            if merged_at is not None:
+                raise PublicGitHubError("open pull request cannot be merged")
+            return PullRequestLifecycleV1("open", head_sha, None)
+        if merged_at is None:
+            return PullRequestLifecycleV1("closed", head_sha, None)
+        if not isinstance(merged_at, str) or not merged_at:
+            raise PublicGitHubError("merged pull request has invalid merged_at")
+        if not isinstance(merge_commit, str) or re.fullmatch(r"[0-9a-f]{40}", merge_commit) is None:
+            raise PublicGitHubError("merged pull request has invalid merge commit")
+        return PullRequestLifecycleV1("merged", head_sha, merge_commit)
