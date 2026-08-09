@@ -186,6 +186,8 @@ class VerificationFactV1:
                 "verification_failed",
                 "transient_infrastructure_failure",
                 "candidate_integrity_mismatch",
+                "candidate_public_readback_failed",
+                "namespace_bootstrap_failed",
             },
             "timeout": {
                 "verification_timeout",

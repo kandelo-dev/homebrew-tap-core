@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from .execution import ExecutionError, select_build_work, select_verification_work
-from .records import build_attempt_outcome_record
+from .records import build_attempt_outcome_record, validate_publication_failure
 from .scheduler import (
     KNOWN_GUARDS,
     ProtectedFailureFactsV1,
@@ -49,6 +49,7 @@ def build_protected_attempt_outcome(
     publication_run: Mapping[str, Any],
     infrastructure_kind: str | None = None,
     infrastructure_http_status: int | None = None,
+    publication_failure: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create one retry fact without trusting candidate failure classification."""
 
@@ -76,7 +77,35 @@ def build_protected_attempt_outcome(
     if application_guard is not None and application_guard not in KNOWN_GUARDS:
         raise WorkflowPublicationError("candidate application guard is not registered")
 
-    if infrastructure_kind is not None:
+    checked_publication_failure = None
+    if publication_failure is not None:
+        try:
+            checked_publication_failure = validate_publication_failure(
+                publication_failure
+            )
+        except ValueError as error:
+            raise WorkflowPublicationError(
+                f"candidate publication failure facts are invalid: {error}"
+            ) from error
+        if (
+            infrastructure_kind is not None
+            or infrastructure_http_status is not None
+            or artifact is None
+            or application_outcome != "success"
+            or application_guard is not None
+            or candidate_record_sha256 is not None
+            or job.conclusion != "success"
+        ):
+            raise WorkflowPublicationError(
+                "candidate publication failure facts are contradictory"
+            )
+        outcome = "failure"
+        guard = (
+            "transient_infrastructure_failure"
+            if checked_publication_failure["retryable"]
+            else checked_publication_failure["guard_code"]
+        )
+    elif infrastructure_kind is not None:
         if (
             artifact is not None
             or application_outcome is not None
@@ -187,6 +216,7 @@ def build_protected_attempt_outcome(
             run=run,
             handoff=handoff,
             candidate_record_sha256=candidate_record_sha256,
+            publication_failure=checked_publication_failure,
         )
     except ValueError as error:
         raise WorkflowPublicationError(f"protected attempt outcome is invalid: {error}") from error
@@ -203,6 +233,7 @@ def build_protected_verification_outcome(
     verification_run: Mapping[str, Any],
     infrastructure_kind: str | None = None,
     infrastructure_http_status: int | None = None,
+    publication_failure: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Bind one verifier or infrastructure outcome to protected workflow facts."""
 
@@ -319,7 +350,24 @@ def build_protected_verification_outcome(
             # deterministic setup, checkout, or command failure.
             outcome = "canceled" if job.conclusion == "cancelled" else "failure"
             guard = "verification_failed"
-    return {
+    checked_publication_failure = None
+    if publication_failure is not None:
+        try:
+            checked_publication_failure = validate_publication_failure(
+                publication_failure
+            )
+        except ValueError as error:
+            raise WorkflowPublicationError(
+                f"verification publication failure facts are invalid: {error}"
+            ) from error
+        if outcome == "success":
+            outcome = "failure"
+            guard = (
+                "transient_infrastructure_failure"
+                if checked_publication_failure["retryable"]
+                else checked_publication_failure["guard_code"]
+            )
+    result = {
         "request_sha256": bundle["request_sha256"],
         "subject": selected["subject"],
         "candidate_record_sha256": selected["candidate_record_sha256"],
@@ -336,3 +384,6 @@ def build_protected_verification_outcome(
             else {"sha256": artifact.sha256, "bytes": artifact.size_in_bytes}
         ),
     }
+    if checked_publication_failure is not None:
+        result["publication_failure"] = checked_publication_failure
+    return result

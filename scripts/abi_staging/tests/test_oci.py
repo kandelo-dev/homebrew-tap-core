@@ -393,6 +393,14 @@ class OciPublicationTests(unittest.TestCase):
                 expected_source_repository=SOURCE_ASSOCIATION,
             )
         self.assertTrue(raised.exception.retryable)
+        self.assertEqual(raised.exception.kind, "registry-http")
+        self.assertEqual(raised.exception.http_status, 503)
+
+        phased = raised.exception.with_phase("candidate-record-publication")
+        self.assertEqual(phased.phase, "candidate-record-publication")
+        self.assertEqual(phased.kind, "registry-http")
+        self.assertEqual(phased.http_status, 503)
+        self.assertTrue(phased.retryable)
 
         redirected = FakeRegistryTransport()
         redirected.redirect_url = "https://registry-attacker.example/v2/steal"
@@ -403,6 +411,8 @@ class OciPublicationTests(unittest.TestCase):
                 expected_source_repository=SOURCE_ASSOCIATION,
             )
         self.assertFalse(raised.exception.retryable)
+        self.assertEqual(raised.exception.kind, "registry-contract")
+        self.assertIsNone(raised.exception.http_status)
         self.assertIn("redirect", str(raised.exception))
 
     def test_hostile_upload_location_fails_closed(self) -> None:

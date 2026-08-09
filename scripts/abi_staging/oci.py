@@ -91,10 +91,40 @@ class FetchedOciRecordV1:
 class OciPublicationError(ValueError):
     """Publication failure carrying the registered staging guard and retry fact."""
 
-    def __init__(self, message: str, *, guard_code: str, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        guard_code: str,
+        retryable: bool = False,
+        phase: str | None = None,
+        kind: str = "registry-contract",
+        http_status: int | None = None,
+    ) -> None:
         super().__init__(message)
         self.guard_code = guard_code
         self.retryable = retryable
+        self.phase = phase
+        self.kind = kind
+        self.http_status = http_status
+
+    def with_phase(self, phase: str) -> OciPublicationError:
+        """Return the same bounded failure facts bound to one caller-owned phase."""
+
+        if not isinstance(phase, str) or re.fullmatch(
+            r"[a-z0-9][a-z0-9._-]{0,127}", phase
+        ) is None:
+            raise ValueError("OCI publication failure phase is invalid")
+        if self.phase not in {None, phase}:
+            raise ValueError("OCI publication failure phase is already bound")
+        return OciPublicationError(
+            str(self),
+            guard_code=self.guard_code,
+            retryable=self.retryable,
+            phase=phase,
+            kind=self.kind,
+            http_status=self.http_status,
+        )
 
 
 def _descriptor(blob: OciBlobV1) -> dict[str, object]:
@@ -567,6 +597,7 @@ def _request(
             f"OCI transport failed before a response: {error}",
             guard_code=guard_code,
             retryable=True,
+            kind="transport-reset",
         ) from error
     if response.url != url:
         raise OciPublicationError(
@@ -578,6 +609,12 @@ def _request(
             f"OCI endpoint returned retryable HTTP {response.status}",
             guard_code=guard_code,
             retryable=True,
+            kind=(
+                "github-http"
+                if urlsplit(url).hostname == GITHUB_API_HOST
+                else "registry-http"
+            ),
+            http_status=response.status,
         )
     if len(response.body) > maximum_bytes:
         raise OciPublicationError(

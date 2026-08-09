@@ -224,6 +224,35 @@ class CandidateRecordTests(unittest.TestCase):
         with self.assertRaises(TapRecordError):
             validate_attempt_outcome_record(changed)
 
+    def test_attempt_outcome_preserves_protected_publication_failure_facts(self) -> None:
+        publication_failure = {
+            "phase": "candidate-record-publication",
+            "kind": "registry-http",
+            "http_status": 503,
+            "retryable": True,
+            "guard_code": "candidate_public_readback_failed",
+        }
+        record = build_attempt_outcome_record(
+            request_sha256=REQUEST,
+            subject=SUBJECT,
+            contract_sha256="b" * 64,
+            retry_ordinal=1,
+            outcome="failure",
+            guard_code="transient_infrastructure_failure",
+            completed_at="2026-08-09T10:00:00.000Z",
+            run=self.publication_run,
+            handoff={"sha256": "c" * 64, "bytes": 1024},
+            candidate_record_sha256=None,
+            publication_failure=publication_failure,
+        )
+        validate_attempt_outcome_record(record)
+        self.assertEqual(record["attempt"]["publication_failure"], publication_failure)
+
+        changed = json.loads(canonical_bytes(record))
+        changed["attempt"]["guard_code"] = "candidate_public_readback_failed"
+        with self.assertRaises(TapRecordError):
+            validate_attempt_outcome_record(changed)
+
     def test_candidate_reuse_is_an_independent_immutable_record(self) -> None:
         contract = build_bottle_contract(_contract_inputs())
         record = make_candidate_reuse_record(

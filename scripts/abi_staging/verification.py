@@ -31,6 +31,7 @@ from .records import (
     OciBlobV1,
     OciRecordPlanV1,
     validate_candidate_record,
+    validate_publication_failure,
 )
 
 
@@ -59,6 +60,26 @@ SECRET_PATTERNS = (
 
 class VerificationError(ValueError):
     """Raised when verification facts are incomplete or contradictory."""
+
+
+class VerificationPublicationError(VerificationError):
+    """Verification failure retaining bounded OCI transport classification."""
+
+    def __init__(
+        self, error: OciPublicationError, *, phase: str, context: str
+    ) -> None:
+        phased = error.with_phase(phase)
+        super().__init__(f"{context}: {phased}")
+        self.guard_code = phased.guard_code
+        self.retryable = phased.retryable
+        self.phase = phased.phase
+        self.kind = phased.kind
+        self.http_status = phased.http_status
+
+    def with_phase(self, phase: str) -> VerificationPublicationError:
+        if phase != self.phase:
+            raise ValueError("verification publication failure phase changed")
+        return self
 
 
 def _exact(value: Any, expected: frozenset[str], field: str) -> Mapping[str, Any]:
@@ -479,6 +500,13 @@ def validate_verification_receipt_record(value: Mapping[str, Any]) -> None:
     _source(common["source"], "verification receipt source")
     _run(common["run"], "verification receipt run")
 
+    optional_fields = tuple(
+        key
+        for key in ("kernel", "host_runtime", "vfs", "publication_failure")
+        if key in _exact_or_mapping(
+            receipt["verification"], "verification receipt payload"
+        )
+    )
     verification = _exact(
         receipt["verification"],
         frozenset(
@@ -491,11 +519,7 @@ def validate_verification_receipt_record(value: Mapping[str, Any]) -> None:
                 "diagnostics",
             }
         )
-        | frozenset(
-            key
-            for key in ("kernel", "host_runtime", "vfs")
-            if key in _exact_or_mapping(receipt["verification"], "verification receipt payload")
-        ),
+        | frozenset(optional_fields),
         "verification receipt payload",
     )
     candidate_record = _digest(
@@ -516,6 +540,16 @@ def validate_verification_receipt_record(value: Mapping[str, Any]) -> None:
     )
     if attempt_ordinal > 3:
         raise VerificationError("verification receipt attempt ordinal exceeds retry policy")
+    if "publication_failure" in verification:
+        try:
+            publication_failure = validate_publication_failure(
+                verification["publication_failure"],
+                field="verification receipt publication failure",
+            )
+        except ValueError as error:
+            raise VerificationError(str(error)) from error
+    else:
+        publication_failure = None
 
     diagnostics = _sequence(
         verification["diagnostics"], "verification receipt diagnostics"
@@ -556,6 +590,8 @@ def validate_verification_receipt_record(value: Mapping[str, Any]) -> None:
             "verification_failed",
             "transient_infrastructure_failure",
             "candidate_integrity_mismatch",
+            "candidate_public_readback_failed",
+            "namespace_bootstrap_failed",
         },
         "timeout": {
             "verification_timeout",
@@ -575,6 +611,20 @@ def validate_verification_receipt_record(value: Mapping[str, Any]) -> None:
     guard = None if not guards else guards[0]
     if guard not in allowed_guards[outcome]:
         raise VerificationError("verification receipt outcome and guard contradict")
+    if publication_failure is not None:
+        publication_guard = (
+            "transient_infrastructure_failure"
+            if publication_failure["retryable"]
+            else publication_failure["guard_code"]
+        )
+        if outcome != "failure" or guard not in {
+            publication_guard,
+            "verification_failed",
+            "candidate_integrity_mismatch",
+        }:
+            raise VerificationError(
+                "verification publication failure and outcome contradict"
+            )
     blockers = _sequence(common["blockers"], "verification receipt blockers")
     expected_blockers = (
         []
@@ -625,6 +675,7 @@ def _receipt_record(
     repository: str,
     guard_code: str | None,
     include_result: bool,
+    publication_failure: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], tuple[OciBlobV1, ...]]:
     outcome = result["outcome"]
     guard = guard_code
@@ -657,6 +708,11 @@ def _receipt_record(
                         "outcome": outcome,
                         "guard_code": guard,
                         "runtime_artifacts": result["runtime_artifacts"],
+                        "publication_failure": (
+                            None
+                            if publication_failure is None
+                            else dict(publication_failure)
+                        ),
                     }
                 ),
                 title="protected-verification-outcome.json",
@@ -720,6 +776,10 @@ def _receipt_record(
             "diagnostics": diagnostics,
         },
     }
+    if publication_failure is not None:
+        receipt["verification"]["publication_failure"] = dict(
+            publication_failure
+        )
     for key in ("kernel", "host_runtime", "vfs"):
         if result["runtime_artifacts"][key] is not None:
             receipt["verification"][key] = result["runtime_artifacts"][key]
@@ -757,8 +817,8 @@ def _public_candidate(
     str,
     Mapping[str, Any],
 ]:
+    checked_locator = parse_public_record_locator(candidate_locator)
     try:
-        checked_locator = parse_public_record_locator(candidate_locator)
         fetched = fetch_public_record(
             checked_locator,
             transport=transport,
@@ -766,8 +826,10 @@ def _public_candidate(
             required_layer_roles=("bottle-layer",),
         )
     except OciPublicationError as error:
-        raise VerificationError(
-            f"cannot re-fetch exact public candidate: {error}"
+        raise VerificationPublicationError(
+            error,
+            phase="verification-candidate-readback",
+            context="cannot re-fetch exact public candidate",
         ) from error
     try:
         candidate = load_canonical_mapping(fetched.config.body, "candidate record")
@@ -808,6 +870,47 @@ def _public_candidate(
         actual_candidate_repository,
         record_sha256,
         candidate_layer,
+    )
+
+
+def _coordinated_candidate(
+    candidate_locator: Mapping[str, object],
+    candidate: Mapping[str, Any],
+    *,
+    tap_policy: TapStagingPolicyV1,
+    expected_source_repository: str,
+) -> tuple[
+    dict[str, str],
+    Mapping[str, Any],
+    str,
+    str,
+    Mapping[str, Any],
+]:
+    """Revalidate a candidate already captured by protected coordination."""
+
+    checked_locator = parse_public_record_locator(candidate_locator)
+    validate_candidate_record(candidate)
+    formula = candidate["candidate"]["formula"]
+    actual_repository = checked_locator["repository"].removeprefix("ghcr.io/")
+    expected_repository = candidate_repository(
+        tap_policy,
+        formula["target_abi"],
+        formula=formula["formula"],
+    )
+    if (
+        tap_policy.tap_repository != expected_source_repository
+        or formula["tap"] != tap_policy.tap_repository
+        or actual_repository != expected_repository
+    ):
+        raise VerificationError(
+            "coordinated candidate namespace differs from protected tap policy"
+        )
+    return (
+        checked_locator,
+        candidate,
+        actual_repository,
+        checked_locator["digest"].removeprefix("sha256:"),
+        candidate["candidate"]["bottle_layer"],
     )
 
 
@@ -853,7 +956,11 @@ def _publish_receipt_plan(
             expected_source_repository=expected_source_repository,
         )
     except OciPublicationError as error:
-        raise VerificationError(f"cannot publish verification receipt: {error}") from error
+        raise VerificationPublicationError(
+            error,
+            phase="verification-receipt-publication",
+            context="cannot publish verification receipt",
+        ) from error
 
 
 def publish_verification_receipt(
@@ -955,6 +1062,8 @@ def publish_protected_verification_outcome(
     attempt_ordinal: int,
     outcome: str,
     guard_code: str,
+    publication_failure: Mapping[str, Any] | None = None,
+    coordinated_candidate: Mapping[str, Any] | None = None,
     transport: OciTransportV1,
     expected_source_repository: str,
 ) -> PublishedRecordLocatorV1:
@@ -977,6 +1086,8 @@ def publish_protected_verification_outcome(
         "failure": {
             "transient_infrastructure_failure",
             "candidate_integrity_mismatch",
+            "candidate_public_readback_failed",
+            "namespace_bootstrap_failed",
         },
         "timeout": {
             "verification_timeout",
@@ -986,18 +1097,31 @@ def publish_protected_verification_outcome(
     }
     if outcome not in allowed or guard_code not in allowed[outcome]:
         raise VerificationError("protected verification outcome and guard contradict")
+    if coordinated_candidate is None:
+        candidate_facts = _public_candidate(
+            candidate_locator,
+            tap_policy=tap_policy,
+            transport=transport,
+            expected_source_repository=expected_source_repository,
+        )
+    else:
+        if publication_failure is None:
+            raise VerificationError(
+                "coordinated candidate may only recover a protected publication failure"
+            )
+        candidate_facts = _coordinated_candidate(
+            candidate_locator,
+            coordinated_candidate,
+            tap_policy=tap_policy,
+            expected_source_repository=expected_source_repository,
+        )
     (
         _checked_locator,
         candidate,
         actual_candidate_repository,
         record_sha256,
         _candidate_layer,
-    ) = _public_candidate(
-        candidate_locator,
-        tap_policy=tap_policy,
-        transport=transport,
-        expected_source_repository=expected_source_repository,
-    )
+    ) = candidate_facts
     repository = receipt_repository(
         actual_candidate_repository, test_definition.id, host
     )
@@ -1022,6 +1146,7 @@ def publish_protected_verification_outcome(
         repository=repository,
         guard_code=guard_code,
         include_result=False,
+        publication_failure=publication_failure,
     )
     validate_verification_receipt_record(receipt)
     return _publish_receipt_plan(
