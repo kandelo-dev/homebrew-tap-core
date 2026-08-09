@@ -29,8 +29,10 @@ from scripts.abi_staging.tests.test_records import (
 from scripts.abi_staging.verification import (
     VerificationError,
     load_verification_result,
+    publish_protected_verification_outcome,
     publish_verification_receipt,
     receipt_repository,
+    validate_verification_receipt_record,
 )
 
 
@@ -193,6 +195,7 @@ class VerificationReceiptTests(unittest.TestCase):
             tap_policy=self.tap_policy,
             expected_run=VERIFIER_RUN,
             expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+            completed_at="2026-08-09T10:00:00.000Z",
             transport=self.transport,
             expected_source_repository=SOURCE_ASSOCIATION,
         )
@@ -228,11 +231,17 @@ class VerificationReceiptTests(unittest.TestCase):
                 tap_policy=self.tap_policy,
                 expected_run=run,
                 expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+                completed_at=f"2026-08-09T10:00:0{ordinal}.000Z",
                 transport=self.transport,
                 expected_source_repository=SOURCE_ASSOCIATION,
             )
             locators.append(locator)
             manifest, receipt = self._receipt(locator)
+            validate_verification_receipt_record(receipt)
+            self.assertEqual(
+                manifest["annotations"]["dev.kandelo.abi-staging.completed-at"],
+                f"2026-08-09T10:00:0{ordinal}.000Z",
+            )
             self.assertEqual(receipt["common"]["outcome"], outcome)
             self.assertEqual(receipt["common"]["guard_codes"], guards)
             self.assertEqual(receipt["common"]["promotion_state"], promotion)
@@ -258,6 +267,59 @@ class VerificationReceiptTests(unittest.TestCase):
             self.candidate_manifest,
         )
 
+    def test_protected_runner_loss_publishes_a_retryable_receipt_without_candidate_output(self) -> None:
+        locator = publish_protected_verification_outcome(
+            candidate_locator={
+                "repository": self.candidate_locator.repository,
+                "digest": self.candidate_locator.digest,
+                "immutable_reference": self.candidate_locator.immutable_reference,
+            },
+            test_definition=TEST_DEFINITION,
+            host="build",
+            tap_policy=self.tap_policy,
+            expected_run=VERIFIER_RUN,
+            expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+            completed_at="2026-08-09T10:00:00.000Z",
+            attempt_ordinal=1,
+            outcome="canceled",
+            guard_code="transient_infrastructure_failure",
+            transport=self.transport,
+            expected_source_repository=SOURCE_ASSOCIATION,
+        )
+        manifest, receipt = self._receipt(locator)
+        validate_verification_receipt_record(receipt)
+        self.assertEqual(
+            [
+                layer["annotations"]["dev.kandelo.abi-staging.role"]
+                for layer in manifest["layers"]
+            ],
+            ["protected-verification-outcome"],
+        )
+        self.assertEqual(receipt["common"]["outcome"], "canceled")
+        self.assertEqual(
+            receipt["common"]["guard_codes"],
+            ["transient_infrastructure_failure"],
+        )
+        self.assertEqual(receipt["verification"]["attempt_ordinal"], 1)
+
+    def test_receipt_validator_rejects_contradictory_scheduler_facts(self) -> None:
+        locator = self._publish(self._write_result("receipt-validator"))
+        _manifest, receipt = self._receipt(locator)
+        validate_verification_receipt_record(receipt)
+        cases = []
+        wrong_candidate = json.loads(canonical_bytes(receipt))
+        wrong_candidate["verification"]["candidate_record_sha256"] = "f" * 64
+        cases.append(wrong_candidate)
+        wrong_outcome = json.loads(canonical_bytes(receipt))
+        wrong_outcome["common"]["promotion_state"] = "ineligible"
+        cases.append(wrong_outcome)
+        wrong_attempts = json.loads(canonical_bytes(receipt))
+        wrong_attempts["common"]["retry_state"]["attempts"] = 2
+        cases.append(wrong_attempts)
+        for candidate in cases:
+            with self.subTest(candidate=candidate), self.assertRaises(VerificationError):
+                validate_verification_receipt_record(candidate)
+
     def test_retesting_adds_receipt_without_changing_candidate_identity(self) -> None:
         first = self._publish(self._write_result("first"))
         second_run = {**VERIFIER_RUN, "run_id": 404}
@@ -272,6 +334,7 @@ class VerificationReceiptTests(unittest.TestCase):
             tap_policy=self.tap_policy,
             expected_run=second_run,
             expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+            completed_at="2026-08-09T10:00:01.000Z",
             transport=self.transport,
             expected_source_repository=SOURCE_ASSOCIATION,
         )
@@ -345,6 +408,7 @@ class VerificationReceiptTests(unittest.TestCase):
                     tap_policy=policy,
                     expected_run=expected_run,
                     expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+                    completed_at="2026-08-09T10:00:00.000Z",
                     transport=self.transport,
                     expected_source_repository=SOURCE_ASSOCIATION,
                 )

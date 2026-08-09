@@ -228,6 +228,22 @@ def _new_request_context() -> dict[str, object]:
 
 
 class BottleContractTests(unittest.TestCase):
+    def test_contract_accepts_exact_inline_formula_source_but_not_arbitrary_uris(self) -> None:
+        inputs = _inputs()
+        inputs["sources"][0]["url"] = "inline:__END__"
+        contract = build_bottle_contract(inputs)
+        self.assertEqual(contract["sources"][0]["url"], "inline:__END__")
+        for invalid in (
+            "inline:../../secret",
+            "inline:__END__?query",
+            "inline://host/__END__",
+            "file:///tmp/source",
+        ):
+            changed = copy.deepcopy(inputs)
+            changed["sources"][0]["url"] = invalid
+            with self.subTest(invalid=invalid), self.assertRaises(ContractError):
+                build_bottle_contract(changed)
+
     def test_every_build_input_component_changes_contract_identity(self) -> None:
         baseline = bottle_contract_digest(build_bottle_contract(_inputs()))
 
@@ -405,6 +421,35 @@ class BottleContractTests(unittest.TestCase):
             )
             self.assertFalse(assessment["complete"])
             self.assertEqual(assessment["ambiguous"][0]["reason"], "symlink-not-authorized")
+
+    def test_capture_tree_identity_excludes_git_administration_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tap = root / "tap"
+            tap.mkdir()
+            digests = []
+            for index in (1, 2):
+                kandelo = root / f"kandelo-{index}"
+                (kandelo / "libc/musl").mkdir(parents=True)
+                (kandelo / "libc/musl/source.c").write_text(
+                    "same source\n", encoding="utf-8"
+                )
+                (kandelo / "libc/musl/.git").write_text(
+                    f"gitdir: /host-{index}/private/worktree\n", encoding="utf-8"
+                )
+                assessment = assess_capture(
+                    subject=exact_formula_subject("curl", "wasm32"),
+                    affected_products=["alpha-shell"],
+                    kandelo_root=kandelo,
+                    tap_root=tap,
+                    kandelo_paths=["libc"],
+                    tap_paths=[],
+                    observed_kandelo_paths=["libc"],
+                    observed_tap_paths=[],
+                )
+                self.assertTrue(assessment["complete"])
+                digests.append(assessment["captured"][0]["sha256"])
+            self.assertEqual(digests[0], digests[1])
 
     def test_reuse_decisions_rebuild_on_change_and_reject_false_identity(self) -> None:
         contract = build_bottle_contract(_inputs())

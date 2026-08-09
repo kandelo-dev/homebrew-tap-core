@@ -182,6 +182,15 @@ def _url(value: Any, field: str) -> str:
     result = _text(value, field, 8192)
     parsed = urlsplit(result)
     if (
+        parsed.scheme == "inline"
+        and parsed.netloc == ""
+        and parsed.path == "__END__"
+        and not parsed.query
+        and not parsed.fragment
+        and result == "inline:__END__"
+    ):
+        return result
+    if (
         parsed.scheme not in {"http", "https"}
         or not parsed.hostname
         or parsed.username is not None
@@ -425,8 +434,13 @@ def _path_descriptor(root: Path, relative: str) -> tuple[str, str]:
         raise ContractError("unsupported-file-kind")
     entries = []
     for candidate in sorted(path.rglob("*")):
-        candidate_metadata = candidate.lstat()
         candidate_relative = candidate.relative_to(path).as_posix()
+        # Git administration files are checkout-local transport state, not
+        # build input bytes. Submodule commits/trees are bound separately by
+        # the exact source request and custody manifest.
+        if ".git" in candidate.relative_to(path).parts:
+            continue
+        candidate_metadata = candidate.lstat()
         if stat.S_ISLNK(candidate_metadata.st_mode):
             raise ContractError(f"symlink-not-authorized:{candidate_relative}")
         if stat.S_ISDIR(candidate_metadata.st_mode):

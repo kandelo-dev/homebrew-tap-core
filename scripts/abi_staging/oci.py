@@ -193,6 +193,132 @@ def parse_public_record_locator(value: Mapping[str, object]) -> dict[str, str]:
     }
 
 
+def list_public_record_locators(
+    repository: str,
+    *,
+    transport: OciTransportV1,
+    page_size: int = 100,
+    max_records: int = 4096,
+) -> tuple[dict[str, str], ...]:
+    """Enumerate a dedicated public record repository without mutable refs."""
+
+    if (
+        not isinstance(repository, str)
+        or re.fullmatch(
+            r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+",
+            repository,
+        )
+        is None
+    ):
+        raise OciPublicationError(
+            "record inventory repository is invalid",
+            guard_code="candidate_integrity_mismatch",
+        )
+    if not 1 <= page_size <= 1000 or not 1 <= max_records <= 65_536:
+        raise OciPublicationError(
+            "record inventory bounds are invalid",
+            guard_code="candidate_integrity_mismatch",
+        )
+    base = _registry_url(repository, "tags/list")
+    current = base + "?" + urlencode({"n": page_size})
+    seen_urls: set[str] = set()
+    tags: set[str] = set()
+    while current is not None:
+        if current in seen_urls or len(seen_urls) >= 1024:
+            raise OciPublicationError(
+                "record inventory pagination repeated or exceeded its bound",
+                guard_code="candidate_integrity_mismatch",
+            )
+        seen_urls.add(current)
+        response = _request(
+            transport,
+            "GET",
+            current,
+            authenticated=False,
+            guard_code="candidate_public_readback_failed",
+            headers={"accept": "application/json"},
+            maximum_bytes=4 * 1024 * 1024,
+        )
+        if response.status == 404:
+            if len(seen_urls) != 1:
+                raise OciPublicationError(
+                    "record inventory disappeared during pagination",
+                    guard_code="candidate_public_readback_failed",
+                )
+            return ()
+        if response.status != 200:
+            raise OciPublicationError(
+                f"record inventory returned HTTP {response.status}",
+                guard_code="candidate_public_readback_failed",
+                retryable=response.status == 429 or response.status >= 500,
+            )
+        try:
+            value = json.loads(response.body.decode("utf-8", errors="strict"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise OciPublicationError(
+                f"record inventory is invalid JSON: {error}",
+                guard_code="candidate_integrity_mismatch",
+            ) from error
+        if not isinstance(value, Mapping) or set(value) != {"name", "tags"}:
+            raise OciPublicationError(
+                "record inventory fields changed",
+                guard_code="candidate_integrity_mismatch",
+            )
+        if value["name"] != repository or not isinstance(value["tags"], list):
+            raise OciPublicationError(
+                "record inventory names a different repository",
+                guard_code="candidate_integrity_mismatch",
+            )
+        for tag in value["tags"]:
+            if (
+                not isinstance(tag, str)
+                or re.fullmatch(r"record-sha256-[0-9a-f]{64}", tag) is None
+            ):
+                raise OciPublicationError(
+                    "record inventory contains a mutable or unknown tag",
+                    guard_code="candidate_integrity_mismatch",
+                )
+            tags.add(tag)
+            if len(tags) > max_records:
+                raise OciPublicationError(
+                    "record inventory exceeds its bound",
+                    guard_code="candidate_integrity_mismatch",
+                )
+        link = _header(response, "link")
+        if link is None:
+            current = None
+            continue
+        match = re.fullmatch(r'<([^>]+)>;\s*rel="next"', link)
+        if match is None:
+            raise OciPublicationError(
+                "record inventory pagination link is invalid",
+                guard_code="candidate_integrity_mismatch",
+            )
+        next_url = match.group(1)
+        parsed = urlsplit(next_url)
+        if (
+            parsed.scheme != "https"
+            or parsed.netloc != REGISTRY_HOST
+            or parsed.path != urlsplit(base).path
+            or parsed.fragment
+        ):
+            raise OciPublicationError(
+                "record inventory pagination escaped its repository",
+                guard_code="candidate_integrity_mismatch",
+            )
+        current = next_url
+    return tuple(
+        {
+            "repository": "ghcr.io/" + repository,
+            "digest": "sha256:" + tag.removeprefix("record-sha256-"),
+            "immutable_reference": (
+                "ghcr.io/" + repository + "@sha256:" + tag.removeprefix("record-sha256-")
+            ),
+        }
+        for tag in sorted(tags)
+    )
+
+
 def _manifest_descriptor(value: object, field: str) -> dict[str, object]:
     descriptor = _exact_keys(
         value,
@@ -834,8 +960,7 @@ class UrllibOciTransportV1:
 
     def __init__(self, *, username: str, token: str) -> None:
         if (
-            not username
-            or not token
+            bool(username) != bool(token)
             or any(character.isspace() for character in username)
             or any(character.isspace() for character in token)
         ):
@@ -845,10 +970,16 @@ class UrllibOciTransportV1:
             )
         self._username = username
         self._token = token
+        self._authenticated = bool(token)
         self._opener = build_opener(_NoRedirect())
         self._bearer_tokens: dict[tuple[bool, str], str] = {}
 
     def _basic(self) -> str:
+        if not self._authenticated:
+            raise OciPublicationError(
+                "anonymous registry transport cannot authenticate",
+                guard_code="candidate_public_readback_failed",
+            )
         encoded = base64.b64encode(
             f"{self._username}:{self._token}".encode("utf-8")
         ).decode("ascii")
@@ -996,6 +1127,11 @@ class UrllibOciTransportV1:
                     "GitHub package metadata requires protected authentication",
                     guard_code="namespace_bootstrap_failed",
                 )
+            if not self._authenticated:
+                raise OciPublicationError(
+                    "anonymous transport cannot access authenticated GitHub metadata",
+                    guard_code="candidate_public_readback_failed",
+                )
             request_headers["authorization"] = "Bearer " + self._token
             request_headers.setdefault("x-github-api-version", "2022-11-28")
             return self._perform(
@@ -1006,6 +1142,11 @@ class UrllibOciTransportV1:
                 maximum_bytes=maximum_bytes,
             )
         if authenticated:
+            if not self._authenticated:
+                raise OciPublicationError(
+                    "anonymous transport cannot perform an authenticated OCI request",
+                    guard_code="candidate_public_readback_failed",
+                )
             request_headers["authorization"] = self._basic()
         response = self._perform(
             method,
@@ -1037,6 +1178,11 @@ def isolated_oras_transport(
 ) -> Iterator[UrllibOciTransportV1]:
     """Bootstrap credentials with ORAS in an ephemeral config, then remove it."""
 
+    if not username or not token:
+        raise OciPublicationError(
+            "protected registry publication requires credentials",
+            guard_code="namespace_bootstrap_failed",
+        )
     transport = UrllibOciTransportV1(username=username, token=token)
     with tempfile.TemporaryDirectory(prefix="kandelo-oras-auth-") as temporary:
         config = Path(temporary) / "config.json"

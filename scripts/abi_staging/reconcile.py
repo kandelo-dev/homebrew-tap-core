@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Sequence
 from pathlib import Path
 import re
 from types import MappingProxyType
@@ -34,10 +35,10 @@ class ReconciliationDecisionV1:
     current_for_pull_request: bool
     action: Literal[
         "observe-open",
+        "observe-historical",
         "observe-merged",
         "stop-new-work",
         "resume-same-head",
-        "await-new-request",
     ]
     permitted_work: tuple[str, ...]
     blockers: tuple[MappingProxyType[str, Any], ...]
@@ -55,12 +56,10 @@ def reconciliation_work_scope(
 ) -> ReconciliationWorkScopeV1:
     """Translate exact-head lifecycle into new-work permission only."""
 
-    if decision.action == "observe-open":
+    if decision.action in {"observe-open", "observe-historical", "observe-merged"}:
         return ReconciliationWorkScopeV1(True, True, False)
     if decision.action == "resume-same-head":
         return ReconciliationWorkScopeV1(True, True, True)
-    if decision.action == "observe-merged":
-        return ReconciliationWorkScopeV1(False, True, False)
     return ReconciliationWorkScopeV1(False, False, False)
 
 
@@ -93,10 +92,10 @@ def load_reconciliation_activation(path: Path) -> str:
         isinstance(value["schema"], bool)
         or value["schema"] != 1
         or value["kind"] != "kandelo-abi-staging-reconciliation-activation"
-        or value["mode"] != "observe"
+        or value["mode"] not in {"observe", "active"}
     ):
-        raise ReconciliationError("reconciliation activation is not observe schema 1")
-    return "observe"
+        raise ReconciliationError("reconciliation activation is not schema 1")
+    return value["mode"]
 
 
 def reconcile_request(
@@ -115,9 +114,9 @@ def reconcile_request(
     if lifecycle.state == "closed":
         action = "stop-new-work"
     elif lifecycle.state == "merged":
-        action = "observe-merged" if current else "stop-new-work"
+        action = "observe-merged" if current else "observe-historical"
     elif not current:
-        action = "await-new-request"
+        action = "observe-historical"
     elif previous_lifecycle is not None and previous_lifecycle.state == "closed":
         action = "resume-same-head"
     else:
@@ -131,3 +130,39 @@ def reconcile_request(
         permitted_work=(),
         blockers=(),
     )
+
+
+def select_reconciliation_cycle(
+    decisions: Sequence[tuple[DiscoveredRequestV1, ReconciliationDecisionV1]],
+    *,
+    cycle_index: int,
+) -> tuple[DiscoveredRequestV1, ReconciliationDecisionV1] | None:
+    """Choose one authorized request fairly without timestamp or SHA ordering."""
+
+    if (
+        isinstance(cycle_index, bool)
+        or not isinstance(cycle_index, int)
+        or not 0 <= cycle_index <= 2**63 - 1
+    ):
+        raise ReconciliationError("reconciliation cycle index is invalid")
+    eligible = []
+    seen: set[str] = set()
+    for discovered, decision in decisions:
+        if decision.request_digest != discovered.request_digest:
+            raise ReconciliationError(
+                "reconciliation decision names a different public request"
+            )
+        if discovered.request_digest in seen:
+            raise ReconciliationError("reconciliation cycle repeats a request digest")
+        seen.add(discovered.request_digest)
+        if decision.action == "stop-new-work":
+            continue
+        number = discovered.request["pull_request"]["number"]
+        if isinstance(number, bool) or not isinstance(number, int) or number < 1:
+            raise ReconciliationError("reconciliation request lost its pull-request number")
+        eligible.append((number, discovered.request_digest, discovered, decision))
+    if not eligible:
+        return None
+    eligible.sort(key=lambda item: (item[0], item[1]))
+    selected = eligible[cycle_index % len(eligible)]
+    return selected[2], selected[3]

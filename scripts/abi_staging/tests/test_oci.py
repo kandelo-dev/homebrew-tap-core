@@ -13,8 +13,10 @@ from scripts.abi_staging.oci import (
     HttpResponseV1,
     OciPublicationError,
     PublishedRecordLocatorV1,
+    UrllibOciTransportV1,
     build_oci_manifest,
     isolated_oras_transport,
+    list_public_record_locators,
     publish_record,
 )
 from scripts.abi_staging.records import (
@@ -88,6 +90,19 @@ class FakeRegistryTransport:
         if parsed.netloc != "ghcr.io" or not parsed.path.startswith(prefix):
             return self._response(404, url)
         remainder = parsed.path[len(prefix) :]
+        if remainder.endswith("/tags/list"):
+            repository = remainder[: -len("/tags/list")]
+            tags = sorted(
+                reference
+                for candidate_repository, reference in self.manifests
+                if candidate_repository == repository
+                and not reference.startswith("sha256:")
+            )
+            return self._response(
+                200,
+                url,
+                body=canonical_bytes({"name": repository, "tags": tags}),
+            )
         if "/manifests/" in remainder:
             repository, reference = remainder.split("/manifests/", 1)
             reference = unquote(reference)
@@ -224,6 +239,36 @@ def _plan() -> OciRecordPlanV1:
 
 
 class OciPublicationTests(unittest.TestCase):
+    def test_anonymous_transport_cannot_be_upgraded_to_authenticated_access(self) -> None:
+        transport = UrllibOciTransportV1(username="", token="")
+        with self.assertRaises(OciPublicationError):
+            transport.request(
+                "GET",
+                "https://api.github.com/orgs/kandelo-dev/packages/container/example",
+                authenticated=True,
+                maximum_bytes=1024,
+            )
+
+    def test_public_record_tags_enumerate_only_immutable_digest_locators(self) -> None:
+        transport = FakeRegistryTransport()
+        published = publish_record(
+            _plan(), transport=transport, expected_source_repository=SOURCE_ASSOCIATION
+        )
+        locators = list_public_record_locators(REPOSITORY, transport=transport)
+        self.assertEqual(
+            locators,
+            (
+                {
+                    "repository": "ghcr.io/" + REPOSITORY,
+                    "digest": published.digest,
+                    "immutable_reference": published.immutable_reference,
+                },
+            ),
+        )
+        transport.manifests[(REPOSITORY, "latest")] = build_oci_manifest(_plan())
+        with self.assertRaises(OciPublicationError):
+            list_public_record_locators(REPOSITORY, transport=transport)
+
     def test_manifest_is_canonical_and_preserves_exact_descriptor_order(self) -> None:
         plan = _plan()
         manifest = build_oci_manifest(plan)

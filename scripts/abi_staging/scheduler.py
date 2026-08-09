@@ -159,7 +159,8 @@ class VerificationFactV1:
     candidate_record_sha256: str
     test_definition_sha256: str
     host: Literal["build", "node", "browser"]
-    outcome: Literal["success", "failure", "timeout"]
+    outcome: Literal["success", "failure", "timeout", "canceled"]
+    guard_code: str | None
     attempt_ordinal: int
     completed_at: str
     record_sha256: str
@@ -174,8 +175,23 @@ class VerificationFactV1:
         _digest(self.record_sha256, "verification record")
         if self.host not in {"build", "node", "browser"}:
             raise SchedulingError("verification host is unsupported")
-        if self.outcome not in {"success", "failure", "timeout"}:
+        if self.outcome not in {"success", "failure", "timeout", "canceled"}:
             raise SchedulingError("verification outcome is unsupported")
+        allowed_guards = {
+            "success": {None},
+            "failure": {
+                "verification_failed",
+                "transient_infrastructure_failure",
+                "candidate_integrity_mismatch",
+            },
+            "timeout": {
+                "verification_timeout",
+                "transient_infrastructure_failure",
+            },
+            "canceled": {"transient_infrastructure_failure"},
+        }
+        if self.guard_code not in allowed_guards[self.outcome]:
+            raise SchedulingError("verification outcome and guard are contradictory")
 
 
 @dataclass(frozen=True)
@@ -304,9 +320,19 @@ def classify_protected_failure(
         "failure",
         "stale",
         "startup_failure",
+        "success",
         "timed_out",
     }:
         raise SchedulingError("failure job conclusion is not a protected failure")
+    if facts.job_conclusion == "success" and facts.kind not in {
+        "artifact-service-unavailable",
+        "github-http",
+        "registry-http",
+        "transport-reset",
+    }:
+        raise SchedulingError(
+            "successful application job cannot assert a non-transport failure"
+        )
     if facts.application_outcome not in {None, "success", "failure", "timeout"}:
         raise SchedulingError("failure application outcome is unsupported")
     if facts.http_status is not None and (
@@ -451,6 +477,30 @@ def _definition_pairs(
     return tuple(pairs)
 
 
+def _dominant_terminal_failure(records: Sequence[object]) -> object:
+    """Converge at-least-once failures without hiding deterministic failures."""
+
+    if not records:
+        raise SchedulingError("terminal failure selection requires one record")
+    nonretryable = [
+        item
+        for item in records
+        if getattr(item, "guard_code", None) not in RETRYABLE_GUARDS
+    ]
+    pool = nonretryable or list(records)
+    guards = sorted({getattr(item, "guard_code", None) for item in pool})
+    if not guards or guards[0] is None:
+        raise SchedulingError("terminal failure lacks one registered guard")
+    guarded = [item for item in pool if getattr(item, "guard_code", None) == guards[0]]
+    latest_completion = max(getattr(item, "completed_at", "") for item in guarded)
+    latest = [
+        item
+        for item in guarded
+        if getattr(item, "completed_at", "") == latest_completion
+    ]
+    return min(latest, key=lambda item: getattr(item, "record_sha256", ""))
+
+
 def schedule_ready_batch(
     plan: Mapping[str, object],
     records: SchedulingRecordsV1,
@@ -540,9 +590,18 @@ def schedule_ready_batch(
             and item.subject == subject
             and item.contract_sha256 == contract
         ]
-        if len(candidates) > 1:
-            raise SchedulingError("current contract has ambiguous candidate records")
-        candidate = candidates[0] if candidates else None
+        if len({item.bottle_layer_sha256 for item in candidates}) > 1:
+            raise SchedulingError(
+                "current contract has conflicting candidate bottle layers"
+            )
+        # At-least-once runs may publish more than one factual producer record
+        # for identical contract/layer bytes. Select one immutable record
+        # deterministically; never treat a differing layer as equivalent.
+        candidate = (
+            min(candidates, key=lambda item: item.record_sha256)
+            if candidates
+            else None
+        )
         if candidate is not None:
             next_verification: tuple[str, str, str, int] | None = None
             verification_blocker: BlockedSubjectV1 | None = None
@@ -567,14 +626,14 @@ def schedule_ready_batch(
                 latest = [
                     item for item in receipts if item.attempt_ordinal == latest_ordinal
                 ]
-                if len({(item.outcome, item.completed_at) for item in latest}) != 1:
-                    raise SchedulingError("verification retry ordinal has conflicting receipts")
-                selected = min(latest, key=lambda item: item.record_sha256)
-                guard = (
-                    "verification_timeout"
-                    if selected.outcome == "timeout"
-                    else "verification_failed"
-                )
+                selected = _dominant_terminal_failure(latest)
+                if not isinstance(selected, VerificationFactV1):
+                    raise SchedulingError("verification failure selection changed type")
+                guard = selected.guard_code
+                if guard is None:
+                    raise SchedulingError(
+                        "unsuccessful verification receipt lacks a guard"
+                    )
                 retry = retry_decision(
                     request_sha256,
                     subject,
@@ -643,9 +702,14 @@ def schedule_ready_batch(
             continue
         latest_ordinal = max(item.retry_ordinal for item in attempts)
         latest = [item for item in attempts if item.retry_ordinal == latest_ordinal]
-        if len({(item.outcome, item.guard_code, item.completed_at) for item in latest}) != 1:
-            raise SchedulingError("build retry ordinal has conflicting attempt records")
-        selected = min(latest, key=lambda item: item.record_sha256)
+        successful = [item for item in latest if item.outcome == "success"]
+        selected = (
+            min(successful, key=lambda item: item.record_sha256)
+            if successful
+            else _dominant_terminal_failure(latest)
+        )
+        if not isinstance(selected, AttemptFactV1):
+            raise SchedulingError("build failure selection changed type")
         if selected.outcome == "success":
             state[subject] = "blocked"
             blocked.append(BlockedSubjectV1(subject, "candidate_integrity_mismatch"))
