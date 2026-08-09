@@ -29,6 +29,7 @@ jobs:
       coordination-artifact-id: ${{ steps.upload.outputs.artifact-id }}
       coordination-artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
       kandelo-head: ${{ steps.discover.outputs.kandelo_head }}
+      kandelo-policy-commit: ${{ steps.discover.outputs.kandelo_policy_commit }}
       kandelo-repository: ${{ steps.discover.outputs.kandelo_repository }}
       tap-commit: ${{ steps.discover.outputs.tap_commit }}
     steps:
@@ -71,14 +72,25 @@ jobs:
           persist-credentials: false
           path: kandelo-source
 
-      - name: Set up exact-head Kandelo tools
+      - name: Check out immutable Kandelo policy tools
         if: steps.discover.outputs.selected == 'true'
-        uses: ./kandelo-source/.github/actions/setup-nix
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ steps.discover.outputs.kandelo_repository }}
+          ref: ${{ steps.discover.outputs.kandelo_policy_commit }}
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+          path: kandelo-authority
+
+      - name: Set up immutable Kandelo policy tools
+        if: steps.discover.outputs.selected == 'true'
+        uses: ./kandelo-authority/.github/actions/setup-nix
 
       - name: Derive Formula roots from exact selected VFS products
         id: requirements
         if: steps.discover.outputs.selected == 'true'
-        working-directory: kandelo-source
+        working-directory: kandelo-authority
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/abi-staging-coordination"
@@ -89,9 +101,9 @@ jobs:
           host_target="$(scripts/dev-shell.sh rustc -vV | awk '/^host/ {print $2}')"
           scripts/dev-shell.sh cargo run --quiet -p xtask \
             --target "$host_target" -- abi-staging requirements \
-            --catalog images/vfs/products/generated/catalog.json \
-            --pages apps/browser-demos/pages/kandelo/kernel-host/pages-vfs-products.toml \
-            --tests tests/vfs-products.toml \
+            --catalog "$GITHUB_WORKSPACE/kandelo-source/images/vfs/products/generated/catalog.json" \
+            --pages "$GITHUB_WORKSPACE/kandelo-source/apps/browser-demos/pages/kandelo/kernel-host/pages-vfs-products.toml" \
+            --tests "$GITHUB_WORKSPACE/kandelo-source/tests/vfs-products.toml" \
             --change-classes "$classes" \
             --products-out "$products" \
             --formulae-out "$RUNNER_TEMP/abi-staging-formula-requirements.json"
@@ -157,6 +169,16 @@ jobs:
           persist-credentials: false
           path: kandelo-source
 
+      - name: Check out immutable Kandelo policy tools
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
+          ref: ${{ needs.discover-plan.outputs.kandelo-policy-commit }}
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+          path: kandelo-authority
+
       - name: Download exact protected coordination data
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -164,8 +186,8 @@ jobs:
           path: ${{ runner.temp }}/coordination
           merge-multiple: true
 
-      - name: Set up exact-head Kandelo tools
-        uses: ./kandelo-source/.github/actions/setup-nix
+      - name: Set up immutable Kandelo policy tools
+        uses: ./kandelo-authority/.github/actions/setup-nix
 
       - name: Build one exact uncredentialed candidate handoff
         working-directory: tap-authority
@@ -174,7 +196,7 @@ jobs:
         run: |
           set -euo pipefail
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-            ../kandelo-source/scripts/dev-shell.sh \
+            ../kandelo-authority/scripts/dev-shell.sh \
             python3 -m scripts.abi_staging.cli execute-build-work \
               --coordination "$RUNNER_TEMP/coordination" \
               --work-id "$WORK_ID" \
@@ -285,6 +307,16 @@ jobs:
           persist-credentials: false
           path: kandelo-source
 
+      - name: Check out immutable Kandelo policy tools
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
+          ref: ${{ needs.discover-plan.outputs.kandelo-policy-commit }}
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+          path: kandelo-authority
+
       - name: Download exact protected coordination data
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -292,8 +324,8 @@ jobs:
           path: ${{ runner.temp }}/coordination
           merge-multiple: true
 
-      - name: Set up exact-head Kandelo tools
-        uses: ./kandelo-source/.github/actions/setup-nix
+      - name: Set up immutable Kandelo policy tools
+        uses: ./kandelo-authority/.github/actions/setup-nix
 
       - name: Verify one exact public candidate without credentials
         working-directory: tap-authority
@@ -302,7 +334,7 @@ jobs:
         run: |
           set -euo pipefail
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-            ../kandelo-source/scripts/dev-shell.sh \
+            ../kandelo-authority/scripts/dev-shell.sh \
             python3 -m scripts.abi_staging.cli execute-verification-work \
               --coordination "$RUNNER_TEMP/coordination" \
               --work-id "$WORK_ID" \

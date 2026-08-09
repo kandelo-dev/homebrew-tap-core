@@ -68,6 +68,38 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_operator requirements_index, :<, coordinate_index
   end
 
+  def test_candidate_code_never_runs_before_the_uncredentialed_boundary
+    %w[discover-plan build-candidate verify-candidate].each do |job_name|
+      steps = @workflow.dig("jobs", job_name, "steps")
+      authority = steps.find do |step|
+        step["uses"]&.start_with?(AbiStagingWorkflowCheck::CHECKOUT) &&
+          step.dig("with", "path") == "kandelo-authority"
+      end
+      refute_nil authority, "#{job_name} lacks immutable Kandelo policy checkout"
+      output = job_name == "discover-plan" ?
+        "steps.discover.outputs.kandelo_policy_commit" :
+        "needs.discover-plan.outputs.kandelo-policy-commit"
+      assert_equal "${{ #{output} }}",
+                   authority.dig("with", "ref")
+      setup = steps.find { |step| step["uses"]&.end_with?("/.github/actions/setup-nix") }
+      refute_nil setup
+      assert_equal "./kandelo-authority/.github/actions/setup-nix", setup["uses"]
+      refute steps.any? { |step| step["uses"]&.start_with?("./kandelo-source/") }
+    end
+
+    requirements = @workflow.dig("jobs", "discover-plan", "steps").find do |step|
+      step["id"] == "requirements"
+    end
+    assert_equal "kandelo-authority", requirements["working-directory"]
+    assert_includes requirements["run"], "$GITHUB_WORKSPACE/kandelo-source/images/vfs/products/generated/catalog.json"
+
+    %w[build-candidate verify-candidate].each do |job_name|
+      command = last_run_step(@workflow, job_name).fetch("run")
+      assert_includes command, "../kandelo-authority/scripts/dev-shell.sh"
+      refute_includes command, "../kandelo-source/scripts/dev-shell.sh"
+    end
+  end
+
   def test_write_permission_is_rejected
     assert_rejected("write permission") do |workflow|
       workflow.dig("jobs", "build-candidate", "permissions")["contents"] = "write"
