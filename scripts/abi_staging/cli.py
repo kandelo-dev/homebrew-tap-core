@@ -94,6 +94,7 @@ from .workflow_artifact import (
     GitHubWorkflowArtifactClientV1,
     WorkflowArtifactError,
     WorkflowArtifactServiceError,
+    WorkflowJobV1,
 )
 from .workflow_publication import (
     WorkflowPublicationError,
@@ -102,6 +103,7 @@ from .workflow_publication import (
 )
 from .verification import (
     VerificationError,
+    VerificationPublicationError,
     load_verification_result,
     publish_protected_verification_outcome,
     publish_verification_receipt,
@@ -513,6 +515,21 @@ def _local_locator(repository: str, manifest: bytes) -> dict[str, str]:
     }
 
 
+def _protected_oci_failure(
+    error: OciPublicationError | VerificationPublicationError, *, phase: str
+) -> dict[str, Any]:
+    """Reduce an OCI exception to bounded facts safe for a durable record."""
+
+    phased = error.with_phase(phase)
+    return {
+        "phase": phased.phase,
+        "kind": phased.kind,
+        "http_status": phased.http_status,
+        "retryable": phased.retryable,
+        "guard_code": phased.guard_code,
+    }
+
+
 def _publication_result(
     *,
     mode: str,
@@ -641,11 +658,14 @@ def _publish_candidate_paths(
         username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
         token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
         with isolated_oras_transport(username=username, token=token) as transport:
-            published_source = publish_record(
-                source_plan,
-                transport=transport,
-                expected_source_repository=policy.tap_repository,
-            )
+            try:
+                published_source = publish_record(
+                    source_plan,
+                    transport=transport,
+                    expected_source_repository=policy.tap_repository,
+                )
+            except OciPublicationError as error:
+                raise error.with_phase("source-custody-publication") from error
             if (
                 published_source.repository != planned_source_locator["repository"]
                 or published_source.digest != planned_source_locator["digest"]
@@ -655,12 +675,16 @@ def _publish_candidate_paths(
                 raise OciPublicationError(
                     "published source locator differs from its local identity",
                     guard_code="candidate_public_readback_failed",
+                    phase="source-custody-publication",
                 )
-            published_candidate = publish_record(
-                candidate_plan,
-                transport=transport,
-                expected_source_repository=policy.tap_repository,
-            )
+            try:
+                published_candidate = publish_record(
+                    candidate_plan,
+                    transport=transport,
+                    expected_source_repository=policy.tap_repository,
+                )
+            except OciPublicationError as error:
+                raise error.with_phase("candidate-record-publication") from error
         published_source_locator = asdict(published_source)
         published_candidate_locator = asdict(published_candidate)
     result = _publication_result(
@@ -894,6 +918,7 @@ def _publish_workflow_candidate(args: argparse.Namespace) -> None:
         application_guard = None
         candidate_record_sha256 = None
         candidate_publication = None
+        publication_failure = None
         if artifact is not None:
             handoff_root = root / "handoff"
             try:
@@ -941,18 +966,28 @@ def _publish_workflow_candidate(args: argparse.Namespace) -> None:
                 else:
                     if build_result["outcome"] == "success":
                         _recheck_workflow_activation(tap_root)
-                        candidate_publication = _publish_candidate_paths(
-                            tap_root_value=tap_root,
-                            handoff_value=handoff_root,
-                            request_value=request_path,
-                            tap_plan_value=tap_plan_path,
-                            formula_plan_value=formula_plan_path,
-                            publication_run_value=publication_run_path,
-                        )
-                        candidate_record_sha256 = candidate_publication["planned"][
-                            "candidate_record"
-                        ]["digest"].removeprefix("sha256:")
                         application_outcome = "success"
+                        try:
+                            candidate_publication = _publish_candidate_paths(
+                                tap_root_value=tap_root,
+                                handoff_value=handoff_root,
+                                request_value=request_path,
+                                tap_plan_value=tap_plan_path,
+                                formula_plan_value=formula_plan_path,
+                                publication_run_value=publication_run_path,
+                            )
+                        except OciPublicationError as error:
+                            if error.phase is None:
+                                raise WorkflowPublicationError(
+                                    "candidate publication failure lacks its phase"
+                                ) from error
+                            publication_failure = _protected_oci_failure(
+                                error, phase=error.phase
+                            )
+                        else:
+                            candidate_record_sha256 = candidate_publication[
+                                "planned"
+                            ]["candidate_record"]["digest"].removeprefix("sha256:")
                     else:
                         application_outcome = (
                             "timeout"
@@ -980,6 +1015,7 @@ def _publish_workflow_candidate(args: argparse.Namespace) -> None:
             infrastructure_http_status=(
                 None if service_failure is None else service_failure.http_status
             ),
+            publication_failure=publication_failure,
         )
         formula_name = formula_plan["identity"]["name"]
         target_abi = bundle["tap_plan"]["target_abi"]["version"]
@@ -1341,7 +1377,79 @@ def _publish_workflow_receipt(args: argparse.Namespace) -> None:
         with isolated_oras_transport(
             username=username, token=package_token
         ) as transport:
-            if loaded_result is None:
+            try:
+                if loaded_result is None:
+                    published = publish_protected_verification_outcome(
+                        candidate_locator=work["candidate_locator"],
+                        test_definition=definition,
+                        host=work["host"],
+                        tap_policy=policy,
+                        expected_run=verification_run,
+                        expected_runtime_artifacts={
+                            "kernel": None,
+                            "host_runtime": None,
+                            "vfs": None,
+                        },
+                        expected_request_sha256=bundle["request_sha256"],
+                        expected_source=bundle["request"]["build_source"],
+                        completed_at=job.completed_at,
+                        attempt_ordinal=work["attempt_ordinal"],
+                        outcome=outcome["outcome"],
+                        guard_code=outcome["guard_code"],
+                        transport=transport,
+                        expected_source_repository=policy.tap_repository,
+                    )
+                else:
+                    published = publish_verification_receipt(
+                        result_root,
+                        candidate_locator=work["candidate_locator"],
+                        test_definition=definition,
+                        tap_policy=policy,
+                        expected_run=verification_run,
+                        expected_runtime_artifacts={
+                            "kernel": None,
+                            "host_runtime": None,
+                            "vfs": None,
+                        },
+                        expected_request_sha256=bundle["request_sha256"],
+                        expected_source=bundle["request"]["build_source"],
+                        completed_at=job.completed_at,
+                        transport=transport,
+                        expected_source_repository=policy.tap_repository,
+                    )
+            except VerificationPublicationError as error:
+                if error.phase is None:
+                    raise WorkflowPublicationError(
+                        "verification publication failure lacks its phase"
+                    ) from error
+                publication_failure = _protected_oci_failure(
+                    error, phase=error.phase
+                )
+                outcome = build_protected_verification_outcome(
+                    bundle=bundle,
+                    work=work,
+                    job=job,
+                    artifact=artifact,
+                    application_outcome=application_outcome,
+                    application_guard=application_guard,
+                    verification_run=verification_run,
+                    infrastructure_kind=(
+                        None if service_failure is None else service_failure.kind
+                    ),
+                    infrastructure_http_status=(
+                        None
+                        if service_failure is None
+                        else service_failure.http_status
+                    ),
+                    publication_failure=publication_failure,
+                )
+                candidate_record = bundle["candidates"]["records"].get(
+                    work["candidate_record_sha256"]
+                )
+                if not isinstance(candidate_record, Mapping):
+                    raise WorkflowPublicationError(
+                        "verification publication recovery lacks its coordinated candidate"
+                    )
                 published = publish_protected_verification_outcome(
                     candidate_locator=work["candidate_locator"],
                     test_definition=definition,
@@ -1359,24 +1467,8 @@ def _publish_workflow_receipt(args: argparse.Namespace) -> None:
                     attempt_ordinal=work["attempt_ordinal"],
                     outcome=outcome["outcome"],
                     guard_code=outcome["guard_code"],
-                    transport=transport,
-                    expected_source_repository=policy.tap_repository,
-                )
-            else:
-                published = publish_verification_receipt(
-                    result_root,
-                    candidate_locator=work["candidate_locator"],
-                    test_definition=definition,
-                    tap_policy=policy,
-                    expected_run=verification_run,
-                    expected_runtime_artifacts={
-                        "kernel": None,
-                        "host_runtime": None,
-                        "vfs": None,
-                    },
-                    expected_request_sha256=bundle["request_sha256"],
-                    expected_source=bundle["request"]["build_source"],
-                    completed_at=job.completed_at,
+                    publication_failure=publication_failure,
+                    coordinated_candidate=candidate_record,
                     transport=transport,
                     expected_source_repository=policy.tap_repository,
                 )

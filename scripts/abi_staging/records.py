@@ -800,6 +800,59 @@ def _timestamp(value: Any, field: str) -> str:
     return result
 
 
+def validate_publication_failure(
+    value: Any, *, field: str = "protected publication failure"
+) -> dict[str, Any]:
+    """Validate bounded transport facts recorded by protected publisher code."""
+
+    failure = _mapping(value, field)
+    _exact_keys(
+        failure,
+        frozenset(
+            {"phase", "kind", "http_status", "retryable", "guard_code"}
+        ),
+        field,
+    )
+    phase = _stable_id(failure["phase"], f"{field} phase")
+    kind = failure["kind"]
+    if kind not in {
+        "github-http",
+        "registry-contract",
+        "registry-http",
+        "transport-reset",
+    }:
+        raise TapRecordError(f"{field} kind is unsupported")
+    status = failure["http_status"]
+    if status is not None and (
+        isinstance(status, bool)
+        or not isinstance(status, int)
+        or not 100 <= status <= 599
+    ):
+        raise TapRecordError(f"{field} HTTP status is invalid")
+    retryable = failure["retryable"]
+    if not isinstance(retryable, bool):
+        raise TapRecordError(f"{field} retryable fact is not Boolean")
+    guard = _stable_id(failure["guard_code"], f"{field} guard")
+    if kind in {"github-http", "registry-http"}:
+        if status is None:
+            raise TapRecordError(f"{field} HTTP failure lacks a status")
+        expected_retryable = status == 429 or status >= 500
+        if retryable != expected_retryable:
+            raise TapRecordError(f"{field} HTTP retry classification is contradictory")
+    elif kind == "transport-reset":
+        if status is not None or not retryable:
+            raise TapRecordError(f"{field} transport reset facts are contradictory")
+    elif status is not None or retryable:
+        raise TapRecordError(f"{field} registry contract facts are contradictory")
+    return {
+        "phase": phase,
+        "kind": kind,
+        "http_status": status,
+        "retryable": retryable,
+        "guard_code": guard,
+    }
+
+
 def validate_attempt_outcome_record(record: Mapping[str, Any]) -> None:
     value = _mapping(record, "attempt outcome record")
     _exact_keys(
@@ -810,24 +863,21 @@ def validate_attempt_outcome_record(record: Mapping[str, Any]) -> None:
     if value["schema"] != 1 or value["kind"] != "kandelo-abi-staging-attempt-outcome":
         raise TapRecordError("attempt outcome protocol is unsupported")
     attempt = _mapping(value["attempt"], "attempt outcome")
-    _exact_keys(
-        attempt,
-        frozenset(
-            {
-                "request_sha256",
-                "subject",
-                "contract_sha256",
-                "retry_ordinal",
-                "outcome",
-                "guard_code",
-                "completed_at",
-                "run",
-                "handoff",
-                "candidate_record_sha256",
-            }
-        ),
-        "attempt outcome",
-    )
+    expected_fields = {
+        "request_sha256",
+        "subject",
+        "contract_sha256",
+        "retry_ordinal",
+        "outcome",
+        "guard_code",
+        "completed_at",
+        "run",
+        "handoff",
+        "candidate_record_sha256",
+    }
+    if "publication_failure" in attempt:
+        expected_fields.add("publication_failure")
+    _exact_keys(attempt, frozenset(expected_fields), "attempt outcome")
     _digest(attempt["request_sha256"], "attempt outcome request")
     _attempt_subject(attempt["subject"])
     _digest(attempt["contract_sha256"], "attempt outcome contract")
@@ -847,6 +897,18 @@ def validate_attempt_outcome_record(record: Mapping[str, Any]) -> None:
         if candidate is not None or guard is None:
             raise TapRecordError("unsuccessful attempt outcome is contradictory")
         _stable_id(guard, "attempt outcome guard")
+    publication_failure = attempt.get("publication_failure")
+    if publication_failure is not None:
+        checked_failure = validate_publication_failure(publication_failure)
+        expected_guard = (
+            "transient_infrastructure_failure"
+            if checked_failure["retryable"]
+            else checked_failure["guard_code"]
+        )
+        if outcome != "failure" or candidate is not None or guard != expected_guard:
+            raise TapRecordError(
+                "attempt publication failure and terminal outcome contradict"
+            )
     _timestamp(attempt["completed_at"], "attempt outcome completion")
     _run(attempt["run"], "attempt outcome run")
     handoff = attempt["handoff"]
@@ -875,6 +937,7 @@ def build_attempt_outcome_record(
     run: Mapping[str, Any],
     handoff: Mapping[str, Any] | None,
     candidate_record_sha256: str | None,
+    publication_failure: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     record = {
         "schema": 1,
@@ -892,6 +955,8 @@ def build_attempt_outcome_record(
             "candidate_record_sha256": candidate_record_sha256,
         },
     }
+    if publication_failure is not None:
+        record["attempt"]["publication_failure"] = dict(publication_failure)
     validate_attempt_outcome_record(record)
     return json.loads(canonical_bytes(record))
 

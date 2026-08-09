@@ -309,6 +309,41 @@ class VerificationReceiptTests(unittest.TestCase):
             receipt["common"]["guard_codes"],
             ["transient_infrastructure_failure"],
         )
+
+    def test_protected_publication_failure_is_durable_in_the_receipt(self) -> None:
+        publication_failure = {
+            "phase": "verification-candidate-readback",
+            "kind": "registry-contract",
+            "http_status": None,
+            "retryable": False,
+            "guard_code": "candidate_public_readback_failed",
+        }
+        locator = publish_protected_verification_outcome(
+            candidate_locator={
+                "repository": self.candidate_locator.repository,
+                "digest": self.candidate_locator.digest,
+                "immutable_reference": self.candidate_locator.immutable_reference,
+            },
+            test_definition=TEST_DEFINITION,
+            host="build",
+            tap_policy=self.tap_policy,
+            expected_run=VERIFIER_RUN,
+            expected_runtime_artifacts=RUNTIME_ARTIFACTS,
+            expected_request_sha256=self.candidate["common"]["request_sha256"],
+            expected_source=self.candidate["common"]["source"],
+            completed_at="2026-08-09T10:00:00.000Z",
+            attempt_ordinal=1,
+            outcome="failure",
+            guard_code="candidate_public_readback_failed",
+            publication_failure=publication_failure,
+            transport=self.transport,
+            expected_source_repository=SOURCE_ASSOCIATION,
+        )
+        _manifest, receipt = self._receipt(locator)
+        validate_verification_receipt_record(receipt)
+        self.assertEqual(
+            receipt["verification"]["publication_failure"], publication_failure
+        )
         self.assertEqual(receipt["verification"]["attempt_ordinal"], 1)
 
     def test_receipt_validator_rejects_contradictory_scheduler_facts(self) -> None:
