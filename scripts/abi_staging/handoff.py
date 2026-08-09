@@ -38,6 +38,7 @@ MAX_PATH_BYTES = 4096
 MAX_ARCHIVE_ENTRIES = 200_000
 MAX_DIAGNOSTIC_BYTES = 4 * 1024 * 1024
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+REPOSITORY = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 INVENTORY_KEYS = frozenset({"schema", "kind", "subject", "outcome", "files"})
 FILE_KEYS = frozenset({"path", "role", "sha256", "bytes"})
@@ -74,6 +75,7 @@ REQUIRED_COMMON_PATHS = frozenset(
     }
 )
 SUCCESS_PATHS = frozenset({"bottle.tar.gz", "bottle-metadata.json"})
+RUN_KEYS = frozenset({"repository", "workflow_ref", "run_id", "run_attempt", "job"})
 SECRET_PATTERNS = (
     re.compile(rb"gh[pousr]_[A-Za-z0-9_]{20,}"),
     re.compile(rb"github_pat_[A-Za-z0-9_]{20,}"),
@@ -195,6 +197,28 @@ def _canonical_mapping(body: bytes, field: str) -> dict[str, Any]:
     except CanonicalJsonError as error:
         raise HandoffError(f"{field} is not canonical JSON: {error}") from error
     return dict(_mapping(_plain(parsed), field))
+
+
+def load_build_run(body: bytes, *, expected_repository: str) -> dict[str, Any]:
+    run = _canonical_mapping(body, "build run")
+    _exact_keys(run, RUN_KEYS, "build run")
+    repository = _text(run["repository"], "build run repository", 255)
+    if REPOSITORY.fullmatch(repository) is None:
+        raise HandoffError("build run repository is not owner/name")
+    if repository != expected_repository:
+        raise HandoffError("build run names a different tap repository")
+    job = _text(run["job"], "build run job", 128)
+    if STABLE_ID.fullmatch(job) is None or job != "build-candidate":
+        raise HandoffError("build run does not name the candidate build job")
+    return {
+        "repository": repository,
+        "workflow_ref": _text(run["workflow_ref"], "build run workflow ref", 1024),
+        "run_id": _integer(run["run_id"], "build run ID", positive=True),
+        "run_attempt": _integer(
+            run["run_attempt"], "build run attempt", positive=True
+        ),
+        "job": job,
+    }
 
 
 def _local_artifact(value: Any, field: str) -> dict[str, Any]:
@@ -777,6 +801,8 @@ def prepare_build_context(
     tap_plan_path: Path,
     formula_plan_path: Path,
     dependency_root: Path,
+    run_path: Path,
+    retry_ordinal: int,
 ) -> dict[str, Any]:
     request_body = _read_regular(request_path, "ABI staging request")
     request = _canonical_mapping(request_body, "ABI staging request")
@@ -918,6 +944,12 @@ def prepare_build_context(
         )
 
     repository = _text(tap_source["repository"], "tap repository", 256)
+    run = load_build_run(
+        _read_regular(run_path, "build run"), expected_repository=repository
+    )
+    checked_retry_ordinal = _integer(retry_ordinal, "retry ordinal")
+    if checked_retry_ordinal == 2**64 - 1:
+        raise HandoffError("retry ordinal cannot overflow the attempt count")
     try:
         staging_policy = load_tap_staging_policy(
             tap_root / "Kandelo/staging/tap-policy.toml"
@@ -939,6 +971,8 @@ def prepare_build_context(
         "formula": formula,
         "architecture": architecture,
         "target_abi": contract["target"]["abi"],
+        "run": run,
+        "retry_ordinal": checked_retry_ordinal,
         "bottle_contract_sha256": contract_digest,
         "bottle_contract_path": str(contract_path.resolve(strict=True)),
         "capture_assessment_sha256": hashlib.sha256(
@@ -1029,20 +1063,14 @@ def _attempt_record(
             "architecture": context["architecture"],
         },
         "source": context["request_source"],
-        "run": {
-            "repository": context["tap_source"]["repository"],
-            "workflow_ref": "local/abi-staging-build-bottle",
-            "run_id": 1,
-            "run_attempt": 1,
-            "job": "build-candidate",
-        },
+        "run": context["run"],
         "guard_codes": guard_codes,
         "work_state": "complete",
         "outcome": outcome,
         "artifact_class": "candidate" if candidate is not None else "none",
         "promotion_state": "eligible" if candidate is not None else "ineligible",
         "retry_state": {
-            "attempts": 1,
+            "attempts": context["retry_ordinal"] + 1,
             "eligible": False,
             "exhausted": False,
             "next_action": "none",
@@ -1070,7 +1098,7 @@ def _attempt_record(
                 "result_sha256": diagnostic_sha256,
                 "diagnostics": [],
             },
-            "retry_ordinal": 0,
+            "retry_ordinal": context["retry_ordinal"],
             **({"candidate": bottle_artifact} if bottle_artifact is not None else {}),
         },
     }
@@ -1247,6 +1275,8 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--tap-plan", required=True)
     prepare.add_argument("--formula-plan", required=True)
     prepare.add_argument("--dependency-root", required=True)
+    prepare.add_argument("--run", required=True)
+    prepare.add_argument("--retry-ordinal", required=True, type=int)
     prepare.add_argument("--out", required=True)
     assemble = commands.add_parser("assemble")
     assemble.add_argument("--context", required=True)
@@ -1283,6 +1313,8 @@ def main(arguments: list[str] | None = None) -> int:
                 tap_plan_path=Path(args.tap_plan).resolve(strict=True),
                 formula_plan_path=Path(args.formula_plan).resolve(strict=True),
                 dependency_root=Path(args.dependency_root).resolve(strict=True),
+                run_path=Path(args.run).resolve(strict=True),
+                retry_ordinal=args.retry_ordinal,
             )
             Path(args.out).write_bytes(canonical_bytes(context))
         elif args.command == "assemble":

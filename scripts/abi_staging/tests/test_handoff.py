@@ -14,6 +14,7 @@ import unittest
 
 from scripts.abi_staging.canonical import canonical_bytes
 from scripts.abi_staging.custody import create_source_custody
+from scripts.abi_staging import handoff as handoff_module
 from scripts.abi_staging.handoff import (
     HandoffError,
     build_handoff_inventory,
@@ -181,6 +182,39 @@ class BuildHandoffTests(unittest.TestCase):
                 self.assertEqual(validated["subject"], SUBJECT)
                 self.assertEqual(validated["request_sha256"], REQUEST)
                 self.assertEqual(validated["candidate"] is not None, outcome == "success")
+
+    def test_build_run_is_canonical_and_bound_to_the_tap_build_job(self) -> None:
+        loader = getattr(handoff_module, "load_build_run", None)
+        self.assertTrue(callable(loader), "build run loading is absent")
+        assert loader is not None
+        run = {
+            "repository": "kandelo-dev/homebrew-tap-core",
+            "workflow_ref": (
+                ".github/workflows/abi-staging-reconcile.yml@refs/heads/main"
+            ),
+            "run_id": 808,
+            "run_attempt": 2,
+            "job": "build-candidate",
+        }
+        body = canonical_bytes(run)
+        self.assertEqual(
+            loader(
+                body,
+                expected_repository="kandelo-dev/homebrew-tap-core",
+            ),
+            run,
+        )
+        for mutation in (
+            {**run, "run_id": 0},
+            {**run, "job": "verify-candidate"},
+            {**run, "repository": "example/homebrew-other"},
+            {**run, "trusted": True},
+        ):
+            with self.subTest(mutation=mutation), self.assertRaises(HandoffError):
+                loader(
+                    canonical_bytes(mutation),
+                    expected_repository="kandelo-dev/homebrew-tap-core",
+                )
 
     def test_protected_validation_requires_external_request_subject_and_tap_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
