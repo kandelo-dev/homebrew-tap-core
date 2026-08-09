@@ -83,22 +83,22 @@ module AbiStagingWorkflowCheck
     policy = checkouts.find { |step| step.dig("with", "path") == "kandelo-authority" }
     require_contract(!tap.nil? && tap.fetch("with") == {
                        "repository" => "kandelo-dev/homebrew-tap-core",
-                       "ref" => "${{ needs.discover-plan.outputs.tap-commit }}",
+                       "ref" => "${{ inputs.tap-commit }}",
                        "fetch-depth" => 1,
                        "persist-credentials" => false,
                        "path" => "tap-authority"
                      }, "#{field} tap checkout is not the exact protected revision")
     require_contract(!kandelo.nil? && kandelo.fetch("with") == {
-                       "repository" => "${{ needs.discover-plan.outputs.kandelo-repository }}",
-                       "ref" => "${{ needs.discover-plan.outputs.kandelo-head }}",
+                       "repository" => "${{ inputs.kandelo-repository }}",
+                       "ref" => "${{ inputs.kandelo-head }}",
                        "fetch-depth" => 1,
                        "submodules" => "recursive",
                        "persist-credentials" => false,
                        "path" => "kandelo-source"
                      }, "#{field} Kandelo checkout is not the exact request head")
     require_contract(!policy.nil? && policy.fetch("with") == {
-                       "repository" => "${{ needs.discover-plan.outputs.kandelo-repository }}",
-                       "ref" => "${{ needs.discover-plan.outputs.kandelo-policy-commit }}",
+                       "repository" => "${{ inputs.kandelo-repository }}",
+                       "ref" => "${{ inputs.kandelo-policy-commit }}",
                        "fetch-depth" => 1,
                        "submodules" => "recursive",
                        "persist-credentials" => false,
@@ -116,11 +116,11 @@ module AbiStagingWorkflowCheck
   def require_protected_checkout(job, field)
     checkouts = action_steps(job, CHECKOUT)
     require_contract(checkouts.length == 1 && checkouts.fetch(0).fetch("with") == {
-                       "ref" => "refs/heads/main",
+                       "ref" => "${{ inputs.tap-commit }}",
                        "fetch-depth" => 1,
                        "persist-credentials" => false,
                        "path" => "tap-authority"
-                     }, "#{field} must execute protected tap main")
+                     }, "#{field} must execute the exact protected tap revision")
   end
 
   def check(workflow)
@@ -140,25 +140,19 @@ module AbiStagingWorkflowCheck
                      "manual workflow gained another coordinator input")
 
     jobs = workflow.fetch("jobs")
-    expected_jobs = %w[discover-plan build-candidate publish-candidate verify-candidate publish-receipt]
+    expected_jobs = %w[discover-plan candidate verification]
     require_contract(jobs.keys == expected_jobs,
                      "workflow job split changed")
-    jobs.each_value do |job|
-      require_contract(job.fetch("runs-on") == "ubuntu-latest",
-                       "reconciliation runner changed")
-      require_contract(!job.key?("environment"),
-                       "reconciliation jobs may not enter a credentialed environment")
-      require_contract(job.fetch("steps").none? { |step| step["continue-on-error"] == true },
-                       "reconciliation workflow may not swallow a step failure")
-      require_contract(!job.key?("secrets"),
-                       "reconciliation jobs may not inherit secrets")
-      check_actions(job)
-      require_contract(job.fetch("steps").none? do |step|
-                         step["uses"]&.start_with?("./kandelo-source/")
-                       end, "candidate-controlled local action may execute before isolation")
-    end
 
     discover = jobs.fetch("discover-plan")
+    require_contract(discover.fetch("runs-on") == "ubuntu-latest" &&
+                     !discover.key?("environment") &&
+                     !discover.key?("secrets") &&
+                     discover.fetch("steps").none? do |step|
+                       step["continue-on-error"] == true ||
+                         step["uses"]&.start_with?("./kandelo-source/")
+                     end, "discovery executes with an unsafe workflow capability")
+    check_actions(discover)
     require_contract(discover.fetch("permissions") == {"contents" => "read"},
                      "discovery must remain contents-read only")
     require_contract(discover.fetch("timeout-minutes").between?(1, 30),
@@ -176,11 +170,11 @@ module AbiStagingWorkflowCheck
       step.dig("with", "path") == "kandelo-authority"
     end
     require_contract(!protected_tap.nil? && protected_tap.fetch("with") == {
-                       "ref" => "refs/heads/main",
+                       "ref" => "${{ github.sha }}",
                        "fetch-depth" => 1,
                        "persist-credentials" => false,
                        "path" => "tap-authority"
-                     }, "discovery tap checkout is not protected main")
+                     }, "discovery tap checkout is not the exact protected run commit")
     require_contract(!exact_kandelo.nil? && exact_kandelo.fetch("if") ==
                        "steps.discover.outputs.selected == 'true'" &&
                        exact_kandelo.fetch("with") == {
@@ -270,95 +264,34 @@ module AbiStagingWorkflowCheck
                        uploads.fetch(0).dig("with", "compression-level") == 0,
                      "protected coordination artifact is not exact and bounded")
 
-    candidate_permissions = {"contents" => "read"}
     writer_permissions = {"actions" => "read", "contents" => "read", "packages" => "write"}
-    build = jobs.fetch("build-candidate")
-    verify = jobs.fetch("verify-candidate")
-    publisher = jobs.fetch("publish-candidate")
-    receipt = jobs.fetch("publish-receipt")
-    require_contract(build.fetch("permissions") == candidate_permissions &&
-                       verify.fetch("permissions") == candidate_permissions,
-                     "candidate execution gained write authority")
-    require_contract(publisher.fetch("permissions") == writer_permissions &&
-                       receipt.fetch("permissions") == writer_permissions,
-                     "publisher permissions changed")
-    require_contract(build.fetch("timeout-minutes") == 360 &&
-                       verify.fetch("timeout-minutes") == 360,
-                     "candidate execution timeout must remain six hours")
-    require_contract(publisher.fetch("timeout-minutes").between?(1, 30) &&
-                       receipt.fetch("timeout-minutes").between?(1, 30),
-                     "publisher timeout is not bounded")
-
+    candidate = jobs.fetch("candidate")
+    verification = jobs.fetch("verification")
     build_matrix = "${{ fromJSON(needs.discover-plan.outputs.build-matrix) }}"
     verify_matrix = "${{ fromJSON(needs.discover-plan.outputs.verify-matrix) }}"
-    require_matrix(build, build_matrix, "build")
-    require_matrix(publisher, build_matrix, "candidate publisher")
-    require_matrix(verify, verify_matrix, "verification")
-    require_matrix(receipt, verify_matrix, "receipt publisher")
-    require_contract(build.fetch("needs") == "discover-plan" &&
-                       verify.fetch("needs") == "discover-plan",
-                     "candidate work gained a cross-class or global gate")
-    require_contract(publisher.fetch("needs") == %w[discover-plan build-candidate] &&
-                       receipt.fetch("needs") == %w[discover-plan verify-candidate],
-                     "publisher dependency split changed")
-
-    require_candidate_checkouts(build, "build")
-    require_candidate_checkouts(verify, "verification")
-    [build, verify].each do |job|
-      downloads = action_steps(job, DOWNLOAD_ARTIFACT)
-      require_contract(downloads.length == 1 &&
-                         downloads.fetch(0).dig("with", "artifact-ids") ==
-                           "${{ needs.discover-plan.outputs.coordination-artifact-id }}" &&
-                         downloads.fetch(0).dig("with", "merge-multiple") == true,
-                       "candidate work does not consume exact protected coordination")
-      command = run_steps(job)
-      require_contract(command.length == 1 &&
-                         command.fetch(0).fetch("run").include?("env -u GITHUB_TOKEN") &&
-                         command.fetch(0).fetch("run").include?(
-                           "../kandelo-authority/scripts/dev-shell.sh") &&
-                         !command.fetch(0).fetch("run").include?(
-                           "../kandelo-source/scripts/dev-shell.sh") &&
-                         command.fetch(0).fetch("run").include?('--run-id "$GITHUB_RUN_ID"') &&
-                         command.fetch(0).fetch("run").include?('--run-attempt "$GITHUB_RUN_ATTEMPT"') &&
-                         command.fetch(0).fetch("run").include?('--workflow-ref "$GITHUB_WORKFLOW_REF"'),
-                       "candidate work is not uncredentialed repository-tool execution")
-      uploads = action_steps(job, UPLOAD_ARTIFACT)
-      require_contract(uploads.length == 1 &&
-                         uploads.fetch(0).fetch("if") == "always()" &&
-                         uploads.fetch(0).dig("with", "if-no-files-found") == "error" &&
-                         uploads.fetch(0).dig("with", "compression-level") == 0,
-                       "candidate handoff upload is not exact")
+    require_matrix(candidate, build_matrix, "candidate")
+    require_matrix(verification, verify_matrix, "verification")
+    common_inputs = {
+      "coordination-artifact-id" => "${{ needs.discover-plan.outputs.coordination-artifact-id }}",
+      "coordination-artifact-digest" => "${{ needs.discover-plan.outputs.coordination-artifact-digest }}",
+      "kandelo-head" => "${{ needs.discover-plan.outputs.kandelo-head }}",
+      "kandelo-policy-commit" => "${{ needs.discover-plan.outputs.kandelo-policy-commit }}",
+      "kandelo-repository" => "${{ needs.discover-plan.outputs.kandelo-repository }}",
+      "tap-commit" => "${{ needs.discover-plan.outputs.tap-commit }}",
+      "work-id" => "${{ matrix.work_id }}"
+    }
+    [[candidate, "./.github/workflows/abi-staging-candidate.yml"],
+     [verification, "./.github/workflows/abi-staging-verification.yml"]].each do |job, reusable|
+      require_contract(job.fetch("needs") == "discover-plan" &&
+                       job.fetch("if") == "needs.discover-plan.outputs.mode == 'active'" &&
+                       job.fetch("permissions") == writer_permissions &&
+                       job.fetch("uses") == reusable &&
+                       job.fetch("with") == common_inputs &&
+                       !job.key?("secrets") &&
+                       !job.key?("runs-on") &&
+                       !job.key?("steps"),
+                       "reusable workflow caller changed authority or exact inputs")
     end
-
-    require_protected_checkout(publisher, "candidate publisher")
-    require_protected_checkout(receipt, "receipt publisher")
-    [publisher, receipt].each do |job|
-      commands = run_steps(job)
-      require_contract(commands.length == 1,
-                       "publisher must have one reviewed coordinator")
-      command = commands.fetch(0)
-      require_contract(command.fetch("working-directory") == "tap-authority",
-                       "publisher must execute protected tap-main code")
-      publisher_source = command.fetch("run")
-      require_contract(publisher_source.include?("--require-github-digest") &&
-                         publisher_source.include?("--anonymous-readback") &&
-                         publisher_source.include?("--immutable") &&
-                         publisher_source.include?('--run-id "$GITHUB_RUN_ID"') &&
-                         publisher_source.include?('--head-sha "$GITHUB_SHA"'),
-                       "publisher lacks exact run/artifact/readback identity")
-      require_no_candidate_execution(publisher_source, "publisher")
-      uploads = action_steps(job, UPLOAD_ARTIFACT)
-      require_contract(uploads.length == 1 &&
-                         uploads.fetch(0).dig("with", "if-no-files-found") == "error" &&
-                         uploads.fetch(0).dig("with", "compression-level") == 0,
-                       "publisher result locator is not retained exactly")
-    end
-    require_contract(run_steps(publisher).fetch(0).fetch("run").include?(
-                       "python3 -m scripts.abi_staging.cli publish-workflow-candidate"),
-                     "candidate publisher bypasses protected CLI")
-    require_contract(run_steps(receipt).fetch(0).fetch("run").include?(
-                       "python3 -m scripts.abi_staging.cli publish-workflow-receipt"),
-                     "receipt publisher bypasses protected CLI")
 
     all_text = flatten(workflow).join("\n")
     require_contract(!all_text.match?(/\bsecrets\b/i),
@@ -370,6 +303,146 @@ module AbiStagingWorkflowCheck
     true
   rescue KeyError, NoMethodError => error
     raise Violation, "workflow structure is incomplete: #{error.message}"
+  end
+
+  def check_reusable(workflow, kind)
+    require_contract(%i[candidate verification].include?(kind),
+                     "reusable ABI workflow kind is unsupported")
+    require_contract(workflow.fetch("permissions") == {},
+                     "reusable workflow permissions must be empty")
+    event = triggers(workflow)
+    require_contract(event.keys == ["workflow_call"],
+                     "reusable ABI workflow must be workflow_call only")
+    expected_inputs = %w[
+      coordination-artifact-id coordination-artifact-digest kandelo-head
+      kandelo-policy-commit kandelo-repository tap-commit work-id
+    ]
+    inputs = event.fetch("workflow_call").fetch("inputs")
+    require_contract(inputs.keys == expected_inputs && inputs.values.all? do |input|
+                       input == {"required" => true, "type" => "string"}
+                     end, "reusable ABI workflow inputs changed")
+
+    producer_id = kind == :candidate ? "build" : "verify"
+    producer_cli = kind == :candidate ? "execute-build-work" : "execute-verification-work"
+    publisher_cli = kind == :candidate ?
+      "publish-workflow-candidate" : "publish-workflow-receipt"
+    producer_name = kind == :candidate ? "build-candidate" : "verify-candidate"
+    handoff_prefix = kind == :candidate ?
+      "abi-staging-build" : "abi-staging-verification"
+    jobs = workflow.fetch("jobs")
+    require_contract(jobs.keys == [producer_id, "publish"],
+                     "reusable ABI workflow job split changed")
+    producer = jobs.fetch(producer_id)
+    publisher = jobs.fetch("publish")
+    [producer, publisher].each do |job|
+      require_contract(job.fetch("runs-on") == "ubuntu-latest" &&
+                       !job.key?("environment") && !job.key?("secrets") &&
+                       job.fetch("steps").none? do |step|
+                         step["continue-on-error"] == true ||
+                           step["uses"]&.start_with?("./kandelo-source/")
+                       end, "reusable ABI job gained an unsafe capability")
+      check_actions(job)
+    end
+
+    require_contract(producer.fetch("permissions") == {"contents" => "read"} &&
+                     producer.fetch("timeout-minutes") == 360 &&
+                     producer.fetch("name") == "#{producer_name} ${{ inputs.work-id }}" &&
+                     producer.fetch("outputs") == {
+                       "artifact-id" => "${{ steps.upload.outputs.artifact-id }}",
+                       "artifact-digest" => "${{ steps.upload.outputs.artifact-digest }}"
+                     }, "candidate producer authority or outputs changed")
+    require_candidate_checkouts(producer, producer_name)
+    downloads = action_steps(producer, DOWNLOAD_ARTIFACT)
+    require_contract(downloads.length == 1 &&
+                     downloads.fetch(0).fetch("with") == {
+                       "artifact-ids" => "${{ inputs.coordination-artifact-id }}",
+                       "path" => "${{ runner.temp }}/coordination",
+                       "merge-multiple" => true
+                     }, "candidate producer lacks exact coordination artifact")
+    commands = run_steps(producer)
+    require_contract(commands.length == 1 &&
+                     commands.fetch(0).fetch("working-directory") == "tap-authority" &&
+                     commands.fetch(0).fetch("env") == {
+                       "WORK_ID" => "${{ inputs.work-id }}"
+                     }, "candidate producer command inputs changed")
+    source = commands.fetch(0).fetch("run")
+    require_contract(source.include?("env -u GITHUB_TOKEN") &&
+                     source.include?("../kandelo-authority/scripts/dev-shell.sh") &&
+                     !source.include?("../kandelo-source/scripts/dev-shell.sh") &&
+                     source.include?("python3 -m scripts.abi_staging.cli #{producer_cli}") &&
+                     source.include?('--run-id "$GITHUB_RUN_ID"') &&
+                     source.include?('--run-attempt "$GITHUB_RUN_ATTEMPT"') &&
+                     source.include?('--workflow-ref "$GITHUB_WORKFLOW_REF"'),
+                     "candidate producer is not isolated repository-tool execution")
+    uploads = action_steps(producer, UPLOAD_ARTIFACT)
+    expected_handoff_name =
+      "#{handoff_prefix}-${{ inputs.work-id }}-${{ github.run_id }}-${{ github.run_attempt }}"
+    require_contract(uploads.length == 1 && uploads.fetch(0).fetch("id") == "upload" &&
+                     uploads.fetch(0).fetch("if") == "always()" &&
+                     uploads.fetch(0).dig("with", "name") == expected_handoff_name &&
+                     uploads.fetch(0).dig("with", "if-no-files-found") == "error" &&
+                     uploads.fetch(0).dig("with", "compression-level") == 0,
+                     "candidate handoff lacks exact protected upload outputs")
+
+    writer_permissions = {"actions" => "read", "contents" => "read", "packages" => "write"}
+    require_contract(publisher.fetch("permissions") == writer_permissions &&
+                     publisher.fetch("timeout-minutes").between?(1, 30) &&
+                     publisher.fetch("needs") == producer_id &&
+                     publisher.fetch("if") == "always()",
+                     "reusable publisher authority or dependency changed")
+    require_protected_checkout(publisher, "reusable publisher")
+    setup = action_steps(publisher, SETUP_PYTHON)
+    require_contract(setup.length == 1 &&
+                     setup.fetch(0).dig("with", "python-version") == "3.13",
+                     "reusable publisher lacks declared Python")
+    commands = run_steps(publisher)
+    require_contract(commands.length == 1 &&
+                     commands.fetch(0).fetch("working-directory") == "tap-authority",
+                     "reusable publisher bypasses protected tap code")
+    command = commands.fetch(0)
+    expected_env = {
+      "COORDINATION_ARTIFACT_DIGEST" => "${{ inputs.coordination-artifact-digest }}",
+      "COORDINATION_ARTIFACT_ID" => "${{ inputs.coordination-artifact-id }}",
+      "GITHUB_TOKEN" => "${{ github.token }}",
+      "HANDOFF_ARTIFACT_DIGEST" => "${{ needs.#{producer_id}.outputs.artifact-digest }}",
+      "HANDOFF_ARTIFACT_ID" => "${{ needs.#{producer_id}.outputs.artifact-id }}",
+      "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
+      "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
+      "PRODUCER_CONCLUSION" => "${{ needs.#{producer_id}.result }}",
+      "TAP_COMMIT" => "${{ inputs.tap-commit }}",
+      "WORK_ID" => "${{ inputs.work-id }}"
+    }
+    require_contract(command.fetch("env") == expected_env,
+                     "publisher is not bound to direct protected job outputs")
+    source = command.fetch("run")
+    required_flags = [
+      '--coordination-artifact-id "$COORDINATION_ARTIFACT_ID"',
+      '--coordination-artifact-digest "$COORDINATION_ARTIFACT_DIGEST"',
+      '--producer-conclusion "$PRODUCER_CONCLUSION"',
+      '--handoff-artifact-id "$HANDOFF_ARTIFACT_ID"',
+      '--handoff-artifact-digest "$HANDOFF_ARTIFACT_DIGEST"',
+      '--head-sha "$TAP_COMMIT"',
+      "--require-github-digest",
+      "--anonymous-readback",
+      "--immutable"
+    ]
+    require_contract(source.include?("python3 -m scripts.abi_staging.cli #{publisher_cli}") &&
+                     required_flags.all? { |flag| source.include?(flag) },
+                     "publisher lacks direct artifact/result/readback identity")
+    require_no_candidate_execution(source, "reusable publisher")
+    uploads = action_steps(publisher, UPLOAD_ARTIFACT)
+    require_contract(uploads.length == 1 &&
+                     uploads.fetch(0).dig("with", "if-no-files-found") == "error" &&
+                     uploads.fetch(0).dig("with", "compression-level") == 0,
+                     "publisher result locator is not retained exactly")
+
+    all_text = flatten(workflow).join("\n")
+    require_contract(!all_text.match?(/\bsecrets\b/i) &&
+                     !all_text.match?(/(?:^|\s)sleep(?:\s|$)/),
+                     "reusable ABI workflow gains secrets or sleeps")
+    true
+  rescue KeyError, NoMethodError => error
+    raise Violation, "reusable ABI workflow structure is incomplete: #{error.message}"
   end
 
   def check_maintenance(workflow)
@@ -467,17 +540,28 @@ if $PROGRAM_NAME == __FILE__
     paths = if ARGV.empty?
       [
         [File.join(root, ".github/workflows/abi-staging-reconcile.yml"), :check],
+        [File.join(root, ".github/workflows/abi-staging-candidate.yml"), :candidate],
+        [File.join(root, ".github/workflows/abi-staging-verification.yml"), :verification],
         [File.join(root, ".github/workflows/abi-staging-maintenance.yml"), :check_maintenance]
       ]
     else
       ARGV.map do |path|
-        method = File.basename(path) == "abi-staging-maintenance.yml" ? :check_maintenance : :check
+        method = case File.basename(path)
+        when "abi-staging-maintenance.yml" then :check_maintenance
+        when "abi-staging-candidate.yml" then :candidate
+        when "abi-staging-verification.yml" then :verification
+        else :check
+        end
         [path, method]
       end
     end
     paths.each do |path, method|
       workflow = YAML.safe_load(File.read(path), permitted_classes: [], aliases: false)
-      AbiStagingWorkflowCheck.public_send(method, workflow)
+      if %i[candidate verification].include?(method)
+        AbiStagingWorkflowCheck.check_reusable(workflow, method)
+      else
+        AbiStagingWorkflowCheck.public_send(method, workflow)
+      end
     end
     puts "check_abi_staging_workflows: PASS"
   rescue Errno::ENOENT, Psych::Exception, AbiStagingWorkflowCheck::Violation => error

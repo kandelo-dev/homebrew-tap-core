@@ -36,7 +36,7 @@ jobs:
       - name: Check out protected tap main
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: refs/heads/main
+          ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
           path: tap-authority
@@ -137,93 +137,10 @@ jobs:
           retention-days: 7
           compression-level: 0
 
-  build-candidate:
-    name: build-candidate ${{ matrix.work_id }}
+  candidate:
+    name: candidate ${{ matrix.work_id }}
     needs: discover-plan
     if: needs.discover-plan.outputs.mode == 'active'
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      max-parallel: 16
-      matrix: ${{ fromJSON(needs.discover-plan.outputs.build-matrix) }}
-    steps:
-      - name: Check out exact protected tap revision
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: kandelo-dev/homebrew-tap-core
-          ref: ${{ needs.discover-plan.outputs.tap-commit }}
-          fetch-depth: 1
-          persist-credentials: false
-          path: tap-authority
-
-      - name: Check out exact Kandelo PR head
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
-          ref: ${{ needs.discover-plan.outputs.kandelo-head }}
-          fetch-depth: 1
-          submodules: recursive
-          persist-credentials: false
-          path: kandelo-source
-
-      - name: Check out immutable Kandelo policy tools
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
-          ref: ${{ needs.discover-plan.outputs.kandelo-policy-commit }}
-          fetch-depth: 1
-          submodules: recursive
-          persist-credentials: false
-          path: kandelo-authority
-
-      - name: Download exact protected coordination data
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          artifact-ids: ${{ needs.discover-plan.outputs.coordination-artifact-id }}
-          path: ${{ runner.temp }}/coordination
-          merge-multiple: true
-
-      - name: Set up immutable Kandelo policy tools
-        uses: ./kandelo-authority/.github/actions/setup-nix
-
-      - name: Build one exact uncredentialed candidate handoff
-        working-directory: tap-authority
-        env:
-          WORK_ID: ${{ matrix.work_id }}
-        run: |
-          set -euo pipefail
-          env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-            ../kandelo-authority/scripts/dev-shell.sh \
-            python3 -m scripts.abi_staging.cli execute-build-work \
-              --coordination "$RUNNER_TEMP/coordination" \
-              --work-id "$WORK_ID" \
-              --kandelo-root "$GITHUB_WORKSPACE/kandelo-source" \
-              --tap-root "$GITHUB_WORKSPACE/tap-authority" \
-              --run-id "$GITHUB_RUN_ID" \
-              --run-attempt "$GITHUB_RUN_ATTEMPT" \
-              --workflow-ref "$GITHUB_WORKFLOW_REF" \
-              --out "$RUNNER_TEMP/handoff"
-
-      - name: Upload exact inert build handoff
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: abi-staging-build-${{ matrix.work_id }}
-          path: ${{ runner.temp }}/handoff
-          if-no-files-found: error
-          include-hidden-files: false
-          retention-days: 7
-          compression-level: 0
-
-  publish-candidate:
-    name: publish-candidate ${{ matrix.work_id }}
-    needs: [discover-plan, build-candidate]
-    if: always() && needs.discover-plan.outputs.mode == 'active'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
     permissions:
       actions: read
       contents: read
@@ -232,136 +149,20 @@ jobs:
       fail-fast: false
       max-parallel: 16
       matrix: ${{ fromJSON(needs.discover-plan.outputs.build-matrix) }}
-    steps:
-      - name: Check out protected tap main
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          ref: refs/heads/main
-          fetch-depth: 1
-          persist-credentials: false
-          path: tap-authority
+    uses: ./.github/workflows/abi-staging-candidate.yml
+    with:
+      coordination-artifact-id: ${{ needs.discover-plan.outputs.coordination-artifact-id }}
+      coordination-artifact-digest: ${{ needs.discover-plan.outputs.coordination-artifact-digest }}
+      kandelo-head: ${{ needs.discover-plan.outputs.kandelo-head }}
+      kandelo-policy-commit: ${{ needs.discover-plan.outputs.kandelo-policy-commit }}
+      kandelo-repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
+      tap-commit: ${{ needs.discover-plan.outputs.tap-commit }}
+      work-id: ${{ matrix.work_id }}
 
-      - name: Set up declared Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.13"
-
-      - name: Publish only protected reconstructions of inert data
-        working-directory: tap-authority
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
-          WORK_ID: ${{ matrix.work_id }}
-        run: |
-          set -euo pipefail
-          python3 -m scripts.abi_staging.cli publish-workflow-candidate \
-            --run-id "$GITHUB_RUN_ID" \
-            --run-attempt "$GITHUB_RUN_ATTEMPT" \
-            --head-sha "$GITHUB_SHA" \
-            --work-id "$WORK_ID" \
-            --require-github-digest \
-            --anonymous-readback \
-            --immutable \
-            --out "$RUNNER_TEMP/candidate-publication.json"
-
-      - name: Upload exact candidate locator
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: abi-staging-candidate-${{ matrix.work_id }}
-          path: ${{ runner.temp }}/candidate-publication.json
-          if-no-files-found: error
-          include-hidden-files: false
-          retention-days: 7
-          compression-level: 0
-
-  verify-candidate:
-    name: verify-candidate ${{ matrix.work_id }}
+  verification:
+    name: verification ${{ matrix.work_id }}
     needs: discover-plan
     if: needs.discover-plan.outputs.mode == 'active'
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      max-parallel: 16
-      matrix: ${{ fromJSON(needs.discover-plan.outputs.verify-matrix) }}
-    steps:
-      - name: Check out exact protected tap revision
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: kandelo-dev/homebrew-tap-core
-          ref: ${{ needs.discover-plan.outputs.tap-commit }}
-          fetch-depth: 1
-          persist-credentials: false
-          path: tap-authority
-
-      - name: Check out exact Kandelo PR head
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
-          ref: ${{ needs.discover-plan.outputs.kandelo-head }}
-          fetch-depth: 1
-          submodules: recursive
-          persist-credentials: false
-          path: kandelo-source
-
-      - name: Check out immutable Kandelo policy tools
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
-          ref: ${{ needs.discover-plan.outputs.kandelo-policy-commit }}
-          fetch-depth: 1
-          submodules: recursive
-          persist-credentials: false
-          path: kandelo-authority
-
-      - name: Download exact protected coordination data
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          artifact-ids: ${{ needs.discover-plan.outputs.coordination-artifact-id }}
-          path: ${{ runner.temp }}/coordination
-          merge-multiple: true
-
-      - name: Set up immutable Kandelo policy tools
-        uses: ./kandelo-authority/.github/actions/setup-nix
-
-      - name: Verify one exact public candidate without credentials
-        working-directory: tap-authority
-        env:
-          WORK_ID: ${{ matrix.work_id }}
-        run: |
-          set -euo pipefail
-          env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-            ../kandelo-authority/scripts/dev-shell.sh \
-            python3 -m scripts.abi_staging.cli execute-verification-work \
-              --coordination "$RUNNER_TEMP/coordination" \
-              --work-id "$WORK_ID" \
-              --kandelo-root "$GITHUB_WORKSPACE/kandelo-source" \
-              --tap-root "$GITHUB_WORKSPACE/tap-authority" \
-              --run-id "$GITHUB_RUN_ID" \
-              --run-attempt "$GITHUB_RUN_ATTEMPT" \
-              --workflow-ref "$GITHUB_WORKFLOW_REF" \
-              --out "$RUNNER_TEMP/verification"
-
-      - name: Upload exact inert verification result
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: abi-staging-verification-${{ matrix.work_id }}
-          path: ${{ runner.temp }}/verification
-          if-no-files-found: error
-          include-hidden-files: false
-          retention-days: 7
-          compression-level: 0
-
-  publish-receipt:
-    name: publish-receipt ${{ matrix.work_id }}
-    needs: [discover-plan, verify-candidate]
-    if: always() && needs.discover-plan.outputs.mode == 'active'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
     permissions:
       actions: read
       contents: read
@@ -370,45 +171,12 @@ jobs:
       fail-fast: false
       max-parallel: 16
       matrix: ${{ fromJSON(needs.discover-plan.outputs.verify-matrix) }}
-    steps:
-      - name: Check out protected tap main
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          ref: refs/heads/main
-          fetch-depth: 1
-          persist-credentials: false
-          path: tap-authority
-
-      - name: Set up declared Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.13"
-
-      - name: Publish only a protected receipt reconstruction
-        working-directory: tap-authority
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
-          WORK_ID: ${{ matrix.work_id }}
-        run: |
-          set -euo pipefail
-          python3 -m scripts.abi_staging.cli publish-workflow-receipt \
-            --run-id "$GITHUB_RUN_ID" \
-            --run-attempt "$GITHUB_RUN_ATTEMPT" \
-            --head-sha "$GITHUB_SHA" \
-            --work-id "$WORK_ID" \
-            --require-github-digest \
-            --anonymous-readback \
-            --immutable \
-            --out "$RUNNER_TEMP/verification-publication.json"
-
-      - name: Upload exact verification receipt locator
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: abi-staging-receipt-${{ matrix.work_id }}
-          path: ${{ runner.temp }}/verification-publication.json
-          if-no-files-found: error
-          include-hidden-files: false
-          retention-days: 7
-          compression-level: 0
+    uses: ./.github/workflows/abi-staging-verification.yml
+    with:
+      coordination-artifact-id: ${{ needs.discover-plan.outputs.coordination-artifact-id }}
+      coordination-artifact-digest: ${{ needs.discover-plan.outputs.coordination-artifact-digest }}
+      kandelo-head: ${{ needs.discover-plan.outputs.kandelo-head }}
+      kandelo-policy-commit: ${{ needs.discover-plan.outputs.kandelo-policy-commit }}
+      kandelo-repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
+      tap-commit: ${{ needs.discover-plan.outputs.tap-commit }}
+      work-id: ${{ matrix.work_id }}

@@ -61,18 +61,16 @@ def build_protected_attempt_outcome(
     expected_job_name = "build-candidate " + selected["work_id"]
     if job.name != expected_job_name:
         raise WorkflowPublicationError("candidate job names another work item")
-    if artifact is not None and (
-        artifact.name != selected["artifact_name"]
-        or artifact.job_id != job.id
-        or artifact.job_conclusion != job.conclusion
-        or artifact.job_completed_at != job.completed_at
-    ):
-        raise WorkflowPublicationError("candidate artifact differs from protected job facts")
     run = _protected_run(
         publication_run,
         expected_repository=bundle["tap_plan"]["tap_source"]["repository"],
         expected_job="publish-candidate",
     )
+    expected_artifact_name = (
+        f"{selected['artifact_name']}-{run['run_id']}-{run['run_attempt']}"
+    )
+    if artifact is not None and artifact.name != expected_artifact_name:
+        raise WorkflowPublicationError("candidate artifact differs from protected job facts")
     if application_outcome not in {None, "success", "failure", "timeout"}:
         raise WorkflowPublicationError("candidate application outcome is unsupported")
     if application_guard is not None and application_guard not in KNOWN_GUARDS:
@@ -160,6 +158,7 @@ def build_protected_attempt_outcome(
                 "action_required",
                 "cancelled",
                 "failure",
+                "skipped",
                 "stale",
                 "startup_failure",
             }:
@@ -217,20 +216,18 @@ def build_protected_verification_outcome(
         raise WorkflowPublicationError("verification work differs from coordination")
     if job.name != "verify-candidate " + selected["work_id"]:
         raise WorkflowPublicationError("verification job names another work item")
-    if artifact is not None and (
-        artifact.name != selected["artifact_name"]
-        or artifact.job_id != job.id
-        or artifact.job_conclusion != job.conclusion
-        or artifact.job_completed_at != job.completed_at
-    ):
-        raise WorkflowPublicationError(
-            "verification artifact differs from protected job facts"
-        )
     run = _protected_run(
         verification_run,
         expected_repository=bundle["tap_plan"]["tap_source"]["repository"],
         expected_job="verify-candidate",
     )
+    expected_artifact_name = (
+        f"{selected['artifact_name']}-{run['run_id']}-{run['run_attempt']}"
+    )
+    if artifact is not None and artifact.name != expected_artifact_name:
+        raise WorkflowPublicationError(
+            "verification artifact differs from protected job facts"
+        )
     allowed_application = {
         "success": {None},
         "failure": {
@@ -311,6 +308,7 @@ def build_protected_verification_outcome(
                 "action_required",
                 "cancelled",
                 "failure",
+                "skipped",
                 "stale",
                 "startup_failure",
             }:
