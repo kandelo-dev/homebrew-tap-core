@@ -188,7 +188,10 @@ class VerificationFactV1:
                 "verification_timeout",
                 "transient_infrastructure_failure",
             },
-            "canceled": {"transient_infrastructure_failure"},
+            "canceled": {
+                "transient_infrastructure_failure",
+                "verification_failed",
+            },
         }
         if self.guard_code not in allowed_guards[self.outcome]:
             raise SchedulingError("verification outcome and guard are contradictory")

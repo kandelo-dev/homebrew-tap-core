@@ -139,38 +139,37 @@ def build_protected_attempt_outcome(
     else:
         if candidate_record_sha256 is not None or application_guard is not None:
             raise WorkflowPublicationError("missing application cannot assert candidate facts")
-        kinds = {
-            "timed_out": "build-timeout",
-            "cancelled": "runner-lost",
-            "failure": "runner-lost",
-            "stale": "runner-lost",
-            "startup_failure": "runner-lost",
-            "action_required": "runner-lost",
-        }
         if job.conclusion == "success":
             outcome = "failure"
             guard = "candidate_integrity_mismatch"
-        else:
-            kind = kinds.get(job.conclusion)
-            if kind is None:
-                raise WorkflowPublicationError(
-                    "job without application has no failure fact"
-                )
+        elif job.conclusion == "timed_out":
             classification = classify_protected_failure(
                 ProtectedFailureFactsV1(
                     authority="protected-workflow",
-                    kind=kind,
+                    kind="build-timeout",
                     job_conclusion=job.conclusion,
                     http_status=None,
                     application_started=False,
                     application_outcome=None,
                 )
             )
-            outcome = {
-                "timed_out": "timeout",
-                "cancelled": "canceled",
-            }.get(job.conclusion, "failure")
+            outcome = "timeout"
             guard = classification.guard_code
+        else:
+            if job.conclusion not in {
+                "action_required",
+                "cancelled",
+                "failure",
+                "stale",
+                "startup_failure",
+            }:
+                raise WorkflowPublicationError(
+                    "job without application has no failure fact"
+                )
+            # A terminal job conclusion says what GitHub observed; it does not
+            # prove that the runner disappeared or that retrying is safe.
+            outcome = "canceled" if job.conclusion == "cancelled" else "failure"
+            guard = "build_failed"
 
     handoff = (
         None
@@ -318,18 +317,10 @@ def build_protected_verification_outcome(
                 raise WorkflowPublicationError(
                     "verification job has no protected failure classification"
                 )
-            classification = classify_protected_failure(
-                ProtectedFailureFactsV1(
-                    authority="protected-workflow",
-                    kind="runner-lost",
-                    job_conclusion=job.conclusion,
-                    http_status=None,
-                    application_started=False,
-                    application_outcome=None,
-                )
-            )
+            # Missing candidate handoff cannot distinguish runner loss from a
+            # deterministic setup, checkout, or command failure.
             outcome = "canceled" if job.conclusion == "cancelled" else "failure"
-            guard = classification.guard_code
+            guard = "verification_failed"
     return {
         "request_sha256": bundle["request_sha256"],
         "subject": selected["subject"],
