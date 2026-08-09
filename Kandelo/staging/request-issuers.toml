@@ -1,0 +1,24 @@
+schema = 1
+kind = "kandelo-abi-staging-request-issuers"
+issuer_repository = "Automattic/kandelo"
+issuer_workflow_path = ".github/workflows/abi-staging-request-feed.yml"
+request_release_tag_prefix = "abi-staging-pr-"
+addressed_tap = "kandelo-dev/homebrew-tap-core"
+accepted_request_schema = 1
+accepted_request_kind = "kandelo-abi-staging-request"
+max_request_bytes = 4194304
+max_api_response_bytes = 4194304
+max_string_bytes = 4096
+max_bindings = 4096
+max_json_depth = 32
+max_release_pages = 64
+max_release_assets = 4096
+max_redirects = 5
+
+allowed_release_hosts = [
+  "api.github.com",
+  "github-releases.githubusercontent.com",
+  "github.com",
+  "objects.githubusercontent.com",
+  "release-assets.githubusercontent.com",
+]
