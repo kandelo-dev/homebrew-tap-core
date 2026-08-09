@@ -1079,7 +1079,12 @@ def validate_product_evidence_result(value: Mapping[str, Any]) -> None:
         "product evidence guard codes",
         empty_allowed=result["outcome"] == "success",
     )
-    if (result["outcome"] == "success") != (codes == []):
+    expected_codes = {
+        "success": [],
+        "failure": ["verification_failed"],
+        "timeout": ["verification_timeout"],
+    }[result["outcome"]]
+    if codes != expected_codes:
         raise ProductEvidenceError("product evidence outcome and guards contradict")
     _diagnostics(result["bounded_diagnostics"], "product evidence diagnostics")
     _validate_run(result["run"], "product evidence run", evidence=True)
