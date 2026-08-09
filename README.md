@@ -9,6 +9,25 @@ The tap is still experimental. Do not publish user-facing `brew tap` or
 `brew install` instructions until a stock guest Homebrew install has been
 validated inside Kandelo.
 
+## Observe-only ABI request reconciliation
+
+The feature branch contains a protected, read-only reconciler for Kandelo ABI
+staging requests. `Kandelo/staging/request-issuers.toml` fixes the authorized
+Kandelo repository, workflow path, addressed tap, public GitHub hosts, and
+input bounds. `Kandelo/staging/reconciliation-activation.toml` remains in
+`observe` mode.
+
+The scheduled and manual workflow checks out only protected tap code, fetches
+public GitHub Release and pull-request data without credentials, validates the
+canonical request filename and bytes, and reports a deterministic lifecycle
+decision. It cannot dispatch a build or write packages, repository contents,
+branches, or GitHub Checks. Candidate-supplied code and coordinator paths are
+never executed.
+
+This workflow is not operational until its revision reaches protected `main`
+and passes a hosted canary. Candidate builds, candidate publication,
+verification, promotion, and current-ABI changes are separate later stages.
+
 ## Formulae
 
 Formulae under `Formula/` use normal Homebrew metadata and build their staged
