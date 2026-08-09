@@ -237,6 +237,17 @@ class WorkflowExecutionTests(unittest.TestCase):
             self.assertEqual(kwargs["cwd"], TAP_ROOT)
             self.assertNotIn("GITHUB_TOKEN", kwargs["env"])
             self.assertNotIn("HOMEBREW_GITHUB_PACKAGES_TOKEN", kwargs["env"])
+            self.assertNotIn("ACTIONS_RUNTIME_TOKEN", kwargs["env"])
+            self.assertNotIn("GITHUB_ENV", kwargs["env"])
+            self.assertNotIn("RENAMED_WRITE_TOKEN", kwargs["env"])
+            self.assertNotIn("NIX_CONFIG", kwargs["env"])
+            self.assertEqual(kwargs["env"]["CC"], "/declared/cc")
+            self.assertEqual(kwargs["env"]["GITHUB_ACTIONS"], "true")
+            self.assertNotEqual(kwargs["env"]["HOME"], "/credentialed/home")
+            self.assertEqual(
+                kwargs["env"]["XDG_CONFIG_HOME"],
+                str(Path(kwargs["env"]["HOME"]) / ".config"),
+            )
             for flag in (
                 "--request",
                 "--tap-plan",
@@ -267,8 +278,15 @@ class WorkflowExecutionTests(unittest.TestCase):
                 run_process=run_process,
                 environment={
                     "PATH": os.environ["PATH"],
+                    "CC": "/declared/cc",
+                    "GITHUB_ACTIONS": "true",
                     "GITHUB_TOKEN": "must-not-survive",
                     "HOMEBREW_GITHUB_PACKAGES_TOKEN": "must-not-survive",
+                    "ACTIONS_RUNTIME_TOKEN": "must-not-survive",
+                    "GITHUB_ENV": "/credentialed/github-env",
+                    "RENAMED_WRITE_TOKEN": "must-not-survive",
+                    "NIX_CONFIG": "access-tokens = github.com=must-not-survive",
+                    "HOME": "/credentialed/home",
                 },
             )
         self.assertEqual(status, 7)

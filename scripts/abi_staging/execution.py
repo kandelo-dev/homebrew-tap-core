@@ -283,32 +283,157 @@ def prepare_build_inputs(
     }
 
 
-def _credential_name(name: str) -> bool:
-    exact = {
-        "HOMEBREW_GITHUB_API_TOKEN",
-        "HOMEBREW_GITHUB_PACKAGES_TOKEN",
-        "NPM_TOKEN",
-        "NODE_AUTH_TOKEN",
-        "SSH_AUTH_SOCK",
-        "SSH_AGENT_PID",
+_DECLARED_TOOL_ENVIRONMENT = frozenset(
+    {
+        "ACLOCAL_PATH",
+        "AR",
+        "AR_FOR_BUILD",
+        "AS",
+        "AS_FOR_BUILD",
+        "CC",
+        "CC_FOR_BUILD",
+        "CI",
+        "CMAKE_INCLUDE_PATH",
+        "CMAKE_LIBRARY_PATH",
+        "CONFIG_SHELL",
+        "CURL_CA_BUNDLE",
+        "CXX",
+        "CXX_FOR_BUILD",
+        "DETERMINISTIC_BUILD",
+        "DEVELOPER_DIR",
+        "GEM_PATH",
+        "GITHUB_ACTIONS",
+        "GIT_SSL_CAINFO",
+        "HOMEBREW_PREFIX",
+        "HOMEBREW_REPOSITORY",
+        "HOST_PATH",
+        "IN_NIX_SHELL",
+        "KANDELO_DEV_SHELL_TOOL_PATH",
+        "LD",
+        "LD_DYLD_PATH",
+        "LD_FOR_BUILD",
+        "LD_LIBRARY_PATH",
+        "LLVM_BIN",
+        "LLVM_PREFIX",
+        "LLVM_VERSION",
+        "LOGNAME",
+        "MACOSX_DEPLOYMENT_TARGET",
+        "NIXPKGS_CMAKE_PREFIX_PATH",
+        "NIX_APPLE_SDK_VERSION",
+        "NIX_BINTOOLS",
+        "NIX_BINTOOLS_FOR_BUILD",
+        "NIX_BUILD_CORES",
+        "NIX_BUILD_TOP",
+        "NIX_CC",
+        "NIX_CC_FOR_BUILD",
+        "NIX_CFLAGS_COMPILE",
+        "NIX_CFLAGS_COMPILE_FOR_BUILD",
+        "NIX_DONT_SET_RPATH",
+        "NIX_DONT_SET_RPATH_FOR_BUILD",
+        "NIX_ENFORCE_NO_NATIVE",
+        "NIX_GCROOT",
+        "NIX_HARDENING_ENABLE",
+        "NIX_IGNORE_LD_THROUGH_GCC",
+        "NIX_LDFLAGS",
+        "NIX_LDFLAGS_FOR_BUILD",
+        "NIX_NO_SELF_RPATH",
+        "NIX_SSL_CERT_FILE",
+        "NIX_STORE",
+        "NM",
+        "NM_FOR_BUILD",
+        "NODE_PATH",
+        "OBJCOPY",
+        "OBJCOPY_FOR_BUILD",
+        "OBJDUMP",
+        "OBJDUMP_FOR_BUILD",
+        "PATH",
+        "PATH_LOCALE",
+        "PERL5LIB",
+        "PKG_CONFIG",
+        "PKG_CONFIG_PATH",
+        "PYTHONHASHSEED",
+        "PYTHONNOUSERSITE",
+        "RANLIB",
+        "RANLIB_FOR_BUILD",
+        "REQUESTS_CA_BUNDLE",
+        "RUBYLIB",
+        "SDKROOT",
+        "SHELL",
+        "SIZE",
+        "SIZE_FOR_BUILD",
+        "SOURCE_DATE_EPOCH",
+        "SSL_CERT_DIR",
+        "SSL_CERT_FILE",
+        "STRINGS",
+        "STRINGS_FOR_BUILD",
+        "STRIP",
+        "STRIP_FOR_BUILD",
+        "SYSTEM_CERTIFICATE_PATH",
+        "TERM",
+        "USER",
+        "WASM_POSIX_LLVM_LIBCXX_SOURCE",
+        "WASM_POSIX_LLVM_LIBUNWIND_SOURCE",
+        "XDG_DATA_DIRS",
+        "ZERO_AR_DATE",
+        "__darwinAllowLocalNetworking",
+        "__impureHostDeps",
+        "__propagatedImpureHostDeps",
+        "__propagatedSandboxProfile",
+        "__sandboxProfile",
+        "__structuredAttrs",
     }
-    prefixes = (
-        "GITHUB_",
-        "GH_",
-        "GHCR_",
-        "AWS_",
-        "AZURE_",
-        "GOOGLE_",
-        "GCP_",
-        "CLOUDSDK_AUTH_",
-        "ACTIONS_ID_TOKEN_",
-        "CI_JOB_JWT",
+)
+_NIX_TARGET_ENVIRONMENT = re.compile(
+    r"^NIX_(?:BINTOOLS|CC|PKG_CONFIG)_WRAPPER_TARGET_(?:BUILD|HOST)_"
+    r"[A-Za-z0-9_]+$"
+)
+
+
+def _uncredentialed_environment(
+    source: Mapping[str, str], *, sandbox_root: Path
+) -> dict[str, str]:
+    """Construct a capability allowlist and isolated user state for candidate code."""
+
+    selected = {
+        name: value
+        for name, value in source.items()
+        if (
+            name in _DECLARED_TOOL_ENVIRONMENT
+            or _NIX_TARGET_ENVIRONMENT.fullmatch(name) is not None
+        )
+        and isinstance(value, str)
+    }
+    if not selected.get("PATH"):
+        raise ExecutionError("candidate environment lacks the declared tool PATH")
+    if selected.get("GITHUB_ACTIONS") not in {None, "true"}:
+        raise ExecutionError("candidate GitHub Actions marker is invalid")
+    home = sandbox_root / "home"
+    temporary = sandbox_root / "tmp"
+    for path in (home, temporary, home / ".config", home / ".cache", home / ".local/share"):
+        try:
+            path.mkdir(parents=True, exist_ok=True, mode=0o700)
+            path.chmod(0o700)
+        except OSError as error:
+            raise ExecutionError(
+                f"cannot isolate candidate environment state: {error}"
+            ) from error
+    selected.update(
+        {
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_TERMINAL_PROMPT": "0",
+            "HOME": str(home),
+            "NPM_CONFIG_USERCONFIG": "/dev/null",
+            "TEMP": str(temporary),
+            "TEMPDIR": str(temporary),
+            "TMP": str(temporary),
+            "TMPDIR": str(temporary),
+            "XDG_CACHE_HOME": str(home / ".cache"),
+            "XDG_CONFIG_HOME": str(home / ".config"),
+            "XDG_DATA_HOME": str(home / ".local/share"),
+        }
     )
-    return name in exact or name.startswith(prefixes)
-
-
-def _uncredentialed_environment(source: Mapping[str, str]) -> dict[str, str]:
-    return {name: value for name, value in source.items() if not _credential_name(name)}
+    return selected
 
 
 def execute_build_work(
@@ -384,7 +509,8 @@ def execute_build_work(
             str(handoff),
         ]
         child_environment = _uncredentialed_environment(
-            os.environ if environment is None else environment
+            os.environ if environment is None else environment,
+            sandbox_root=Path(temporary) / "environment",
         )
         result = run_process(command, cwd=tap, env=child_environment, check=False)
     returncode = getattr(result, "returncode", None)
@@ -972,7 +1098,8 @@ def execute_verification_work(
             command.extend(["--forbidden-root", forbidden])
         command.extend(["--out", str(output)])
         child_environment = _uncredentialed_environment(
-            os.environ if environment is None else environment
+            os.environ if environment is None else environment,
+            sandbox_root=temporary_root / "environment",
         )
         result = run_process(command, cwd=tap, env=child_environment, check=False)
     returncode = getattr(result, "returncode", None)

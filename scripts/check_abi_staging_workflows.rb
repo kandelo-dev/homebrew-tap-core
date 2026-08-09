@@ -76,10 +76,11 @@ module AbiStagingWorkflowCheck
 
   def require_candidate_checkouts(job, field)
     checkouts = action_steps(job, CHECKOUT)
-    require_contract(checkouts.length == 2,
-                     "#{field} must check out exactly tap and Kandelo sources")
+    require_contract(checkouts.length == 3,
+                     "#{field} must check out tap, candidate, and policy sources")
     tap = checkouts.find { |step| step.dig("with", "path") == "tap-authority" }
     kandelo = checkouts.find { |step| step.dig("with", "path") == "kandelo-source" }
+    policy = checkouts.find { |step| step.dig("with", "path") == "kandelo-authority" }
     require_contract(!tap.nil? && tap.fetch("with") == {
                        "repository" => "kandelo-dev/homebrew-tap-core",
                        "ref" => "${{ needs.discover-plan.outputs.tap-commit }}",
@@ -95,6 +96,21 @@ module AbiStagingWorkflowCheck
                        "persist-credentials" => false,
                        "path" => "kandelo-source"
                      }, "#{field} Kandelo checkout is not the exact request head")
+    require_contract(!policy.nil? && policy.fetch("with") == {
+                       "repository" => "${{ needs.discover-plan.outputs.kandelo-repository }}",
+                       "ref" => "${{ needs.discover-plan.outputs.kandelo-policy-commit }}",
+                       "fetch-depth" => 1,
+                       "submodules" => "recursive",
+                       "persist-credentials" => false,
+                       "path" => "kandelo-authority"
+                     }, "#{field} Kandelo policy checkout is not immutable")
+    setup = job.fetch("steps").select do |step|
+      step["uses"]&.end_with?("/.github/actions/setup-nix")
+    end
+    require_contract(setup.length == 1 &&
+                     setup.fetch(0).fetch("uses") ==
+                       "./kandelo-authority/.github/actions/setup-nix",
+                     "#{field} executes candidate-controlled setup code")
   end
 
   def require_protected_checkout(job, field)
@@ -137,6 +153,9 @@ module AbiStagingWorkflowCheck
       require_contract(!job.key?("secrets"),
                        "reconciliation jobs may not inherit secrets")
       check_actions(job)
+      require_contract(job.fetch("steps").none? do |step|
+                         step["uses"]&.start_with?("./kandelo-source/")
+                       end, "candidate-controlled local action may execute before isolation")
     end
 
     discover = jobs.fetch("discover-plan")
@@ -145,13 +164,16 @@ module AbiStagingWorkflowCheck
     require_contract(discover.fetch("timeout-minutes").between?(1, 30),
                      "discovery timeout is not bounded")
     discovery_checkouts = action_steps(discover, CHECKOUT)
-    require_contract(discovery_checkouts.length == 2,
-                     "discovery must check out protected tap and exact Kandelo sources")
+    require_contract(discovery_checkouts.length == 3,
+                     "discovery must check out tap, candidate, and policy sources")
     protected_tap = discovery_checkouts.find do |step|
       step.dig("with", "path") == "tap-authority"
     end
     exact_kandelo = discovery_checkouts.find do |step|
       step.dig("with", "path") == "kandelo-source"
+    end
+    policy_kandelo = discovery_checkouts.find do |step|
+      step.dig("with", "path") == "kandelo-authority"
     end
     require_contract(!protected_tap.nil? && protected_tap.fetch("with") == {
                        "ref" => "refs/heads/main",
@@ -169,6 +191,16 @@ module AbiStagingWorkflowCheck
                          "persist-credentials" => false,
                          "path" => "kandelo-source"
                        }, "discovery Kandelo checkout is not the exact request head")
+    require_contract(!policy_kandelo.nil? && policy_kandelo.fetch("if") ==
+                       "steps.discover.outputs.selected == 'true'" &&
+                       policy_kandelo.fetch("with") == {
+                         "repository" => "${{ steps.discover.outputs.kandelo_repository }}",
+                         "ref" => "${{ steps.discover.outputs.kandelo_policy_commit }}",
+                         "fetch-depth" => 1,
+                         "submodules" => "recursive",
+                         "persist-credentials" => false,
+                         "path" => "kandelo-authority"
+                       }, "discovery Kandelo policy checkout is not immutable")
     setup = action_steps(discover, SETUP_PYTHON)
     require_contract(setup.length == 1 &&
                        setup.fetch(0).dig("with", "python-version") == "3.13",
@@ -199,13 +231,13 @@ module AbiStagingWorkflowCheck
     requirements_source = requirements.fetch("run")
     require_contract(requirements.fetch("if") ==
                        "steps.discover.outputs.selected == 'true'" &&
-                       requirements.fetch("working-directory") == "kandelo-source" &&
+                       requirements.fetch("working-directory") == "kandelo-authority" &&
                        requirements_source.include?("scripts/dev-shell.sh") &&
                        requirements_source.include?("abi-staging requirements") &&
                        requirements_source.include?('--change-classes "$classes"') &&
-                       requirements_source.include?("images/vfs/products/generated/catalog.json") &&
-                       requirements_source.include?("pages-vfs-products.toml") &&
-                       requirements_source.include?("tests/vfs-products.toml"),
+                       requirements_source.include?('$GITHUB_WORKSPACE/kandelo-source/images/vfs/products/generated/catalog.json') &&
+                       requirements_source.include?('$GITHUB_WORKSPACE/kandelo-source/apps/browser-demos/pages/kandelo/kernel-host/pages-vfs-products.toml') &&
+                       requirements_source.include?('$GITHUB_WORKSPACE/kandelo-source/tests/vfs-products.toml'),
                      "requirements do not come from exact-head product authorities")
     coordinator_source = coordinator.fetch("run")
     require_contract(coordinator.fetch("if") ==
@@ -218,15 +250,16 @@ module AbiStagingWorkflowCheck
                      "coordination does not bind exact-head request requirements")
     steps = discover.fetch("steps")
     require_contract(steps.index(request_discovery) < steps.index(exact_kandelo) &&
-                       steps.index(exact_kandelo) < steps.index(requirements) &&
+                       steps.index(exact_kandelo) < steps.index(policy_kandelo) &&
+                       steps.index(policy_kandelo) < steps.index(requirements) &&
                        steps.index(requirements) < steps.index(coordinator),
                      "discovery stages exact sources in the wrong order")
     exact_setup = discover.fetch("steps").find do |step|
-      step["uses"] == "./kandelo-source/.github/actions/setup-nix"
+      step["uses"] == "./kandelo-authority/.github/actions/setup-nix"
     end
     require_contract(!exact_setup.nil? && exact_setup.fetch("if") ==
                        "steps.discover.outputs.selected == 'true'",
-                     "discovery lacks exact-head Kandelo setup")
+                     "discovery lacks immutable Kandelo policy setup")
     discovery_source = commands.map { |step| step.fetch("run") }.join("\n")
     require_contract(!discovery_source.match?(/gh\s+(?:workflow|api)/) &&
                        !discovery_source.match?(/(?:^|\s)sleep(?:\s|$)/),
@@ -281,7 +314,10 @@ module AbiStagingWorkflowCheck
       command = run_steps(job)
       require_contract(command.length == 1 &&
                          command.fetch(0).fetch("run").include?("env -u GITHUB_TOKEN") &&
-                         command.fetch(0).fetch("run").include?("scripts/dev-shell.sh") &&
+                         command.fetch(0).fetch("run").include?(
+                           "../kandelo-authority/scripts/dev-shell.sh") &&
+                         !command.fetch(0).fetch("run").include?(
+                           "../kandelo-source/scripts/dev-shell.sh") &&
                          command.fetch(0).fetch("run").include?('--run-id "$GITHUB_RUN_ID"') &&
                          command.fetch(0).fetch("run").include?('--run-attempt "$GITHUB_RUN_ATTEMPT"') &&
                          command.fetch(0).fetch("run").include?('--workflow-ref "$GITHUB_WORKFLOW_REF"'),

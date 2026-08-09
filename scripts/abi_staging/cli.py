@@ -327,6 +327,9 @@ def _discover_workflow_request(args: argparse.Namespace) -> None:
         outputs.update(
             {
                 "kandelo_head": candidate.request["build_source"]["commit"],
+                "kandelo_policy_commit": candidate.request["issuance"][
+                    "issuer_workflow_ref"
+                ].rsplit("@", 1)[1],
                 "kandelo_repository": candidate.request["build_source"]["repository"],
                 "selected": "true",
             }
