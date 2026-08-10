@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -45,7 +44,7 @@ from .product_evidence import (
     inspect_product_evidence_repository,
 )
 from .reconcile import PullRequestLifecycleV1, reconcile_request
-from .request import load_request_issuer_policy, validate_request
+from .request import load_request_issuer_policy
 from .scheduler import SchedulingDecisionV1, schedule_ready_batch
 
 
@@ -273,6 +272,54 @@ def _current_request(
     return matches[0] if matches else None
 
 
+def _current_request_for_context(
+    context: Mapping[str, Any],
+    expected_requirements: Mapping[str, Any],
+    discovered_requests: Sequence[DiscoveredRequestV1],
+) -> DiscoveredRequestV1 | None:
+    checked_context = _validate_context(context)
+    requirements = _plain(expected_requirements)
+    if requirements.get("digest") != checked_context["current_requirements_sha256"]:
+        raise CheckProjectionCollectionError(
+            "protected requirements differ from the current Check context"
+        )
+    matches = []
+    for discovered in discovered_requests:
+        if not isinstance(discovered, DiscoveredRequestV1):
+            raise CheckProjectionCollectionError("request discovery item changed type")
+        request = discovered.request
+        pull_request = request.get("pull_request")
+        source = request.get("build_source")
+        issuance = request.get("issuance")
+        authorization = issuance.get("authorization") if isinstance(issuance, Mapping) else None
+        if (
+            isinstance(pull_request, Mapping)
+            and isinstance(source, Mapping)
+            and isinstance(issuance, Mapping)
+            and isinstance(authorization, Mapping)
+            and pull_request.get("repository") == checked_context["repository"]
+            and pull_request.get("number") == checked_context["pull_request_number"]
+            and source.get("repository") == checked_context["repository"]
+            and source.get("commit") == checked_context["exact_head"]
+            and _plain(request.get("requirements")) == requirements
+            and issuance.get("issuer_repository") == checked_context["repository"]
+            and issuance.get("policy_version") == checked_context["current_policy_version"]
+            and issuance.get("policy_sha256") == checked_context["current_policy_sha256"]
+            and issuance.get("guard_registry_version")
+            == checked_context["current_guard_registry_version"]
+            and issuance.get("guard_registry_sha256")
+            == checked_context["current_guard_registry_sha256"]
+            and authorization
+            == {"mode": "same-repository", "head": checked_context["exact_head"]}
+        ):
+            matches.append(discovered)
+    if len(matches) > 1:
+        raise CheckProjectionCollectionError(
+            "public discovery returned duplicate requests for the complete current identity"
+        )
+    return matches[0] if matches else None
+
+
 def build_check_projection_input(
     *,
     context: Mapping[str, Any],
@@ -314,9 +361,11 @@ def build_check_projection_input(
             )
         return _plain(base)
     if expected_request is None:
-        raise CheckProjectionCollectionError(
-            "applicable collection requires one protected expected request"
-        )
+        if request_claimed or public_records or blockers or tap_plan is not None:
+            raise CheckProjectionCollectionError(
+                "request-missing collection cannot carry downstream public facts"
+            )
+        return _plain(base)
     selected = _current_request(expected_request, discovered_requests)
     if selected is None:
         if request_claimed or public_records or blockers:
@@ -564,7 +613,7 @@ def collect_check_projection_input(
     exact_head_root: Path | None,
     context: Mapping[str, Any],
     applicable: bool,
-    expected_request: Mapping[str, Any] | None,
+    expected_requirements: Mapping[str, Any] | None,
     formula_requirements: Sequence[Mapping[str, Any]] | None,
     now: str,
     client: GitHubPublicClient | None = None,
@@ -591,16 +640,18 @@ def collect_check_projection_input(
             now=now,
         )
     discovered = (client or GitHubPublicClient(issuer_policy)).scan()
-    if expected_request is None or formula_requirements is None:
+    if expected_requirements is None or formula_requirements is None:
         raise CheckProjectionCollectionError(
             "applicable collection lacks protected request requirements"
         )
-    selected = _current_request(expected_request, discovered)
+    selected = _current_request_for_context(
+        context, expected_requirements, discovered
+    )
     if selected is None:
         return build_check_projection_input(
             context=context,
             applicable=True,
-            expected_request=expected_request,
+            expected_request=None,
             discovered_requests=discovered,
             tap_plan=None,
             blockers=(),
@@ -608,6 +659,7 @@ def collect_check_projection_input(
             request_claimed=False,
             now=now,
         )
+    expected_request = selected.request
     source = expected_request.get("build_source")
     if not isinstance(source, Mapping) or exact_head_root is None:
         raise CheckProjectionCollectionError("current request lacks exact source input")
@@ -721,7 +773,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--now", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--exact-head-root")
-    parser.add_argument("--expected-request")
+    parser.add_argument("--expected-requirements")
     parser.add_argument("--formula-requirements")
     parser.add_argument("--not-applicable", action="store_true")
     return parser
@@ -733,33 +785,17 @@ def main(arguments: Sequence[str] | None = None) -> int:
         context = load_canonical_mapping(
             Path(args.context).resolve(strict=True).read_bytes(), "Check context"
         )
-        expected_request = None
+        expected_requirements = None
         requirements = None
         if not args.not_applicable:
-            if not args.expected_request or not args.formula_requirements:
+            if not args.expected_requirements or not args.formula_requirements:
                 raise CheckProjectionCollectionError(
                     "applicable collection requires request and Formula requirements"
                 )
-            expected_path = Path(args.expected_request).resolve(strict=True)
-            expected_body = expected_path.read_bytes()
-            raw_expected = load_canonical_mapping(
-                expected_body, "protected expected request"
+            expected_requirements = load_canonical_mapping(
+                Path(args.expected_requirements).resolve(strict=True).read_bytes(),
+                "protected expected requirements",
             )
-            digest = hashlib.sha256(expected_body).hexdigest()
-            asset_name = (
-                f"candidate-request-{raw_expected['build_source']['commit']}-"
-                f"sha256-{digest}.json"
-            )
-            policy = load_tap_staging_policy(
-                Path(args.tap_root).resolve(strict=True)
-                / "Kandelo/staging/tap-policy.toml"
-            )
-            issuer = load_request_issuer_policy(
-                Path(args.tap_root).resolve(strict=True)
-                / "Kandelo/staging/request-issuers.toml",
-                expected_tap=policy.tap_repository,
-            )
-            expected_request = validate_request(expected_body, asset_name, issuer)
             requirements = load_formula_requirements(
                 Path(args.formula_requirements).resolve(strict=True).read_bytes()
             )
@@ -770,7 +806,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             ),
             context=context,
             applicable=not args.not_applicable,
-            expected_request=expected_request,
+            expected_requirements=expected_requirements,
             formula_requirements=requirements,
             now=args.now,
         )
