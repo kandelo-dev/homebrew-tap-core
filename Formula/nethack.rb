@@ -3,11 +3,13 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Nethack < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
-  GUEST_OPT_PREFIX =
-    "#{KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX}/opt/nethack".freeze
-  GUEST_HACKDIR = "#{GUEST_OPT_PREFIX}/share/nethack".freeze
+  GUEST_HOMEBREW_PREFIX =
+    KandeloFormulaSupport::KANDELO_GUEST_HOMEBREW_PREFIX
+  GUEST_OPT_PREFIX = "#{GUEST_HOMEBREW_PREFIX}/opt/nethack".freeze
+  GUEST_HACKDIR = "#{GUEST_OPT_PREFIX}/libexec".freeze
+  GUEST_VAR_PLAYGROUND = "#{GUEST_HOMEBREW_PREFIX}/share/nethack".freeze
 
   desc "Classic dungeon exploration game for Kandelo"
   homepage "https://www.nethack.org/"
@@ -15,15 +17,15 @@ class Nethack < Formula
   version "3.6.7"
   sha256 "98cf67df6debf9668a61745aa84c09bcab362e5d33f5b944ec5155d44d2aacb2"
   license :cannot_represent
+  revision 1
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "c13bfbeebf44016f7eec36b618544eb64fc7f11175a9e4bbf0f021ac0e0b730d"
-  end
-
+  depends_on "bison" => :build
+  depends_on "flex" => :build
+  depends_on "gpatch" => :build
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
+  depends_on "llvm" => :build
+  depends_on "make" => :build
   depends_on "kandelo-dev/tap-core/ncurses"
 
   skip_clean "bin/nethack"
@@ -31,19 +33,22 @@ class Nethack < Formula
   def install
     kandelo_require_arch!("wasm32")
     ENV.deparallelize
-
-    # Transitional Tier-2 bridge: NetHack's registry recipe still owns the
-    # host code-generator phase and the target/data serialization patches.
-    # Its compiled data path is the stable guest opt prefix, not a staging keg
-    # path and not the registry image's historical /usr/share location.
-
-    out_dir = kandelo_build_package(script_env: {
-      "WASM_POSIX_DEP_NCURSES_DIR" => formula_opt_prefix("kandelo-dev/tap-core/ncurses"),
-      "NETHACK_HACKDIR"            => GUEST_HACKDIR,
-    })
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "0424b58585f85cfd9e1e55cde1427515cf883c84a8f449dff881b641b7ae3d94",
+      script_env:      {
+        "WASM_POSIX_DEP_HOST_CC"              => formula_opt_bin("llvm")/"clang",
+        "WASM_POSIX_DEP_MAKE"                 => formula_opt_bin("make")/"make",
+        "WASM_POSIX_DEP_PATCH"                => formula_opt_bin("gpatch")/"patch",
+        "WASM_POSIX_DEP_BISON"                => formula_opt_bin("bison")/"bison",
+        "WASM_POSIX_DEP_FLEX"                 => formula_opt_bin("flex")/"flex",
+        "WASM_POSIX_DEP_GUEST_HACKDIR"        => GUEST_HACKDIR,
+        "WASM_POSIX_DEP_GUEST_VAR_PLAYGROUND" => GUEST_VAR_PLAYGROUND,
+      },
+    )
     kandelo_validate_wasm_artifact(out_dir/"nethack.wasm", fork: :required)
     kandelo_install_bin(out_dir, "nethack.wasm", "nethack")
-    (share/"nethack").install Dir["#{out_dir}/runtime/share/nethack/*"]
+    libexec.install out_dir/"runtime/nhdat", out_dir/"runtime/symbols",
+                    out_dir/"runtime/license"
   end
 
   test do

@@ -1,0 +1,98 @@
+diff --git a/include/config.h b/include/config.h
+--- a/include/config.h
++++ b/include/config.h
+@@ -45,8 +45,8 @@
+ #if !defined(NOTTYGRAPHICS)
+ #define TTY_GRAPHICS /* good old tty based graphics */
+ #endif
+-/* #define CURSES_GRAPHICS *//* Curses interface - Karl Garrison*/
++#define CURSES_GRAPHICS /* Curses interface - Karl Garrison*/
+ /* #define X11_GRAPHICS */   /* X11 interface */
+ /* #define QT_GRAPHICS */    /* Qt interface */
+ /* #define GNOME_GRAPHICS */ /* Gnome interface */
+ /* #define MSWIN_GRAPHICS */ /* Windows NT, CE, Graphics */
+@@ -198,7 +198,7 @@
+
+ #ifndef SYSCF
+-#define SYSCF                /* use a global configuration */
+-#define SYSCF_FILE "sysconf" /* global configuration is in a file */
++/* SYSCF disabled for wasm32 */
++/* SYSCF_FILE disabled for wasm32 */
+ #endif
+
+ #ifndef GDBPATH
+@@ -263,8 +263,8 @@
+
+ #if defined(UNIX) && !defined(ZLIB_COMP) && !defined(COMPRESS)
+ /* path and file name extension for compression program */
+-#define COMPRESS "/usr/bin/compress" /* Lempel-Ziv compression */
+-#define COMPRESS_EXTENSION ".Z"      /* compress's extension */
++/* COMPRESS disabled for wasm32 */
++/* COMPRESS_EXTENSION disabled */
+ /* An example of one alternative you might want to use: */
+ /* #define COMPRESS "/usr/local/bin/gzip" */ /* FSF gzip compression */
+ /* #define COMPRESS_EXTENSION ".gz" */       /* normal gzip extension */
+diff --git a/include/system.h b/include/system.h
+--- a/include/system.h
++++ b/include/system.h
+@@ -511,7 +511,7 @@
+
+ #ifdef MICRO
+ E int FDECL(tgetent, (const char *, const char *));
+-E void FDECL(tputs, (const char *, int, int (*)()));
++E int FDECL(tputs, (const char *, int, int (*)(int)));
+ E int FDECL(tgetnum, (const char *));
+ E int FDECL(tgetflag, (const char *));
+ E char *FDECL(tgetstr, (const char *, char **));
+@@ -519,7 +519,7 @@
+ #else
+ #if !(defined(HPUX) && defined(_POSIX_SOURCE))
+ E int FDECL(tgetent, (char *, const char *));
+-E void FDECL(tputs, (const char *, int, int (*)()));
++E int FDECL(tputs, (const char *, int, int (*)(int)));
+ #endif
+ E int FDECL(tgetnum, (const char *));
+ E int FDECL(tgetflag, (const char *));
+diff --git a/include/tradstdc.h b/include/tradstdc.h
+--- a/include/tradstdc.h
++++ b/include/tradstdc.h
+@@ -432,8 +432,8 @@
+ #if !defined(__linux__) || defined(GCC_URWARN)
+ /* disable gcc's __attribute__((__warn_unused_result__)) since explicitly
+    discarding the result by casting to (void) is not accepted as a 'use' */
+-#define __warn_unused_result__ /*empty*/
+-#define warn_unused_result /*empty*/
++/* __warn_unused_result__ empty-define suppressed for macOS SDK compatibility */
++/* warn_unused_result empty-define suppressed for macOS SDK compatibility */
+ #endif
+ #endif
+ #endif
+diff --git a/win/tty/termcap.c b/win/tty/termcap.c
+--- a/win/tty/termcap.c
++++ b/win/tty/termcap.c
+@@ -194,19 +194,22 @@
+     if ((pc = Tgetstr("pc")) != 0)
+         PC = *pc;
+
+-    if (!(BC = Tgetstr("le"))) /* both termcap and terminfo use le */
++    if (!(BC = Tgetstr("le"))) { /* both termcap and terminfo use le */
+ #ifdef TERMINFO
+-        error("Terminal must backspace.");
++        BC = tbufptr;
++        tbufptr += 2;
++        *BC = 010;
+ #else
+         if (!(BC = Tgetstr("bc"))) { /* termcap also uses bc/bs */
+ #ifndef MINIMAL_TERM
+             if (!tgetflag("bs"))
+                 error("Terminal must backspace.");
+ #endif
+             BC = tbufptr;
+             tbufptr += 2;
+             *BC = '\b';
+         }
+ #endif
++    }
+
+ #ifdef MINIMAL_TERM
+     HO = (char *) 0;

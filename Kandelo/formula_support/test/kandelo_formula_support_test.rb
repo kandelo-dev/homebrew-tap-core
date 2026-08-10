@@ -3756,6 +3756,62 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_equal [%Q(  version "3.6.7"\n)], version_declarations
   end
 
+  def test_nethack_is_a_closed_tap_recipe_with_declared_tools
+    formula = File.read(File.expand_path("../../../Formula/nethack.rb", __dir__))
+
+    assert_includes formula, "  KANDELO_TAP_RECIPE = true\n"
+    assert_includes formula, "  revision 1\n"
+    assert_includes formula, "kandelo_build_tap_recipe("
+    assert_includes formula, 'depends_on "bison" => :build'
+    assert_includes formula, 'depends_on "flex" => :build'
+    assert_includes formula, 'depends_on "gpatch" => :build'
+    assert_includes formula, 'depends_on "llvm" => :build'
+    assert_includes formula, 'depends_on "make" => :build'
+    assert_includes formula, 'depends_on "kandelo-dev/tap-core/ncurses"'
+    refute_includes formula, "KANDELO_REGISTRY_BRIDGE"
+    refute_includes formula, "kandelo_build_package("
+  end
+
+  def test_nethack_recipe_is_complete_and_has_no_registry_authority
+    recipe_root = Pathname(File.expand_path("../../recipes/nethack", __dir__))
+    manifest_path = recipe_root/"recipe.json"
+    manifest = JSON.parse(manifest_path.binread)
+    paths = manifest.fetch("files").map { |entry| entry.fetch("path") }
+
+    assert_equal 1, manifest.fetch("schema")
+    assert_equal ["kandelo-dev/tap-core/ncurses"], manifest.fetch("dependencies")
+    assert_equal "build.sh", manifest.fetch("entrypoint")
+    assert_equal paths.sort, paths
+    assert_equal [
+      "build.sh",
+      "patches/kandelo-portable-data-layout.patch",
+      "patches/kandelo-terminal.patch",
+    ], paths
+    manifest.fetch("files").each do |record|
+      bytes = (recipe_root/record.fetch("path")).binread
+      assert_equal bytes.bytesize, record.fetch("bytes")
+      assert_equal Digest::SHA256.hexdigest(bytes), record.fetch("sha256")
+      assert_equal(record.fetch("path") == "build.sh" ? "0755" : "0644",
+                   record.fetch("mode"))
+    end
+
+    build = (recipe_root/"build.sh").binread
+    assert_includes build, 'SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"'
+    assert_includes build, 'NCURSES_PREFIX="${WASM_POSIX_DEP_NCURSES_DIR:?}"'
+    assert_includes build, 'FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"'
+    assert_includes build, 'HOST_CC="${WASM_POSIX_DEP_HOST_CC:?}"'
+    assert_includes build, 'MAKE="${WASM_POSIX_DEP_MAKE:?}"'
+    assert_includes build, 'PATCH="${WASM_POSIX_DEP_PATCH:?}"'
+    assert_includes build, 'BISON="${WASM_POSIX_DEP_BISON:?}"'
+    assert_includes build, 'FLEX="${WASM_POSIX_DEP_FLEX:?}"'
+    refute_match(/\b(?:curl|wget)\b/, build)
+    refute_includes build, "build-deps resolve"
+    refute_includes build, "install-local-binary"
+    refute_includes build, "WASM_POSIX_BINARY_CACHE_ROOT"
+    refute_includes build, "HOMEBREW_KANDELO_ROOT"
+    refute_match(/\bREPO_ROOT\b/, build)
+  end
+
   def test_changed_tier2_formulae_keep_the_reviewed_abi42_bottle_identity
     # These Formulae already consumed rebuild 2 during the ABI 42 bottle
     # rebuild. The canonical-prefix bottles must use the next identity because

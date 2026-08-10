@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "dependencies": [
+    "kandelo-dev/tap-core/ncurses"
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 5237,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "0f56927f1c2276450b91da898fb74d824461ebb553d5daf3c2fd5b1f3b67d2be"
+    },
+    {
+      "bytes": 4258,
+      "mode": "0644",
+      "path": "patches/kandelo-portable-data-layout.patch",
+      "sha256": "353fba38ab67c2e1b73b732b92108fec83c9ddf77e8d42fec502db3c7e00e971"
+    },
+    {
+      "bytes": 3486,
+      "mode": "0644",
+      "path": "patches/kandelo-terminal.patch",
+      "sha256": "0122c51baa6ada17526f7ae9e8f665046b571b4df5708ffb7c4ac33e0b5751e6"
+    }
+  ]
+}
