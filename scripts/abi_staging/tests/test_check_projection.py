@@ -158,7 +158,7 @@ class CheckProjectionCollectionTests(unittest.TestCase):
             exact_head_root=None,
             context=context(expected),
             applicable=False,
-            expected_request=None,
+            expected_requirements=None,
             formula_requirements=None,
             now="2026-08-09T10:30:00Z",
             client=FailingClient(),
@@ -361,7 +361,7 @@ class CheckProjectionCollectionTests(unittest.TestCase):
 
         class Client:
             def scan(self):
-                return (current,)
+                return (discovered("same-head-reissued-request.json"), current)
 
         with tempfile.TemporaryDirectory() as temporary:
             exact_root = Path(temporary)
@@ -415,7 +415,7 @@ class CheckProjectionCollectionTests(unittest.TestCase):
                     exact_head_root=exact_root,
                     context=context(expected),
                     applicable=True,
-                    expected_request=expected,
+                    expected_requirements=expected["requirements"],
                     formula_requirements=(),
                     now="2026-08-09T12:00:00.000Z",
                     client=Client(),
