@@ -1389,7 +1389,12 @@ def _fetch_candidate_record(
         locator,
         transport=transport,
         expected_artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
-        required_layer_roles=("bottle-layer", "bottle-metadata", "bottle-contract"),
+        required_layer_roles=(
+            "bottle-layer",
+            "bottle-metadata",
+            "vfs-composition-descriptor",
+            "bottle-contract",
+        ),
     )
 
 

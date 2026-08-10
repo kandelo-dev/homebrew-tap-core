@@ -46,6 +46,9 @@ BOTTLE_LAYER_MEDIA_TYPE = "application/vnd.kandelo.homebrew.bottle.layer.v1+tar+
 BOTTLE_METADATA_MEDIA_TYPE = (
     "application/vnd.kandelo.homebrew.bottle.metadata.v1+json"
 )
+VFS_COMPOSITION_DESCRIPTOR_MEDIA_TYPE = (
+    "application/vnd.kandelo.homebrew.vfs-composition-descriptor.v1+json"
+)
 BOTTLE_CONTRACT_MEDIA_TYPE = (
     "application/vnd.kandelo.homebrew.bottle.contract.v1+json"
 )
@@ -440,6 +443,11 @@ def build_candidate_oci_plan(
     metadata_body = _read_regular(
         handoff_root / "bottle-metadata.json", "candidate bottle metadata", MAX_RECORD_BYTES
     )
+    composition_body = _read_regular(
+        handoff_root / "vfs-composition-descriptor.json",
+        "candidate VFS composition descriptor",
+        MAX_RECORD_BYTES,
+    )
     bottle_sha256 = hashlib.sha256(bottle_body).hexdigest()
     candidate_blob_reference = f"ghcr.io/{checked_repository}@sha256:{bottle_sha256}"
     bottle_artifact = _artifact(bottle_body, candidate_blob_reference)
@@ -472,12 +480,23 @@ def build_candidate_oci_plan(
             ),
         },
         {
+            "id": "vfs-composition-descriptor",
+            "artifact": _artifact(
+                composition_body,
+                "ghcr.io/"
+                + checked_repository
+                + "@sha256:"
+                + hashlib.sha256(composition_body).hexdigest(),
+            ),
+        },
+        {
             "id": "source-custody",
             "artifact": _artifact(
                 source_manifest_bytes, source_locator["immutable_reference"]
             ),
         },
     ]
+    normalized_components.sort(key=lambda candidate: candidate["id"])
     direct_dependencies = []
     for dependency in contract["direct_dependencies"]:
         dependency_digest = dependency["bottle_layer_sha256"]
@@ -574,6 +593,12 @@ def build_candidate_oci_plan(
                 media_type=BOTTLE_METADATA_MEDIA_TYPE,
                 body=metadata_body,
                 title="bottle-metadata.json",
+            ),
+            OciBlobV1(
+                role="vfs-composition-descriptor",
+                media_type=VFS_COMPOSITION_DESCRIPTOR_MEDIA_TYPE,
+                body=composition_body,
+                title="vfs-composition-descriptor.json",
             ),
             OciBlobV1(
                 role="bottle-contract",
@@ -768,6 +793,13 @@ def validate_candidate_record(record: Mapping[str, Any]) -> None:
     ].endswith(bottle["sha256"]):
         raise TapRecordError("candidate subject differs from its exact bottle layer")
     normalized_by_id = {item["id"]: item["artifact"] for item in normalized}
+    if frozenset(normalized_by_id) != {
+        "bottle-contract",
+        "bottle-metadata",
+        "source-custody",
+        "vfs-composition-descriptor",
+    }:
+        raise TapRecordError("candidate normalized component inventory changed")
     if normalized_by_id.get("bottle-contract", {}).get("sha256") != formula[
         "bottle_contract_sha256"
     ]:

@@ -72,6 +72,7 @@ from scripts.abi_staging.records import (
     CANDIDATE_RECORD_MEDIA_TYPE,
     CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
     SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
+    VFS_COMPOSITION_DESCRIPTOR_MEDIA_TYPE,
     OciBlobV1,
     OciRecordPlanV1,
     build_candidate_reuse_oci_plan,
@@ -283,6 +284,7 @@ class PromotionTests(unittest.TestCase):
             required_layer_roles=(
                 "bottle-layer",
                 "bottle-metadata",
+                "vfs-composition-descriptor",
                 "bottle-contract",
             ),
         )
@@ -383,6 +385,7 @@ class PromotionTests(unittest.TestCase):
         metadata = canonical_bytes(
             {"architecture": ARCHITECTURE, "formula": FORMULA, "nonendorsed": True}
         )
+        composition_descriptor = self._candidate_composition_descriptor()
         source_digest = hashlib.sha256(build_oci_manifest(self.source_plan)).hexdigest()
         record = {
             "schema": 1,
@@ -451,6 +454,12 @@ class PromotionTests(unittest.TestCase):
                             "immutable_reference": self.source.immutable_reference,
                         },
                     },
+                    {
+                        "id": "vfs-composition-descriptor",
+                        "artifact": _artifact(
+                            composition_descriptor, candidate_repository
+                        ),
+                    },
                 ],
                 "direct_dependency_layers": [
                     {"id": "ncurses-wasm32", "artifact": self.dependency_artifact}
@@ -473,6 +482,7 @@ class PromotionTests(unittest.TestCase):
         metadata = canonical_bytes(
             {"architecture": ARCHITECTURE, "formula": FORMULA, "nonendorsed": True}
         )
+        composition_descriptor = self._candidate_composition_descriptor()
         return OciRecordPlanV1(
             repository=repository,
             artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
@@ -496,6 +506,12 @@ class PromotionTests(unittest.TestCase):
                     title="bottle-metadata.json",
                 ),
                 OciBlobV1(
+                    role="vfs-composition-descriptor",
+                    media_type=VFS_COMPOSITION_DESCRIPTOR_MEDIA_TYPE,
+                    body=composition_descriptor,
+                    title="vfs-composition-descriptor.json",
+                ),
+                OciBlobV1(
                     role="bottle-contract",
                     media_type=BOTTLE_CONTRACT_MEDIA_TYPE,
                     body=self.contract_body,
@@ -508,6 +524,55 @@ class PromotionTests(unittest.TestCase):
                 ),
                 "dev.kandelo.abi-staging.nonendorsed": "true",
             },
+        )
+
+    def _candidate_composition_descriptor(self) -> bytes:
+        candidate_repository = (
+            "kandelo-dev/homebrew-tap-core-abi-8-candidates/bash"
+        )
+        return canonical_bytes(
+            {
+                "architecture": ARCHITECTURE,
+                "formula": FORMULA,
+                "kind": "kandelo-homebrew-original-bottle-tree",
+                "required_by": [FORMULA],
+                "schema": 1,
+                "tap": "kandelo-dev/homebrew-tap-core",
+                "tree": {
+                    "activation": {
+                        "capabilities": [f"homebrew-bottle:{FORMULA}"],
+                        "mode": "first-use",
+                        "roots": [
+                            "/opt/kandelo/homebrew/Cellar/"
+                            + FORMULA
+                            + "/"
+                            + str(self.formula_plan["identity"]["version"])
+                        ],
+                    },
+                    "content": {
+                        "bytes": len(self.bottle_body),
+                        "decoder": "homebrew-bottle-tar-gzip-v1",
+                        "media_type": (
+                            "application/vnd.oci.image.layer.v1.tar+gzip"
+                        ),
+                        "sha256": self.bottle_sha256,
+                    },
+                    "id": FORMULA,
+                    "inventory": {},
+                    "package": "kandelo-dev/tap-core/bash",
+                    "transports": [
+                        {
+                            "kind": "external-https",
+                            "url": (
+                                "https://ghcr.io/v2/"
+                                + candidate_repository
+                                + "/blobs/sha256:"
+                                + self.bottle_sha256
+                            ),
+                        }
+                    ],
+                },
+            }
         )
 
     def _verification_record(
@@ -1430,13 +1495,46 @@ class PromotionTests(unittest.TestCase):
         canonical_manifest = build_oci_manifest(plan)
         self.assertNotEqual(candidate_manifest, canonical_manifest)
         self.assertEqual(plan.artifact_type, CANONICAL_BOTTLE_MANIFEST_MEDIA_TYPE)
-        self.assertEqual(len(plan.layers), 1)
+        self.assertEqual(
+            [layer.role for layer in plan.layers],
+            [
+                "bottle-layer",
+                "bottle-metadata",
+                "vfs-composition-descriptor",
+            ],
+        )
         self.assertEqual(plan.layers[0].body, self.bottle_body)
         self.assertEqual(plan.layers[0].digest.removeprefix("sha256:"), self.bottle_sha256)
+        candidate_metadata = next(
+            layer for layer in self.candidate.layers if layer.role == "bottle-metadata"
+        )
+        self.assertEqual(plan.layers[1].body, candidate_metadata.body)
+        self.assertEqual(plan.layers[1].digest, candidate_metadata.digest)
+        candidate_descriptor = next(
+            layer
+            for layer in self.candidate.layers
+            if layer.role == "vfs-composition-descriptor"
+        )
+        candidate_descriptor_value = json.loads(candidate_descriptor.body)
+        canonical_descriptor_value = json.loads(plan.layers[2].body)
+        candidate_descriptor_value["tree"]["transports"] = (
+            canonical_descriptor_value["tree"]["transports"]
+        )
+        self.assertEqual(canonical_descriptor_value, candidate_descriptor_value)
+        self.assertIn(
+            "/homebrew-tap-core-abi-8/bash/blobs/sha256:",
+            canonical_descriptor_value["tree"]["transports"][0]["url"],
+        )
+        self.assertNotIn("-candidates/", plan.layers[2].body.decode())
         self.assertEqual(
             plan.layers[0].mount_from,
             self.candidate.repository.removeprefix("ghcr.io/"),
         )
+        self.assertEqual(
+            plan.layers[1].mount_from,
+            self.candidate.repository.removeprefix("ghcr.io/"),
+        )
+        self.assertIsNone(plan.layers[2].mount_from)
 
     def test_canonical_destination_and_layer_cannot_be_changed_or_rebuilt(self) -> None:
         decision = self._evaluate()
