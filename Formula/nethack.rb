@@ -51,22 +51,18 @@ class Nethack < Formula
                     out_dir/"runtime/license"
   end
 
-  def post_install
-    playground = HOMEBREW_PREFIX/"share/nethack"
+  test do
+    playground = testpath/"nethack-runtime"
     save = playground/"save"
     [playground, save].each(&:mkpath)
     chmod 0755, playground
     chmod 0755, save
     %w[perm record logfile xlogfile].each do |name|
       path = playground/name
-      touch path unless path.exist?
+      path.write ""
       chmod 0600, path
     end
-  end
 
-  test do
-    playground = HOMEBREW_PREFIX/"share/nethack"
-    save = playground/"save"
     assert_predicate playground, :directory?
     assert_predicate save, :directory?
     assert_equal 0755, playground.stat.mode & 0777
