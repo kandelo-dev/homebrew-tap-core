@@ -48,6 +48,10 @@ REPOSITORY = re.compile(
     r"^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*/"
     r"[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$"
 )
+OCI_REPOSITORY = re.compile(
+    r"^[a-z0-9]+(?:[._-][a-z0-9]+)*"
+    r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+$"
+)
 BRANCH = re.compile(r"^abi/(0|[1-9][0-9]{0,9})$")
 HISTORY_RECORD_MEDIA_TYPE = "application/vnd.kandelo.abi-history.record.v1+json"
 
@@ -436,6 +440,13 @@ def _repository(value: Any, field: str) -> str:
     checked = _text(value, field, 255)
     if REPOSITORY.fullmatch(checked) is None:
         raise AbiHistoryError(f"{field} is not owner/name")
+    return checked
+
+
+def _oci_repository(value: Any, field: str) -> str:
+    checked = _text(value, field, 512)
+    if OCI_REPOSITORY.fullmatch(checked) is None:
+        raise AbiHistoryError(f"{field} is not a lowercase OCI repository")
     return checked
 
 
@@ -1083,7 +1094,7 @@ def build_history_oci_plan(
         validate_abi_history_record(record)
     except TapRecordError as error:
         raise AbiHistoryError(f"ABI history record is invalid: {error}") from error
-    checked_repository = _repository(repository, "history record repository").lower()
+    checked_repository = _oci_repository(repository, "history record repository")
     body = canonical_bytes(record)
     plan = _mapping(record["plan"], "history plan")
     return OciRecordPlanV1(

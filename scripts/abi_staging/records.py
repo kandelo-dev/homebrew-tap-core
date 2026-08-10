@@ -1405,6 +1405,66 @@ def _formula_metadata_update(
     return {"formula": formula, "architecture": architecture}
 
 
+def build_admission_record(
+    *,
+    request_sha256: str,
+    request_source: Mapping[str, Any],
+    run: Mapping[str, Any],
+    candidate_record_sha256: str,
+    promoted_layer: Mapping[str, Any],
+    qualifying_receipt_sha256s: Sequence[str],
+    merged_pull_request: Mapping[str, Any],
+    tap_source: Mapping[str, Any],
+    canonical: Mapping[str, Any],
+    canonical_public_readback_sha256: str,
+    formula_metadata_source: Mapping[str, Any],
+    formula_metadata_update: Mapping[str, Any],
+    original_producer: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build one admission only after canonical and tap metadata readback."""
+
+    candidate_digest = _digest(candidate_record_sha256, "admission candidate record")
+    record = {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-admission",
+        "common": {
+            "request_sha256": _digest(request_sha256, "admission request"),
+            "subject": {"kind": "candidate", "identity": candidate_digest},
+            "source": _plain(request_source),
+            "run": _plain(run),
+            "guard_codes": [],
+            "work_state": "complete",
+            "outcome": "success",
+            "artifact_class": "canonical",
+            "artifact": _plain(canonical),
+            "promotion_state": "promoted",
+            "retry_state": {
+                "attempts": 0,
+                "eligible": False,
+                "exhausted": False,
+                "next_action": "none",
+            },
+            "blockers": [],
+        },
+        "admission": {
+            "candidate_record_sha256": candidate_digest,
+            "promoted_layer": _plain(promoted_layer),
+            "qualifying_receipt_sha256s": list(qualifying_receipt_sha256s),
+            "merged_pull_request": _plain(merged_pull_request),
+            "tap_source": _plain(tap_source),
+            "canonical": _plain(canonical),
+            "canonical_public_readback_sha256": _digest(
+                canonical_public_readback_sha256, "canonical public readback"
+            ),
+            "formula_metadata_source": _plain(formula_metadata_source),
+            "formula_metadata_update": _plain(formula_metadata_update),
+            "original_producer": _plain(original_producer),
+        },
+    }
+    validate_admission_record(record)
+    return record
+
+
 def validate_admission_record(record: Mapping[str, Any]) -> None:
     value = _mapping(record, "admission record")
     _exact_keys(

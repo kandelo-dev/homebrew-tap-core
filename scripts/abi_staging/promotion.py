@@ -1,0 +1,1348 @@
+"""Pure merge admission and unchanged-layer canonical promotion contracts."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass
+import hashlib
+import re
+from types import MappingProxyType
+from typing import Any, Literal
+
+from .abi_history import (
+    HISTORY_RECORD_MEDIA_TYPE,
+    AbiHistoryError,
+    history_record_repository,
+    validate_protection_snapshot,
+)
+from .canonical import CanonicalJsonError, canonical_bytes, canonical_sha256, parse_canonical_bytes
+from .contract import ContractError, load_bottle_contract
+from .custody import CustodyError, load_source_custody_manifest
+from .github_public import GitHubPublicClient, PublicGitHubError
+from .oci import (
+    FetchedOciBlobV1,
+    FetchedOciRecordV1,
+    OciPublicationError,
+    OciTransportV1,
+    PublishedRecordLocatorV1,
+    build_oci_manifest,
+    publish_immutable_oci_plan,
+)
+from .override import OVERRIDE_RECEIPT_MEDIA_TYPE
+from .plan import (
+    PlanError,
+    exact_formula_subject,
+    parse_formula_subject,
+    validate_tap_plan,
+)
+from .records import (
+    BOTTLE_LAYER_MEDIA_TYPE,
+    CANDIDATE_RECORD_MEDIA_TYPE,
+    OCI_MANIFEST_MEDIA_TYPE,
+    SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
+    OciBlobV1,
+    OciRecordPlanV1,
+    TapRecordError,
+    build_admission_record,
+    validate_abi_history_record,
+    validate_candidate_record,
+)
+from .policy import VerificationTestDefinitionV1
+from .tap_metadata import PromotionPolicyV1
+from .verification import (
+    VERIFICATION_RECEIPT_MEDIA_TYPE,
+    VerificationError,
+    receipt_repository,
+    validate_verification_receipt_record,
+)
+CANONICAL_BOTTLE_MANIFEST_MEDIA_TYPE = (
+    "application/vnd.kandelo.homebrew.canonical-bottle.v1+json"
+)
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+REPOSITORY = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9+._-]{0,127}$")
+
+
+class PromotionError(ValueError):
+    """Raised when merge admission or canonical promotion is not exact."""
+
+
+@dataclass(frozen=True)
+class PromotionDecisionV1:
+    request_digest: str
+    merged_pull_request: Mapping[str, object]
+    formula_subject: str
+    tap_plan_digest: str
+    candidate_record_digest: str
+    bottle_layer_sha256: str
+    bottle_layer_bytes: int
+    source_custody_digest: str
+    qualifying_receipts: tuple[str, ...]
+    override_receipts: tuple[str, ...]
+    tap_source_state: Literal["exact", "drift", "rebuild-required"]
+    eligibility: Literal["eligible", "ineligible", "rebuild-required"]
+
+
+@dataclass(frozen=True)
+class CanonicalBottlePublicationV1:
+    locator: PublishedRecordLocatorV1
+    artifact: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class PreparedAdmissionV1:
+    decision: PromotionDecisionV1
+    request_source: Mapping[str, object]
+    tap_source: Mapping[str, object]
+    canonical: Mapping[str, object]
+    canonical_readback_evidence_sha256: str
+    promoted_layer: Mapping[str, object]
+    original_producer: Mapping[str, object]
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _plain(child) for key, child in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_plain(child) for child in value]
+    return value
+
+
+def _exact(value: Any, keys: frozenset[str], field: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping) or frozenset(value) != keys:
+        raise PromotionError(f"{field} fields changed")
+    return value
+
+
+def _digest(value: Any, field: str) -> str:
+    if not isinstance(value, str) or SHA256.fullmatch(value) is None:
+        raise PromotionError(f"{field} is not a lowercase SHA-256")
+    return value
+
+
+def _git_sha(value: Any, field: str) -> str:
+    if not isinstance(value, str) or GIT_SHA.fullmatch(value) is None:
+        raise PromotionError(f"{field} is not a full lowercase Git SHA")
+    return value
+
+
+def _positive(value: Any, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 2**64 - 1:
+        raise PromotionError(f"{field} is not a bounded positive integer")
+    return value
+
+
+def _nonnegative(value: Any, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 2**32 - 1:
+        raise PromotionError(f"{field} is not a bounded nonnegative integer")
+    return value
+
+
+def _repository(value: Any, field: str) -> str:
+    if not isinstance(value, str) or REPOSITORY.fullmatch(value) is None:
+        raise PromotionError(f"{field} is not an owner/name repository")
+    return value
+
+
+def _stable_id(value: Any, field: str) -> str:
+    if not isinstance(value, str) or STABLE_ID.fullmatch(value) is None:
+        raise PromotionError(f"{field} is not a stable identifier")
+    return value
+
+
+def _source(value: Any, field: str) -> dict[str, str]:
+    source = _exact(value, frozenset({"repository", "commit", "tree"}), field)
+    return {
+        "repository": _repository(source["repository"], f"{field} repository"),
+        "commit": _git_sha(source["commit"], f"{field} commit"),
+        "tree": _git_sha(source["tree"], f"{field} tree"),
+    }
+
+
+def _artifact(value: Any, field: str) -> dict[str, object]:
+    artifact = _exact(
+        value,
+        frozenset({"sha256", "bytes", "immutable_reference"}),
+        field,
+    )
+    digest = _digest(artifact["sha256"], f"{field} digest")
+    size = _positive(artifact["bytes"], f"{field} bytes")
+    reference = artifact["immutable_reference"]
+    if (
+        not isinstance(reference, str)
+        or any(character.isspace() for character in reference)
+        or f"sha256:{digest}" not in reference
+    ):
+        raise PromotionError(f"{field} reference is not immutable")
+    return {"sha256": digest, "bytes": size, "immutable_reference": reference}
+
+
+def _canonical_mapping(body: bytes, field: str) -> dict[str, Any]:
+    try:
+        value = parse_canonical_bytes(body, maximum_bytes=64 * 1024 * 1024)
+    except CanonicalJsonError as error:
+        raise PromotionError(f"{field} is not canonical: {error}") from error
+    if not isinstance(value, Mapping):
+        raise PromotionError(f"{field} is not an object")
+    return _plain(value)
+
+
+def _descriptor_identity(blob: FetchedOciBlobV1) -> dict[str, object]:
+    return {
+        "mediaType": blob.media_type,
+        "digest": blob.digest,
+        "size": blob.size,
+        "annotations": {
+            "dev.kandelo.abi-staging.role": blob.role,
+            "org.opencontainers.image.title": blob.title,
+        },
+    }
+
+
+def _validated_fetched_record(
+    value: FetchedOciRecordV1 | None,
+    *,
+    artifact_type: str,
+    required_roles: tuple[str, ...],
+    field: str,
+) -> tuple[dict[str, Any], dict[str, FetchedOciBlobV1]]:
+    if not isinstance(value, FetchedOciRecordV1):
+        raise PromotionError(f"{field} public record is missing")
+    if value.artifact_type != artifact_type:
+        raise PromotionError(f"{field} artifact type changed")
+    if not value.repository.startswith("ghcr.io/"):
+        raise PromotionError(f"{field} repository is not public GHCR")
+    digest = value.digest
+    if (
+        not digest.startswith("sha256:")
+        or SHA256.fullmatch(digest.removeprefix("sha256:")) is None
+        or hashlib.sha256(value.manifest).hexdigest() != digest.removeprefix("sha256:")
+        or value.immutable_reference != f"{value.repository}@{digest}"
+    ):
+        raise PromotionError(f"{field} public manifest/readback identity drifted")
+    manifest = _canonical_mapping(value.manifest, f"{field} manifest")
+    manifest = dict(
+        _exact(
+            manifest,
+            frozenset(
+                {
+                    "schemaVersion",
+                    "mediaType",
+                    "artifactType",
+                    "config",
+                    "layers",
+                    "annotations",
+                }
+            ),
+            f"{field} manifest",
+        )
+    )
+    if (
+        manifest["schemaVersion"] != 2
+        or manifest["mediaType"] != OCI_MANIFEST_MEDIA_TYPE
+        or manifest["artifactType"] != artifact_type
+        or manifest["config"] != _descriptor_identity(value.config)
+        or hashlib.sha256(value.config.body).hexdigest()
+        != value.config.digest.removeprefix("sha256:")
+        or len(value.config.body) != value.config.size
+    ):
+        raise PromotionError(f"{field} manifest/config identity drifted")
+    raw_layers = manifest["layers"]
+    if not isinstance(raw_layers, list):
+        raise PromotionError(f"{field} manifest layers changed shape")
+    descriptors: dict[str, Mapping[str, Any]] = {}
+    for descriptor in raw_layers:
+        if not isinstance(descriptor, Mapping):
+            raise PromotionError(f"{field} manifest layer descriptor is invalid")
+        annotations = descriptor.get("annotations")
+        role = (
+            annotations.get("dev.kandelo.abi-staging.role")
+            if isinstance(annotations, Mapping)
+            else None
+        )
+        if not isinstance(role, str) or not role or role in descriptors:
+            raise PromotionError(f"{field} manifest layer roles are invalid")
+        descriptors[role] = descriptor
+    layers: dict[str, FetchedOciBlobV1] = {}
+    for layer in value.layers:
+        if (
+            layer.role in layers
+            or descriptors.get(layer.role) != _descriptor_identity(layer)
+            or hashlib.sha256(layer.body).hexdigest()
+            != layer.digest.removeprefix("sha256:")
+            or len(layer.body) != layer.size
+        ):
+            raise PromotionError(f"{field} layer {layer.role!r} drifted")
+        layers[layer.role] = layer
+    if any(role not in layers for role in required_roles):
+        raise PromotionError(f"{field} lacks required public layer bytes")
+    return _canonical_mapping(value.config.body, f"{field} config"), layers
+
+
+def _request_context(
+    request: Mapping[str, Any],
+    request_digest: str,
+    expected_policy: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, str], int]:
+    digest = _digest(request_digest, "promotion request")
+    if canonical_sha256(request) != digest:
+        raise PromotionError("promotion request digest differs from canonical request bytes")
+    value = _exact(
+        request,
+        frozenset(
+            {
+                "schema",
+                "kind",
+                "pull_request",
+                "build_source",
+                "target_abi",
+                "requirements",
+                "issuance",
+                "informational_context",
+            }
+        ),
+        "promotion request",
+    )
+    if value["schema"] != 1 or value["kind"] != "kandelo-abi-staging-request":
+        raise PromotionError("promotion request protocol is unsupported")
+    pull = _exact(
+        value["pull_request"], frozenset({"repository", "number"}), "request PR"
+    )
+    pull_checked = {
+        "repository": _repository(pull["repository"], "request PR repository"),
+        "number": _positive(pull["number"], "request PR number"),
+    }
+    source = _source(value["build_source"], "request build source")
+    target = _exact(
+        value["target_abi"], frozenset({"version", "snapshot_sha256"}), "request target ABI"
+    )
+    target_abi = _nonnegative(target["version"], "request target ABI")
+    _digest(target["snapshot_sha256"], "request ABI snapshot")
+    if _plain(value["issuance"]) != _plain(expected_policy):
+        raise PromotionError("request policy/guard identity is not current")
+    return pull_checked, source, target_abi
+
+
+def _merged_pull_request(
+    value: Any, *, request_pull: Mapping[str, Any], source: Mapping[str, str]
+) -> dict[str, object]:
+    fact = _exact(
+        value,
+        frozenset({"repository", "number", "state", "head", "merge_commit"}),
+        "merged pull-request fact",
+    )
+    checked = {
+        "repository": _repository(fact["repository"], "merged PR repository"),
+        "number": _positive(fact["number"], "merged PR number"),
+        "head": _git_sha(fact["head"], "merged PR head"),
+        "merge_commit": _git_sha(fact["merge_commit"], "merged PR commit"),
+    }
+    if fact["state"] != "merged":
+        raise PromotionError("only an exact merged pull request permits promotion")
+    if (
+        checked["repository"].lower() != str(request_pull["repository"]).lower()
+        or checked["number"] != request_pull["number"]
+        or checked["head"] != source["commit"]
+    ):
+        raise PromotionError("merged pull-request fact differs from the exact request")
+    return checked
+
+
+def fetch_exact_merge_fact(
+    request: Mapping[str, Any], client: GitHubPublicClient
+) -> dict[str, object]:
+    """Fetch and validate the public merge fact for the request's exact PR head."""
+
+    request_value = _exact(
+        request,
+        frozenset(
+            {
+                "schema",
+                "kind",
+                "pull_request",
+                "build_source",
+                "target_abi",
+                "requirements",
+                "issuance",
+                "informational_context",
+            }
+        ),
+        "promotion request",
+    )
+    pull = _exact(
+        request_value["pull_request"],
+        frozenset({"repository", "number"}),
+        "request PR",
+    )
+    checked_pull = {
+        "repository": _repository(pull["repository"], "request PR repository"),
+        "number": _positive(pull["number"], "request PR number"),
+    }
+    source = _source(request_value["build_source"], "request build source")
+    policy = getattr(client, "policy", None)
+    issuer_repository = getattr(policy, "issuer_repository", None)
+    if (
+        not isinstance(issuer_repository, str)
+        or issuer_repository.lower() != checked_pull["repository"].lower()
+    ):
+        raise PromotionError("public GitHub client is bound to another repository")
+    try:
+        lifecycle = client.pull_request_lifecycle(checked_pull["number"])
+    except PublicGitHubError as error:
+        raise PromotionError(f"cannot fetch exact merged pull request: {error}") from error
+    fact = {
+        "repository": checked_pull["repository"],
+        "number": checked_pull["number"],
+        "state": getattr(lifecycle, "state", None),
+        "head": getattr(lifecycle, "current_head", None),
+        "merge_commit": getattr(lifecycle, "merged_commit", None),
+    }
+    checked = _merged_pull_request(
+        fact,
+        request_pull=checked_pull,
+        source=source,
+    )
+    return {**checked, "state": "merged"}
+
+
+def _formula_entry(plan: Mapping[str, Any], name: str, architecture: str) -> Mapping[str, Any]:
+    matches = [
+        formula
+        for formula in plan["formulae"]
+        if formula["identity"]["name"] == name
+        and formula["identity"]["architecture"] == architecture
+    ]
+    if len(matches) != 1:
+        raise PromotionError("candidate Formula is absent or duplicated in the tap plan")
+    return matches[0]
+
+
+def _candidate_facts(
+    candidate: FetchedOciRecordV1,
+    source_custody: FetchedOciRecordV1,
+    *,
+    request_digest: str,
+    request_source: Mapping[str, str],
+    target_abi: int,
+    tap_plan: Mapping[str, Any],
+    policy: PromotionPolicyV1,
+) -> tuple[dict[str, Any], Mapping[str, Any], dict[str, object], str, str]:
+    record, candidate_layers = _validated_fetched_record(
+        candidate,
+        artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
+        required_roles=("bottle-layer", "bottle-contract"),
+        field="candidate",
+    )
+    try:
+        validate_candidate_record(record)
+    except TapRecordError as error:
+        raise PromotionError(f"candidate record is invalid: {error}") from error
+    payload = record["candidate"]
+    formula = payload["formula"]
+    name = _stable_id(formula["formula"], "candidate Formula")
+    architecture = formula["architecture"]
+    if architecture not in {"wasm32", "wasm64"}:
+        raise PromotionError("candidate architecture is unsupported")
+    expected_candidate_repository = canonical_repository(
+        policy, target_abi, name, candidate=True
+    )
+    if candidate.repository != "ghcr.io/" + expected_candidate_repository:
+        raise PromotionError("candidate repository differs from its exact ABI namespace")
+    bottle = _artifact(payload["bottle_layer"], "candidate bottle layer")
+    layer = candidate_layers["bottle-layer"]
+    contract_layer = candidate_layers["bottle-contract"]
+    if (
+        bottle["sha256"] != layer.digest.removeprefix("sha256:")
+        or bottle["bytes"] != layer.size
+        or record["common"]["artifact"] != bottle
+        or record["common"]["request_sha256"] != request_digest
+        or record["common"]["source"] != request_source
+        or formula["target_abi"] != target_abi
+        or formula["tap"].lower() != policy.tap_repository.lower()
+    ):
+        raise PromotionError("candidate differs from request, source, target, or bottle bytes")
+    try:
+        contract = load_bottle_contract(contract_layer.body)
+    except ContractError as error:
+        raise PromotionError(f"candidate bottle contract is invalid: {error}") from error
+    contract_digest = hashlib.sha256(contract_layer.body).hexdigest()
+    normalized = {
+        item["id"]: item["artifact"] for item in payload["normalized_components"]
+    }
+    expected_contract_artifact = {
+        "sha256": contract_digest,
+        "bytes": contract_layer.size,
+        "immutable_reference": f"{candidate.repository}@sha256:{contract_digest}",
+    }
+    if (
+        formula["bottle_contract_sha256"] != contract_digest
+        or normalized.get("bottle-contract") != expected_contract_artifact
+        or contract["target"]["abi"] != target_abi
+        or contract["target"]["architecture"] != architecture
+        or contract["formula"]["name"] != name
+        or contract["formula"]["version"] != formula["version"]
+        or contract["formula"]["revision"] != formula["revision"]
+        or contract["formula"]["rebuild"] != formula["bottle_rebuild"]
+    ):
+        raise PromotionError("candidate Formula and bottle contract differ")
+    formula_plan = _formula_entry(tap_plan, name, architecture)
+    planned_identity = formula_plan["identity"]
+    planned_contract = formula_plan["contract_sha256"]
+    if (
+        planned_identity["version"] != formula["version"]
+        or planned_identity["revision"] != formula["revision"]
+        or planned_identity["rebuild"] != formula["bottle_rebuild"]
+        or contract["formula"]["normalized_source_sha256"]
+        != formula_plan["capture"]["normalized_source_sha256"]
+        or planned_contract not in {None, contract_digest}
+    ):
+        raise PromotionError("candidate differs from the protected tap plan")
+    candidate_dependencies = {
+        item["id"]: _artifact(
+            item["artifact"],
+            f"candidate dependency {item['id']}",
+        )
+        for item in payload["direct_dependency_layers"]
+    }
+    expected_dependency_ids = {
+        f"{dependency['formula']}-{dependency['architecture']}"
+        for dependency in formula_plan["direct_dependencies"]
+    }
+    expected_contract_dependencies = []
+    for dependency in formula_plan["direct_dependencies"]:
+        identity = f"{dependency['formula']}-{dependency['architecture']}"
+        dependency_artifact = candidate_dependencies.get(identity)
+        if dependency_artifact is None:
+            raise PromotionError("candidate dependency layer inventory is incomplete")
+        expected_contract_dependencies.append(
+            {
+                "formula": dependency["formula"],
+                "architecture": dependency["architecture"],
+                "bottle_layer_sha256": dependency_artifact["sha256"],
+                "bottle_layer_bytes": dependency_artifact["bytes"],
+                "materialization_policy_sha256": dependency[
+                    "materialization_policy_sha256"
+                ],
+            }
+        )
+    if (
+        set(candidate_dependencies) != expected_dependency_ids
+        or contract["direct_dependencies"] != expected_contract_dependencies
+    ):
+        raise PromotionError("candidate dependency contract differs from its exact layers")
+
+    custody_record, custody_layers = _validated_fetched_record(
+        source_custody,
+        artifact_type=SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
+        required_roles=(),
+        field="source custody",
+    )
+    try:
+        custody = load_source_custody_manifest(canonical_bytes(custody_record))
+    except CustodyError as error:
+        raise PromotionError(f"source custody record is invalid: {error}") from error
+    custody_digest = source_custody.digest.removeprefix("sha256:")
+    expected_custody_artifact = {
+        "sha256": custody_digest,
+        "bytes": len(source_custody.manifest),
+        "immutable_reference": source_custody.immutable_reference,
+    }
+    expected_custody_roles = {
+        f"{entry[identity]}-{suffix}"
+        for collection, identity in ((custody["sources"], "role"), (custody["submodules"], "id"))
+        for entry in collection
+        for suffix in ("bundle", "tree")
+    }
+    if set(custody_layers) != expected_custody_roles:
+        raise PromotionError("source custody public member closure is incomplete")
+    expected_custody_repository = (
+        policy.tap_repository.split("/", 1)[0].lower()
+        + "/"
+        + policy.canonical_repository_prefix
+        + str(target_abi)
+        + "-source-custody"
+    )
+    sources = {entry["role"]: entry for entry in custody["sources"]}
+    if (
+        source_custody.repository != "ghcr.io/" + expected_custody_repository
+        or payload["source_custody_sha256"] != custody_digest
+        or normalized.get("source-custody") != expected_custody_artifact
+        or custody["request_sha256"] != request_digest
+        or {
+            key: sources.get("kandelo", {}).get(key)
+            for key in ("repository", "commit", "tree")
+        }
+        != request_source
+        or {
+            key: sources.get("tap", {}).get(key)
+            for key in ("repository", "commit", "tree")
+        }
+        != tap_plan["tap_source"]
+    ):
+        raise PromotionError("source custody differs from candidate/request/tap plan")
+    return record, formula_plan, bottle, contract_digest, custody_digest
+
+
+def _verification_receipt(
+    receipt: FetchedOciRecordV1,
+    *,
+    request_digest: str,
+    request_source: Mapping[str, str],
+    candidate_digest: str,
+    bottle: Mapping[str, object],
+    expected_authority: Mapping[tuple[str, str], str],
+) -> tuple[str, str | None, tuple[str, str]]:
+    record, _layers = _validated_fetched_record(
+        receipt,
+        artifact_type=VERIFICATION_RECEIPT_MEDIA_TYPE,
+        required_roles=(),
+        field="verification receipt",
+    )
+    try:
+        validate_verification_receipt_record(record)
+    except VerificationError as error:
+        raise PromotionError(f"verification receipt is invalid: {error}") from error
+    common = record["common"]
+    payload = record["verification"]
+    identity = (payload["test_definition_sha256"], payload["host"])
+    if (
+        common["request_sha256"] != request_digest
+        or common["source"] != request_source
+        or payload["candidate_record_sha256"] != candidate_digest
+        or payload["candidate_layer"] != bottle
+        or receipt.repository != expected_authority.get(identity)
+    ):
+        raise PromotionError("verification receipt differs from the exact candidate")
+    guard = common["guard_codes"][0] if common["guard_codes"] else None
+    eligible = (
+        common["outcome"] == "success"
+        and common["promotion_state"] == "eligible"
+        and guard is None
+    )
+    return receipt.digest.removeprefix("sha256:"), None if eligible else guard, identity
+
+
+def _override_receipt(
+    receipt: FetchedOciRecordV1,
+    *,
+    request_digest: str,
+    request_source: Mapping[str, str],
+    candidate_digest: str,
+    bottle: Mapping[str, object],
+    request_policy: Mapping[str, Any],
+    failed_guards: set[str],
+    expected_repository: str,
+) -> tuple[str, tuple[str, ...]]:
+    record, _layers = _validated_fetched_record(
+        receipt,
+        artifact_type=OVERRIDE_RECEIPT_MEDIA_TYPE,
+        required_roles=(),
+        field="override receipt",
+    )
+    value = _exact(
+        record,
+        frozenset({"schema", "kind", "common", "override_receipt"}),
+        "override receipt",
+    )
+    if value["schema"] != 1 or value["kind"] != "kandelo-abi-staging-override-receipt":
+        raise PromotionError("override receipt protocol is unsupported")
+    common = _exact(
+        value["common"],
+        frozenset(
+            {
+                "request_sha256",
+                "subject",
+                "source",
+                "run",
+                "guard_codes",
+                "work_state",
+                "outcome",
+                "artifact_class",
+                "artifact",
+                "promotion_state",
+                "retry_state",
+                "blockers",
+            }
+        ),
+        "override receipt common",
+    )
+    payload = value["override_receipt"]
+    allowed = {
+        "accepted_guard_codes",
+        "maintainer",
+        "justification",
+        "policy",
+        "candidate_record_sha256",
+        "bottle_layer",
+    }
+    if "capture_authorization_sha256" in payload:
+        allowed.add("capture_authorization_sha256")
+    payload = _exact(payload, frozenset(allowed), "override receipt payload")
+    guards = payload["accepted_guard_codes"]
+    if (
+        not isinstance(guards, list)
+        or guards != sorted(set(guards))
+        or not guards
+        or not set(guards).issubset(failed_guards)
+    ):
+        raise PromotionError("override receipt does not accept the exact failed guards")
+    maintainer = _exact(
+        payload["maintainer"],
+        frozenset({"login", "permission", "authorization_reference"}),
+        "override maintainer",
+    )
+    justification = payload["justification"]
+    subject = common["subject"]
+    if (
+        common["request_sha256"] != request_digest
+        or common["source"] != request_source
+        or subject != {"kind": "candidate", "identity": candidate_digest}
+        or common["guard_codes"] != guards
+        or common["work_state"] != "complete"
+        or common["outcome"] != "success"
+        or common["artifact_class"] != "candidate"
+        or common["artifact"] != bottle
+        or common["promotion_state"] != "accepted-with-override"
+        or common["blockers"] != []
+        or payload["candidate_record_sha256"] != candidate_digest
+        or payload["bottle_layer"] != bottle
+        or receipt.repository != expected_repository
+        or _plain(payload["policy"])
+        != {
+            key: request_policy[key]
+            for key in (
+                "policy_version",
+                "policy_sha256",
+                "guard_registry_version",
+                "guard_registry_sha256",
+            )
+        }
+        or maintainer["permission"] not in {"maintain", "admin"}
+        or not isinstance(maintainer["authorization_reference"], str)
+        or not maintainer["authorization_reference"].startswith("https://github.com/")
+        or not isinstance(justification, str)
+        or len(justification.strip()) < 16
+    ):
+        raise PromotionError("override receipt differs from exact candidate authority")
+    if "capture_authorization_sha256" in payload:
+        _digest(payload["capture_authorization_sha256"], "capture authorization")
+    return receipt.digest.removeprefix("sha256:"), tuple(guards)
+
+
+def _verification_authority(
+    definitions: Sequence[VerificationTestDefinitionV1],
+    *,
+    candidate_repository: str,
+) -> dict[tuple[str, str], str]:
+    if not definitions:
+        raise PromotionError("protected verification registry is empty")
+    result: dict[tuple[str, str], str] = {}
+    previous_id = ""
+    base = candidate_repository.removeprefix("ghcr.io/")
+    for definition in definitions:
+        if not isinstance(definition, VerificationTestDefinitionV1):
+            raise PromotionError("protected verification definition is invalid")
+        identity = {
+            "hosts": list(definition.hosts),
+            "id": definition.id,
+            "kandelo_paths": list(definition.kandelo_paths),
+            "policy": definition.policy,
+        }
+        if (
+            definition.id <= previous_id
+            or canonical_sha256(identity) != definition.sha256
+            or not definition.hosts
+        ):
+            raise PromotionError("protected verification registry identity drifted")
+        previous_id = definition.id
+        for host in definition.hosts:
+            key = (definition.sha256, host)
+            if key in result:
+                raise PromotionError("protected verification identity is duplicated")
+            try:
+                repository = receipt_repository(base, definition.id, host)
+            except VerificationError as error:
+                raise PromotionError(
+                    f"protected verification namespace is invalid: {error}"
+                ) from error
+            result[key] = "ghcr.io/" + repository
+    return result
+
+
+def _history(
+    history: FetchedOciRecordV1 | None,
+    *,
+    protection_snapshot: Mapping[str, Any],
+    target_abi: int,
+    tap_source: Mapping[str, str],
+    policy: PromotionPolicyV1,
+) -> None:
+    record, _layers = _validated_fetched_record(
+        history,
+        artifact_type=HISTORY_RECORD_MEDIA_TYPE,
+        required_roles=(),
+        field="ABI history",
+    )
+    try:
+        validate_abi_history_record(record)
+    except TapRecordError as error:
+        raise PromotionError(f"ABI history record is invalid: {error}") from error
+    plan = record["plan"]
+    expected_repository = (
+        "ghcr.io/"
+        + history_record_repository(policy.tap_repository, plan["source_abi"])
+    )
+    if (
+        plan["successor_abi"] != target_abi
+        or plan["source_abi"] + 1 != target_abi
+        or plan["branch"] != policy.historical_branch_prefix + str(plan["source_abi"])
+        or plan["preactivation_tap_commit"] != tap_source["commit"]
+        or plan["preactivation_tap_tree"] != tap_source["tree"]
+        or history is None
+        or history.repository != expected_repository
+    ):
+        raise PromotionError("ABI history does not guard this exact successor transition")
+    try:
+        evidence = validate_protection_snapshot(
+            plan,
+            protection_snapshot,
+            phase="postcreate",
+            expected_repository=policy.tap_repository,
+        )
+    except AbiHistoryError as error:
+        raise PromotionError(f"ABI history protection is invalid: {error}") from error
+    if evidence != record["protection_evidence"]:
+        raise PromotionError("ABI history protection moved after record publication")
+
+
+def _formula_contract_changed(
+    planned: Mapping[str, Any], current: Mapping[str, Any]
+) -> bool:
+    current = _exact(
+        current,
+        frozenset(
+            {
+                "identity",
+                "capture",
+                "contract_sha256",
+                "direct_dependencies",
+                "required_by_products",
+                "work_class",
+            }
+        ),
+        "current Formula plan",
+    )
+    for field in ("identity", "capture", "direct_dependencies"):
+        if canonical_bytes(current[field]) != canonical_bytes(planned[field]):
+            return True
+    return False
+
+
+def _dependency_layers_changed(
+    candidate_record: Mapping[str, Any],
+    current_dependency_layers: Mapping[str, Mapping[str, Any]],
+    formula_plan: Mapping[str, Any],
+) -> bool:
+    if not isinstance(current_dependency_layers, Mapping):
+        raise PromotionError("current dependency layer inventory is not an object")
+    candidate_layers = {
+        item["id"]: _artifact(item["artifact"], f"candidate dependency {item['id']}")
+        for item in candidate_record["candidate"]["direct_dependency_layers"]
+    }
+    for dependency in formula_plan["direct_dependencies"]:
+        name = dependency["formula"]
+        architecture = dependency["architecture"]
+        subject = exact_formula_subject(name, architecture)
+        current = current_dependency_layers.get(subject)
+        if current is None:
+            raise PromotionError("current dependency layer inventory is incomplete")
+        expected = candidate_layers.get(f"{name}-{architecture}")
+        if expected is None:
+            raise PromotionError("candidate dependency layer inventory is incomplete")
+        if _artifact(current, f"current dependency {subject}") != expected:
+            return True
+    return False
+
+
+def evaluate_promotion(
+    *,
+    request: Mapping[str, Any],
+    request_digest: str,
+    merge_fact: Mapping[str, Any],
+    tap_plan: Mapping[str, Any],
+    tap_plan_digest: str,
+    candidate: FetchedOciRecordV1,
+    source_custody: FetchedOciRecordV1,
+    verification_receipts: Sequence[FetchedOciRecordV1],
+    override_receipts: Sequence[FetchedOciRecordV1],
+    history: FetchedOciRecordV1 | None,
+    history_protection_snapshot: Mapping[str, Any],
+    current_tap_source: Mapping[str, Any],
+    current_formula: Mapping[str, Any],
+    current_dependency_layers: Mapping[str, Mapping[str, Any]],
+    policy: PromotionPolicyV1,
+    expected_request_policy: Mapping[str, Any],
+    verification_tests: Sequence[VerificationTestDefinitionV1],
+) -> PromotionDecisionV1:
+    """Re-evaluate one Formula against exact merge, record, and tap authority."""
+
+    if not isinstance(policy, PromotionPolicyV1):
+        raise PromotionError("promotion policy is not protected schema 1")
+    pull, request_source, target_abi = _request_context(
+        request, request_digest, expected_request_policy
+    )
+    if pull["repository"].lower() != policy.kandelo_repository.lower():
+        raise PromotionError("request repository differs from promotion policy")
+    merged = _merged_pull_request(merge_fact, request_pull=pull, source=request_source)
+    try:
+        validate_tap_plan(tap_plan)
+    except PlanError as error:
+        raise PromotionError(f"tap plan is invalid: {error}") from error
+    checked_plan_digest = _digest(tap_plan_digest, "tap plan")
+    if (
+        canonical_sha256(tap_plan) != checked_plan_digest
+        or tap_plan["request_digest"] != request_digest
+        or tap_plan["target_abi"] != request["target_abi"]
+        or tap_plan["tap_source"]["repository"].lower()
+        != policy.tap_repository.lower()
+    ):
+        raise PromotionError("tap plan differs from request, target, or protected tap")
+    candidate_record, formula_plan, bottle, _contract_digest, custody_digest = (
+        _candidate_facts(
+            candidate,
+            source_custody,
+            request_digest=request_digest,
+            request_source=request_source,
+            target_abi=target_abi,
+            tap_plan=tap_plan,
+            policy=policy,
+        )
+    )
+    candidate_digest = candidate.digest.removeprefix("sha256:")
+    expected_verification = _verification_authority(
+        verification_tests,
+        candidate_repository=candidate.repository,
+    )
+    receipt_digests: list[str] = []
+    failed_guards: set[str] = set()
+    seen_verification: set[tuple[str, str]] = set()
+    for receipt in verification_receipts:
+        digest, guard, identity = _verification_receipt(
+            receipt,
+            request_digest=request_digest,
+            request_source=request_source,
+            candidate_digest=candidate_digest,
+            bottle=bottle,
+            expected_authority=expected_verification,
+        )
+        if identity in seen_verification:
+            raise PromotionError("verification identity repeats in promotion input")
+        seen_verification.add(identity)
+        if guard is None:
+            receipt_digests.append(digest)
+        else:
+            failed_guards.add(guard)
+    override_results = [
+        _override_receipt(
+            receipt,
+            request_digest=request_digest,
+            request_source=request_source,
+            candidate_digest=candidate_digest,
+            bottle=bottle,
+            request_policy=request["issuance"],
+            failed_guards=failed_guards,
+            expected_repository=(
+                candidate.repository + "/receipts/overrides"
+            ),
+        )
+        for receipt in override_receipts
+    ]
+    override_digests = [result[0] for result in override_results]
+    accepted_guards = {
+        guard for _digest_value, guards in override_results for guard in guards
+    }
+    if len(receipt_digests) != len(set(receipt_digests)):
+        raise PromotionError("qualifying verification receipts repeat")
+    if len(override_digests) != len(set(override_digests)):
+        raise PromotionError("override receipts repeat")
+    receipt_digests.sort()
+    override_digests.sort()
+    verification_complete = set(expected_verification) == seen_verification
+    verification_accepted = failed_guards.issubset(accepted_guards)
+
+    planned_tap_source = _source(tap_plan["tap_source"], "planned tap source")
+    _history(
+        history,
+        protection_snapshot=history_protection_snapshot,
+        target_abi=target_abi,
+        tap_source=planned_tap_source,
+        policy=policy,
+    )
+    current_source = _source(current_tap_source, "current tap source")
+    if current_source["repository"].lower() != policy.tap_repository.lower():
+        raise PromotionError("current tap source names another repository")
+    formula_changed = _formula_contract_changed(formula_plan, current_formula)
+    dependency_changed = _dependency_layers_changed(
+        candidate_record, current_dependency_layers, formula_plan
+    )
+    if formula_changed or dependency_changed:
+        tap_source_state = "rebuild-required"
+        eligibility = "rebuild-required"
+    else:
+        tap_source_state = "exact" if current_source == planned_tap_source else "drift"
+        eligibility = (
+            "eligible"
+            if verification_complete and verification_accepted
+            else "ineligible"
+        )
+
+    decision = PromotionDecisionV1(
+        request_digest=request_digest,
+        merged_pull_request=merged,
+        formula_subject=exact_formula_subject(
+            candidate_record["candidate"]["formula"]["formula"],
+            candidate_record["candidate"]["formula"]["architecture"],
+        ),
+        tap_plan_digest=checked_plan_digest,
+        candidate_record_digest=candidate_digest,
+        bottle_layer_sha256=str(bottle["sha256"]),
+        bottle_layer_bytes=int(bottle["bytes"]),
+        source_custody_digest=custody_digest,
+        qualifying_receipts=tuple(receipt_digests),
+        override_receipts=tuple(override_digests),
+        tap_source_state=tap_source_state,
+        eligibility=eligibility,
+    )
+    validate_promotion_decision(asdict(decision))
+    return decision
+
+
+def validate_promotion_decision(value: Mapping[str, Any]) -> None:
+    decision = _exact(
+        value,
+        frozenset(PromotionDecisionV1.__dataclass_fields__),
+        "promotion decision",
+    )
+    _digest(decision["request_digest"], "promotion request")
+    merged = _exact(
+        decision["merged_pull_request"],
+        frozenset({"repository", "number", "head", "merge_commit"}),
+        "promotion merged PR",
+    )
+    _repository(merged["repository"], "promotion merged PR repository")
+    _positive(merged["number"], "promotion merged PR number")
+    _git_sha(merged["head"], "promotion merged PR head")
+    _git_sha(merged["merge_commit"], "promotion merged PR commit")
+    subject = decision["formula_subject"]
+    try:
+        parse_formula_subject(subject, "promotion Formula subject")
+    except PlanError as error:
+        raise PromotionError(f"promotion Formula subject is invalid: {error}") from error
+    _digest(decision["tap_plan_digest"], "promotion tap plan")
+    _digest(decision["candidate_record_digest"], "promotion candidate")
+    _digest(decision["bottle_layer_sha256"], "promotion bottle layer")
+    _positive(decision["bottle_layer_bytes"], "promotion bottle bytes")
+    _digest(decision["source_custody_digest"], "promotion source custody")
+    for field in ("qualifying_receipts", "override_receipts"):
+        values = decision[field]
+        if (
+            not isinstance(values, (list, tuple))
+            or list(values) != sorted(set(values))
+        ):
+            raise PromotionError(f"promotion {field} is not sorted and unique")
+        for item in values:
+            _digest(item, f"promotion {field}")
+    if decision["tap_source_state"] not in {"exact", "drift", "rebuild-required"}:
+        raise PromotionError("promotion tap source state is unsupported")
+    if decision["eligibility"] not in {"eligible", "ineligible", "rebuild-required"}:
+        raise PromotionError("promotion eligibility is unsupported")
+    if (
+        decision["eligibility"] == "eligible"
+        and not decision["qualifying_receipts"]
+        and not decision["override_receipts"]
+    ):
+        raise PromotionError("eligible promotion has no qualifying trust receipt")
+    if (decision["tap_source_state"] == "rebuild-required") != (
+        decision["eligibility"] == "rebuild-required"
+    ):
+        raise PromotionError("promotion source and eligibility states contradict")
+
+
+def canonical_repository(
+    policy: PromotionPolicyV1, target_abi: int, formula: str, *, candidate: bool = False
+) -> str:
+    if not isinstance(policy, PromotionPolicyV1):
+        raise PromotionError("promotion policy is invalid")
+    owner, tap_name = policy.tap_repository.lower().split("/", 1)
+    expected_prefix = tap_name + "-abi-"
+    if policy.canonical_repository_prefix != expected_prefix:
+        raise PromotionError("canonical repository policy does not derive from the tap")
+    abi = _nonnegative(target_abi, "canonical target ABI")
+    name = _stable_id(formula, "canonical Formula")
+    suffix = "-candidates" if candidate else ""
+    return f"{owner}/{policy.canonical_repository_prefix}{abi}{suffix}/{name}"
+
+
+def _candidate_layer(candidate: FetchedOciRecordV1) -> tuple[dict[str, Any], FetchedOciBlobV1]:
+    record, layers = _validated_fetched_record(
+        candidate,
+        artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
+        required_roles=("bottle-layer",),
+        field="candidate",
+    )
+    try:
+        validate_candidate_record(record)
+    except TapRecordError as error:
+        raise PromotionError(f"candidate record is invalid: {error}") from error
+    return record, layers["bottle-layer"]
+
+
+def build_canonical_bottle_plan(
+    decision: PromotionDecisionV1,
+    *,
+    candidate: FetchedOciRecordV1,
+    policy: PromotionPolicyV1,
+    destination_repository: str | None = None,
+) -> OciRecordPlanV1:
+    validate_promotion_decision(asdict(decision))
+    if decision.eligibility != "eligible":
+        raise PromotionError("ineligible candidate cannot receive a canonical manifest")
+    record, layer = _candidate_layer(candidate)
+    formula = record["candidate"]["formula"]
+    if decision.formula_subject != exact_formula_subject(
+        formula["formula"], formula["architecture"]
+    ):
+        raise PromotionError("canonical plan Formula differs from promotion decision")
+    expected = canonical_repository(policy, formula["target_abi"], formula["formula"])
+    destination = expected if destination_repository is None else destination_repository
+    if destination != expected or destination == candidate.repository.removeprefix("ghcr.io/"):
+        raise PromotionError("canonical destination is not the exact endorsed ABI namespace")
+    if (
+        candidate.digest.removeprefix("sha256:") != decision.candidate_record_digest
+        or layer.digest.removeprefix("sha256:") != decision.bottle_layer_sha256
+        or layer.size != decision.bottle_layer_bytes
+    ):
+        raise PromotionError("canonical plan candidate/layer differs from promotion decision")
+    metadata = {
+        "schema": 1,
+        "kind": "kandelo-homebrew-canonical-bottle",
+        "classification": "canonical-pending-admission",
+        "request_sha256": decision.request_digest,
+        "candidate_record_sha256": decision.candidate_record_digest,
+        "merged_pull_request": _plain(decision.merged_pull_request),
+        "formula": {
+            "tap": formula["tap"],
+            "name": formula["formula"],
+            "architecture": formula["architecture"],
+            "target_abi": formula["target_abi"],
+        },
+        "bottle_layer": {
+            "sha256": decision.bottle_layer_sha256,
+            "bytes": decision.bottle_layer_bytes,
+        },
+    }
+    return OciRecordPlanV1(
+        repository=destination,
+        artifact_type=CANONICAL_BOTTLE_MANIFEST_MEDIA_TYPE,
+        config=OciBlobV1(
+            role="canonical-bottle-metadata",
+            media_type=CANONICAL_BOTTLE_MANIFEST_MEDIA_TYPE,
+            body=canonical_bytes(metadata),
+            title="canonical-bottle.json",
+        ),
+        layers=(
+            OciBlobV1(
+                role="bottle-layer",
+                media_type=BOTTLE_LAYER_MEDIA_TYPE,
+                body=layer.body,
+                title=layer.title,
+                mount_from=candidate.repository.removeprefix("ghcr.io/"),
+            ),
+        ),
+        annotations={
+            "dev.kandelo.abi-staging.candidate-record-sha256": (
+                decision.candidate_record_digest
+            ),
+            "dev.kandelo.abi-staging.classification": "canonical-pending-admission",
+            "dev.kandelo.abi-staging.formula": formula["formula"],
+            "dev.kandelo.abi-staging.kind": "canonical-bottle",
+            "dev.kandelo.abi-staging.target-abi": str(formula["target_abi"]),
+            "org.opencontainers.image.source": "https://github.com/" + policy.tap_repository,
+        },
+    )
+
+
+def validate_canonical_bottle_plan(
+    plan: OciRecordPlanV1,
+    *,
+    decision: PromotionDecisionV1,
+    candidate: FetchedOciRecordV1,
+    policy: PromotionPolicyV1,
+) -> None:
+    expected = build_canonical_bottle_plan(
+        decision, candidate=candidate, policy=policy
+    )
+    if plan != expected:
+        raise PromotionError("canonical bottle plan changed bytes, destination, or authority")
+
+
+def _canonical_publication_identity(plan: OciRecordPlanV1) -> dict[str, Any]:
+    manifest = build_oci_manifest(plan)
+    digest = "sha256:" + hashlib.sha256(manifest).hexdigest()
+    repository = "ghcr.io/" + plan.repository
+    reference = f"{repository}@{digest}"
+    return {
+        "repository": repository,
+        "digest": digest,
+        "immutable_reference": reference,
+        "anonymous_readback_sha256": canonical_sha256(
+            {
+                "manifest": {"digest": digest, "size": len(manifest)},
+                "blobs": [
+                    {"digest": blob.digest, "role": blob.role, "size": blob.size}
+                    for blob in (plan.config, *plan.layers)
+                ],
+            }
+        ),
+        "artifact": {
+            "sha256": digest.removeprefix("sha256:"),
+            "bytes": len(manifest),
+            "immutable_reference": reference,
+        },
+    }
+
+
+def publish_canonical_bottle(
+    plan: OciRecordPlanV1,
+    *,
+    decision: PromotionDecisionV1,
+    candidate: FetchedOciRecordV1,
+    policy: PromotionPolicyV1,
+    transport: OciTransportV1,
+) -> CanonicalBottlePublicationV1:
+    validate_canonical_bottle_plan(
+        plan, decision=decision, candidate=candidate, policy=policy
+    )
+    locator = publish_immutable_oci_plan(
+        plan,
+        transport=transport,
+        expected_source_repository=policy.tap_repository,
+        tag_prefix="canonical-sha256-",
+    )
+    expected = _canonical_publication_identity(plan)
+    artifact = expected["artifact"]
+    if (
+        locator.repository != expected["repository"]
+        or locator.digest != expected["digest"]
+        or locator.immutable_reference != expected["immutable_reference"]
+        or locator.anonymous_readback_sha256
+        != expected["anonymous_readback_sha256"]
+    ):
+        raise PromotionError("canonical manifest lacks exact anonymous readback")
+    return CanonicalBottlePublicationV1(
+        locator=locator,
+        artifact=MappingProxyType(artifact),
+    )
+
+
+def prepare_admission(
+    decision: PromotionDecisionV1,
+    *,
+    candidate: FetchedOciRecordV1,
+    canonical_publication: CanonicalBottlePublicationV1,
+    tap_source: Mapping[str, Any],
+    policy: PromotionPolicyV1,
+) -> PreparedAdmissionV1:
+    validate_promotion_decision(asdict(decision))
+    if decision.eligibility != "eligible":
+        raise PromotionError("admission cannot be prepared for an ineligible candidate")
+    if not isinstance(canonical_publication, CanonicalBottlePublicationV1):
+        raise PromotionError("canonical publication handoff is missing")
+    expected_plan = build_canonical_bottle_plan(
+        decision,
+        candidate=candidate,
+        policy=policy,
+    )
+    expected = _canonical_publication_identity(expected_plan)
+    record, layer = _candidate_layer(candidate)
+    canonical = _artifact(canonical_publication.artifact, "canonical artifact")
+    if (
+        candidate.digest.removeprefix("sha256:") != decision.candidate_record_digest
+        or layer.digest.removeprefix("sha256:") != decision.bottle_layer_sha256
+        or layer.size != decision.bottle_layer_bytes
+        or canonical != expected["artifact"]
+        or canonical_publication.locator.repository != expected["repository"]
+        or canonical_publication.locator.digest != expected["digest"]
+        or canonical_publication.locator.immutable_reference
+        != expected["immutable_reference"]
+        or canonical_publication.locator.anonymous_readback_sha256
+        != expected["anonymous_readback_sha256"]
+    ):
+        raise PromotionError("admission preparation differs from canonical readback")
+    return PreparedAdmissionV1(
+        decision=decision,
+        request_source=MappingProxyType(_source(record["common"]["source"], "candidate source")),
+        tap_source=MappingProxyType(_source(tap_source, "admission tap source")),
+        canonical=MappingProxyType(canonical),
+        canonical_readback_evidence_sha256=(
+            canonical_publication.locator.anonymous_readback_sha256
+        ),
+        promoted_layer=MappingProxyType(
+            _artifact(record["candidate"]["bottle_layer"], "promoted layer")
+        ),
+        original_producer=MappingProxyType(
+            _plain(record["candidate"]["producer"])
+        ),
+    )
+
+
+def finalize_admission_record(
+    prepared: PreparedAdmissionV1,
+    *,
+    formula_metadata_source: Mapping[str, Any] | None,
+    formula_metadata_update: Mapping[str, Any] | None,
+    post_write_readback: Mapping[str, Any] | None,
+    run: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(prepared, PreparedAdmissionV1):
+        raise PromotionError("prepared admission facts are missing")
+    if (
+        formula_metadata_source is None
+        or formula_metadata_update is None
+        or post_write_readback is None
+    ):
+        raise PromotionError("admission requires exact metadata commit and post-write readback")
+    metadata_source = _source(formula_metadata_source, "Formula metadata source")
+    readback = _exact(
+        post_write_readback,
+        frozenset({"source", "formula_metadata_update"}),
+        "Formula metadata post-write readback",
+    )
+    if (
+        _plain(readback["source"]) != metadata_source
+        or canonical_bytes(readback["formula_metadata_update"])
+        != canonical_bytes(formula_metadata_update)
+    ):
+        raise PromotionError("Formula metadata post-write readback differs from committed facts")
+    try:
+        return build_admission_record(
+            request_sha256=prepared.decision.request_digest,
+            request_source=prepared.request_source,
+            run=run,
+            candidate_record_sha256=prepared.decision.candidate_record_digest,
+            promoted_layer=prepared.promoted_layer,
+            qualifying_receipt_sha256s=sorted(
+                set(prepared.decision.qualifying_receipts)
+                | set(prepared.decision.override_receipts)
+            ),
+            merged_pull_request=prepared.decision.merged_pull_request,
+            tap_source=prepared.tap_source,
+            canonical=prepared.canonical,
+            canonical_public_readback_sha256=str(prepared.canonical["sha256"]),
+            formula_metadata_source=metadata_source,
+            formula_metadata_update=formula_metadata_update,
+            original_producer=prepared.original_producer,
+        )
+    except TapRecordError as error:
+        raise PromotionError(f"admission record is invalid: {error}") from error

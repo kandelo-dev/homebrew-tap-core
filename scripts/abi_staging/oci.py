@@ -945,18 +945,25 @@ def _verify_package_association(
         )
 
 
-def publish_record(
+def publish_immutable_oci_plan(
     plan: OciRecordPlanV1,
     *,
     transport: OciTransportV1,
     expected_source_repository: str,
+    tag_prefix: str,
 ) -> PublishedRecordLocatorV1:
-    """Publish exact bytes, then independently read the manifest and every blob."""
+    """Publish one digest-tagged plan and anonymously re-read every exact byte."""
+
+    if tag_prefix not in {"canonical-sha256-", "record-sha256-"}:
+        raise OciPublicationError(
+            "immutable OCI tag prefix is unsupported",
+            guard_code="namespace_bootstrap_failed",
+        )
 
     manifest = build_oci_manifest(plan)
     digest_hex = hashlib.sha256(manifest).hexdigest()
     digest = "sha256:" + digest_hex
-    tag = "record-sha256-" + digest_hex
+    tag = tag_prefix + digest_hex
     tag_exists = _probe_manifest(
         plan, tag, manifest, transport, collision="record tag"
     )
@@ -1045,6 +1052,22 @@ def publish_record(
         digest=digest,
         immutable_reference=f"ghcr.io/{plan.repository}@{digest}",
         anonymous_readback_sha256=evidence_sha256,
+    )
+
+
+def publish_record(
+    plan: OciRecordPlanV1,
+    *,
+    transport: OciTransportV1,
+    expected_source_repository: str,
+) -> PublishedRecordLocatorV1:
+    """Publish one immutable factual record and prove its public readback."""
+
+    return publish_immutable_oci_plan(
+        plan,
+        transport=transport,
+        expected_source_repository=expected_source_repository,
+        tag_prefix="record-sha256-",
     )
 
 
