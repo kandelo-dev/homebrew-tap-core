@@ -9,6 +9,7 @@ import unittest
 from scripts.abi_staging import inventory as inventory_module
 from scripts.abi_staging.inventory import (
     InventoryError,
+    inspect_attempt_repository,
     inspect_candidate_reuse_repository,
     inspect_verification_repository,
     scan_attempt_repository,
@@ -221,12 +222,22 @@ class PublicInventoryTests(unittest.TestCase):
             transport=transport,
             expected_source_repository="kandelo-dev/homebrew-tap-core",
         )
-        facts = scan_attempt_repository(repository, transport=transport)
+        inspected = inspect_attempt_repository(repository, transport=transport)
+        facts = inspected.facts
+        manifest_sha256 = published.digest.removeprefix("sha256:")
         self.assertEqual(len(facts), 1)
         self.assertEqual(facts[0].retry_ordinal, 1)
         self.assertEqual(facts[0].guard_code, "build_timeout")
         self.assertEqual(facts[0].completed_at, "2026-08-09T10:00:00.000Z")
-        self.assertEqual(facts[0].record_sha256, published.digest.removeprefix("sha256:"))
+        self.assertEqual(facts[0].record_sha256, manifest_sha256)
+        self.assertEqual(inspected.records[manifest_sha256], record)
+        self.assertEqual(
+            inspected.locators[manifest_sha256]["immutable_reference"],
+            published.immutable_reference,
+        )
+        self.assertEqual(
+            scan_attempt_repository(repository, transport=transport), facts
+        )
 
     def test_candidate_inventory_reconstructs_exact_scheduler_fact_and_locator(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

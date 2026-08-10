@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import hashlib
 import json
 import re
@@ -45,6 +46,7 @@ class DiscoveredRequestV1:
     asset_url: str
     release_tag: str
     request: MappingProxyType[str, Any]
+    created_at: str | None = None
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -116,6 +118,23 @@ def _bounded_text(value: Any, field: str, maximum: int) -> str:
     if length < 1 or length > maximum or "\0" in value:
         raise PublicGitHubError(f"{field} exceeds its string bound")
     return value
+
+
+def _asset_created_at(value: Any) -> str:
+    timestamp = _bounded_text(value, "Release asset creation time", 32)
+    try:
+        parsed = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError as error:
+        raise PublicGitHubError(
+            "Release asset creation time is not UTC RFC 3339"
+        ) from error
+    if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != timestamp:
+        raise PublicGitHubError(
+            "Release asset creation time is not canonical UTC RFC 3339"
+        )
+    return timestamp
 
 
 class GitHubPublicClient:
@@ -244,7 +263,9 @@ class GitHubPublicClient:
         parse_request_asset_name(asset_name)
         return tag, asset_name, int(tag_match.group(1), 10)
 
-    def discover_url(self, url: str) -> DiscoveredRequestV1:
+    def discover_url(
+        self, url: str, *, created_at: str | None = None
+    ) -> DiscoveredRequestV1:
         try:
             tag, asset_name, pull_request_number = self._parse_public_request_url(url)
             body = self._get(url, self.policy.max_request_bytes, "application/octet-stream")
@@ -254,7 +275,11 @@ class GitHubPublicClient:
         if request["pull_request"]["number"] != pull_request_number:
             raise PublicGitHubError("request body and Release tag name different pull requests")
         digest = hashlib.sha256(body).hexdigest()
-        return DiscoveredRequestV1(digest, asset_name, url, tag, request)
+        if created_at is not None:
+            created_at = _asset_created_at(created_at)
+        return DiscoveredRequestV1(
+            digest, asset_name, url, tag, request, created_at
+        )
 
     def scan(self) -> tuple[DiscoveredRequestV1, ...]:
         repository = self.policy.issuer_repository
@@ -291,12 +316,13 @@ class GitHubPublicClient:
                     "Release asset URL",
                     self.policy.max_string_bytes,
                 )
+                created_at = _asset_created_at(asset.get("created_at"))
                 identity = (asset_id, name, url)
                 if identity in seen_assets:
                     raise PublicGitHubError("GitHub API returned a duplicate asset")
                 seen_assets.add(identity)
                 parse_request_asset_name(name)
-                candidate = self.discover_url(url)
+                candidate = self.discover_url(url, created_at=created_at)
                 if candidate.release_tag != tag or candidate.asset_name != name:
                     raise PublicGitHubError("Release metadata and request URL disagree")
                 discovered.append(candidate)
