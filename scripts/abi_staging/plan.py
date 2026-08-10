@@ -183,7 +183,7 @@ def exact_formula_subject(name: str, architecture: str) -> str:
     ).decode("utf-8").strip()
 
 
-def _parse_formula_subject(value: Any, field: str) -> tuple[str, str]:
+def parse_formula_subject(value: Any, field: str) -> tuple[str, str]:
     subject = _text(value, field, 512)
     try:
         parsed = json.loads(subject)
@@ -812,8 +812,10 @@ def validate_tap_plan(plan: Mapping[str, Any]) -> None:
 
     required_list = list(_sequence(value["required_subjects"], "required subjects"))
     background_list = list(_sequence(value["background_subjects"], "background subjects"))
-    required_subjects = [_parse_formula_subject(item, "required subject") for item in required_list]
-    background_subjects = [_parse_formula_subject(item, "background subject") for item in background_list]
+    required_subjects = [parse_formula_subject(item, "required subject") for item in required_list]
+    background_subjects = [
+        parse_formula_subject(item, "background subject") for item in background_list
+    ]
     if len(set(required_subjects + background_subjects)) != len(required_subjects) + len(background_subjects):
         raise PlanError("tap plan subject lists overlap or contain duplicates")
     if set(required_subjects + background_subjects) != set(graph):

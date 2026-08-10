@@ -26,6 +26,11 @@ from scripts.abi_staging.product import (
     load_resolved_product_inputs,
     resolve_product_inputs,
 )
+from scripts.abi_staging.product_evidence import (
+    PRODUCT_CANDIDATE_MEDIA_TYPE,
+    build_candidate_product_oci_plan,
+    candidate_product_repository,
+)
 from scripts.abi_staging.reconcile import load_product_evidence_activation
 from scripts.abi_staging.scheduler import (
     CandidateFactV1,
@@ -42,6 +47,10 @@ ACTIVATION = TAP_ROOT / "Kandelo/staging/product-evidence-activation.toml"
 
 def _digest(label: str) -> str:
     return hashlib.sha256(label.encode()).hexdigest()
+
+
+def _digest_bytes(body: bytes) -> str:
+    return hashlib.sha256(body).hexdigest()
 
 
 def _artifact_reference(label: str, digest: str) -> str:
@@ -666,6 +675,123 @@ class ProductInputResolverTests(unittest.TestCase):
                 sorted(resolution.plan.required_formula_subjects),
             )
 
+    def test_resolver_plan_is_accepted_by_candidate_product_publication(self) -> None:
+        runtime_files = {
+            "browser/dist/bundle.js": b"browser bundle\n",
+            "browser/dist/service-worker.js": b"service worker\n",
+            "flake.lock": b"flake-lock",
+            "host/dist/bundle.js": b"host runtime bundle\n",
+            "host/generated-abi.ts": b"generated ABI\n",
+            "host/worker-protocol.ts": b"worker protocol\n",
+            "kernel.wasm": b"\x00asm miniature kernel\n",
+        }
+        inventory = [
+            {"path": path, "sha256": _digest_bytes(body), "bytes": len(body)}
+            for path, body in sorted(runtime_files.items())
+        ]
+        host_inventory = [
+            item for item in inventory if item["path"].startswith("host/")
+        ]
+        browser_inventory = [
+            item for item in inventory if item["path"].startswith("browser/")
+        ]
+        target = self.request["target_abi"]
+        runtime_bundle = {
+            "schema": 1,
+            "kind": "kandelo-exact-runtime-bundle",
+            "source": copy.deepcopy(self.source),
+            "target_abi": copy.deepcopy(target),
+            "kernel": {
+                "wasm_sha256": _digest_bytes(runtime_files["kernel.wasm"]),
+                "bytes": len(runtime_files["kernel.wasm"]),
+                "abi_version": target["version"],
+                "snapshot_sha256": target["snapshot_sha256"],
+            },
+            "host": {
+                "bundle_sha256": _digest_bytes(canonical_bytes(host_inventory)),
+                "bytes": sum(item["bytes"] for item in host_inventory),
+                "generated_abi_sha256": _digest_bytes(
+                    runtime_files["host/generated-abi.ts"]
+                ),
+                "worker_protocol_sha256": _digest_bytes(
+                    runtime_files["host/worker-protocol.ts"]
+                ),
+            },
+            "browser": {
+                "bundle_sha256": _digest_bytes(canonical_bytes(browser_inventory)),
+                "bytes": sum(item["bytes"] for item in browser_inventory),
+                "service_worker_sha256": _digest_bytes(
+                    runtime_files["browser/dist/service-worker.js"]
+                ),
+            },
+            "build_policy_sha256": self.runtime_bundle["build_policy_sha256"],
+            "inventory": inventory,
+        }
+        self.assertEqual(
+            _digest_bytes(runtime_files["flake.lock"]),
+            self.dev_shell_lock_sha256,
+        )
+        resolution = next(
+            item
+            for item in self.resolve(runtime_bundle=runtime_bundle)
+            if item.plan.product_id == "alpha-shell"
+        )
+        resolved = resolution.resolved_inputs
+        resolved_body = canonical_bytes(resolved)
+        vfs_body = b"resolved product miniature VFS\n"
+        report_inputs = []
+        for item in resolved["inputs"]:
+            report_item = {
+                "bytes": item["bytes"],
+                "id": item["id"],
+                "kind": item["kind"],
+                "placement": item["effective_materialization"],
+                "role": item["role"],
+                "sha256": item["sha256"],
+            }
+            if "descriptor" in item:
+                report_item["descriptor"] = {
+                    "bytes": item["descriptor"]["bytes"],
+                    "sha256": item["descriptor"]["sha256"],
+                }
+            report_inputs.append(report_item)
+        builder_report = {
+            "schema": 1,
+            "kind": "kandelo-vfs-builder-report",
+            "product": copy.deepcopy(resolved["product"]),
+            "resolved_inputs_sha256": canonical_sha256(resolved),
+            "inputs": report_inputs,
+            "capture": {"complete": True, "unreported_reads": []},
+            "output": {
+                "abi": copy.deepcopy(resolved["target_abi"]),
+                "bytes": len(vfs_body),
+                "name": resolved["product"]["output"],
+                "path": resolved["product"]["output"],
+                "sha256": _digest_bytes(vfs_body),
+            },
+        }
+        repository = candidate_product_repository(
+            owner="kandelo-dev",
+            repository_prefix="homebrew-tap-core-abi-",
+            candidate_suffix="-candidates",
+            target_abi=target["version"],
+            product_id=resolution.plan.product_id,
+        )
+
+        publication = build_candidate_product_oci_plan(
+            repository=repository,
+            publisher_repository="kandelo-dev/homebrew-tap-core",
+            input_plan=resolution.plan,
+            vfs_body=vfs_body,
+            builder_report_body=canonical_bytes(builder_report),
+            resolved_inputs_body=resolved_body,
+            runtime_bundle_body=canonical_bytes(runtime_bundle),
+            runtime_files=runtime_files,
+        )
+
+        self.assertEqual(publication.artifact_type, PRODUCT_CANDIDATE_MEDIA_TYPE)
+        self.assertTrue(resolution.plan.required_formula_subjects)
+
     def test_preserves_lazy_embedded_build_only_and_records_shared_roots(self) -> None:
         by_product = {item.plan.product_id: item for item in self.resolve()}
         alpha = by_product["alpha-shell"]
@@ -999,6 +1125,35 @@ class ProductInputResolverTests(unittest.TestCase):
         hostile["unexpected"] = True
         with self.assertRaises(ProductInputResolutionError):
             load_resolved_product_inputs(canonical_bytes(hostile))
+
+    def test_every_lazy_reference_uses_the_candidate_namespace(self) -> None:
+        embedded = json.loads(FIXTURE.read_bytes())
+        archive = next(
+            item for item in embedded["inputs"] if item["kind"] == "source-archive"
+        )
+        self.assertEqual(archive["effective_materialization"], "embedded")
+        self.assertTrue(archive["reference"].startswith("https://"))
+        load_resolved_product_inputs(canonical_bytes(embedded))
+
+        lazy = copy.deepcopy(embedded)
+        lazy_archive = next(
+            item for item in lazy["inputs"] if item["kind"] == "source-archive"
+        )
+        lazy_archive["declared_materialization"] = "lazy"
+        lazy_archive["effective_materialization"] = "lazy-reference"
+        lazy_archive.pop("path")
+        lazy_archive["reference"] = (
+            "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/"
+            f"lazy/archive@sha256:{lazy_archive['sha256']}"
+        )
+        load_resolved_product_inputs(canonical_bytes(lazy))
+
+        lazy_archive["reference"] = archive["reference"]
+        with self.assertRaisesRegex(
+            ProductInputResolutionError,
+            "candidate namespace",
+        ):
+            load_resolved_product_inputs(canonical_bytes(lazy))
 
 
 if __name__ == "__main__":

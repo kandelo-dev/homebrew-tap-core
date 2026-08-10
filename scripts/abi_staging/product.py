@@ -22,8 +22,12 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 REPOSITORY = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
-CANDIDATE_NAMESPACE = re.compile(r"homebrew-tap-core-abi-([0-9]+)-candidates/")
-CANONICAL_NAMESPACE = re.compile(r"homebrew-tap-core-abi-([0-9]+)/")
+CANDIDATE_NAMESPACE = re.compile(
+    r"^(?:https://)?ghcr\.io/kandelo-dev/homebrew-tap-core-abi-([0-9]+)-candidates/"
+)
+CANONICAL_NAMESPACE = re.compile(
+    r"^(?:https://)?ghcr\.io/kandelo-dev/homebrew-tap-core-abi-([0-9]+)/"
+)
 ARCHITECTURES = frozenset({"wasm32", "wasm64"})
 INPUT_KINDS = frozenset(
     {
@@ -137,6 +141,7 @@ def _immutable_reference(
     *,
     kind: str | None = None,
     target_abi: int | None = None,
+    require_candidate: bool = False,
 ) -> str:
     reference = _text(value, field)
     if any(character.isspace() for character in reference) or (
@@ -147,7 +152,7 @@ def _immutable_reference(
     candidate = CANDIDATE_NAMESPACE.search(reference)
     if canonical is not None:
         raise ProductInputResolutionError(f"{field} enters the canonical namespace")
-    if kind in {"homebrew-bottle", "product-image"}:
+    if kind in {"homebrew-bottle", "product-image"} or require_candidate:
         if candidate is None:
             raise ProductInputResolutionError(f"{field} is not in the candidate namespace")
         if target_abi is None or int(candidate.group(1)) != target_abi:
@@ -1395,6 +1400,7 @@ def resolve_product_inputs(
                     f"resolved {claim.input_id} reference",
                     kind=claim.kind,
                     target_abi=target_abi,
+                    require_candidate=effective == "lazy-reference",
                 ),
             }
             if effective != "lazy-reference":
@@ -1622,6 +1628,7 @@ def load_resolved_product_inputs(body: bytes) -> Mapping[str, Any]:
                     f"resolved input {input_id} descriptor reference",
                     kind=kind,
                     target_abi=target_abi,
+                    require_candidate=effective == "lazy-reference",
                 )
             else:
                 _text(
@@ -1660,6 +1667,7 @@ def load_resolved_product_inputs(body: bytes) -> Mapping[str, Any]:
                     f"resolved input {input_id} reference",
                     kind=kind,
                     target_abi=target_abi,
+                    require_candidate=effective == "lazy-reference",
                 )
             else:
                 _text(reference, f"resolved input {input_id} reference")

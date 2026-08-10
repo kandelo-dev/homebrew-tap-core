@@ -10,6 +10,8 @@ import unittest
 from scripts.abi_staging.canonical import canonical_bytes, canonical_sha256
 from scripts.abi_staging.cli import main as cli_main
 from scripts.abi_staging.oci import build_oci_manifest, fetch_public_record
+from scripts.abi_staging.plan import exact_formula_subject
+from scripts.abi_staging.product import ProductInputPlanV1
 from scripts.abi_staging.product_evidence import (
     PRODUCT_CANDIDATE_MEDIA_TYPE,
     CandidateProductLocatorV1,
@@ -170,6 +172,18 @@ class ProductEvidenceFixture:
         self.vfs = b"miniature ABI-bound VFS image\n"
         self.report = _report(self.inputs, self.vfs)
         self.runtime, self.runtime_files = _runtime(self.inputs)
+        product = self.inputs["product"]
+        self.input_plan = ProductInputPlanV1(
+            product_id=product["id"],
+            manifest_path=product["manifest_path"],
+            manifest_sha256=product["manifest_sha256"],
+            architecture=product["architecture"],
+            reference_class="candidate",
+            resolved_inputs_sha256=canonical_sha256(self.inputs),
+            dependency_product_ids=("base",),
+            required_formula_subjects=(exact_formula_subject("mini", "wasm32"),),
+            runtime_bundle_sha256=canonical_sha256(self.runtime),
+        )
         self.repository = candidate_product_repository(
             owner="kandelo-dev",
             repository_prefix="homebrew-tap-core-abi-",
@@ -180,6 +194,7 @@ class ProductEvidenceFixture:
         self.plan = build_candidate_product_oci_plan(
             repository=self.repository,
             publisher_repository=SOURCE_ASSOCIATION,
+            input_plan=self.input_plan,
             vfs_body=self.vfs,
             builder_report_body=canonical_bytes(self.report),
             resolved_inputs_body=canonical_bytes(self.inputs),
@@ -393,6 +408,7 @@ class CandidateProductPublicationTests(ProductEvidenceFixture, unittest.TestCase
                 build_candidate_product_oci_plan(
                     repository=repository,
                     publisher_repository=SOURCE_ASSOCIATION,
+                    input_plan=self.input_plan,
                     vfs_body=self.vfs,
                     builder_report_body=canonical_bytes(self.report),
                     resolved_inputs_body=canonical_bytes(self.inputs),
@@ -422,11 +438,37 @@ class CandidateProductPublicationTests(ProductEvidenceFixture, unittest.TestCase
                 build_candidate_product_oci_plan(
                     repository=self.repository,
                     publisher_repository=SOURCE_ASSOCIATION,
+                    input_plan=self.input_plan,
                     vfs_body=self.vfs,
                     builder_report_body=canonical_bytes(report),
                     resolved_inputs_body=canonical_bytes(self.inputs),
                     runtime_bundle_body=canonical_bytes(runtime),
                     runtime_files=files,
+                )
+
+    def test_candidate_publication_is_bound_to_the_protected_resolver_plan(self) -> None:
+        mutations = {
+            "product": replace(self.input_plan, product_id="other-shell"),
+            "resolved inputs": replace(
+                self.input_plan,
+                resolved_inputs_sha256="f" * 64,
+            ),
+            "runtime bundle": replace(
+                self.input_plan,
+                runtime_bundle_sha256="f" * 64,
+            ),
+        }
+        for label, input_plan in mutations.items():
+            with self.subTest(label=label), self.assertRaises(ProductEvidenceError):
+                build_candidate_product_oci_plan(
+                    repository=self.repository,
+                    publisher_repository=SOURCE_ASSOCIATION,
+                    input_plan=input_plan,
+                    vfs_body=self.vfs,
+                    builder_report_body=canonical_bytes(self.report),
+                    resolved_inputs_body=canonical_bytes(self.inputs),
+                    runtime_bundle_body=canonical_bytes(self.runtime),
+                    runtime_files=self.runtime_files,
                 )
 
     def test_formula_and_product_repositories_cannot_cross(self) -> None:
@@ -439,6 +481,7 @@ class CandidateProductPublicationTests(ProductEvidenceFixture, unittest.TestCase
             build_candidate_product_oci_plan(
                 repository="kandelo-dev/homebrew-tap-core-abi-8-candidates/mini-shell",
                 publisher_repository=SOURCE_ASSOCIATION,
+                input_plan=self.input_plan,
                 vfs_body=self.vfs,
                 builder_report_body=canonical_bytes(self.report),
                 resolved_inputs_body=canonical_bytes(self.inputs),
@@ -454,6 +497,7 @@ class CandidateProductPublicationTests(ProductEvidenceFixture, unittest.TestCase
             build_candidate_product_oci_plan(
                 repository=self.repository,
                 publisher_repository=SOURCE_ASSOCIATION,
+                input_plan=self.input_plan,
                 vfs_body=self.vfs,
                 builder_report_body=canonical_bytes(self.report),
                 resolved_inputs_body=canonical_bytes(hostile),
