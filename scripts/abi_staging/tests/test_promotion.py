@@ -23,7 +23,10 @@ from scripts.abi_staging.abi_history import (
 )
 from scripts.abi_staging.canonical import canonical_bytes, canonical_sha256
 from scripts.abi_staging.cli import main as cli_main
-from scripts.abi_staging.contract import load_bottle_contract
+from scripts.abi_staging.contract import (
+    load_bottle_contract,
+    make_candidate_reuse_record,
+)
 from scripts.abi_staging.custody import source_capsule_digest
 from scripts.abi_staging.oci import (
     FetchedOciRecordV1,
@@ -45,13 +48,20 @@ from scripts.abi_staging.policy import (
     load_verification_tests,
 )
 from scripts.abi_staging.promotion import (
+    ADMISSION_RECORD_MEDIA_TYPE,
     CANONICAL_BOTTLE_MANIFEST_MEDIA_TYPE,
     PromotionError,
+    build_admission_oci_plan,
     build_canonical_bottle_plan,
     evaluate_promotion,
+    expected_canonical_publication,
     finalize_admission_record,
+    load_metadata_patch_document,
+    metadata_patch_document,
     prepare_admission,
+    publish_admission_record,
     publish_canonical_bottle,
+    read_canonical_publication,
     validate_canonical_bottle_plan,
     validate_promotion_decision,
 )
@@ -60,13 +70,15 @@ from scripts.abi_staging.records import (
     BOTTLE_LAYER_MEDIA_TYPE,
     BOTTLE_METADATA_MEDIA_TYPE,
     CANDIDATE_RECORD_MEDIA_TYPE,
+    CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
     SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
     OciBlobV1,
     OciRecordPlanV1,
+    build_candidate_reuse_oci_plan,
     validate_admission_record,
     validate_candidate_record,
 )
-from scripts.abi_staging.tap_metadata import load_promotion_policy
+from scripts.abi_staging.tap_metadata import TapMetadataPatchV1, load_promotion_policy
 from scripts.abi_staging.reconcile import PullRequestLifecycleV1
 from scripts.abi_staging.tests.test_oci import (
     FakeRegistryTransport,
@@ -695,6 +707,82 @@ class PromotionTests(unittest.TestCase):
         arguments.update(changes)
         return evaluate_promotion(**arguments)
 
+    def _new_request_reuse(self):
+        request = copy.deepcopy(self.request)
+        request["build_source"] = {
+            "repository": self.request["build_source"]["repository"],
+            "commit": "4" * 40,
+            "tree": "5" * 40,
+        }
+        request_digest = canonical_sha256(request)
+        tap_plan = copy.deepcopy(self.tap_plan)
+        tap_plan["request_digest"] = request_digest
+        tap_plan["request_asset_url"] = (
+            "https://github.com/Automattic/kandelo/releases/download/"
+            "abi-staging-pr-19/candidate-request-"
+            f"{request['build_source']['commit']}-sha256-{request_digest}.json"
+        )
+        validate_tap_plan(tap_plan)
+        payload = self.candidate_record["candidate"]
+        source = next(
+            item["artifact"]
+            for item in payload["normalized_components"]
+            if item["id"] == "source-custody"
+        )
+        existing = {
+            "schema": 1,
+            "kind": "kandelo-existing-candidate",
+            "contract_sha256": payload["formula"]["bottle_contract_sha256"],
+            "formula": {
+                key: payload["formula"][key]
+                for key in ("tap", "formula", "architecture", "target_abi")
+            },
+            "candidate_record": {
+                "record_sha256": self.candidate_digest,
+                "immutable_reference": self.candidate.immutable_reference,
+            },
+            "source_custody": {
+                "record_sha256": source["sha256"],
+                "immutable_reference": source["immutable_reference"],
+            },
+            "bottle_layer": copy.deepcopy(payload["bottle_layer"]),
+            "qualifying_receipts": [
+                {
+                    "record_sha256": self.verification.digest.removeprefix(
+                        "sha256:"
+                    ),
+                    "immutable_reference": self.verification.immutable_reference,
+                }
+            ],
+            "original_producer": copy.deepcopy(payload["producer"]),
+            "nonendorsed": True,
+        }
+        record = make_candidate_reuse_record(
+            self.contract,
+            exact_formula_subject(FORMULA, ARCHITECTURE),
+            existing,
+            {
+                "request_sha256": request_digest,
+                "source": copy.deepcopy(request["build_source"]),
+                "run": {
+                    "repository": "kandelo-dev/homebrew-tap-core",
+                    "workflow_ref": (
+                        ".github/workflows/abi-staging-reconcile.yml@refs/heads/main"
+                    ),
+                    "run_id": 303,
+                    "run_attempt": 1,
+                    "job": "publish-reuse",
+                },
+            },
+        )
+        plan = build_candidate_reuse_oci_plan(
+            record,
+            repository=(
+                "kandelo-dev/homebrew-tap-core-abi-8-candidates/bash/reuse"
+            ),
+        )
+        return request, request_digest, tap_plan, record, _fetched_from_plan(plan)
+
     def test_exact_merged_candidate_is_eligible(self) -> None:
         decision = self._evaluate()
         validate_promotion_decision(asdict(decision))
@@ -708,6 +796,216 @@ class PromotionTests(unittest.TestCase):
             decision.qualifying_receipts,
             (self.verification.digest.removeprefix("sha256:"),),
         )
+        self.assertEqual(decision.candidate_binding_digest, self.candidate_digest)
+
+    def test_exact_historical_candidate_reuse_is_eligible_and_keeps_provenance(self) -> None:
+        request, request_digest, tap_plan, _record, reuse = self._new_request_reuse()
+        decision = self._evaluate(
+            request=request,
+            request_digest=request_digest,
+            merge_fact={
+                **self._merge_fact(),
+                "head": request["build_source"]["commit"],
+            },
+            tap_plan=tap_plan,
+            tap_plan_digest=canonical_sha256(tap_plan),
+            candidate_reuse=reuse,
+        )
+
+        self.assertEqual(decision.eligibility, "eligible")
+        self.assertEqual(decision.request_digest, request_digest)
+        self.assertEqual(decision.candidate_record_digest, self.candidate_digest)
+        self.assertEqual(
+            decision.candidate_binding_digest,
+            reuse.digest.removeprefix("sha256:"),
+        )
+        self.assertEqual(
+            decision.qualifying_receipts,
+            (self.verification.digest.removeprefix("sha256:"),),
+        )
+        plan = build_canonical_bottle_plan(
+            decision,
+            candidate=self.candidate,
+            policy=self.promotion_policy,
+        )
+        transport = FakeRegistryTransport()
+        layer = plan.layers[0]
+        assert layer.mount_from is not None
+        transport.blobs[(layer.mount_from, layer.digest)] = layer.body
+        publication = publish_canonical_bottle(
+            plan,
+            decision=decision,
+            candidate=self.candidate,
+            policy=self.promotion_policy,
+            transport=transport,
+        )
+        prepared = prepare_admission(
+            decision,
+            candidate=self.candidate,
+            candidate_reuse=reuse,
+            canonical_publication=publication,
+            preactivation_tap_source=tap_plan["tap_source"],
+            abi_history_record_sha256=self.history.digest.removeprefix("sha256:"),
+            policy=self.promotion_policy,
+        )
+        self.assertEqual(dict(prepared.request_source), request["build_source"])
+        self.assertEqual(
+            dict(prepared.candidate_source), self.request["build_source"]
+        )
+        self.assertEqual(
+            dict(prepared.original_producer),
+            self.candidate_record["candidate"]["producer"],
+        )
+        metadata_source = {
+            "repository": self.promotion_policy.tap_repository,
+            "commit": NEXT_TAP_COMMIT,
+            "tree": NEXT_TAP_TREE,
+        }
+        metadata_base_source = {
+            "repository": self.promotion_policy.tap_repository,
+            "commit": "6" * 40,
+            "tree": "5" * 40,
+        }
+        formula_update = {
+            "formula": FORMULA,
+            "architecture": ARCHITECTURE,
+            "expected_main_commit": metadata_base_source["commit"],
+            "expected_normalized_formula_sha256": self.formula_plan["identity"][
+                "normalized_formula_sha256"
+            ],
+            "expected_generated_metadata_sha256": "e" * 64,
+            "allowed_paths": [
+                "Formula/bash.rb",
+                "Kandelo/formula/bash.json",
+                "Kandelo/metadata.json",
+                "Kandelo/link/bash-1.0-rebuild1-wasm32.json",
+            ],
+            "link_manifest_path": (
+                "Kandelo/link/bash-1.0-rebuild1-wasm32.json"
+            ),
+            "link_manifest_sha256": "f" * 64,
+            "canonical_manifest_digest": publication.artifact["sha256"],
+            "bottle_layer_sha256": self.bottle_sha256,
+            "bottle_layer_bytes": len(self.bottle_body),
+            "target_abi": TARGET_ABI,
+        }
+        admission = finalize_admission_record(
+            prepared,
+            formula_metadata_base_source=metadata_base_source,
+            formula_metadata_source=metadata_source,
+            formula_metadata_update=formula_update,
+            post_write_readback={
+                "source": metadata_source,
+                "formula_metadata_update": formula_update,
+            },
+            run=OVERRIDE_RUN,
+        )
+        self.assertEqual(
+            admission["admission"]["candidate_binding_sha256"],
+            reuse.digest.removeprefix("sha256:"),
+        )
+        self.assertEqual(admission["common"]["source"], request["build_source"])
+        self.assertEqual(
+            admission["admission"]["original_producer"],
+            self.candidate_record["candidate"]["producer"],
+        )
+
+    def test_historical_candidate_requires_the_exact_reuse_binding(self) -> None:
+        request, request_digest, tap_plan, record, reuse = self._new_request_reuse()
+        arguments = {
+            "request": request,
+            "request_digest": request_digest,
+            "merge_fact": {
+                **self._merge_fact(),
+                "head": request["build_source"]["commit"],
+            },
+            "tap_plan": tap_plan,
+            "tap_plan_digest": canonical_sha256(tap_plan),
+        }
+        with self.assertRaises(PromotionError):
+            self._evaluate(**arguments)
+
+        changed = copy.deepcopy(record)
+        changed["common"]["source"]["tree"] = "6" * 40
+        body = canonical_bytes(changed)
+        changed_plan = build_candidate_reuse_oci_plan(
+            changed,
+            repository=(
+                "kandelo-dev/homebrew-tap-core-abi-8-candidates/bash/reuse"
+            ),
+        )
+        self.assertEqual(
+            changed_plan.artifact_type, CANDIDATE_REUSE_RECORD_MEDIA_TYPE
+        )
+        with self.assertRaises(PromotionError):
+            self._evaluate(
+                **arguments,
+                candidate_reuse=_fetched_from_plan(changed_plan),
+            )
+
+        wrong_repository = replace(
+            reuse,
+            repository=(
+                "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/"
+                "bash/other"
+            ),
+        )
+        with self.assertRaises(PromotionError):
+            self._evaluate(**arguments, candidate_reuse=wrong_repository)
+
+    def test_separated_writer_revalidates_the_reuse_locator(self) -> None:
+        request, request_digest, tap_plan, _record, reuse = self._new_request_reuse()
+        decision = self._evaluate(
+            request=request,
+            request_digest=request_digest,
+            merge_fact={
+                **self._merge_fact(),
+                "head": request["build_source"]["commit"],
+            },
+            tap_plan=tap_plan,
+            tap_plan_digest=canonical_sha256(tap_plan),
+            candidate_reuse=reuse,
+        )
+        expected = expected_canonical_publication(
+            decision,
+            candidate=self.candidate,
+            policy=self.promotion_policy,
+        )
+        detail = {
+            "decision": asdict(decision),
+            "candidate_locator": _locator(self.candidate),
+            "candidate_reuse_locator": _locator(reuse),
+            "canonical": {
+                "locator": asdict(expected.locator),
+                "artifact": dict(expected.artifact),
+            },
+        }
+        with (
+            patch.object(
+                cli_module,
+                "_fetch_candidate_record",
+                return_value=self.candidate,
+            ),
+            patch.object(
+                cli_module,
+                "_fetch_candidate_reuse",
+                return_value=reuse,
+            ),
+        ):
+            checked = cli_module._promotion_candidate_and_canonical(
+                detail,
+                policy=self.promotion_policy,
+                transport=object(),
+            )
+            self.assertEqual(checked, (decision, self.candidate, reuse, expected))
+            missing = copy.deepcopy(detail)
+            missing["candidate_reuse_locator"] = None
+            with self.assertRaises(cli_module.WorkflowPublicationError):
+                cli_module._promotion_candidate_and_canonical(
+                    missing,
+                    policy=self.promotion_policy,
+                    transport=object(),
+                )
 
     def test_merge_fact_is_fetched_for_the_exact_request_pr(self) -> None:
         class PublicClient:
@@ -922,6 +1220,61 @@ class PromotionTests(unittest.TestCase):
                 override_receipts=(hostile_override,),
             )
 
+    def test_override_discovery_ignores_valid_receipts_for_other_candidates(self) -> None:
+        exact_record = accept_artifact_risk(
+            request=self.request,
+            request_sha256=self.request_digest,
+            candidate=self.candidate_record,
+            candidate_record_sha256=self.candidate_digest,
+            accepted_guard_codes=("verification_failed",),
+            guard_registry=self.registry,
+            maintainer=MAINTAINER,
+            justification="Reviewed the exact failing successor bottle bytes.",
+            run=OVERRIDE_RUN,
+            tap_repository=self.tap_policy.tap_repository,
+        )
+        foreign_record = accept_artifact_risk(
+            request=self.request,
+            request_sha256=self.request_digest,
+            candidate=self.candidate_record,
+            candidate_record_sha256="f" * 64,
+            accepted_guard_codes=("verification_failed",),
+            guard_registry=self.registry,
+            maintainer=MAINTAINER,
+            justification="Reviewed another exact successor candidate bottle.",
+            run=OVERRIDE_RUN,
+            tap_repository=self.tap_policy.tap_repository,
+        )
+        exact = _fetched_from_plan(
+            build_override_receipt_oci_plan(
+                exact_record,
+                candidate=self.candidate_record,
+                policy=self.tap_policy,
+            )
+        )
+        foreign = _fetched_from_plan(
+            build_override_receipt_oci_plan(
+                foreign_record,
+                candidate=self.candidate_record,
+                policy=self.tap_policy,
+            )
+        )
+        with patch.object(
+            cli_module,
+            "list_public_record_locators",
+            return_value=({}, {}),
+        ), patch.object(
+            cli_module,
+            "fetch_public_record",
+            side_effect=(exact, foreign),
+        ):
+            selected = cli_module._fetch_candidate_overrides(
+                self.candidate,
+                transport=SimpleNamespace(),
+            )
+
+        self.assertEqual(selected, (exact,))
+
     def test_every_protected_verification_identity_is_required(self) -> None:
         definitions = load_verification_tests(
             TAP_ROOT / "Kandelo/staging/verification-tests.toml"
@@ -980,6 +1333,65 @@ class PromotionTests(unittest.TestCase):
             self._evaluate(
                 tap_plan=wrong_plan,
                 tap_plan_digest=canonical_sha256(wrong_plan),
+            )
+
+    def test_postactivation_plan_uses_immutable_preactivation_history_epoch(self) -> None:
+        current_plan = copy.deepcopy(self.tap_plan)
+        current_plan["tap_source"] = {
+            "repository": self.promotion_policy.tap_repository,
+            "commit": "8" * 40,
+            "tree": "9" * 40,
+        }
+
+        decision = self._evaluate(
+            tap_plan=current_plan,
+            tap_plan_digest=canonical_sha256(current_plan),
+            current_tap_source=current_plan["tap_source"],
+            history_tap_source=self.tap_plan["tap_source"],
+        )
+
+        self.assertEqual(decision.eligibility, "eligible")
+        self.assertEqual(decision.tap_source_state, "exact")
+
+    def test_each_writer_rechecks_the_exact_history_ref_and_protection(self) -> None:
+        locator = {
+            "repository": self.history.repository,
+            "digest": self.history.digest,
+            "immutable_reference": self.history.immutable_reference,
+        }
+        client = SimpleNamespace(
+            protection_snapshot=lambda branch, phase: copy.deepcopy(
+                self.history_snapshot
+            )
+        )
+        with patch.object(
+            cli_module, "fetch_public_record", return_value=self.history
+        ), patch.object(
+            cli_module, "GitHubHistoryClient", return_value=client
+        ):
+            history, source = cli_module._require_promotion_history_barrier(
+                {"history_locator": locator},
+                policy=self.promotion_policy,
+                expected_target_abi=TARGET_ABI,
+                transport=SimpleNamespace(),
+            )
+
+        self.assertIs(history, self.history)
+        self.assertEqual(source, self.tap_plan["tap_source"])
+
+        unprotected = copy.deepcopy(self.history_snapshot)
+        unprotected["direct"] = None
+        client.protection_snapshot = lambda branch, phase: unprotected
+        with patch.object(
+            cli_module, "fetch_public_record", return_value=self.history
+        ), patch.object(
+            cli_module, "GitHubHistoryClient", return_value=client
+        ), self.assertRaises(PromotionError):
+            cli_module._require_promotion_history_barrier(
+                {"history_locator": locator},
+                policy=self.promotion_policy,
+                expected_target_abi=TARGET_ABI,
+                transport=SimpleNamespace(),
             )
 
     def test_current_policy_and_guard_identity_are_exact(self) -> None:
@@ -1114,6 +1526,20 @@ class PromotionTests(unittest.TestCase):
                 transport=private,
             )
 
+        expected = expected_canonical_publication(
+            decision, candidate=self.candidate, policy=self.promotion_policy
+        )
+        self.assertEqual(expected, publication)
+        self.assertEqual(
+            read_canonical_publication(
+                decision,
+                candidate=self.candidate,
+                policy=self.promotion_policy,
+                transport=transport,
+            ),
+            publication,
+        )
+
     def test_admission_waits_for_exact_metadata_commit_and_readback(self) -> None:
         decision = self._evaluate()
         plan = build_canonical_bottle_plan(
@@ -1136,7 +1562,8 @@ class PromotionTests(unittest.TestCase):
             decision,
             candidate=self.candidate,
             canonical_publication=publication,
-            tap_source=self.tap_plan["tap_source"],
+            preactivation_tap_source=self.tap_plan["tap_source"],
+            abi_history_record_sha256=self.history.digest.removeprefix("sha256:"),
             policy=self.promotion_policy,
         )
         forged_publication = replace(
@@ -1151,12 +1578,16 @@ class PromotionTests(unittest.TestCase):
                 decision,
                 candidate=self.candidate,
                 canonical_publication=forged_publication,
-                tap_source=self.tap_plan["tap_source"],
+                preactivation_tap_source=self.tap_plan["tap_source"],
+                abi_history_record_sha256=(
+                    self.history.digest.removeprefix("sha256:")
+                ),
                 policy=self.promotion_policy,
             )
         with self.assertRaises(PromotionError):
             finalize_admission_record(
                 prepared,
+                formula_metadata_base_source=None,
                 formula_metadata_source=None,
                 formula_metadata_update=None,
                 post_write_readback=None,
@@ -1166,7 +1597,7 @@ class PromotionTests(unittest.TestCase):
         update = {
             "formula": FORMULA,
             "architecture": ARCHITECTURE,
-            "expected_main_commit": CURRENT_TAP_COMMIT,
+            "expected_main_commit": "6" * 40,
             "expected_normalized_formula_sha256": self.formula_plan["identity"][
                 "normalized_formula_sha256"
             ],
@@ -1191,6 +1622,11 @@ class PromotionTests(unittest.TestCase):
         }
         admission = finalize_admission_record(
             prepared,
+            formula_metadata_base_source={
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": "6" * 40,
+                "tree": "5" * 40,
+            },
             formula_metadata_source=metadata_source,
             formula_metadata_update=update,
             post_write_readback={
@@ -1208,6 +1644,60 @@ class PromotionTests(unittest.TestCase):
             admission["admission"]["merged_pull_request"]["merge_commit"],
             MERGE_COMMIT,
         )
+        self.assertEqual(
+            admission["admission"]["preactivation_tap_source"],
+            self.tap_plan["tap_source"],
+        )
+        self.assertEqual(
+            admission["admission"]["tap_source"]["commit"], "6" * 40
+        )
+        self.assertEqual(
+            admission["admission"]["formula_metadata_source"]["commit"],
+            NEXT_TAP_COMMIT,
+        )
+        admission_plan = build_admission_oci_plan(
+            admission, policy=self.promotion_policy
+        )
+        self.assertEqual(admission_plan.artifact_type, ADMISSION_RECORD_MEDIA_TYPE)
+        self.assertTrue(admission_plan.repository.endswith("/bash/admissions"))
+        admission_locator = publish_admission_record(
+            admission,
+            policy=self.promotion_policy,
+            transport=transport,
+        )
+        self.assertTrue(admission_locator.immutable_reference.startswith("ghcr.io/"))
+        self.assertEqual(
+            [
+                reference
+                for repository, reference in transport.manifests
+                if repository == admission_plan.repository
+                and not reference.startswith("sha256:")
+            ],
+            ["record-sha256-" + admission_locator.digest.removeprefix("sha256:")],
+        )
+
+    def test_metadata_patch_handoff_is_canonical_bounded_and_exact(self) -> None:
+        patch = TapMetadataPatchV1(
+            operation="successor-activation",
+            expected_main_commit="a" * 40,
+            expected_main_tree="b" * 40,
+            allowed_paths=("Kandelo/abi-state.json",),
+            expected_files_sha256={"Kandelo/abi-state.json": "c" * 64},
+            files={"Kandelo/abi-state.json": b'{"schema":1}\n'},
+        )
+        document = metadata_patch_document(patch, formula_update=None)
+        loaded, update = load_metadata_patch_document(canonical_bytes(document))
+        self.assertEqual(update, None)
+        self.assertEqual(loaded.operation, patch.operation)
+        self.assertEqual(dict(loaded.files), dict(patch.files))
+        self.assertEqual(
+            dict(loaded.expected_files_sha256), dict(patch.expected_files_sha256)
+        )
+
+        changed = copy.deepcopy(document)
+        changed["files"][0]["base64"] = "e30K"
+        with self.assertRaises(PromotionError):
+            load_metadata_patch_document(canonical_bytes(changed))
 
     def test_tap_metadata_only_or_unrelated_drift_retains_eligibility(self) -> None:
         drifted_source = {
@@ -1268,6 +1758,27 @@ class PromotionTests(unittest.TestCase):
             current_dependency_layers=self._current_dependencies(),
         )
         self.assertEqual(same.eligibility, "eligible")
+
+        promoted_reference = self._current_dependencies()
+        dependency = promoted_reference[
+            exact_formula_subject("ncurses", ARCHITECTURE)
+        ]
+        promoted_reference[exact_formula_subject("ncurses", ARCHITECTURE)] = {
+            **dependency,
+            "immutable_reference": (
+                "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8/ncurses@sha256:"
+                + dependency["sha256"]
+            ),
+        }
+        promoted = self._evaluate(
+            current_tap_source={
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": NEXT_TAP_COMMIT,
+                "tree": NEXT_TAP_TREE,
+            },
+            current_dependency_layers=promoted_reference,
+        )
+        self.assertEqual(promoted.eligibility, "eligible")
 
         changed = self._current_dependencies()
         changed[exact_formula_subject("ncurses", ARCHITECTURE)] = _artifact(

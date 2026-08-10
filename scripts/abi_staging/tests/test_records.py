@@ -254,6 +254,8 @@ def _admission_record() -> dict[str, object]:
             "blockers": [],
         },
         "admission": {
+            "abi_history_record_sha256": "d" * 64,
+            "candidate_binding_sha256": SHA_C,
             "candidate_record_sha256": SHA_C,
             "promoted_layer": candidate_layer,
             "qualifying_receipt_sha256s": [SHA_A],
@@ -262,6 +264,11 @@ def _admission_record() -> dict[str, object]:
                 "number": 19,
                 "head": COMMIT_A,
                 "merge_commit": COMMIT_B,
+            },
+            "preactivation_tap_source": {
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": "0" * 40,
+                "tree": "3" * 40,
             },
             "tap_source": {
                 "repository": "kandelo-dev/homebrew-tap-core",
@@ -690,6 +697,12 @@ class CandidateRecordTests(unittest.TestCase):
         validate_durable_record(record)
 
         mutations = {
+            "history": lambda changed: changed["admission"].__setitem__(
+                "abi_history_record_sha256", "not-a-digest"
+            ),
+            "binding": lambda changed: changed["admission"].__setitem__(
+                "candidate_binding_sha256", "not-a-digest"
+            ),
             "readback": lambda changed: changed["admission"].__setitem__(
                 "canonical_public_readback_sha256", SHA_C
             ),

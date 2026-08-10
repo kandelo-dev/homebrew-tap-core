@@ -2,21 +2,29 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 import re
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 import tomllib
 
-from .canonical import canonical_sha256
+from .canonical import CanonicalJsonError, canonical_sha256, parse_canonical_bytes
 from .github_public import DiscoveredRequestV1
+from .plan import PlanError, exact_formula_subject, parse_formula_subject
+
+if TYPE_CHECKING:
+    from .promotion import PromotionDecisionV1
 
 
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+REPOSITORY = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+MAX_PROMOTION_WAVE = 16
+MAX_PROMOTION_PLAN_BYTES = 256 * 1024 * 1024
+PROMOTION_PLAN_STAGES = ("activation", "canonical", "metadata", "admission")
 
 
 class ReconciliationError(ValueError):
@@ -137,6 +145,882 @@ class ProductReconciliationPlanV1:
     evidence_publication_work: tuple[MappingProxyType[str, Any], ...]
     blocked: tuple[MappingProxyType[str, Any], ...]
     complete: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PromotionEpochV1:
+    request_digest: str
+    history_record_sha256: str | None
+    activation_patch_sha256: str
+    activation_record_sha256: str | None
+    current_tap_commit: str
+    current_tap_tree: str
+
+    def __post_init__(self) -> None:
+        _optional_digest(self.history_record_sha256, "promotion history record")
+        _digest(self.request_digest, "promotion epoch request")
+        _digest(self.activation_patch_sha256, "promotion activation patch")
+        _optional_digest(self.activation_record_sha256, "promotion activation record")
+        _git_sha(self.current_tap_commit, "promotion current tap commit")
+        _git_sha(self.current_tap_tree, "promotion current tap tree")
+        if self.activation_record_sha256 is not None and self.history_record_sha256 is None:
+            raise ReconciliationError(
+                "promotion activation cannot exist without exact ABI history"
+            )
+
+
+@dataclass(frozen=True)
+class PromotionSubjectV1:
+    decision: "PromotionDecisionV1"
+    work_class: Literal["required", "background"]
+    dependency_subjects: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        from .promotion import (
+            PromotionDecisionV1,
+            PromotionError,
+            validate_promotion_decision,
+        )
+
+        if not isinstance(self.decision, PromotionDecisionV1):
+            raise ReconciliationError("promotion subject decision is untyped")
+        try:
+            validate_promotion_decision(asdict(self.decision))
+        except PromotionError as error:
+            raise ReconciliationError(
+                f"promotion subject decision is invalid: {error}"
+            ) from error
+        if self.work_class not in {"required", "background"}:
+            raise ReconciliationError("promotion subject work class is unsupported")
+        checked = tuple(
+            _formula_subject(value, "promotion dependency subject")
+            for value in self.dependency_subjects
+        )
+        if checked != tuple(sorted(set(checked))):
+            raise ReconciliationError(
+                "promotion dependency subjects are not sorted and unique"
+            )
+        if self.decision.formula_subject in checked:
+            raise ReconciliationError("promotion subject depends on itself")
+
+
+@dataclass(frozen=True)
+class PromotionProgressV1:
+    canonical_manifest_sha256: str | None = None
+    canonical_readback_sha256: str | None = None
+    metadata_commit: str | None = None
+    metadata_tree: str | None = None
+    metadata_update_sha256: str | None = None
+    metadata_readback_sha256: str | None = None
+    admission_record_sha256: str | None = None
+    stale_admission_record_sha256: str | None = None
+
+    def __post_init__(self) -> None:
+        canonical = (
+            self.canonical_manifest_sha256,
+            self.canonical_readback_sha256,
+        )
+        metadata = (
+            self.metadata_commit,
+            self.metadata_tree,
+            self.metadata_update_sha256,
+            self.metadata_readback_sha256,
+        )
+        if any(value is not None for value in canonical):
+            if not all(value is not None for value in canonical):
+                raise ReconciliationError(
+                    "promotion canonical progress is only partially authenticated"
+                )
+            _digest(canonical[0], "promotion canonical manifest")
+            _digest(canonical[1], "promotion canonical readback")
+        if any(value is not None for value in metadata):
+            if not all(value is not None for value in metadata):
+                raise ReconciliationError(
+                    "promotion metadata progress is only partially authenticated"
+                )
+            if canonical[0] is None:
+                raise ReconciliationError(
+                    "promotion metadata cannot precede canonical readback"
+                )
+            _git_sha(metadata[0], "promotion metadata commit")
+            _git_sha(metadata[1], "promotion metadata tree")
+            _digest(metadata[2], "promotion metadata update")
+            _digest(metadata[3], "promotion metadata readback")
+        _optional_digest(self.admission_record_sha256, "promotion admission record")
+        _optional_digest(
+            self.stale_admission_record_sha256,
+            "stale promotion admission record",
+        )
+        if self.admission_record_sha256 is not None and metadata[0] is None:
+            raise ReconciliationError(
+                "promotion admission cannot precede metadata readback"
+            )
+        if (
+            self.stale_admission_record_sha256 is not None
+            and (canonical[0] is None or self.admission_record_sha256 is not None)
+        ):
+            raise ReconciliationError(
+                "stale promotion admission requires canonical progress only"
+            )
+
+
+@dataclass(frozen=True)
+class PromotionReconciliationPlanV1:
+    mode: Literal["disabled", "observe", "active"]
+    authoritative: bool
+    request_digest: str
+    history_record_sha256: str | None
+    activation_work: tuple[MappingProxyType[str, Any], ...]
+    canonical_work: tuple[MappingProxyType[str, Any], ...]
+    metadata_work: tuple[MappingProxyType[str, Any], ...]
+    admission_work: tuple[MappingProxyType[str, Any], ...]
+    blocked: tuple[MappingProxyType[str, Any], ...]
+    complete: tuple[str, ...]
+    canonical_matrix: Mapping[str, list[dict[str, Any]]]
+    metadata_matrix: Mapping[str, list[dict[str, Any]]]
+    admission_matrix: Mapping[str, list[dict[str, Any]]]
+
+
+def _digest(value: Any, field: str) -> str:
+    if not isinstance(value, str) or SHA256.fullmatch(value) is None:
+        raise ReconciliationError(f"{field} is not a lowercase SHA-256 digest")
+    return value
+
+
+def _optional_digest(value: Any, field: str) -> str | None:
+    if value is None:
+        return None
+    return _digest(value, field)
+
+
+def _git_sha(value: Any, field: str) -> str:
+    if not isinstance(value, str) or GIT_SHA.fullmatch(value) is None:
+        raise ReconciliationError(f"{field} is not a full lowercase Git SHA")
+    return value
+
+
+def _formula_subject(value: Any, field: str) -> str:
+    if not isinstance(value, str):
+        raise ReconciliationError(f"{field} is not a string")
+    try:
+        identity, architecture = parse_formula_subject(value, field)
+        expected = exact_formula_subject(identity, architecture)
+    except (PlanError, TypeError, ValueError) as error:
+        raise ReconciliationError(f"{field} is invalid: {error}") from error
+    if value != expected:
+        raise ReconciliationError(f"{field} is not canonical")
+    return value
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _plain(child) for key, child in value.items()}
+    if isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray)
+    ):
+        return [_plain(child) for child in value]
+    return value
+
+
+def _exact_mapping(
+    value: Any, keys: frozenset[str], field: str
+) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping) or frozenset(value) != keys:
+        raise ReconciliationError(f"{field} fields changed")
+    return value
+
+
+def _promotion_tap_source(value: Any) -> dict[str, str]:
+    source = _exact_mapping(
+        value,
+        frozenset({"repository", "commit", "tree"}),
+        "promotion plan tap source",
+    )
+    repository = source["repository"]
+    if not isinstance(repository, str) or REPOSITORY.fullmatch(repository) is None:
+        raise ReconciliationError("promotion plan tap repository is invalid")
+    return {
+        "repository": repository,
+        "commit": _git_sha(source["commit"], "promotion plan tap commit"),
+        "tree": _git_sha(source["tree"], "promotion plan tap tree"),
+    }
+
+
+def _validate_promotion_plan_document(value: Any) -> dict[str, Any]:
+    document = _exact_mapping(
+        value,
+        frozenset(
+            {
+                "schema",
+                "kind",
+                "mode",
+                "authoritative",
+                "request_sha256",
+                "tap_source",
+                "history_record_sha256",
+                "work",
+                "blocked",
+                "complete",
+                "matrices",
+            }
+        ),
+        "promotion plan document",
+    )
+    mode = document["mode"]
+    if (
+        document["schema"] != 1
+        or document["kind"] != "kandelo-abi-staging-promotion-plan"
+        or mode not in {"disabled", "observe", "active"}
+        or not isinstance(document["authoritative"], bool)
+        or document["authoritative"] is not (mode == "active")
+    ):
+        raise ReconciliationError("promotion plan document protocol is unsupported")
+    request_sha256 = _digest(
+        document["request_sha256"], "promotion plan request"
+    )
+    tap_source = _promotion_tap_source(document["tap_source"])
+    history_record_sha256 = _optional_digest(
+        document["history_record_sha256"], "promotion plan history record"
+    )
+    work = _exact_mapping(
+        document["work"], frozenset(PROMOTION_PLAN_STAGES), "promotion plan work"
+    )
+    checked_work: dict[str, list[dict[str, Any]]] = {}
+    all_work_ids: set[str] = set()
+    for stage in PROMOTION_PLAN_STAGES:
+        entries = work[stage]
+        if (
+            not isinstance(entries, Sequence)
+            or isinstance(entries, (str, bytes, bytearray))
+            or len(entries) > MAX_PROMOTION_WAVE
+        ):
+            raise ReconciliationError(f"promotion {stage} work exceeds its bound")
+        checked_entries: list[dict[str, Any]] = []
+        for raw_entry in entries:
+            entry = _exact_mapping(
+                raw_entry,
+                frozenset({"summary", "detail_sha256", "detail"}),
+                f"promotion {stage} work entry",
+            )
+            summary = entry["summary"]
+            detail = entry["detail"]
+            if not isinstance(summary, Mapping) or not isinstance(detail, Mapping):
+                raise ReconciliationError(
+                    f"promotion {stage} work entry is not an object"
+                )
+            work_id = _digest(
+                summary.get("work_id"), f"promotion {stage} work ID"
+            )
+            if work_id in all_work_ids:
+                raise ReconciliationError("promotion work ID is duplicated")
+            all_work_ids.add(work_id)
+            detail_sha256 = _digest(
+                entry["detail_sha256"], f"promotion {stage} detail"
+            )
+            if canonical_sha256(detail) != detail_sha256:
+                raise ReconciliationError(
+                    f"promotion {stage} work detail identity changed"
+                )
+            checked_entries.append(
+                {
+                    "summary": _plain(summary),
+                    "detail_sha256": detail_sha256,
+                    "detail": _plain(detail),
+                }
+            )
+        checked_work[stage] = checked_entries
+
+    blocked = document["blocked"]
+    if (
+        not isinstance(blocked, Sequence)
+        or isinstance(blocked, (str, bytes, bytearray))
+        or len(blocked) > 65_536
+        or any(not isinstance(item, Mapping) for item in blocked)
+    ):
+        raise ReconciliationError("promotion plan blockers exceed their bound")
+    complete = document["complete"]
+    complete_values = list(complete) if isinstance(complete, Sequence) else []
+    if (
+        not isinstance(complete, Sequence)
+        or isinstance(complete, (str, bytes, bytearray))
+        or len(complete) > 65_536
+        or complete_values != sorted(set(complete_values))
+    ):
+        raise ReconciliationError("promotion plan completion set is invalid")
+    for subject in complete_values:
+        _formula_subject(subject, "promotion completed subject")
+
+    matrices = _exact_mapping(
+        document["matrices"],
+        frozenset({"canonical", "metadata", "admission"}),
+        "promotion plan matrices",
+    )
+    active = mode == "active"
+    expected_matrices = {
+        "canonical": {
+            "include": [
+                _plain(item["summary"]) for item in checked_work["canonical"]
+            ]
+            if active
+            else []
+        },
+        "metadata": {
+            "include": [
+                _plain(item["summary"])
+                for stage in ("activation", "metadata")
+                for item in checked_work[stage]
+            ]
+            if active
+            else []
+        },
+        "admission": {
+            "include": [
+                _plain(item["summary"]) for item in checked_work["admission"]
+            ]
+            if active
+            else []
+        },
+    }
+    if _plain(matrices) != expected_matrices:
+        raise ReconciliationError("promotion plan matrices differ from exact work")
+    return {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-promotion-plan",
+        "mode": mode,
+        "authoritative": active,
+        "request_sha256": request_sha256,
+        "tap_source": tap_source,
+        "history_record_sha256": history_record_sha256,
+        "work": checked_work,
+        "blocked": [_plain(item) for item in blocked],
+        "complete": complete_values,
+        "matrices": expected_matrices,
+    }
+
+
+def build_promotion_plan_document(
+    plan: PromotionReconciliationPlanV1,
+    *,
+    tap_source: Mapping[str, Any],
+    work_details: Mapping[str, Mapping[str, Mapping[str, Any]]],
+) -> dict[str, Any]:
+    """Bind every scheduled item to one canonical protected work detail."""
+
+    if not isinstance(plan, PromotionReconciliationPlanV1):
+        raise ReconciliationError("promotion workflow plan is untyped")
+    details = _exact_mapping(
+        work_details,
+        frozenset(PROMOTION_PLAN_STAGES),
+        "promotion plan work details",
+    )
+    stage_work = {
+        "activation": plan.activation_work,
+        "canonical": plan.canonical_work,
+        "metadata": plan.metadata_work,
+        "admission": plan.admission_work,
+    }
+    work: dict[str, list[dict[str, Any]]] = {}
+    for stage in PROMOTION_PLAN_STAGES:
+        stage_details = details[stage]
+        if not isinstance(stage_details, Mapping):
+            raise ReconciliationError(
+                f"promotion {stage} work details are not an object"
+            )
+        summaries = [dict(item) for item in stage_work[stage]]
+        work_ids = {item["work_id"] for item in summaries}
+        if set(stage_details) != work_ids:
+            raise ReconciliationError(
+                f"promotion {stage} work details do not cover exact work"
+            )
+        work[stage] = []
+        for summary in summaries:
+            detail = stage_details[summary["work_id"]]
+            if not isinstance(detail, Mapping):
+                raise ReconciliationError(
+                    f"promotion {stage} work detail is not an object"
+                )
+            plain_detail = _plain(detail)
+            work[stage].append(
+                {
+                    "summary": summary,
+                    "detail_sha256": canonical_sha256(plain_detail),
+                    "detail": plain_detail,
+                }
+            )
+    return _validate_promotion_plan_document(
+        {
+            "schema": 1,
+            "kind": "kandelo-abi-staging-promotion-plan",
+            "mode": plan.mode,
+            "authoritative": plan.authoritative,
+            "request_sha256": plan.request_digest,
+            "tap_source": _plain(tap_source),
+            "history_record_sha256": plan.history_record_sha256,
+            "work": work,
+            "blocked": [_plain(item) for item in plan.blocked],
+            "complete": list(plan.complete),
+            "matrices": {
+                "canonical": _plain(plan.canonical_matrix),
+                "metadata": _plain(plan.metadata_matrix),
+                "admission": _plain(plan.admission_matrix),
+            },
+        }
+    )
+
+
+def load_promotion_plan_document(body: bytes) -> dict[str, Any]:
+    try:
+        value = parse_canonical_bytes(body, maximum_bytes=MAX_PROMOTION_PLAN_BYTES)
+    except CanonicalJsonError as error:
+        raise ReconciliationError(f"promotion plan is not canonical: {error}") from error
+    return _validate_promotion_plan_document(value)
+
+
+def select_promotion_plan_work(
+    document: Mapping[str, Any], *, stage: str, work_id: str
+) -> dict[str, Any]:
+    checked = _validate_promotion_plan_document(document)
+    if stage not in PROMOTION_PLAN_STAGES:
+        raise ReconciliationError("promotion work stage is unsupported")
+    digest = _digest(work_id, "promotion selected work ID")
+    matches = [
+        item
+        for item in checked["work"][stage]
+        if item["summary"]["work_id"] == digest
+    ]
+    if len(matches) != 1:
+        raise ReconciliationError("promotion work is absent or duplicated")
+    return matches[0]
+
+
+def _promotion_item(
+    *,
+    stage: str,
+    subject: PromotionSubjectV1,
+    epoch: PromotionEpochV1,
+    extra: Mapping[str, Any] | None = None,
+) -> MappingProxyType[str, Any]:
+    decision = asdict(subject.decision)
+    decision_sha256 = canonical_sha256(decision)
+    identity = {
+        "stage": stage,
+        "decision_sha256": decision_sha256,
+        "request_digest": epoch.request_digest,
+        "formula_subject": subject.decision.formula_subject,
+        "current_tap_commit": epoch.current_tap_commit,
+        "current_tap_tree": epoch.current_tap_tree,
+        **({} if extra is None else dict(extra)),
+    }
+    return MappingProxyType(
+        {
+            "work_id": canonical_sha256(identity),
+            "work_class": subject.work_class,
+            "formula_subject": subject.decision.formula_subject,
+            "decision_sha256": decision_sha256,
+            "candidate_record_sha256": subject.decision.candidate_record_digest,
+            "bottle_layer_sha256": subject.decision.bottle_layer_sha256,
+            **({} if extra is None else dict(extra)),
+        }
+    )
+
+
+def _promotion_plan_result(
+    *,
+    mode: str,
+    request_digest: str,
+    history_record_sha256: str | None,
+    activation_work: list[MappingProxyType[str, Any]],
+    canonical_work: list[MappingProxyType[str, Any]],
+    metadata_work: list[MappingProxyType[str, Any]],
+    admission_work: list[MappingProxyType[str, Any]],
+    blocked: list[MappingProxyType[str, Any]],
+    complete: list[str],
+) -> PromotionReconciliationPlanV1:
+    active = mode == "active"
+    metadata_jobs = [*activation_work, *metadata_work]
+    return PromotionReconciliationPlanV1(
+        mode=mode,
+        authoritative=active,
+        request_digest=request_digest,
+        history_record_sha256=history_record_sha256,
+        activation_work=tuple(activation_work),
+        canonical_work=tuple(canonical_work),
+        metadata_work=tuple(metadata_work),
+        admission_work=tuple(admission_work),
+        blocked=tuple(blocked),
+        complete=tuple(complete),
+        canonical_matrix={
+            "include": [dict(item) for item in canonical_work] if active else []
+        },
+        metadata_matrix={
+            "include": [dict(item) for item in metadata_jobs] if active else []
+        },
+        admission_matrix={
+            "include": [dict(item) for item in admission_work] if active else []
+        },
+    )
+
+
+def build_promotion_workflow_plan(
+    reconciliation: ReconciliationDecisionV1,
+    subjects: Sequence[PromotionSubjectV1],
+    *,
+    epoch: PromotionEpochV1,
+    progress: Mapping[str, PromotionProgressV1],
+    activation_mode: str,
+) -> PromotionReconciliationPlanV1:
+    """Plan one bounded, independently convergent merged-PR promotion wave."""
+
+    if activation_mode not in {"disabled", "observe", "active"}:
+        raise ReconciliationError("promotion activation mode is unsupported")
+    if not isinstance(reconciliation, ReconciliationDecisionV1):
+        raise ReconciliationError("promotion reconciliation decision is untyped")
+    _digest(reconciliation.request_digest, "promotion reconciliation request")
+    if not isinstance(epoch, PromotionEpochV1):
+        raise ReconciliationError("promotion epoch is untyped")
+    if epoch.request_digest != reconciliation.request_digest:
+        raise ReconciliationError("promotion epoch names another request")
+    checked_subjects = tuple(subjects)
+    by_subject: dict[str, PromotionSubjectV1] = {}
+    for subject in checked_subjects:
+        if not isinstance(subject, PromotionSubjectV1):
+            raise ReconciliationError("promotion subject is untyped")
+        name = subject.decision.formula_subject
+        if name in by_subject:
+            raise ReconciliationError("promotion subject repeats")
+        if subject.decision.request_digest != reconciliation.request_digest:
+            raise ReconciliationError("promotion subject names another request")
+        by_subject[name] = subject
+    if set(progress) != set(by_subject) or any(
+        not isinstance(item, PromotionProgressV1) for item in progress.values()
+    ):
+        raise ReconciliationError("promotion progress does not cover exact subjects")
+    for subject in by_subject.values():
+        if any(dependency not in by_subject for dependency in subject.dependency_subjects):
+            raise ReconciliationError("promotion dependency is outside the exact plan")
+
+    ordered = sorted(
+        by_subject.values(),
+        key=lambda item: (
+            0 if item.work_class == "required" else 1,
+            item.decision.formula_subject,
+        ),
+    )
+    empty: list[MappingProxyType[str, Any]] = []
+    if activation_mode == "disabled":
+        return _promotion_plan_result(
+            mode=activation_mode,
+            request_digest=reconciliation.request_digest,
+            history_record_sha256=epoch.history_record_sha256,
+            activation_work=empty,
+            canonical_work=[],
+            metadata_work=[],
+            admission_work=[],
+            blocked=[],
+            complete=[],
+        )
+
+    blocked: list[MappingProxyType[str, Any]] = []
+    if (
+        reconciliation.lifecycle.state != "merged"
+        or reconciliation.action != "observe-merged"
+        or not reconciliation.current_for_pull_request
+    ):
+        blocked.extend(
+            MappingProxyType(
+                {
+                    "formula_subject": item.decision.formula_subject,
+                    "guard_code": "pull_request_not_merged",
+                    "blocked_by": None,
+                }
+            )
+            for item in ordered
+        )
+        return _promotion_plan_result(
+            mode=activation_mode,
+            request_digest=reconciliation.request_digest,
+            history_record_sha256=epoch.history_record_sha256,
+            activation_work=[],
+            canonical_work=[],
+            metadata_work=[],
+            admission_work=[],
+            blocked=blocked,
+            complete=[],
+        )
+
+    merge = {
+        "repository": ordered[0].decision.merged_pull_request["repository"],
+        "number": ordered[0].decision.merged_pull_request["number"],
+        "head": ordered[0].decision.merged_pull_request["head"],
+        "merge_commit": ordered[0].decision.merged_pull_request["merge_commit"],
+    } if ordered else None
+    for item in ordered:
+        current_merge = dict(item.decision.merged_pull_request)
+        if (
+            merge is None
+            or current_merge != merge
+            or current_merge["head"] != reconciliation.lifecycle.current_head
+            or current_merge["merge_commit"] != reconciliation.lifecycle.merged_commit
+        ):
+            raise ReconciliationError(
+                "promotion subjects do not share the exact merged pull request"
+            )
+
+    if epoch.history_record_sha256 is None:
+        blocked.extend(
+            MappingProxyType(
+                {
+                    "formula_subject": item.decision.formula_subject,
+                    "guard_code": "history_unavailable",
+                    "blocked_by": None,
+                }
+            )
+            for item in ordered
+        )
+        return _promotion_plan_result(
+            mode=activation_mode,
+            request_digest=reconciliation.request_digest,
+            history_record_sha256=None,
+            activation_work=[],
+            canonical_work=[],
+            metadata_work=[],
+            admission_work=[],
+            blocked=blocked,
+            complete=[],
+        )
+
+    if epoch.activation_record_sha256 is None:
+        activation_identity = {
+            "stage": "successor-activation",
+            "request_digest": epoch.request_digest,
+            "history_record_sha256": epoch.history_record_sha256,
+            "activation_patch_sha256": epoch.activation_patch_sha256,
+            "current_tap_commit": epoch.current_tap_commit,
+            "current_tap_tree": epoch.current_tap_tree,
+        }
+        activation = MappingProxyType(
+            {
+                "operation": "successor-activation",
+                "work_id": canonical_sha256(activation_identity),
+                **activation_identity,
+            }
+        )
+        return _promotion_plan_result(
+            mode=activation_mode,
+            request_digest=reconciliation.request_digest,
+            history_record_sha256=epoch.history_record_sha256,
+            activation_work=[activation],
+            canonical_work=[],
+            metadata_work=[],
+            admission_work=[],
+            blocked=[
+                MappingProxyType(
+                    {
+                        "formula_subject": item.decision.formula_subject,
+                        "guard_code": "activation_pending",
+                        "blocked_by": None,
+                    }
+                )
+                for item in ordered
+            ],
+            complete=[],
+        )
+
+    canonical_work: list[MappingProxyType[str, Any]] = []
+    metadata_work: list[MappingProxyType[str, Any]] = []
+    admission_work: list[MappingProxyType[str, Any]] = []
+    complete: list[str] = []
+    scheduled = 0
+    metadata_owner: str | None = None
+    completed_subjects = {
+        name
+        for name, state in progress.items()
+        if state.admission_record_sha256 is not None
+    }
+    for subject in ordered:
+        name = subject.decision.formula_subject
+        state = progress[name]
+        if state.admission_record_sha256 is not None:
+            complete.append(name)
+            continue
+        unavailable = next(
+            (
+                dependency
+                for dependency in subject.dependency_subjects
+                if dependency not in completed_subjects
+            ),
+            None,
+        )
+        if unavailable is not None:
+            blocked.append(
+                MappingProxyType(
+                    {
+                        "formula_subject": name,
+                        "guard_code": "dependency_unavailable",
+                        "blocked_by": unavailable,
+                    }
+                )
+            )
+            continue
+        if subject.decision.eligibility == "rebuild-required":
+            blocked.append(
+                MappingProxyType(
+                    {
+                        "formula_subject": name,
+                        "guard_code": "tap_source_drift",
+                        "blocked_by": None,
+                    }
+                )
+            )
+            continue
+        if subject.decision.eligibility != "eligible":
+            blocked.append(
+                MappingProxyType(
+                    {
+                        "formula_subject": name,
+                        "guard_code": "promotion_ineligible",
+                        "blocked_by": None,
+                    }
+                )
+            )
+            continue
+        if scheduled >= MAX_PROMOTION_WAVE:
+            blocked.append(
+                MappingProxyType(
+                    {
+                        "formula_subject": name,
+                        "guard_code": "promotion_wave_deferred",
+                        "blocked_by": None,
+                    }
+                )
+            )
+            continue
+        if state.canonical_manifest_sha256 is None:
+            canonical_item = _promotion_item(
+                stage="publish-canonical",
+                subject=subject,
+                epoch=epoch,
+                extra={
+                    "history_record_sha256": epoch.history_record_sha256,
+                    "activation_record_sha256": epoch.activation_record_sha256,
+                },
+            )
+            canonical_work.append(canonical_item)
+            if metadata_owner is None:
+                metadata_owner = name
+                metadata_item = MappingProxyType(
+                    {
+                        **dict(
+                            _promotion_item(
+                                stage="update-tap-metadata",
+                                subject=subject,
+                                epoch=epoch,
+                                extra={
+                                    "canonical_work_id": canonical_item["work_id"],
+                                    "activation_record_sha256": (
+                                        epoch.activation_record_sha256
+                                    ),
+                                },
+                            )
+                        ),
+                        "operation": "formula-metadata",
+                    }
+                )
+                metadata_work.append(metadata_item)
+                admission_work.append(
+                    _promotion_item(
+                        stage="publish-admission",
+                        subject=subject,
+                        epoch=epoch,
+                        extra={
+                            "canonical_work_id": canonical_item["work_id"],
+                            "metadata_work_id": metadata_item["work_id"],
+                        },
+                    )
+                )
+            else:
+                blocked.append(
+                    MappingProxyType(
+                        {
+                            "formula_subject": name,
+                            "guard_code": "dependency_unavailable",
+                            "blocked_by": metadata_owner,
+                        }
+                    )
+                )
+        elif state.metadata_commit is None:
+            if metadata_owner is None:
+                metadata_owner = name
+                metadata_item = MappingProxyType(
+                    {
+                        **dict(
+                            _promotion_item(
+                                stage="update-tap-metadata",
+                                subject=subject,
+                                epoch=epoch,
+                                extra={
+                                    "canonical_manifest_sha256": state.canonical_manifest_sha256,
+                                    "canonical_readback_sha256": state.canonical_readback_sha256,
+                                    "activation_record_sha256": epoch.activation_record_sha256,
+                                },
+                            )
+                        ),
+                        "operation": "formula-metadata",
+                    }
+                )
+                metadata_work.append(metadata_item)
+                if state.stale_admission_record_sha256 is None:
+                    admission_work.append(
+                        _promotion_item(
+                            stage="publish-admission",
+                            subject=subject,
+                            epoch=epoch,
+                            extra={
+                                "canonical_manifest_sha256": state.canonical_manifest_sha256,
+                                "canonical_readback_sha256": state.canonical_readback_sha256,
+                                "metadata_work_id": metadata_item["work_id"],
+                            },
+                        )
+                    )
+            else:
+                blocked.append(
+                    MappingProxyType(
+                        {
+                            "formula_subject": name,
+                            "guard_code": "dependency_unavailable",
+                            "blocked_by": metadata_owner,
+                        }
+                    )
+                )
+        else:
+            admission_work.append(
+                _promotion_item(
+                    stage="publish-admission",
+                    subject=subject,
+                    epoch=epoch,
+                    extra={
+                        "canonical_manifest_sha256": state.canonical_manifest_sha256,
+                        "canonical_readback_sha256": state.canonical_readback_sha256,
+                        "metadata_commit": state.metadata_commit,
+                        "metadata_tree": state.metadata_tree,
+                        "metadata_update_sha256": state.metadata_update_sha256,
+                        "metadata_readback_sha256": state.metadata_readback_sha256,
+                    },
+                )
+            )
+        scheduled += 1
+
+    return _promotion_plan_result(
+        mode=activation_mode,
+        request_digest=reconciliation.request_digest,
+        history_record_sha256=epoch.history_record_sha256,
+        activation_work=[],
+        canonical_work=canonical_work,
+        metadata_work=metadata_work,
+        admission_work=admission_work,
+        blocked=blocked,
+        complete=complete,
+    )
 
 
 def reconciliation_work_scope(

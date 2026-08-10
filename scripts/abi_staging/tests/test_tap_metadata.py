@@ -840,6 +840,7 @@ class TapMetadataTests(unittest.TestCase):
             formula_subject=exact_formula_subject(formula, architecture),
             tap_plan_digest="1" * 64,
             candidate_record_digest="2" * 64,
+            candidate_binding_digest="2" * 64,
             bottle_layer_sha256=layer_sha256,
             bottle_layer_bytes=len(bottle_body),
             source_custody_digest="3" * 64,
@@ -887,7 +888,13 @@ class TapMetadataTests(unittest.TestCase):
                     "commit": MERGED_HEAD,
                     "tree": "6" * 40,
                 },
-                tap_source=preactivation,
+                candidate_source={
+                    "repository": "Automattic/kandelo",
+                    "commit": MERGED_HEAD,
+                    "tree": "6" * 40,
+                },
+                preactivation_tap_source=preactivation,
+                abi_history_record_sha256="9" * 64,
                 canonical={
                     "sha256": canonical_digest,
                     "bytes": 99,
@@ -1392,6 +1399,94 @@ class TapMetadataTests(unittest.TestCase):
 
         self.assertEqual(dict(repeated.patch.files), {})
         self.assertEqual(repeated.update.expected_main_commit, current["commit"])
+
+    def test_admission_progress_requires_the_exact_current_metadata_projection(self) -> None:
+        history, snapshot, preactivation, current = self._activate_fixture()
+        prepared = self._prepared_admission(preactivation=preactivation)
+        planned = self._prepare_formula(
+            prepared=prepared,
+            history=history,
+            snapshot=snapshot,
+            current=current,
+        )
+        self._materialize_patch(planned.patch, "promote bash wasm32")
+        validate = getattr(
+            tap_metadata_module, "validate_formula_admission_projection", None
+        )
+        if validate is None:
+            self.fail("admission progress does not revalidate current metadata")
+
+        validate(self.root, planned.update)
+        sidecar_path = self.root / "Kandelo/formula/bash.json"
+        sidecar = json.loads(sidecar_path.read_bytes())
+        sidecar["bottles"][0]["sha256"] = "f" * 64
+        sidecar_path.write_bytes(canonical_bytes(sidecar))
+        with self.assertRaises(tap_metadata_module.TapMetadataError):
+            validate(self.root, planned.update)
+
+    def test_landed_metadata_commit_has_the_exact_base_and_changed_paths(self) -> None:
+        history, snapshot, preactivation, current = self._activate_fixture()
+        prepared = self._prepared_admission(preactivation=preactivation)
+        planned = self._prepare_formula(
+            prepared=prepared,
+            history=history,
+            snapshot=snapshot,
+            current=current,
+        )
+        landed = self._materialize_patch(planned.patch, "promote bash wasm32")
+
+        tap_metadata_module.validate_landed_formula_metadata_commit(
+            self.root,
+            base_source=current,
+            landed_source=landed,
+            patch=planned.patch,
+        )
+        with self.assertRaises(tap_metadata_module.TapMetadataError):
+            tap_metadata_module.validate_landed_formula_metadata_commit(
+                self.root,
+                base_source={**current, "commit": "f" * 40},
+                landed_source=landed,
+                patch=planned.patch,
+            )
+
+    def test_landed_metadata_without_admission_recovers_its_original_cas(self) -> None:
+        history, snapshot, preactivation, base = self._activate_fixture()
+        prepared = self._prepared_admission(preactivation=preactivation)
+        planned = self._prepare_formula(
+            prepared=prepared,
+            history=history,
+            snapshot=snapshot,
+            current=base,
+        )
+        landed = self._materialize_patch(planned.patch, "promote bash wasm32")
+        (self.root / "later-change.txt").write_text("later metadata wave\n")
+        _git(self.root, "add", "--", "later-change.txt")
+        _git(self.root, "commit", "-m", "later metadata wave")
+        later = {
+            "repository": "kandelo-dev/homebrew-tap-core",
+            "commit": _git(self.root, "rev-parse", "HEAD"),
+            "tree": _git(self.root, "rev-parse", "HEAD^{tree}"),
+        }
+        repeated = self._prepare_formula(
+            prepared=prepared,
+            history=history,
+            snapshot=snapshot,
+            current=later,
+        )
+        self.assertEqual(dict(repeated.patch.files), {})
+
+        recover = getattr(
+            tap_metadata_module, "recover_landed_formula_metadata_commit", None
+        )
+        if recover is None:
+            self.fail("landed Formula metadata has no admission retry recovery")
+        recovered = recover(self.root, current_update=repeated.update)
+
+        self.assertEqual(dict(recovered.base_source), base)
+        self.assertEqual(dict(recovered.landed_source), landed)
+        self.assertEqual(recovered.update, planned.update)
+        self.assertEqual(recovered.patch, planned.patch)
+        self.assertEqual(_git(self.root, "rev-parse", "HEAD"), later["commit"])
 
     def _metadata_writer(self) -> tuple[object, type[Exception], type[object]]:
         apply = getattr(tap_metadata_module, "apply_metadata_patch", None)

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import copy
+from dataclasses import asdict
 import hashlib
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 import tempfile
 import unittest
@@ -13,20 +16,30 @@ TAP_ROOT = Path(os.environ["KANDELO_TAP_ROOT"])
 sys.path.insert(0, str(TAP_ROOT))
 
 from scripts.abi_staging.github_public import DiscoveredRequestV1
-from scripts.abi_staging.canonical import canonical_sha256
+from scripts.abi_staging import cli as cli_module
+from scripts.abi_staging.canonical import canonical_bytes, canonical_sha256
 from scripts.abi_staging.cli import main as cli_main
 from scripts.abi_staging.reconcile import (
     build_product_workflow_wave,
     build_product_workflow_seed,
+    build_promotion_workflow_plan,
     ProductProgressV1,
     ProductSelectionV1,
+    PromotionEpochV1,
+    PromotionProgressV1,
+    PromotionSubjectV1,
     PullRequestLifecycleV1,
     ReconciliationError,
+    build_promotion_plan_document,
     load_reconciliation_activation,
+    load_promotion_plan_document,
     plan_product_reconciliation,
     reconcile_request,
+    select_promotion_plan_work,
     select_reconciliation_cycle,
 )
+from scripts.abi_staging.plan import build_miniature_tap_plan_fixture, exact_formula_subject
+from scripts.abi_staging.promotion import PromotionDecisionV1
 from scripts.abi_staging.request import load_request_issuer_policy, validate_request
 
 
@@ -49,6 +62,995 @@ def discovered(name: str = "current-request.json") -> DiscoveredRequestV1:
 
 
 class ReconciliationTests(unittest.TestCase):
+    def test_promotion_reconstructs_formula_roots_without_parallel_authority(self) -> None:
+        tap_plan = build_miniature_tap_plan_fixture(TAP_ROOT)
+        requirements = cli_module._formula_requirements_from_tap_plan(tap_plan)
+        self.assertEqual(
+            requirements,
+            [
+                {
+                    "tap": "kandelo-dev/homebrew-tap-core",
+                    "formula": "bash",
+                    "architecture": "wasm32",
+                    "uses": [
+                        {
+                            "product_id": "beta-tools",
+                            "materialization": "embedded",
+                        }
+                    ],
+                },
+                {
+                    "tap": "kandelo-dev/homebrew-tap-core",
+                    "formula": "curl",
+                    "architecture": "wasm32",
+                    "uses": [
+                        {
+                            "product_id": "alpha-shell",
+                            "materialization": "lazy",
+                        }
+                    ],
+                },
+                {
+                    "tap": "kandelo-dev/homebrew-tap-core",
+                    "formula": "libcurl",
+                    "architecture": "wasm32",
+                    "uses": [
+                        {
+                            "product_id": "beta-tools",
+                            "materialization": "embedded",
+                        }
+                    ],
+                },
+            ],
+        )
+
+    def test_promotion_history_selection_requires_one_exact_epoch(self) -> None:
+        record = json.loads(
+            (TAP_ROOT / "Kandelo/staging/fixtures/abi-history-record.json").read_bytes()
+        )
+        fetched = SimpleNamespace(
+            digest="sha256:" + "d" * 64,
+            config=SimpleNamespace(body=canonical_bytes(record)),
+        )
+        selected = cli_module._select_exact_history_record(
+            (fetched,),
+            target_abi=8,
+            planned_tap_source={
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": "1" * 40,
+                "tree": "2" * 40,
+            },
+        )
+        self.assertIs(selected, fetched)
+
+        with self.assertRaises(ReconciliationError):
+            cli_module._select_exact_history_record(
+                (fetched, fetched),
+                target_abi=8,
+                planned_tap_source={
+                    "repository": "kandelo-dev/homebrew-tap-core",
+                    "commit": "1" * 40,
+                    "tree": "2" * 40,
+                },
+            )
+
+    def test_activated_epoch_fetches_the_record_bound_by_abi_state(self) -> None:
+        digest = "d" * 64
+        fetched = SimpleNamespace(digest="sha256:" + digest)
+        policy = SimpleNamespace(tap_repository="kandelo-dev/homebrew-tap-core")
+        with patch.object(
+            cli_module, "fetch_public_record", return_value=fetched
+        ) as fetch, patch.object(
+            cli_module, "list_public_record_locators"
+        ) as listing:
+            selected = cli_module._fetch_exact_history_record(
+                policy=policy,
+                target_abi=8,
+                planned_tap_source={
+                    "repository": policy.tap_repository,
+                    "commit": "9" * 40,
+                    "tree": "a" * 40,
+                },
+                expected_digest=digest,
+                transport=SimpleNamespace(),
+            )
+
+        self.assertIs(selected, fetched)
+        listing.assert_not_called()
+        locator = fetch.call_args.args[0]
+        self.assertEqual(
+            locator,
+            {
+                "repository": (
+                    "ghcr.io/kandelo-dev/homebrew-tap-core-abi-7-records/history"
+                ),
+                "digest": "sha256:" + digest,
+                "immutable_reference": (
+                    "ghcr.io/kandelo-dev/homebrew-tap-core-abi-7-records/history"
+                    "@sha256:"
+                    + digest
+                ),
+            },
+        )
+
+    def test_history_epoch_authority_comes_from_the_immutable_record(self) -> None:
+        record = json.loads(
+            (TAP_ROOT / "Kandelo/staging/fixtures/abi-history-record.json").read_bytes()
+        )
+        fetched = SimpleNamespace(
+            repository=(
+                "ghcr.io/kandelo-dev/homebrew-tap-core-abi-7-records/history"
+            ),
+            config=SimpleNamespace(body=canonical_bytes(record)),
+        )
+
+        source, branch = cli_module._history_epoch_authority(
+            fetched,
+            policy=SimpleNamespace(
+                tap_repository="kandelo-dev/homebrew-tap-core",
+                historical_branch_prefix="abi/",
+            ),
+            target_abi=8,
+        )
+
+        self.assertEqual(
+            source,
+            {
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": "1" * 40,
+                "tree": "2" * 40,
+            },
+        )
+        self.assertEqual(branch, "abi/7")
+
+    def test_admission_progress_does_not_hide_current_metadata_drift(self) -> None:
+        record = json.loads(
+            (TAP_ROOT / "Kandelo/staging/fixtures/admission-record.json").read_bytes()
+        )
+        admission = record["admission"]
+        current = PromotionProgressV1(
+            canonical_manifest_sha256=admission["canonical"]["sha256"],
+            canonical_readback_sha256=admission["canonical"]["sha256"],
+        )
+        fetched = SimpleNamespace(
+            digest="sha256:" + "e" * 64,
+            config=SimpleNamespace(body=canonical_bytes(record)),
+        )
+        decision = SimpleNamespace(
+            request_digest=record["common"]["request_sha256"],
+            candidate_record_digest=admission["candidate_record_sha256"],
+            candidate_binding_digest=admission["candidate_binding_sha256"],
+            merged_pull_request=admission["merged_pull_request"],
+        )
+        with patch.object(
+            cli_module, "list_public_record_locators", return_value=({},)
+        ), patch.object(
+            cli_module, "fetch_public_record", return_value=fetched
+        ), patch.object(
+            cli_module,
+            "validate_formula_admission_projection",
+            side_effect=cli_module.TapMetadataError("metadata drift"),
+            create=True,
+        ):
+            progress = cli_module._admission_progress(
+                current,
+                tap_root=TAP_ROOT,
+                decision=decision,
+                canonical=SimpleNamespace(artifact=admission["canonical"]),
+                policy=cli_module.load_promotion_policy(
+                    TAP_ROOT / "Kandelo/staging/promotion-policy.toml"
+                ),
+                history_record_sha256=admission["abi_history_record_sha256"],
+                preactivation_tap_source=admission[
+                    "preactivation_tap_source"
+                ],
+                target_abi=admission["formula_metadata_update"]["target_abi"],
+                formula=admission["formula_metadata_update"]["formula"],
+                transport=SimpleNamespace(),
+            )
+
+        self.assertEqual(
+            progress.canonical_manifest_sha256,
+            current.canonical_manifest_sha256,
+        )
+        self.assertEqual(
+            progress.stale_admission_record_sha256,
+            "e" * 64,
+        )
+
+    def test_admission_progress_requires_the_exact_history_epoch(self) -> None:
+        record = json.loads(
+            (TAP_ROOT / "Kandelo/staging/fixtures/admission-record.json").read_bytes()
+        )
+        admission = record["admission"]
+        current = PromotionProgressV1(
+            canonical_manifest_sha256=admission["canonical"]["sha256"],
+            canonical_readback_sha256=admission["canonical"]["sha256"],
+        )
+        fetched = SimpleNamespace(
+            digest="sha256:" + "e" * 64,
+            config=SimpleNamespace(body=canonical_bytes(record)),
+        )
+        decision = SimpleNamespace(
+            request_digest=record["common"]["request_sha256"],
+            candidate_record_digest=admission["candidate_record_sha256"],
+            candidate_binding_digest=admission["candidate_binding_sha256"],
+            merged_pull_request=admission["merged_pull_request"],
+        )
+        with patch.object(
+            cli_module, "list_public_record_locators", return_value=({},)
+        ), patch.object(
+            cli_module, "fetch_public_record", return_value=fetched
+        ), patch.object(
+            cli_module, "validate_formula_admission_projection"
+        ) as projection:
+            progress = cli_module._admission_progress(
+                current,
+                tap_root=TAP_ROOT,
+                decision=decision,
+                canonical=SimpleNamespace(artifact=admission["canonical"]),
+                policy=cli_module.load_promotion_policy(
+                    TAP_ROOT / "Kandelo/staging/promotion-policy.toml"
+                ),
+                history_record_sha256="f" * 64,
+                preactivation_tap_source=admission[
+                    "preactivation_tap_source"
+                ],
+                target_abi=admission["formula_metadata_update"]["target_abi"],
+                formula=admission["formula_metadata_update"]["formula"],
+                transport=SimpleNamespace(),
+            )
+
+        self.assertEqual(progress, current)
+        projection.assert_not_called()
+
+    def promotion_decision(
+        self,
+        name: str,
+        *,
+        architecture: str = "wasm32",
+        eligibility: str = "eligible",
+        tap_source_state: str = "exact",
+        marker: str = "a",
+    ) -> PromotionDecisionV1:
+        request = discovered()
+        digest = lambda suffix: hashlib.sha256(
+            f"{marker}-{suffix}".encode("utf-8")
+        ).hexdigest()
+        return PromotionDecisionV1(
+            request_digest=request.request_digest,
+            merged_pull_request={
+                "repository": request.request["pull_request"]["repository"],
+                "number": request.request["pull_request"]["number"],
+                "head": request.request["build_source"]["commit"],
+                "merge_commit": "8" * 40,
+            },
+            formula_subject=exact_formula_subject(name, architecture),
+            tap_plan_digest=digest("tap-plan"),
+            candidate_record_digest=digest("candidate"),
+            candidate_binding_digest=digest("candidate"),
+            bottle_layer_sha256=digest("bottle"),
+            bottle_layer_bytes=4096,
+            source_custody_digest=digest("custody"),
+            qualifying_receipts=(digest("receipt"),),
+            override_receipts=(),
+            tap_source_state=tap_source_state,
+            eligibility=eligibility,
+        )
+
+    def promotion_epoch(self, *, activated: bool) -> PromotionEpochV1:
+        request = discovered()
+        return PromotionEpochV1(
+            request_digest=request.request_digest,
+            history_record_sha256="1" * 64,
+            activation_patch_sha256="2" * 64,
+            activation_record_sha256="3" * 64 if activated else None,
+            current_tap_commit="4" * 40,
+            current_tap_tree="5" * 40,
+        )
+
+    def merged_promotion_reconciliation(self) -> ReconciliationDecisionV1:
+        request = discovered()
+        return reconcile_request(
+            request,
+            PullRequestLifecycleV1(
+                "merged", request.request["build_source"]["commit"], "8" * 40
+            ),
+        )
+
+    def test_promotion_modes_require_exact_history_then_one_activation(self) -> None:
+        reconciliation = self.merged_promotion_reconciliation()
+        subject = PromotionSubjectV1(
+            self.promotion_decision("alpha"), "required", ()
+        )
+        progress = {subject.decision.formula_subject: PromotionProgressV1()}
+
+        disabled = build_promotion_workflow_plan(
+            reconciliation,
+            (subject,),
+            epoch=self.promotion_epoch(activated=False),
+            progress=progress,
+            activation_mode="disabled",
+        )
+        self.assertEqual(disabled.activation_work, ())
+        self.assertEqual(disabled.canonical_matrix, {"include": []})
+
+        observe = build_promotion_workflow_plan(
+            reconciliation,
+            (subject,),
+            epoch=self.promotion_epoch(activated=False),
+            progress=progress,
+            activation_mode="observe",
+        )
+        self.assertEqual(len(observe.activation_work), 1)
+        self.assertEqual(observe.metadata_matrix, {"include": []})
+        self.assertFalse(observe.authoritative)
+
+        active = build_promotion_workflow_plan(
+            reconciliation,
+            (subject,),
+            epoch=self.promotion_epoch(activated=False),
+            progress=progress,
+            activation_mode="active",
+        )
+        self.assertEqual(
+            [item["operation"] for item in active.metadata_matrix["include"]],
+            ["successor-activation"],
+        )
+        self.assertEqual(active.canonical_matrix, {"include": []})
+
+        activated = build_promotion_workflow_plan(
+            reconciliation,
+            (subject,),
+            epoch=self.promotion_epoch(activated=True),
+            progress=progress,
+            activation_mode="active",
+        )
+        self.assertEqual(activated.activation_work, ())
+        self.assertEqual(
+            [item["formula_subject"] for item in activated.canonical_matrix["include"]],
+            [subject.decision.formula_subject],
+        )
+
+        with self.assertRaises(ReconciliationError):
+            PromotionEpochV1(
+                request_digest=reconciliation.request_digest,
+                history_record_sha256=True,
+                activation_patch_sha256="2" * 64,
+                activation_record_sha256=None,
+                current_tap_commit="4" * 40,
+                current_tap_tree="5" * 40,
+            )
+
+    def test_open_pr_never_produces_promotion_work(self) -> None:
+        request = discovered()
+        open_reconciliation = reconcile_request(
+            request,
+            PullRequestLifecycleV1(
+                "open", request.request["build_source"]["commit"], None
+            ),
+        )
+        subject = PromotionSubjectV1(
+            self.promotion_decision("alpha"), "required", ()
+        )
+        plan = build_promotion_workflow_plan(
+            open_reconciliation,
+            (subject,),
+            epoch=self.promotion_epoch(activated=True),
+            progress={subject.decision.formula_subject: PromotionProgressV1()},
+            activation_mode="active",
+        )
+        self.assertEqual(plan.canonical_matrix, {"include": []})
+        self.assertEqual(plan.metadata_matrix, {"include": []})
+        self.assertEqual(plan.admission_matrix, {"include": []})
+        self.assertEqual(
+            [item["guard_code"] for item in plan.blocked],
+            ["pull_request_not_merged"],
+        )
+
+    def test_promotion_plan_artifact_is_canonical_exact_and_stage_bound(self) -> None:
+        reconciliation = self.merged_promotion_reconciliation()
+        subject = PromotionSubjectV1(
+            self.promotion_decision("alpha"), "required", ()
+        )
+        plan = build_promotion_workflow_plan(
+            reconciliation,
+            (subject,),
+            epoch=self.promotion_epoch(activated=True),
+            progress={subject.decision.formula_subject: PromotionProgressV1()},
+            activation_mode="active",
+        )
+        work = plan.canonical_work[0]
+        detail = {
+            "decision": asdict(subject.decision),
+            "candidate_locator": {
+                "repository": "ghcr.io/kandelo-dev/fixture",
+                "digest": "sha256:" + subject.decision.candidate_record_digest,
+                "immutable_reference": (
+                    "ghcr.io/kandelo-dev/fixture@sha256:"
+                    + subject.decision.candidate_record_digest
+                ),
+            },
+        }
+        document = build_promotion_plan_document(
+            plan,
+            tap_source={
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": "4" * 40,
+                "tree": "5" * 40,
+            },
+            work_details={
+                "activation": {},
+                "canonical": {work["work_id"]: detail},
+                "metadata": {
+                    plan.metadata_work[0]["work_id"]: {
+                        "decision": asdict(subject.decision)
+                    }
+                },
+                "admission": {
+                    plan.admission_work[0]["work_id"]: {
+                        "decision": asdict(subject.decision)
+                    }
+                },
+            },
+        )
+        body = canonical_bytes(document)
+        loaded = load_promotion_plan_document(body)
+        self.assertEqual(canonical_bytes(loaded), body)
+        selected = select_promotion_plan_work(
+            loaded, stage="canonical", work_id=work["work_id"]
+        )
+        self.assertEqual(
+            canonical_bytes(selected["detail"]), canonical_bytes(detail)
+        )
+        with self.assertRaises(ReconciliationError):
+            select_promotion_plan_work(
+                loaded, stage="metadata", work_id=work["work_id"]
+            )
+
+        changed = copy.deepcopy(document)
+        changed["work"]["canonical"][0]["detail"]["candidate_locator"][
+            "digest"
+        ] = "sha256:" + "f" * 64
+        with self.assertRaises(ReconciliationError):
+            load_promotion_plan_document(canonical_bytes(changed))
+
+        changed = copy.deepcopy(document)
+        changed["matrices"]["canonical"]["include"][0]["work_id"] = "f" * 64
+        with self.assertRaises(ReconciliationError):
+            load_promotion_plan_document(canonical_bytes(changed))
+
+        with self.assertRaises(ReconciliationError):
+            build_promotion_plan_document(
+                plan,
+                tap_source={
+                    "repository": "kandelo-dev/homebrew-tap-core",
+                    "commit": "4" * 40,
+                    "tree": "5" * 40,
+                },
+                work_details={
+                    "activation": {},
+                    "canonical": {},
+                    "metadata": {},
+                    "admission": {},
+                },
+            )
+
+    def test_writer_loads_only_the_exact_current_run_promotion_plan(self) -> None:
+        reconciliation = self.merged_promotion_reconciliation()
+        subject = PromotionSubjectV1(
+            self.promotion_decision("alpha"), "required", ()
+        )
+        plan = build_promotion_workflow_plan(
+            reconciliation,
+            (subject,),
+            epoch=self.promotion_epoch(activated=True),
+            progress={subject.decision.formula_subject: PromotionProgressV1()},
+            activation_mode="active",
+        )
+        work = plan.canonical_work[0]
+        detail = {"decision": asdict(subject.decision)}
+        document = build_promotion_plan_document(
+            plan,
+            tap_source={
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": "4" * 40,
+                "tree": "5" * 40,
+            },
+            work_details={
+                "activation": {},
+                "canonical": {work["work_id"]: detail},
+                "metadata": {
+                    plan.metadata_work[0]["work_id"]: {
+                        "decision": asdict(subject.decision)
+                    }
+                },
+                "admission": {
+                    plan.admission_work[0]["work_id"]: {
+                        "decision": asdict(subject.decision)
+                    }
+                },
+            },
+        )
+
+        class ArtifactClient:
+            def __init__(self) -> None:
+                self.requested = None
+
+            def artifact_by_id(self, **kwargs):
+                self.requested = kwargs
+                return object()
+
+            def extract_artifact(self, _artifact, destination, **_kwargs):
+                destination.mkdir(parents=True)
+                (destination / "promotion-plan.json").write_bytes(
+                    canonical_bytes(document)
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            client = ArtifactClient()
+            selected = cli_module._load_workflow_promotion_work(
+                client,
+                root=Path(temporary),
+                run_id=91,
+                run_attempt=2,
+                request_digest=reconciliation.request_digest,
+                artifact_id="17",
+                artifact_digest="a" * 64,
+                expected_tap_source={
+                    "repository": "kandelo-dev/homebrew-tap-core",
+                    "commit": "4" * 40,
+                    "tree": "5" * 40,
+                },
+                stage="canonical",
+                work_id=work["work_id"],
+            )
+            self.assertEqual(
+                canonical_bytes(selected["detail"]), canonical_bytes(detail)
+            )
+            self.assertEqual(
+                client.requested["name"],
+                "abi-staging-promotion-plan-"
+                + reconciliation.request_digest
+                + "-91-2",
+            )
+
+            with self.assertRaises(ReconciliationError):
+                cli_module._load_workflow_promotion_work(
+                    ArtifactClient(),
+                    root=Path(temporary) / "second",
+                    run_id=91,
+                    run_attempt=2,
+                    request_digest="f" * 64,
+                    artifact_id="17",
+                    artifact_digest="a" * 64,
+                    expected_tap_source={
+                        "repository": "kandelo-dev/homebrew-tap-core",
+                        "commit": "4" * 40,
+                        "tree": "5" * 40,
+                    },
+                    stage="canonical",
+                    work_id=work["work_id"],
+                )
+
+    def test_metadata_readback_handoff_binds_exact_landed_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "Kandelo").mkdir()
+            (root / "Kandelo/abi-state.json").write_bytes(b"state\n")
+            source = {
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": "a" * 40,
+                "tree": "b" * 40,
+            }
+            result = SimpleNamespace(
+                status="committed",
+                source=source,
+                changed_paths=("Kandelo/abi-state.json",),
+            )
+            patch = {
+                "schema": 1,
+                "kind": "kandelo-tap-metadata-patch",
+                "operation": "successor-activation",
+                "expected_main_commit": "c" * 40,
+                "expected_main_tree": "d" * 40,
+                "allowed_paths": ["Kandelo/abi-state.json"],
+                "expected_files_sha256": {
+                    "Kandelo/abi-state.json": "e" * 64
+                },
+                "files": [],
+                "formula_update": None,
+            }
+            document = cli_module._metadata_readback_document(
+                work_id="1" * 64,
+                request_digest="f" * 64,
+                result=result,
+                patch_document=patch,
+                formula_update=None,
+                tap_root=root,
+            )
+            self.assertEqual(
+                document["post_write_readback_sha256"],
+                canonical_sha256(document["post_write_readback"]),
+            )
+            self.assertEqual(
+                document["changed_files"],
+                [
+                    {
+                        "path": "Kandelo/abi-state.json",
+                        "sha256": hashlib.sha256(b"state\n").hexdigest(),
+                        "bytes": 6,
+                    }
+                ],
+            )
+
+    def test_disabled_workflow_planner_emits_exact_empty_artifact(self) -> None:
+        selected = discovered()
+        tap_source = {
+            "repository": "kandelo-dev/homebrew-tap-core",
+            "commit": "4" * 40,
+            "tree": "5" * 40,
+        }
+        bundle = {
+            "request": selected.request,
+            "request_sha256": selected.request_digest,
+            "request_asset_url": selected.asset_url,
+            "tap_plan": {"tap_source": tap_source},
+        }
+        client = unittest.mock.Mock()
+        client.pull_request_lifecycle.return_value = PullRequestLifecycleV1(
+            "merged", selected.request["build_source"]["commit"], "8" * 40
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            coordination = root / "coordination"
+            coordination.mkdir()
+            output = root / "promotion-plan"
+            github_output = root / "github-output"
+            github_output.write_text("", encoding="utf-8")
+            with (
+                patch(
+                    "scripts.abi_staging.cli.load_coordination_bundle",
+                    return_value=bundle,
+                ),
+                patch(
+                    "scripts.abi_staging.cli.snapshot_tap_source",
+                    return_value=tap_source,
+                ),
+                patch(
+                    "scripts.abi_staging.cli.load_promotion_activation",
+                    return_value=SimpleNamespace(mode="disabled"),
+                ),
+                patch(
+                    "scripts.abi_staging.cli.GitHubPublicClient",
+                    return_value=client,
+                ),
+            ):
+                status = cli_main(
+                    [
+                        "plan-workflow-promotion",
+                        "--coordination-root",
+                        str(coordination),
+                        "--tap-root",
+                        str(TAP_ROOT),
+                        "--require-merged",
+                        "--require-history-record",
+                        "--out",
+                        str(output),
+                        "--github-output",
+                        str(github_output),
+                    ]
+                )
+
+            self.assertEqual(status, 0)
+            plan = load_promotion_plan_document(
+                (output / "promotion-plan.json").read_bytes()
+            )
+            self.assertEqual(plan["mode"], "disabled")
+            self.assertEqual(
+                plan["matrices"],
+                {
+                    "canonical": {"include": []},
+                    "metadata": {"include": []},
+                    "admission": {"include": []},
+                },
+            )
+            self.assertIn("canonical_matrix={\"include\":[]}", github_output.read_text())
+
+    def test_observe_workflow_planner_keeps_work_non_authoritative(self) -> None:
+        selected = discovered()
+        tap_source = {
+            "repository": "kandelo-dev/homebrew-tap-core",
+            "commit": "4" * 40,
+            "tree": "5" * 40,
+        }
+        bundle = {
+            "request": selected.request,
+            "request_sha256": selected.request_digest,
+            "request_asset_url": selected.asset_url,
+            "tap_plan": {"tap_source": tap_source},
+        }
+        client = unittest.mock.Mock()
+        client.pull_request_lifecycle.return_value = PullRequestLifecycleV1(
+            "merged", selected.request["build_source"]["commit"], "8" * 40
+        )
+        subject = PromotionSubjectV1(
+            self.promotion_decision("alpha"), "required", ()
+        )
+        planned = build_promotion_workflow_plan(
+            self.merged_promotion_reconciliation(),
+            (subject,),
+            epoch=self.promotion_epoch(activated=True),
+            progress={subject.decision.formula_subject: PromotionProgressV1()},
+            activation_mode="observe",
+        )
+        details = {
+            "activation": {},
+            "canonical": {
+                planned.canonical_work[0]["work_id"]: {
+                    "decision": asdict(subject.decision)
+                }
+            },
+            "metadata": {
+                planned.metadata_work[0]["work_id"]: {
+                    "decision": asdict(subject.decision)
+                }
+            },
+            "admission": {
+                planned.admission_work[0]["work_id"]: {
+                    "decision": asdict(subject.decision)
+                }
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            coordination = root / "coordination"
+            coordination.mkdir()
+            output = root / "promotion-plan"
+            github_output = root / "github-output"
+            github_output.write_text("", encoding="utf-8")
+            with (
+                patch(
+                    "scripts.abi_staging.cli.load_coordination_bundle",
+                    return_value=bundle,
+                ),
+                patch(
+                    "scripts.abi_staging.cli.snapshot_tap_source",
+                    return_value=tap_source,
+                ),
+                patch(
+                    "scripts.abi_staging.cli.load_promotion_activation",
+                    return_value=SimpleNamespace(mode="observe"),
+                ),
+                patch(
+                    "scripts.abi_staging.cli.GitHubPublicClient",
+                    return_value=client,
+                ),
+                patch(
+                    "scripts.abi_staging.cli._collect_active_promotion_inputs",
+                    return_value=(planned, details),
+                    create=True,
+                ) as collector,
+            ):
+                status = cli_main(
+                    [
+                        "plan-workflow-promotion",
+                        "--coordination-root",
+                        str(coordination),
+                        "--tap-root",
+                        str(TAP_ROOT),
+                        "--require-merged",
+                        "--require-history-record",
+                        "--out",
+                        str(output),
+                        "--github-output",
+                        str(github_output),
+                    ]
+                )
+
+            self.assertEqual(status, 0)
+            collector.assert_called_once()
+            plan = load_promotion_plan_document(
+                (output / "promotion-plan.json").read_bytes()
+            )
+            self.assertEqual(len(plan["work"]["canonical"]), 1)
+            self.assertEqual(plan["matrices"]["canonical"], {"include": []})
+            self.assertFalse(plan["authoritative"])
+
+    def test_promotion_converges_independently_and_retries_exact_stage(self) -> None:
+        reconciliation = self.merged_promotion_reconciliation()
+        root = PromotionSubjectV1(
+            self.promotion_decision("root", marker="a"), "required", ()
+        )
+        dependent = PromotionSubjectV1(
+            self.promotion_decision("dependent", marker="f"),
+            "required",
+            (root.decision.formula_subject,),
+        )
+        background = PromotionSubjectV1(
+            self.promotion_decision("background", marker="k"), "background", ()
+        )
+        drifted = PromotionSubjectV1(
+            self.promotion_decision(
+                "drifted",
+                marker="p",
+                eligibility="rebuild-required",
+                tap_source_state="rebuild-required",
+            ),
+            "background",
+            (),
+        )
+        subjects = (background, dependent, drifted, root)
+        empty = {
+            item.decision.formula_subject: PromotionProgressV1()
+            for item in subjects
+        }
+
+        first = build_promotion_workflow_plan(
+            reconciliation,
+            subjects,
+            epoch=self.promotion_epoch(activated=True),
+            progress=empty,
+            activation_mode="active",
+        )
+        self.assertEqual(
+            [item["formula_subject"] for item in first.canonical_work],
+            [root.decision.formula_subject, background.decision.formula_subject],
+        )
+        self.assertEqual(
+            [item["formula_subject"] for item in first.metadata_work],
+            [root.decision.formula_subject],
+        )
+        self.assertEqual(
+            [item["formula_subject"] for item in first.admission_work],
+            [root.decision.formula_subject],
+        )
+        self.assertEqual(
+            first.metadata_work[0]["canonical_work_id"],
+            first.canonical_work[0]["work_id"],
+        )
+        self.assertEqual(
+            first.admission_work[0]["metadata_work_id"],
+            first.metadata_work[0]["work_id"],
+        )
+        self.assertEqual(
+            [(item["formula_subject"], item["guard_code"]) for item in first.blocked],
+            [
+                (dependent.decision.formula_subject, "dependency_unavailable"),
+                (background.decision.formula_subject, "dependency_unavailable"),
+                (drifted.decision.formula_subject, "tap_source_drift"),
+            ],
+        )
+        self.assertEqual(
+            first.blocked[1]["blocked_by"], root.decision.formula_subject
+        )
+        self.assertEqual(
+            first,
+            build_promotion_workflow_plan(
+                reconciliation,
+                subjects,
+                epoch=self.promotion_epoch(activated=True),
+                progress=empty,
+                activation_mode="active",
+            ),
+        )
+
+        canonical_progress = dict(empty)
+        canonical_progress[root.decision.formula_subject] = PromotionProgressV1(
+            canonical_manifest_sha256="6" * 64,
+            canonical_readback_sha256="7" * 64,
+        )
+        canonical_progress[background.decision.formula_subject] = (
+            PromotionProgressV1(
+                canonical_manifest_sha256="8" * 64,
+                canonical_readback_sha256="9" * 64,
+            )
+        )
+        metadata = build_promotion_workflow_plan(
+            reconciliation,
+            subjects,
+            epoch=self.promotion_epoch(activated=True),
+            progress=canonical_progress,
+            activation_mode="active",
+        )
+        self.assertEqual(
+            [item["formula_subject"] for item in metadata.metadata_work],
+            [root.decision.formula_subject],
+        )
+        stale_admission = build_promotion_workflow_plan(
+            reconciliation,
+            (root,),
+            epoch=self.promotion_epoch(activated=True),
+            progress={
+                root.decision.formula_subject: PromotionProgressV1(
+                    canonical_manifest_sha256="6" * 64,
+                    canonical_readback_sha256="7" * 64,
+                    stale_admission_record_sha256="e" * 64,
+                )
+            },
+            activation_mode="active",
+        )
+        self.assertEqual(
+            [item["formula_subject"] for item in stale_admission.metadata_work],
+            [root.decision.formula_subject],
+        )
+        self.assertEqual(stale_admission.admission_work, ())
+        retry = build_promotion_workflow_plan(
+            reconciliation,
+            subjects,
+            epoch=PromotionEpochV1(
+                request_digest=reconciliation.request_digest,
+                history_record_sha256="1" * 64,
+                activation_patch_sha256="2" * 64,
+                activation_record_sha256="3" * 64,
+                current_tap_commit="a" * 40,
+                current_tap_tree="b" * 40,
+            ),
+            progress=canonical_progress,
+            activation_mode="active",
+        )
+        self.assertNotEqual(
+            metadata.metadata_work[0]["work_id"], retry.metadata_work[0]["work_id"]
+        )
+
+        landed = dict(canonical_progress)
+        landed[root.decision.formula_subject] = PromotionProgressV1(
+            canonical_manifest_sha256="6" * 64,
+            canonical_readback_sha256="7" * 64,
+            metadata_commit="a" * 40,
+            metadata_tree="b" * 40,
+            metadata_update_sha256="c" * 64,
+            metadata_readback_sha256="d" * 64,
+        )
+        admission = build_promotion_workflow_plan(
+            reconciliation,
+            subjects,
+            epoch=self.promotion_epoch(activated=True),
+            progress=landed,
+            activation_mode="active",
+        )
+        self.assertEqual(
+            [item["formula_subject"] for item in admission.admission_work],
+            [root.decision.formula_subject, background.decision.formula_subject],
+        )
+        self.assertEqual(
+            [item["formula_subject"] for item in admission.metadata_work],
+            [background.decision.formula_subject],
+        )
+        self.assertEqual(
+            admission.admission_work,
+            build_promotion_workflow_plan(
+                reconciliation,
+                subjects,
+                epoch=self.promotion_epoch(activated=True),
+                progress=landed,
+                activation_mode="active",
+            ).admission_work,
+        )
+
+        complete = dict(landed)
+        complete[root.decision.formula_subject] = PromotionProgressV1(
+            canonical_manifest_sha256="6" * 64,
+            canonical_readback_sha256="7" * 64,
+            metadata_commit="a" * 40,
+            metadata_tree="b" * 40,
+            metadata_update_sha256="c" * 64,
+            metadata_readback_sha256="d" * 64,
+            admission_record_sha256="e" * 64,
+        )
+        resumed = build_promotion_workflow_plan(
+            reconciliation,
+            subjects,
+            epoch=self.promotion_epoch(activated=True),
+            progress=complete,
+            activation_mode="active",
+        )
+        self.assertIn(root.decision.formula_subject, resumed.complete)
+        self.assertEqual(
+            [item["formula_subject"] for item in resumed.canonical_work],
+            [dependent.decision.formula_subject],
+        )
+
     def test_cli_routes_post_formula_product_wave_planning(self) -> None:
         from scripts.abi_staging import cli
 
