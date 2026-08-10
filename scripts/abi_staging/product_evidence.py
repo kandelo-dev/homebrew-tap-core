@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import hashlib
+import os
+from pathlib import Path
 import re
+import stat
 from typing import Any
 
 from .canonical import (
@@ -14,12 +17,21 @@ from .canonical import (
     canonical_sha256,
     parse_canonical_bytes,
 )
-from .oci import OciTransportV1, PublishedRecordLocatorV1, publish_record
+from .oci import (
+    OciPublicationError,
+    OciTransportV1,
+    PublishedRecordLocatorV1,
+    fetch_public_record,
+    list_public_record_locators,
+    publish_record,
+)
 from .plan import PlanError, parse_formula_subject
 from .product import (
+    CandidateProductArtifactV1,
     ProductInputPlanV1,
     ProductInputResolutionError,
     load_resolved_product_inputs,
+    select_product_execution_scope,
 )
 from .records import OciBlobV1, OciRecordPlanV1
 
@@ -44,6 +56,7 @@ RESOLVED_INPUTS_MEDIA_TYPE = (
 RUNTIME_BUNDLE_MEDIA_TYPE = (
     "application/vnd.kandelo.abi-staging.runtime-bundle.v1+json"
 )
+LAZY_INPUT_MEDIA_TYPE = "application/vnd.kandelo.vfs.lazy-input.v1"
 
 MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
 MAX_RUNTIME_BUNDLE_BYTES = 16 * 1024 * 1024
@@ -51,6 +64,21 @@ MAX_RUNTIME_FILES = 32_768
 MAX_RUNTIME_BYTES = 8 * 1024 * 1024 * 1024
 MAX_RESULT_DIAGNOSTICS = 64
 MAX_DIAGNOSTIC_BYTES = 64 * 1024
+BROWSER_RUNTIME_KEYS = frozenset(
+    {
+        "bundle_sha256",
+        "bytes",
+        "harness_entry_bytes",
+        "harness_entry_path",
+        "harness_entry_sha256",
+        "host_entry_bytes",
+        "host_entry_path",
+        "host_entry_sha256",
+        "kernel_asset_path",
+        "kernel_asset_sha256",
+        "service_worker_sha256",
+    }
+)
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9@+._-]{0,255}$")
@@ -66,6 +94,263 @@ PRODUCT_REPOSITORY = re.compile(
 
 class ProductEvidenceError(ValueError):
     """Raised when product identity or evidence is incomplete or contradictory."""
+
+
+def select_product_evidence_execution_scope(
+    request: Mapping[str, Any],
+    *,
+    request_sha256: str,
+    product_id: str,
+    product_work_id: str,
+    host: str,
+    definition_id: str,
+    work_id: str,
+) -> dict[str, Any]:
+    """Bind one host evidence job to its exact request-selected parent work."""
+
+    if host not in {"node", "browser"}:
+        raise ProductEvidenceError("product evidence work host is unsupported")
+    checked_definition_id = _stable_id(
+        definition_id, "product evidence work definition ID"
+    )
+    checked_product_work_id = _digest(
+        product_work_id, "product evidence parent work ID"
+    )
+    checked_work_id = _digest(work_id, "product evidence work ID")
+    try:
+        product_scope = select_product_execution_scope(
+            request,
+            request_sha256=request_sha256,
+            product_id=product_id,
+            work_id=checked_product_work_id,
+        )
+    except ProductInputResolutionError as error:
+        raise ProductEvidenceError(
+            f"product evidence parent work is invalid: {error}"
+        ) from error
+
+    checked_request = _plain(request)
+    requirements = checked_request.get("requirements")
+    if not isinstance(requirements, Mapping):
+        raise ProductEvidenceError("product evidence work requirements are missing")
+    selected_bindings = []
+    for index, candidate in enumerate(
+        _sequence(requirements.get("evidence"), "product evidence work bindings")
+    ):
+        binding = _exact(
+            candidate,
+            frozenset({"applicability", "browser", "node", "product_id"}),
+            f"product evidence work binding {index}",
+        )
+        binding_product_id = _stable_id(
+            binding["product_id"],
+            f"product evidence work binding {index} product ID",
+        )
+        if binding_product_id == product_scope["id"]:
+            selected_bindings.append(binding)
+    if len(selected_bindings) != 1:
+        raise ProductEvidenceError(
+            "product evidence work lacks one exact product binding"
+        )
+    selected_ids = [
+        _stable_id(value, f"product evidence work {host} definition")
+        for value in _sequence(
+            selected_bindings[0][host],
+            f"product evidence work {host} definitions",
+        )
+    ]
+    if selected_ids != sorted(set(selected_ids)):
+        raise ProductEvidenceError(
+            f"product evidence work {host} definitions are not sorted and unique"
+        )
+    if checked_definition_id not in selected_ids:
+        raise ProductEvidenceError(
+            "product evidence definition is not selected by the exact request"
+        )
+
+    expected_work_id = canonical_sha256(
+        {
+            "applicability": product_scope["applicability"],
+            "definition_id": checked_definition_id,
+            "manifest_sha256": product_scope["manifest_sha256"],
+            "product_id": product_scope["id"],
+            "request_digest": request_sha256,
+            "stage": f"{host}-product-evidence",
+        }
+    )
+    if checked_work_id != expected_work_id:
+        raise ProductEvidenceError(
+            "product evidence work ID differs from its selected host scope"
+        )
+    return {
+        **product_scope,
+        "definition_id": checked_definition_id,
+        "host": host,
+        "product_work_id": checked_product_work_id,
+        "work_id": checked_work_id,
+    }
+
+
+def select_product_evidence_publication_scope(
+    request: Mapping[str, Any],
+    *,
+    request_sha256: str,
+    product_id: str,
+    product_work_id: str,
+    work_id: str,
+    definitions: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind one publisher to the complete protected terminal-result set."""
+
+    checked_request = _plain(request)
+    checked_request_sha256 = _digest(
+        request_sha256, "product evidence publication request"
+    )
+    if canonical_sha256(checked_request) != checked_request_sha256:
+        raise ProductEvidenceError(
+            "product evidence publication request digest is not canonical"
+        )
+    checked_product_work_id = _digest(
+        product_work_id, "product evidence publication parent work"
+    )
+    try:
+        product_scope = select_product_execution_scope(
+            checked_request,
+            request_sha256=checked_request_sha256,
+            product_id=product_id,
+            work_id=checked_product_work_id,
+        )
+    except ProductInputResolutionError as error:
+        raise ProductEvidenceError(
+            f"product evidence publication parent work is invalid: {error}"
+        ) from error
+
+    requirements_value = checked_request.get("requirements")
+    if not isinstance(requirements_value, Mapping):
+        raise ProductEvidenceError(
+            "product evidence publication requirements are missing"
+        )
+    bindings = []
+    for index, candidate in enumerate(
+        _sequence(
+            requirements_value.get("evidence"),
+            "product evidence publication bindings",
+        )
+    ):
+        binding = _exact(
+            candidate,
+            frozenset({"applicability", "browser", "node", "product_id"}),
+            f"product evidence publication binding {index}",
+        )
+        if binding["product_id"] == product_scope["id"]:
+            bindings.append(binding)
+    if len(bindings) != 1 or bindings[0]["applicability"] != product_scope["applicability"]:
+        raise ProductEvidenceError(
+            "product evidence publication lacks one exact product binding"
+        )
+    binding = bindings[0]
+
+    registry = _exact(
+        definitions,
+        frozenset({"definitions", "kind", "schema", "version"}),
+        "protected evidence definition registry",
+    )
+    if (
+        registry["schema"] != 1
+        or registry["kind"] != "kandelo-vfs-evidence-definitions"
+        or _integer(
+            registry["version"],
+            "protected evidence definition registry version",
+            positive=True,
+        )
+        < 1
+    ):
+        raise ProductEvidenceError(
+            "protected evidence definition registry is unsupported"
+        )
+    by_id: dict[str, dict[str, Any]] = {}
+    previous = ""
+    for index, candidate in enumerate(
+        _sequence(registry["definitions"], "protected evidence definitions")
+    ):
+        definition = _validate_context_definition(
+            candidate, f"protected evidence definition {index}"
+        )
+        if definition["id"] <= previous:
+            raise ProductEvidenceError(
+                "protected evidence definitions must be sorted and duplicate-free"
+            )
+        previous = definition["id"]
+        by_id[definition["id"]] = definition
+
+    base_identity = {
+        "applicability": product_scope["applicability"],
+        "manifest_sha256": product_scope["manifest_sha256"],
+        "product_id": product_scope["id"],
+        "request_digest": checked_request_sha256,
+    }
+    expected_work_id = canonical_sha256(
+        {**base_identity, "stage": "publish-product-evidence"}
+    )
+    if _digest(work_id, "product evidence publication work") != expected_work_id:
+        raise ProductEvidenceError(
+            "product evidence publication work ID differs from its selected scope"
+        )
+
+    selected_requirements = []
+    evidence_work = []
+    for host in ("browser", "node"):
+        selected_ids = [
+            _stable_id(value, f"product evidence publication {host} definition")
+            for value in _sequence(
+                binding[host], f"product evidence publication {host} definitions"
+            )
+        ]
+        if selected_ids != sorted(set(selected_ids)):
+            raise ProductEvidenceError(
+                f"product evidence publication {host} definitions are not sorted and unique"
+            )
+        for definition_id in selected_ids:
+            definition = by_id.get(definition_id)
+            if definition is None or definition["host"] != host:
+                raise ProductEvidenceError(
+                    "selected product evidence definition differs from protected policy"
+                )
+            selected_requirements.append(
+                {
+                    "applicability": product_scope["applicability"],
+                    "definition_sha256": definition["definition_sha256"],
+                    "host": host,
+                    "id": definition_id,
+                }
+            )
+            evidence_work.append(
+                {
+                    "definition_id": definition_id,
+                    "host": host,
+                    "work_id": canonical_sha256(
+                        {
+                            **base_identity,
+                            "definition_id": definition_id,
+                            "stage": f"{host}-product-evidence",
+                        }
+                    ),
+                }
+            )
+    if not selected_requirements:
+        raise ProductEvidenceError(
+            "product evidence publication has no selected terminal definitions"
+        )
+    return {
+        **product_scope,
+        "product_work_id": checked_product_work_id,
+        "work_id": expected_work_id,
+        "requirements": selected_requirements,
+        "evidence_work": evidence_work,
+        "selecting_registries": _registries(
+            requirements_value.get("registries")
+        ),
+    }
 
 
 def _sha(body: bytes) -> str:
@@ -342,11 +627,121 @@ class CandidateProductLocatorV1:
         }
 
 
+@dataclass(frozen=True)
+class CandidateProductInventoryEntryV1:
+    """One current-request candidate reconstructed from public OCI identity."""
+
+    artifact: CandidateProductArtifactV1
+    locator: CandidateProductLocatorV1
+    runtime_bundle_sha256: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.artifact, CandidateProductArtifactV1):
+            raise ProductEvidenceError("candidate product inventory artifact is invalid")
+        if not isinstance(self.locator, CandidateProductLocatorV1):
+            raise ProductEvidenceError("candidate product inventory locator is invalid")
+        _digest(
+            self.runtime_bundle_sha256,
+            "candidate product inventory runtime bundle",
+        )
+        if (
+            self.artifact.product_id != self.locator.product_id
+            or self.artifact.vfs_layer_sha256 != self.locator.vfs_layer_sha256
+            or self.artifact.vfs_layer_bytes != self.locator.vfs_layer_bytes
+            or self.artifact.builder_report_sha256
+            != self.locator.builder_report_sha256
+        ):
+            raise ProductEvidenceError(
+                "candidate product inventory artifact differs from its locator"
+            )
+
+
+@dataclass(frozen=True)
+class ProductEvidenceInventoryEntryV1:
+    """One complete aggregate reconstructed without downloading its layers."""
+
+    record: Mapping[str, Any]
+    record_sha256: str
+    manifest_digest: str
+    outcome: str
+    immutable_reference: str
+
+    def __post_init__(self) -> None:
+        validate_product_evidence_record(self.record)
+        _digest(self.record_sha256, "product evidence inventory record")
+        if canonical_sha256(self.record) != self.record_sha256:
+            raise ProductEvidenceError(
+                "product evidence inventory record digest is not canonical"
+            )
+        if self.outcome != self.record["common"]["outcome"]:
+            raise ProductEvidenceError(
+                "product evidence inventory outcome differs from its record"
+            )
+        manifest_digest = _oci_digest(
+            self.manifest_digest, "product evidence inventory manifest"
+        )
+        reference = _text(
+            self.immutable_reference,
+            "product evidence inventory immutable reference",
+            1024,
+        )
+        if not reference.endswith("@" + manifest_digest):
+            raise ProductEvidenceError(
+                "product evidence inventory reference differs from its record"
+            )
+
+
+def load_candidate_product_locator(
+    body: bytes, *, expected_repository: str
+) -> CandidateProductLocatorV1:
+    """Load one canonical locator and bind it to protected repository authority."""
+
+    value = _exact(
+        _load_canonical(body, "candidate product locator"),
+        frozenset(
+            {
+                "builder_report_sha256",
+                "immutable_reference",
+                "manifest_digest",
+                "product_id",
+                "repository",
+                "vfs_layer_bytes",
+                "vfs_layer_sha256",
+            }
+        ),
+        "candidate product locator",
+    )
+    expected = _text(
+        expected_repository, "protected candidate product repository", 520
+    )
+    if value["repository"] != expected:
+        raise ProductEvidenceError(
+            "candidate product locator differs from its protected repository"
+        )
+    try:
+        return CandidateProductLocatorV1(
+            product_id=value["product_id"],
+            repository=value["repository"],
+            manifest_digest=value["manifest_digest"],
+            immutable_reference=value["immutable_reference"],
+            vfs_layer_sha256=value["vfs_layer_sha256"],
+            vfs_layer_bytes=value["vfs_layer_bytes"],
+            builder_report_sha256=value["builder_report_sha256"],
+        )
+    except (TypeError, ValueError) as error:
+        if isinstance(error, ProductEvidenceError):
+            raise
+        raise ProductEvidenceError(
+            f"candidate product locator is invalid: {error}"
+        ) from error
+
+
 def _validate_runtime_bundle(
     body: bytes,
     *,
     expected_inputs: Mapping[str, Any] | None = None,
     runtime_files: Mapping[str, bytes] | None = None,
+    runtime_root: Path | None = None,
 ) -> dict[str, Any]:
     runtime = _load_canonical(
         body, "exact runtime bundle", maximum_bytes=MAX_RUNTIME_BUNDLE_BYTES
@@ -401,14 +796,50 @@ def _validate_runtime_bundle(
     protocol_sha = _digest(host["worker_protocol_sha256"], "runtime worker protocol")
     browser = _exact(
         runtime["browser"],
-        frozenset({"bundle_sha256", "bytes", "service_worker_sha256"}),
+        BROWSER_RUNTIME_KEYS,
         "runtime browser",
     )
     browser_sha = _digest(browser["bundle_sha256"], "runtime browser bundle")
     browser_bytes = _integer(browser["bytes"], "runtime browser bytes", positive=True)
+    harness_path = _relative_path(
+        browser["harness_entry_path"], "runtime browser harness entry path"
+    )
+    harness_sha = _digest(
+        browser["harness_entry_sha256"], "runtime browser harness entry"
+    )
+    harness_bytes = _integer(
+        browser["harness_entry_bytes"],
+        "runtime browser harness entry bytes",
+        positive=True,
+    )
+    host_entry_path = _relative_path(
+        browser["host_entry_path"], "runtime browser host entry path"
+    )
+    host_entry_sha = _digest(
+        browser["host_entry_sha256"], "runtime browser host entry"
+    )
+    host_entry_bytes = _integer(
+        browser["host_entry_bytes"],
+        "runtime browser host entry bytes",
+        positive=True,
+    )
+    kernel_asset_path = _relative_path(
+        browser["kernel_asset_path"], "runtime browser kernel asset path"
+    )
+    kernel_asset_sha = _digest(
+        browser["kernel_asset_sha256"], "runtime browser kernel asset"
+    )
     service_worker_sha = _digest(
         browser["service_worker_sha256"], "runtime service worker"
     )
+    if (
+        harness_path != "browser/dist/abi-staging-harness/index.html"
+        or host_entry_path != "browser/dist/abi-staging/browser-host.js"
+        or not kernel_asset_path.startswith("browser/dist/")
+        or not kernel_asset_path.endswith(".wasm")
+        or kernel_asset_sha != kernel_sha
+    ):
+        raise ProductEvidenceError("runtime browser entry identity differs")
     policy_sha = _digest(runtime["build_policy_sha256"], "runtime build policy")
 
     inventory = _sequence(runtime["inventory"], "runtime inventory")
@@ -431,7 +862,9 @@ def _validate_runtime_bundle(
         checked_inventory[path] = {
             "sha256": _digest(item["sha256"], f"runtime inventory {path} digest"),
             "bytes": _integer(
-                item["bytes"], f"runtime inventory {path} bytes", positive=True
+                item["bytes"],
+                f"runtime inventory {path} bytes",
+                positive=not path.startswith("toolchain/"),
             ),
         }
     total_bytes = sum(item["bytes"] for item in checked_inventory.values())
@@ -454,6 +887,14 @@ def _validate_runtime_bundle(
         None,
         "service worker",
     )
+    exact_file(harness_path, harness_sha, harness_bytes, "browser harness entry")
+    exact_file(
+        host_entry_path,
+        host_entry_sha,
+        host_entry_bytes,
+        "browser host entry",
+    )
+    exact_file(kernel_asset_path, kernel_asset_sha, None, "browser kernel asset")
 
     def subset_identity(prefix: str, field: str) -> tuple[str, int]:
         selected = [
@@ -481,21 +922,135 @@ def _validate_runtime_bundle(
             raise ProductEvidenceError(
                 "runtime source, ABI, or build policy differs from resolved product inputs"
             )
+    if runtime_files is not None and runtime_root is not None:
+        raise ProductEvidenceError(
+            "runtime validation must use either a file map or an artifact root"
+        )
+    checked_files: Mapping[str, Mapping[str, Any]] | None = None
+    if runtime_root is not None:
+        checked_files = _runtime_file_identities(runtime_root)
     if runtime_files is not None:
-        if set(runtime_files) != set(checked_inventory):
+        checked_files = {
+            path: {
+                "bytes": len(file_body) if isinstance(file_body, bytes) else None,
+                "sha256": (
+                    hashlib.sha256(file_body).hexdigest()
+                    if isinstance(file_body, bytes)
+                    else None
+                ),
+            }
+            for path, file_body in runtime_files.items()
+        }
+    if checked_files is not None:
+        if set(checked_files) != set(checked_inventory):
             raise ProductEvidenceError(
                 "runtime file handoff differs from the exact runtime inventory"
             )
         for path, expected in checked_inventory.items():
-            body_at_path = runtime_files[path]
-            if not isinstance(body_at_path, bytes) or not body_at_path:
-                raise ProductEvidenceError(f"runtime file {path} is empty or not bytes")
-            if (
-                len(body_at_path) != expected["bytes"]
-                or hashlib.sha256(body_at_path).hexdigest() != expected["sha256"]
-            ):
+            actual = checked_files[path]
+            if actual != expected:
                 raise ProductEvidenceError(f"runtime file {path} differs from its inventory")
     return runtime
+
+
+def _runtime_file_identities(root: Path) -> dict[str, dict[str, Any]]:
+    """Hash one exact artifact tree without retaining its file bodies in memory."""
+
+    try:
+        supplied = Path(root)
+        root_metadata = supplied.lstat()
+        if stat.S_ISLNK(root_metadata.st_mode) or not stat.S_ISDIR(
+            root_metadata.st_mode
+        ):
+            raise ProductEvidenceError(
+                "runtime artifact root must be a real directory"
+            )
+        exact_root = supplied.resolve(strict=True)
+    except OSError as error:
+        raise ProductEvidenceError(
+            f"runtime artifact root is unavailable: {error}"
+        ) from error
+
+    identities: dict[str, dict[str, Any]] = {}
+    entry_count = 0
+    total_bytes = 0
+
+    def visit(directory: Path, prefix: str, depth: int) -> None:
+        nonlocal entry_count, total_bytes
+        if depth > 128:
+            raise ProductEvidenceError("runtime artifact directory depth exceeds 128")
+        try:
+            children = sorted(directory.iterdir(), key=lambda item: item.name)
+        except OSError as error:
+            raise ProductEvidenceError(
+                f"cannot enumerate runtime artifact directory: {error}"
+            ) from error
+        if not children and prefix:
+            raise ProductEvidenceError("runtime artifact contains an empty directory")
+        for child in children:
+            entry_count += 1
+            if entry_count > MAX_RUNTIME_FILES * 2:
+                raise ProductEvidenceError("runtime artifact entry count exceeds its bound")
+            relative = child.name if not prefix else f"{prefix}/{child.name}"
+            _relative_path(relative, "runtime artifact path")
+            try:
+                metadata = child.lstat()
+            except OSError as error:
+                raise ProductEvidenceError(
+                    f"cannot inspect runtime artifact {relative}: {error}"
+                ) from error
+            if stat.S_ISLNK(metadata.st_mode):
+                raise ProductEvidenceError(
+                    f"runtime artifact {relative} is a symbolic link"
+                )
+            if stat.S_ISDIR(metadata.st_mode):
+                visit(child, relative, depth + 1)
+                continue
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                raise ProductEvidenceError(
+                    f"runtime artifact {relative} is not one regular file"
+                )
+            total_bytes += metadata.st_size
+            if total_bytes > MAX_RUNTIME_BYTES:
+                raise ProductEvidenceError("runtime artifact exceeds its byte bound")
+            digest = hashlib.sha256()
+            flags = os.O_RDONLY
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            try:
+                descriptor = os.open(child, flags)
+                with os.fdopen(descriptor, "rb", closefd=True) as stream:
+                    opened = os.fstat(stream.fileno())
+                    if (
+                        not stat.S_ISREG(opened.st_mode)
+                        or opened.st_dev != metadata.st_dev
+                        or opened.st_ino != metadata.st_ino
+                        or opened.st_size != metadata.st_size
+                    ):
+                        raise ProductEvidenceError(
+                            f"runtime artifact {relative} changed while opening"
+                        )
+                    while chunk := stream.read(1024 * 1024):
+                        digest.update(chunk)
+                    finished = os.fstat(stream.fileno())
+                    if (
+                        finished.st_size != opened.st_size
+                        or finished.st_mtime_ns != opened.st_mtime_ns
+                    ):
+                        raise ProductEvidenceError(
+                            f"runtime artifact {relative} changed while hashing"
+                        )
+            except OSError as error:
+                raise ProductEvidenceError(
+                    f"cannot hash runtime artifact {relative}: {error}"
+                ) from error
+            identities[relative] = {
+                "sha256": digest.hexdigest(),
+                "bytes": metadata.st_size,
+            }
+
+    visit(exact_root, "", 0)
+    return identities
 
 
 def runtime_evidence_identity(runtime_bundle_body: bytes) -> dict[str, Any]:
@@ -508,6 +1063,453 @@ def runtime_evidence_identity(runtime_bundle_body: bytes) -> dict[str, Any]:
         "host_runtime": _plain(runtime["host"]),
         "browser": _plain(runtime["browser"]),
         "build_policy_sha256": runtime["build_policy_sha256"],
+    }
+
+
+def _context_absolute_path(value: Any, field: str) -> str:
+    path = _text(value, field)
+    if (
+        not path.startswith("/")
+        or "\\" in path
+        or any(part in {".", ".."} for part in path.split("/"))
+    ):
+        raise ProductEvidenceError(f"{field} is not a normalized absolute path")
+    return path
+
+
+def _validate_context_boot(value: Any) -> dict[str, Any]:
+    boot = _exact(
+        value,
+        frozenset({"argv", "cwd", "env", "gid", "uid"}),
+        "protected product boot",
+    )
+    argv = [
+        _text(item, f"protected product boot argv {index}")
+        for index, item in enumerate(
+            _sequence(boot["argv"], "protected product boot argv")
+        )
+    ]
+    if not argv or len(argv) > 256:
+        raise ProductEvidenceError("protected product boot argv exceeds its bound")
+    environment = boot["env"]
+    if not isinstance(environment, Mapping) or len(environment) > 256:
+        raise ProductEvidenceError("protected product boot environment is invalid")
+    checked_environment: dict[str, str] = {}
+    for key, candidate in environment.items():
+        if not isinstance(key, str) or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) is None:
+            raise ProductEvidenceError("protected product boot environment name is invalid")
+        checked_environment[key] = _text(
+            candidate, f"protected product boot environment {key}", 16 * 1024
+        )
+    return {
+        "argv": argv,
+        "cwd": _context_absolute_path(boot["cwd"], "protected product boot cwd"),
+        "env": checked_environment,
+        "gid": _integer(boot["gid"], "protected product boot gid"),
+        "uid": _integer(boot["uid"], "protected product boot uid"),
+    }
+
+
+def _validate_context_mounts(value: Any) -> list[dict[str, Any]]:
+    mounts = _sequence(value, "protected product mounts")
+    if not mounts or len(mounts) > 32:
+        raise ProductEvidenceError("protected product mounts exceed their bound")
+    checked: list[dict[str, Any]] = []
+    previous = ""
+    for index, candidate in enumerate(mounts):
+        if not isinstance(candidate, Mapping):
+            raise ProductEvidenceError(f"protected product mount {index} is not an object")
+        source = candidate.get("source")
+        if source == "built-image":
+            mount = _exact(
+                candidate,
+                frozenset({"path", "readonly", "source"}),
+                f"protected product mount {index}",
+            )
+            if not isinstance(mount["readonly"], bool):
+                raise ProductEvidenceError(
+                    f"protected product mount {index} readonly flag is invalid"
+                )
+            result = {
+                "path": _context_absolute_path(
+                    mount["path"], f"protected product mount {index} path"
+                ),
+                "readonly": mount["readonly"],
+                "source": "built-image",
+            }
+        elif source == "scratch":
+            mount = _exact(
+                candidate,
+                frozenset({"ephemeral", "gid", "mode", "path", "source", "uid"}),
+                f"protected product mount {index}",
+            )
+            mode = _text(mount["mode"], f"protected product mount {index} mode", 4)
+            if re.fullmatch(r"[0-7]{3,4}", mode) is None or mount["ephemeral"] is not True:
+                raise ProductEvidenceError(
+                    f"protected product mount {index} scratch contract is invalid"
+                )
+            result = {
+                "ephemeral": True,
+                "gid": _integer(mount["gid"], f"protected product mount {index} gid"),
+                "mode": mode,
+                "path": _context_absolute_path(
+                    mount["path"], f"protected product mount {index} path"
+                ),
+                "source": "scratch",
+                "uid": _integer(mount["uid"], f"protected product mount {index} uid"),
+            }
+        else:
+            raise ProductEvidenceError(
+                f"protected product mount {index} source is unsupported"
+            )
+        if result["path"] <= previous:
+            raise ProductEvidenceError(
+                "protected product mounts must be sorted and duplicate-free"
+            )
+        previous = result["path"]
+        checked.append(result)
+    if checked[0].get("source") != "built-image" or checked[0]["path"] != "/":
+        raise ProductEvidenceError("protected product mounts lack the built image root")
+    return checked
+
+
+def _validate_context_definition(value: Any, field: str) -> dict[str, Any]:
+    definition = _exact(
+        value,
+        frozenset(
+            {
+                "definition_sha256",
+                "host",
+                "id",
+                "implementation",
+                "probe",
+                "runner",
+                "timeout_seconds",
+            }
+        ),
+        field,
+    )
+    definition_id = _stable_id(definition["id"], f"{field} ID")
+    if definition["host"] not in {"node", "browser"}:
+        raise ProductEvidenceError(f"{field} host is unsupported")
+    if definition["runner"] not in {
+        "compile",
+        "exec",
+        "http",
+        "interactive-terminal",
+        "repository-suite",
+        "service-protocol",
+        "sql",
+    }:
+        raise ProductEvidenceError(f"{field} runner is unsupported")
+    timeout = _integer(definition["timeout_seconds"], f"{field} timeout", positive=True)
+    if timeout > 3 * 60 * 60:
+        raise ProductEvidenceError(f"{field} timeout exceeds three hours")
+    if not isinstance(definition["probe"], Mapping):
+        raise ProductEvidenceError(f"{field} probe is not an object")
+    implementations = _sequence(definition["implementation"], f"{field} implementation")
+    if not implementations:
+        raise ProductEvidenceError(f"{field} implementation is empty")
+    checked_implementations = []
+    previous = ""
+    for index, candidate in enumerate(implementations):
+        item = _exact(
+            candidate,
+            frozenset({"path", "sha256"}),
+            f"{field} implementation {index}",
+        )
+        path = _relative_path(item["path"], f"{field} implementation {index} path")
+        if path <= previous:
+            raise ProductEvidenceError(
+                f"{field} implementations must be sorted and duplicate-free"
+            )
+        previous = path
+        checked_implementations.append(
+            {
+                "path": path,
+                "sha256": _digest(
+                    item["sha256"], f"{field} implementation {index} digest"
+                ),
+            }
+        )
+    identity = {
+        "host": definition["host"],
+        "id": definition_id,
+        "implementation": checked_implementations,
+        "probe": _plain(definition["probe"]),
+        "runner": definition["runner"],
+        "timeout_seconds": timeout,
+    }
+    if _digest(definition["definition_sha256"], f"{field} digest") != canonical_sha256(
+        identity
+    ):
+        raise ProductEvidenceError(f"{field} digest differs from its protected identity")
+    return {**identity, "definition_sha256": definition["definition_sha256"]}
+
+
+def build_product_evidence_context(
+    *,
+    request: Mapping[str, Any],
+    request_digest: str,
+    catalog: Mapping[str, Any],
+    definitions: Mapping[str, Any],
+    candidate_product: CandidateProductLocatorV1,
+    runtime_bundle_body: bytes,
+    host: str,
+    definition_id: str,
+    run: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Derive one host context exclusively from protected selected authority."""
+
+    if not isinstance(request, Mapping):
+        raise ProductEvidenceError("product evidence request must be an object")
+    checked_request = _plain(request)
+    checked_request_digest = _digest(request_digest, "product evidence request digest")
+    try:
+        actual_request_digest = canonical_sha256(checked_request)
+    except CanonicalJsonError as error:
+        raise ProductEvidenceError(f"product evidence request is invalid: {error}") from error
+    if actual_request_digest != checked_request_digest:
+        raise ProductEvidenceError("product evidence request digest differs from its bytes")
+    if host not in {"node", "browser"}:
+        raise ProductEvidenceError("product evidence host is unsupported")
+    selected_definition_id = _stable_id(
+        definition_id, "product evidence definition ID"
+    )
+    if not isinstance(candidate_product, CandidateProductLocatorV1):
+        raise ProductEvidenceError("product evidence candidate locator is invalid")
+
+    requirements = checked_request.get("requirements")
+    if not isinstance(requirements, Mapping):
+        raise ProductEvidenceError("product evidence request requirements are missing")
+    requested_products: dict[str, dict[str, str]] = {}
+    previous = ""
+    for index, candidate in enumerate(
+        _sequence(requirements.get("products"), "product evidence request products")
+    ):
+        item = _exact(
+            candidate,
+            frozenset({"id", "manifest_sha256", "path"}),
+            f"product evidence request product {index}",
+        )
+        product_id = _stable_id(item["id"], f"product evidence request product {index} ID")
+        if product_id <= previous:
+            raise ProductEvidenceError(
+                "product evidence request products must be sorted and duplicate-free"
+            )
+        previous = product_id
+        path = _relative_path(item["path"], f"product evidence request product {product_id} path")
+        if path != f"images/vfs/products/{product_id}.toml":
+            raise ProductEvidenceError(
+                "product evidence request names a noncanonical product manifest"
+            )
+        requested_products[product_id] = {
+            "id": product_id,
+            "path": path,
+            "manifest_sha256": _digest(
+                item["manifest_sha256"],
+                f"product evidence request product {product_id} manifest",
+            ),
+        }
+    requested_product = requested_products.get(candidate_product.product_id)
+    if requested_product is None:
+        raise ProductEvidenceError(
+            "candidate product is not selected by the exact product evidence request"
+        )
+
+    selected_evidence = []
+    for index, candidate in enumerate(
+        _sequence(requirements.get("evidence"), "product evidence request bindings")
+    ):
+        binding = _exact(
+            candidate,
+            frozenset({"applicability", "browser", "node", "product_id"}),
+            f"product evidence request binding {index}",
+        )
+        product_id = _stable_id(
+            binding["product_id"], f"product evidence request binding {index} product"
+        )
+        if product_id != candidate_product.product_id:
+            continue
+        if binding["applicability"] not in {"required", "informational"}:
+            raise ProductEvidenceError("product evidence request applicability is unsupported")
+        selected_ids = [
+            _stable_id(value, f"product evidence request {host} definition")
+            for value in _sequence(
+                binding[host], f"product evidence request {host} definitions"
+            )
+        ]
+        if selected_ids != sorted(set(selected_ids)):
+            raise ProductEvidenceError(
+                f"product evidence request {host} definitions are not sorted and unique"
+            )
+        selected_evidence.append(selected_ids)
+    if len(selected_evidence) != 1 or selected_definition_id not in selected_evidence[0]:
+        raise ProductEvidenceError(
+            "evidence definition is not selected for the exact product and host"
+        )
+
+    checked_catalog = _exact(
+        catalog,
+        frozenset({"kind", "products", "schema"}),
+        "protected VFS product catalog",
+    )
+    if (
+        checked_catalog["schema"] != 1
+        or checked_catalog["kind"] != "kandelo-vfs-product-catalog"
+    ):
+        raise ProductEvidenceError("protected VFS product catalog identity is unsupported")
+    selected_catalog_entry = None
+    previous = ""
+    for index, candidate in enumerate(
+        _sequence(checked_catalog["products"], "protected VFS product catalog products")
+    ):
+        entry = _exact(
+            candidate,
+            frozenset({"manifest", "path", "sha256"}),
+            f"protected VFS product catalog entry {index}",
+        )
+        if not isinstance(entry["manifest"], Mapping):
+            raise ProductEvidenceError(
+                f"protected VFS product catalog entry {index} manifest is invalid"
+            )
+        manifest = _plain(entry["manifest"])
+        product_id = _stable_id(
+            manifest.get("id"), f"protected VFS product catalog entry {index} ID"
+        )
+        if product_id <= previous:
+            raise ProductEvidenceError(
+                "protected VFS product catalog must be sorted and duplicate-free"
+            )
+        previous = product_id
+        path = _relative_path(entry["path"], f"protected VFS product {product_id} path")
+        digest = _digest(entry["sha256"], f"protected VFS product {product_id} manifest")
+        if (
+            path != f"images/vfs/products/{product_id}.toml"
+            or digest != canonical_sha256(manifest)
+        ):
+            raise ProductEvidenceError(
+                f"protected VFS product {product_id} catalog identity is invalid"
+            )
+        if product_id == candidate_product.product_id:
+            selected_catalog_entry = (manifest, path, digest)
+    if selected_catalog_entry is None:
+        raise ProductEvidenceError("candidate product is absent from the protected catalog")
+    manifest, manifest_path, manifest_sha256 = selected_catalog_entry
+    if (
+        manifest_path != requested_product["path"]
+        or manifest_sha256 != requested_product["manifest_sha256"]
+    ):
+        raise ProductEvidenceError(
+            "protected product manifest differs from the exact request selection"
+        )
+    evidence = manifest.get("evidence")
+    if not isinstance(evidence, Mapping) or host not in evidence:
+        raise ProductEvidenceError("protected product does not declare evidence for this host")
+    declared = _exact(
+        evidence[host], frozenset({"test"}), f"protected product {host} evidence"
+    )
+    _stable_id(declared["test"], f"protected product {host} basic evidence")
+    boot = _validate_context_boot(manifest.get("boot"))
+    mounts = _validate_context_mounts(manifest.get("mounts"))
+
+    checked_definitions = _exact(
+        definitions,
+        frozenset({"definitions", "kind", "schema", "version"}),
+        "protected evidence definition registry",
+    )
+    if (
+        checked_definitions["schema"] != 1
+        or checked_definitions["kind"] != "kandelo-vfs-evidence-definitions"
+        or _integer(
+            checked_definitions["version"],
+            "protected evidence definition registry version",
+            positive=True,
+        )
+        < 1
+    ):
+        raise ProductEvidenceError("protected evidence definition registry is unsupported")
+    selected_definition = None
+    previous = ""
+    for index, candidate in enumerate(
+        _sequence(
+            checked_definitions["definitions"],
+            "protected evidence definitions",
+        )
+    ):
+        definition = _validate_context_definition(
+            candidate, f"protected evidence definition {index}"
+        )
+        if definition["id"] <= previous:
+            raise ProductEvidenceError(
+                "protected evidence definitions must be sorted and duplicate-free"
+            )
+        previous = definition["id"]
+        if definition["id"] == selected_definition_id:
+            selected_definition = definition
+    if selected_definition is None or selected_definition["host"] != host:
+        raise ProductEvidenceError(
+            "selected evidence definition differs from protected current policy"
+        )
+
+    runtime = _validate_runtime_bundle(runtime_bundle_body)
+    request_source = _validate_source(
+        checked_request.get("build_source"), "product evidence request source"
+    )
+    request_target = _exact(
+        checked_request.get("target_abi"),
+        frozenset({"snapshot_sha256", "version"}),
+        "product evidence request ABI",
+    )
+    checked_target = {
+        "snapshot_sha256": _digest(
+            request_target["snapshot_sha256"], "product evidence request ABI snapshot"
+        ),
+        "version": _integer(
+            request_target["version"], "product evidence request ABI version"
+        ),
+    }
+    issuance = checked_request.get("issuance")
+    if not isinstance(issuance, Mapping):
+        raise ProductEvidenceError("product evidence request issuance is missing")
+    request_policy = _digest(
+        issuance.get("policy_sha256"), "product evidence request policy"
+    )
+    if (
+        runtime["source"] != request_source
+        or runtime["target_abi"] != checked_target
+        or runtime["build_policy_sha256"] != request_policy
+    ):
+        raise ProductEvidenceError(
+            "exact runtime differs from the request source, ABI, or policy"
+        )
+    repository_match = PRODUCT_REPOSITORY.fullmatch(
+        candidate_product.repository[len("ghcr.io/") :]
+    )
+    if (
+        repository_match is None
+        or repository_match.group("product") != candidate_product.product_id
+        or int(repository_match.group("abi")) != checked_target["version"]
+    ):
+        raise ProductEvidenceError(
+            "candidate product repository differs from the exact request ABI"
+        )
+
+    return {
+        "schema": 1,
+        "kind": f"kandelo-vfs-product-{host}-evidence-context",
+        "request_digest": checked_request_digest,
+        "product": {
+            "id": candidate_product.product_id,
+            "manifest_sha256": manifest_sha256,
+        },
+        "candidate_product": candidate_product.evidence_identity(),
+        "runtime": runtime_evidence_identity(runtime_bundle_body),
+        "host": host,
+        "definition": selected_definition,
+        "boot": boot,
+        "mounts": mounts,
+        "run": _validate_run(run, "product evidence run", evidence=True),
     }
 
 
@@ -710,7 +1712,9 @@ def build_candidate_product_oci_plan(
     builder_report_body: bytes,
     resolved_inputs_body: bytes,
     runtime_bundle_body: bytes,
-    runtime_files: Mapping[str, bytes],
+    runtime_files: Mapping[str, bytes] | None = None,
+    runtime_root: Path | None = None,
+    lazy_input_bodies: Mapping[str, bytes] | None = None,
 ) -> OciRecordPlanV1:
     """Validate an inert composition handoff before creating its OCI plan."""
 
@@ -744,7 +1748,67 @@ def build_candidate_product_oci_plan(
         runtime_bundle_body,
         expected_inputs=resolved,
         runtime_files=runtime_files,
+        runtime_root=runtime_root,
     )
+    if lazy_input_bodies is None:
+        lazy_input_bodies = {}
+    if not isinstance(lazy_input_bodies, Mapping):
+        raise ProductEvidenceError("candidate lazy input bodies must be an object")
+    expected_lazy = [
+        item
+        for item in resolved["inputs"]
+        if item["effective_materialization"] == "lazy-reference"
+        and item["kind"]
+        in {
+            "package-output",
+            "source-archive",
+            "toolchain-output",
+            "repository-path",
+        }
+    ]
+    expected_lazy.sort(key=lambda item: item["id"])
+    if set(lazy_input_bodies) != {item["id"] for item in expected_lazy}:
+        raise ProductEvidenceError(
+            "candidate lazy input body closure differs from resolved product inputs"
+        )
+    lazy_artifacts = []
+    lazy_layers = []
+    for index, item in enumerate(expected_lazy):
+        body = lazy_input_bodies[item["id"]]
+        if (
+            not isinstance(body, bytes)
+            or not body
+            or len(body) != item["bytes"]
+            or _sha(body) != item["sha256"]
+        ):
+            raise ProductEvidenceError(
+                f"candidate lazy input {item['id']} differs from its resolved identity"
+            )
+        expected_reference = (
+            f"ghcr.io/{repository}@sha256:{item['sha256']}"
+        )
+        if item["reference"] != expected_reference:
+            raise ProductEvidenceError(
+                f"candidate lazy input {item['id']} enters another repository"
+            )
+        role = f"lazy-input-{index:04d}"
+        lazy_artifacts.append(
+            {
+                "id": item["id"],
+                "kind": item["kind"],
+                "sha256": item["sha256"],
+                "bytes": item["bytes"],
+                "immutable_reference": expected_reference,
+            }
+        )
+        lazy_layers.append(
+            OciBlobV1(
+                role=role,
+                media_type=LAZY_INPUT_MEDIA_TYPE,
+                body=body,
+                title=f"lazy-input-{item['id']}",
+            )
+        )
     record = {
         "schema": 1,
         "kind": "kandelo-vfs-candidate-product",
@@ -763,6 +1827,7 @@ def build_candidate_product_oci_plan(
             "runtime_bundle": _artifact_for_blob(
                 repository, _sha(runtime_bundle_body), len(runtime_bundle_body)
             ),
+            "lazy_inputs": lazy_artifacts,
         },
         "nonendorsed": True,
     }
@@ -800,6 +1865,7 @@ def build_candidate_product_oci_plan(
                 body=runtime_bundle_body,
                 title="runtime-bundle.json",
             ),
+            *lazy_layers,
         ),
         annotations={
             "dev.kandelo.abi-staging.architecture": product["architecture"],
@@ -814,17 +1880,19 @@ def build_candidate_product_oci_plan(
     )
 
 
-def _candidate_record(plan: OciRecordPlanV1) -> dict[str, Any]:
-    if plan.artifact_type != PRODUCT_CANDIDATE_MEDIA_TYPE:
-        raise ProductEvidenceError("OCI plan is not a candidate product")
-    _require_blob_descriptor(
-        plan.config,
-        role="candidate-product-record",
-        media_type=PRODUCT_CANDIDATE_MEDIA_TYPE,
-        title="candidate-product-record.json",
-        field="candidate product config",
-    )
-    record = _load_canonical(plan.config.body, "candidate product record")
+def _validate_candidate_record_body(
+    body: bytes, *, repository: str
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    int,
+    dict[str, str],
+    Mapping[str, Any],
+    list[tuple[str, dict[str, Any]]],
+]:
+    """Validate candidate config bytes independently from large OCI layers."""
+
+    record = _load_canonical(body, "candidate product record")
     _exact(
         record,
         frozenset(
@@ -858,10 +1926,8 @@ def _candidate_record(plan: OciRecordPlanV1) -> dict[str, Any]:
     if target_abi > 2**32 - 1:
         raise ProductEvidenceError("candidate product ABI exceeds its unsigned 32-bit bound")
     _digest(target["snapshot_sha256"], "candidate product ABI snapshot")
-    _validate_source(record["source"], "candidate product source")
-    _validate_product_repository(
-        plan.repository, product["id"], target_abi
-    )
+    source = _validate_source(record["source"], "candidate product source")
+    _validate_product_repository(repository, product["id"], target_abi)
     artifacts = _exact(
         record["artifacts"],
         frozenset(
@@ -870,13 +1936,94 @@ def _candidate_record(plan: OciRecordPlanV1) -> dict[str, Any]:
                 "builder_report",
                 "resolved_inputs",
                 "runtime_bundle",
+                "lazy_inputs",
             }
         ),
         "candidate product artifacts",
     )
     for key in ("vfs_image", "builder_report", "resolved_inputs", "runtime_bundle"):
-        _artifact(artifacts[key], f"candidate product {key}")
-    expected_roles = ["vfs-image", "builder-report", "resolved-inputs", "runtime-bundle"]
+        artifact = _artifact(artifacts[key], f"candidate product {key}")
+        if artifact["immutable_reference"] != (
+            f"ghcr.io/{repository}@sha256:{artifact['sha256']}"
+        ):
+            raise ProductEvidenceError(
+                f"candidate product {key} reference differs from its repository"
+            )
+    lazy_inputs = _sequence(
+        artifacts["lazy_inputs"], "candidate product lazy inputs"
+    )
+    checked_lazy_inputs = []
+    previous_id = ""
+    for index, value in enumerate(lazy_inputs):
+        item = _exact(
+            value,
+            frozenset(
+                {"id", "kind", "sha256", "bytes", "immutable_reference"}
+            ),
+            f"candidate product lazy input {index}",
+        )
+        input_id = _stable_id(
+            item["id"], f"candidate product lazy input {index} ID"
+        )
+        if input_id <= previous_id:
+            raise ProductEvidenceError(
+                "candidate product lazy inputs are not sorted and unique"
+            )
+        previous_id = input_id
+        if item["kind"] not in {
+            "package-output",
+            "source-archive",
+            "toolchain-output",
+            "repository-path",
+        }:
+            raise ProductEvidenceError("candidate product lazy input kind is unsupported")
+        artifact = _artifact(
+            {
+                "sha256": item["sha256"],
+                "bytes": item["bytes"],
+                "immutable_reference": item["immutable_reference"],
+            },
+            f"candidate product lazy input {input_id}",
+        )
+        expected_reference = (
+            f"ghcr.io/{repository}@sha256:{artifact['sha256']}"
+        )
+        if artifact["immutable_reference"] != expected_reference:
+            raise ProductEvidenceError(
+                "candidate product lazy input reference differs from its repository"
+            )
+        checked_lazy_inputs.append((input_id, artifact))
+    return record, product, target_abi, source, artifacts, checked_lazy_inputs
+
+
+def _candidate_record(plan: OciRecordPlanV1) -> dict[str, Any]:
+    if plan.artifact_type != PRODUCT_CANDIDATE_MEDIA_TYPE:
+        raise ProductEvidenceError("OCI plan is not a candidate product")
+    _require_blob_descriptor(
+        plan.config,
+        role="candidate-product-record",
+        media_type=PRODUCT_CANDIDATE_MEDIA_TYPE,
+        title="candidate-product-record.json",
+        field="candidate product config",
+    )
+    (
+        record,
+        product,
+        _target_abi,
+        _source,
+        artifacts,
+        checked_lazy_inputs,
+    ) = _validate_candidate_record_body(
+        plan.config.body,
+        repository=plan.repository,
+    )
+    expected_roles = [
+        "vfs-image",
+        "builder-report",
+        "resolved-inputs",
+        "runtime-bundle",
+        *(f"lazy-input-{index:04d}" for index in range(len(checked_lazy_inputs))),
+    ]
     if [layer.role for layer in plan.layers] != expected_roles:
         raise ProductEvidenceError("candidate product OCI descriptor roles changed")
     fixed = (
@@ -919,6 +2066,23 @@ def _candidate_record(plan: OciRecordPlanV1) -> dict[str, Any]:
             raise ProductEvidenceError(
                 f"candidate product {key} layer differs from its record"
             )
+    for index, ((input_id, artifact), layer) in enumerate(
+        zip(checked_lazy_inputs, plan.layers[4:], strict=True)
+    ):
+        _require_blob_descriptor(
+            layer,
+            role=f"lazy-input-{index:04d}",
+            media_type=LAZY_INPUT_MEDIA_TYPE,
+            title=f"lazy-input-{input_id}",
+            field=f"candidate product lazy input {input_id}",
+        )
+        if (
+            layer.digest != "sha256:" + artifact["sha256"]
+            or layer.size != artifact["bytes"]
+        ):
+            raise ProductEvidenceError(
+                f"candidate product lazy input {input_id} layer differs from its record"
+            )
     return record
 
 
@@ -960,6 +2124,327 @@ def publish_candidate_product(
         vfs_layer_bytes=artifacts["vfs_image"]["bytes"],
         builder_report_sha256=artifacts["builder_report"]["sha256"],
     )
+
+
+def _candidate_manifest_descriptor(value: Any, field: str) -> dict[str, Any]:
+    descriptor = _exact(
+        value,
+        frozenset({"mediaType", "digest", "size", "annotations"}),
+        field,
+    )
+    annotations = _exact(
+        descriptor["annotations"],
+        frozenset(
+            {
+                "dev.kandelo.abi-staging.role",
+                "org.opencontainers.image.title",
+            }
+        ),
+        f"{field} annotations",
+    )
+    return {
+        "media_type": _text(descriptor["mediaType"], f"{field} media type", 255),
+        "digest": _oci_digest(descriptor["digest"], f"{field} digest"),
+        "size": _integer(descriptor["size"], f"{field} bytes", positive=True),
+        "role": _text(
+            annotations["dev.kandelo.abi-staging.role"], f"{field} role", 255
+        ),
+        "title": _text(
+            annotations["org.opencontainers.image.title"], f"{field} title", 255
+        ),
+    }
+
+
+def _require_public_candidate_descriptor(
+    descriptor: Mapping[str, Any],
+    *,
+    artifact: Mapping[str, Any],
+    role: str,
+    media_type: str,
+    title: str,
+    field: str,
+) -> None:
+    if (
+        descriptor["role"] != role
+        or descriptor["media_type"] != media_type
+        or descriptor["title"] != title
+        or descriptor["digest"] != "sha256:" + artifact["sha256"]
+        or descriptor["size"] != artifact["bytes"]
+    ):
+        raise ProductEvidenceError(f"{field} OCI descriptor metadata changed")
+
+
+def inspect_candidate_product_repository(
+    repository: str,
+    *,
+    request: Mapping[str, Any],
+    request_sha256: str,
+    expected_source_repository: str,
+    transport: OciTransportV1,
+) -> tuple[CandidateProductInventoryEntryV1, ...]:
+    """Recover current-request product facts without downloading VFS layers."""
+
+    checked_repository = _repository(repository, "candidate product inventory repository")
+    match = PRODUCT_REPOSITORY.fullmatch(checked_repository)
+    if match is None:
+        raise ProductEvidenceError(
+            "candidate product inventory is outside the reserved repository"
+        )
+    checked_request = _plain(request)
+    checked_request_sha256 = _digest(
+        request_sha256, "candidate product inventory request"
+    )
+    if canonical_sha256(checked_request) != checked_request_sha256:
+        raise ProductEvidenceError(
+            "candidate product inventory request digest is not canonical"
+        )
+    source = _validate_source(
+        checked_request.get("build_source"), "candidate product inventory source"
+    )
+    target = _exact(
+        checked_request.get("target_abi"),
+        frozenset({"version", "snapshot_sha256"}),
+        "candidate product inventory ABI",
+    )
+    target_abi = _integer(target["version"], "candidate product inventory ABI version")
+    snapshot_sha256 = _digest(
+        target["snapshot_sha256"], "candidate product inventory ABI snapshot"
+    )
+    if target_abi != int(match.group("abi")):
+        raise ProductEvidenceError(
+            "candidate product inventory repository has the wrong ABI"
+        )
+    requirements = checked_request.get("requirements")
+    if not isinstance(requirements, Mapping):
+        raise ProductEvidenceError(
+            "candidate product inventory request lacks requirements"
+        )
+    selected = []
+    for index, value in enumerate(
+        _sequence(requirements.get("products"), "candidate product requirements")
+    ):
+        product = _exact(
+            value,
+            frozenset({"id", "path", "manifest_sha256"}),
+            f"candidate product requirement {index}",
+        )
+        product_id = _stable_id(
+            product["id"], f"candidate product requirement {index} ID"
+        )
+        if product_id == match.group("product"):
+            selected.append(
+                {
+                    "id": product_id,
+                    "path": _relative_path(
+                        product["path"],
+                        f"candidate product requirement {index} path",
+                    ),
+                    "manifest_sha256": _digest(
+                        product["manifest_sha256"],
+                        f"candidate product requirement {index} manifest",
+                    ),
+                }
+            )
+    if len(selected) != 1:
+        raise ProductEvidenceError(
+            "candidate product repository lacks one exact request selection"
+        )
+    selection = selected[0]
+    checked_publisher = _text(
+        expected_source_repository,
+        "candidate product inventory publisher repository",
+        255,
+    )
+    if re.fullmatch(
+        r"[A-Za-z0-9._-]+/[A-Za-z0-9._-]+", checked_publisher
+    ) is None:
+        raise ProductEvidenceError(
+            "candidate product inventory publisher is not owner/name"
+        )
+
+    results = []
+    try:
+        locators = list_public_record_locators(
+            checked_repository, transport=transport
+        )
+        for public_locator in locators:
+            fetched = fetch_public_record(
+                public_locator,
+                transport=transport,
+                expected_artifact_type=PRODUCT_CANDIDATE_MEDIA_TYPE,
+                required_layer_roles=(),
+            )
+            manifest = _exact(
+                _load_canonical(fetched.manifest, "candidate product OCI manifest"),
+                frozenset(
+                    {
+                        "schemaVersion",
+                        "mediaType",
+                        "artifactType",
+                        "config",
+                        "layers",
+                        "annotations",
+                    }
+                ),
+                "candidate product OCI manifest",
+            )
+            if manifest["schemaVersion"] != 2:
+                raise ProductEvidenceError(
+                    "candidate product OCI manifest schema changed"
+                )
+            record, product, record_abi, record_source, artifacts, lazy_inputs = (
+                _validate_candidate_record_body(
+                    fetched.config.body,
+                    repository=checked_repository,
+                )
+            )
+            expected_annotations = {
+                "dev.kandelo.abi-staging.architecture": product["architecture"],
+                "dev.kandelo.abi-staging.classification": (
+                    "public-candidate-not-endorsed"
+                ),
+                "dev.kandelo.abi-staging.kind": "candidate-product",
+                "dev.kandelo.abi-staging.nonendorsed": "true",
+                "dev.kandelo.abi-staging.product": product["id"],
+                "dev.kandelo.abi-staging.target-abi": str(record_abi),
+                "org.opencontainers.image.source": (
+                    "https://github.com/" + checked_publisher
+                ),
+            }
+            if dict(manifest["annotations"]) != expected_annotations:
+                raise ProductEvidenceError(
+                    "candidate product OCI annotations differ from protected policy"
+                )
+            config = _candidate_manifest_descriptor(
+                manifest["config"], "candidate product config"
+            )
+            config_artifact = {
+                "sha256": _sha(fetched.config.body),
+                "bytes": len(fetched.config.body),
+            }
+            _require_public_candidate_descriptor(
+                config,
+                artifact=config_artifact,
+                role="candidate-product-record",
+                media_type=PRODUCT_CANDIDATE_MEDIA_TYPE,
+                title="candidate-product-record.json",
+                field="candidate product config",
+            )
+            raw_layers = _sequence(
+                manifest["layers"], "candidate product OCI layers"
+            )
+            descriptors = [
+                _candidate_manifest_descriptor(
+                    value, f"candidate product OCI layer {index}"
+                )
+                for index, value in enumerate(raw_layers)
+            ]
+            fixed = (
+                (
+                    "vfs_image",
+                    "vfs-image",
+                    VFS_IMAGE_MEDIA_TYPE,
+                    product["output"],
+                ),
+                (
+                    "builder_report",
+                    "builder-report",
+                    BUILDER_REPORT_MEDIA_TYPE,
+                    "builder-report.json",
+                ),
+                (
+                    "resolved_inputs",
+                    "resolved-inputs",
+                    RESOLVED_INPUTS_MEDIA_TYPE,
+                    "resolved-inputs.json",
+                ),
+                (
+                    "runtime_bundle",
+                    "runtime-bundle",
+                    RUNTIME_BUNDLE_MEDIA_TYPE,
+                    "runtime-bundle.json",
+                ),
+            )
+            if len(descriptors) != len(fixed) + len(lazy_inputs):
+                raise ProductEvidenceError(
+                    "candidate product OCI descriptor count changed"
+                )
+            for descriptor, (key, role, media_type, title) in zip(
+                descriptors, fixed, strict=False
+            ):
+                _require_public_candidate_descriptor(
+                    descriptor,
+                    artifact=_artifact(
+                        artifacts[key], f"candidate product {key}"
+                    ),
+                    role=role,
+                    media_type=media_type,
+                    title=title,
+                    field=f"candidate product {key}",
+                )
+            for index, ((input_id, artifact), descriptor) in enumerate(
+                zip(lazy_inputs, descriptors[len(fixed) :], strict=True)
+            ):
+                _require_public_candidate_descriptor(
+                    descriptor,
+                    artifact=artifact,
+                    role=f"lazy-input-{index:04d}",
+                    media_type=LAZY_INPUT_MEDIA_TYPE,
+                    title=f"lazy-input-{input_id}",
+                    field=f"candidate product lazy input {input_id}",
+                )
+
+            if (
+                record_source != source
+                or record_abi != target_abi
+                or record["target_abi"]["snapshot_sha256"] != snapshot_sha256
+                or product["id"] != selection["id"]
+                or product["manifest_path"] != selection["path"]
+                or product["manifest_sha256"] != selection["manifest_sha256"]
+            ):
+                continue
+            candidate_locator = CandidateProductLocatorV1(
+                product_id=product["id"],
+                repository=fetched.repository,
+                manifest_digest=fetched.digest,
+                immutable_reference=fetched.immutable_reference,
+                vfs_layer_sha256=artifacts["vfs_image"]["sha256"],
+                vfs_layer_bytes=artifacts["vfs_image"]["bytes"],
+                builder_report_sha256=artifacts["builder_report"]["sha256"],
+            )
+            artifact = CandidateProductArtifactV1(
+                product_id=product["id"],
+                manifest_sha256=product["manifest_sha256"],
+                architecture=product["architecture"],
+                request_sha256=checked_request_sha256,
+                source_repository=record_source["repository"],
+                source_commit=record_source["commit"],
+                source_tree=record_source["tree"],
+                target_abi=record_abi,
+                snapshot_sha256=record["target_abi"]["snapshot_sha256"],
+                vfs_layer_sha256=artifacts["vfs_image"]["sha256"],
+                vfs_layer_bytes=artifacts["vfs_image"]["bytes"],
+                immutable_reference=(
+                    f"ghcr.io/{checked_repository}@sha256:"
+                    + artifacts["vfs_image"]["sha256"]
+                ),
+                builder_report_sha256=artifacts["builder_report"]["sha256"],
+            )
+            results.append(
+                CandidateProductInventoryEntryV1(
+                    artifact=artifact,
+                    locator=candidate_locator,
+                    runtime_bundle_sha256=artifacts["runtime_bundle"]["sha256"],
+                )
+            )
+    except (OciPublicationError, ValueError) as error:
+        if isinstance(error, ProductEvidenceError):
+            raise
+        raise ProductEvidenceError(
+            f"candidate product inventory is invalid: {error}"
+        ) from error
+    results.sort(key=lambda value: value.locator.manifest_digest)
+    return tuple(results)
 
 
 def _validate_candidate_identity(value: Any, field: str) -> dict[str, Any]:
@@ -1033,12 +2518,37 @@ def _validate_runtime_identity(value: Any, field: str) -> dict[str, Any]:
     _integer(host["bytes"], f"{field} host bytes", positive=True)
     browser = _exact(
         runtime["browser"],
-        frozenset({"bundle_sha256", "bytes", "service_worker_sha256"}),
+        BROWSER_RUNTIME_KEYS,
         f"{field} browser",
     )
-    _digest(browser["bundle_sha256"], f"{field} browser bundle")
+    for key in (
+        "bundle_sha256",
+        "harness_entry_sha256",
+        "host_entry_sha256",
+        "kernel_asset_sha256",
+        "service_worker_sha256",
+    ):
+        _digest(browser[key], f"{field} browser {key}")
     _integer(browser["bytes"], f"{field} browser bytes", positive=True)
-    _digest(browser["service_worker_sha256"], f"{field} service worker")
+    for key in ("harness_entry_bytes", "host_entry_bytes"):
+        _integer(browser[key], f"{field} browser {key}", positive=True)
+    harness_path = _relative_path(
+        browser["harness_entry_path"], f"{field} browser harness path"
+    )
+    host_entry_path = _relative_path(
+        browser["host_entry_path"], f"{field} browser host path"
+    )
+    kernel_asset_path = _relative_path(
+        browser["kernel_asset_path"], f"{field} browser kernel path"
+    )
+    if (
+        harness_path != "browser/dist/abi-staging-harness/index.html"
+        or host_entry_path != "browser/dist/abi-staging/browser-host.js"
+        or not kernel_asset_path.startswith("browser/dist/")
+        or not kernel_asset_path.endswith(".wasm")
+        or browser["kernel_asset_sha256"] != kernel["wasm_sha256"]
+    ):
+        raise ProductEvidenceError(f"{field} browser entry identity differs")
     _digest(runtime["build_policy_sha256"], f"{field} build policy")
     return _plain(runtime)
 
@@ -1907,6 +3417,231 @@ def validate_product_evidence_record(
         raise ProductEvidenceError("product evidence record differs from exact rederivation")
 
 
+def inspect_product_evidence_repository(
+    repository: str,
+    *,
+    request: Mapping[str, Any],
+    request_sha256: str,
+    product: Mapping[str, Any],
+    candidate_product: CandidateProductLocatorV1,
+    runtime_bundle_sha256: str,
+    expected_source_repository: str,
+    transport: OciTransportV1,
+) -> tuple[ProductEvidenceInventoryEntryV1, ...]:
+    """Recover complete aggregate facts through anonymous manifest/config reads."""
+
+    checked_repository = _repository(
+        repository, "product evidence inventory repository"
+    )
+    suffix = "/evidence"
+    if not checked_repository.endswith(suffix):
+        raise ProductEvidenceError(
+            "product evidence inventory repository is not an aggregate repository"
+        )
+    product_repository = checked_repository[: -len(suffix)]
+    checked_product = _validate_product(
+        product, "product evidence inventory product", full=True
+    )
+    match = PRODUCT_REPOSITORY.fullmatch(product_repository)
+    if match is None or match.group("product") != checked_product["id"]:
+        raise ProductEvidenceError(
+            "product evidence inventory is outside its reserved product repository"
+        )
+    checked_request = _plain(request)
+    checked_request_sha256 = _digest(
+        request_sha256, "product evidence inventory request"
+    )
+    if canonical_sha256(checked_request) != checked_request_sha256:
+        raise ProductEvidenceError(
+            "product evidence inventory request digest is not canonical"
+        )
+    source = _validate_source(
+        checked_request.get("build_source"), "product evidence inventory source"
+    )
+    target = _exact(
+        checked_request.get("target_abi"),
+        frozenset({"version", "snapshot_sha256"}),
+        "product evidence inventory ABI",
+    )
+    target_abi = _integer(target["version"], "product evidence inventory ABI version")
+    _digest(target["snapshot_sha256"], "product evidence inventory ABI snapshot")
+    if int(match.group("abi")) != target_abi:
+        raise ProductEvidenceError(
+            "product evidence inventory repository has the wrong ABI"
+        )
+    if (
+        not isinstance(candidate_product, CandidateProductLocatorV1)
+        or candidate_product.product_id != checked_product["id"]
+        or candidate_product.repository != "ghcr.io/" + product_repository
+    ):
+        raise ProductEvidenceError(
+            "product evidence inventory candidate differs from its repository"
+        )
+    checked_runtime_sha256 = _digest(
+        runtime_bundle_sha256, "product evidence inventory runtime bundle"
+    )
+    checked_publisher = _text(
+        expected_source_repository,
+        "product evidence inventory publisher repository",
+        255,
+    )
+    if re.fullmatch(
+        r"[A-Za-z0-9._-]+/[A-Za-z0-9._-]+", checked_publisher
+    ) is None:
+        raise ProductEvidenceError(
+            "product evidence inventory publisher is not owner/name"
+        )
+
+    results = []
+    try:
+        for locator in list_public_record_locators(
+            checked_repository, transport=transport
+        ):
+            fetched = fetch_public_record(
+                locator,
+                transport=transport,
+                expected_artifact_type=PRODUCT_EVIDENCE_RECORD_MEDIA_TYPE,
+                required_layer_roles=(),
+            )
+            manifest = _exact(
+                _load_canonical(fetched.manifest, "product evidence OCI manifest"),
+                frozenset(
+                    {
+                        "schemaVersion",
+                        "mediaType",
+                        "artifactType",
+                        "config",
+                        "layers",
+                        "annotations",
+                    }
+                ),
+                "product evidence OCI manifest",
+            )
+            record = _load_canonical(
+                fetched.config.body, "product evidence inventory record"
+            )
+            validate_product_evidence_record(record)
+            payload = record["product_evidence"]
+            common = record["common"]
+            expected_annotations = {
+                "dev.kandelo.abi-staging.candidate-product-manifest": (
+                    candidate_product.manifest_digest
+                ),
+                "dev.kandelo.abi-staging.classification": (
+                    "public-candidate-not-endorsed"
+                ),
+                "dev.kandelo.abi-staging.kind": "product-evidence-record",
+                "dev.kandelo.abi-staging.nonendorsed": "true",
+                "dev.kandelo.abi-staging.product": checked_product["id"],
+                "org.opencontainers.image.source": (
+                    "https://github.com/" + checked_publisher
+                ),
+            }
+            if (
+                dict(manifest["annotations"]) != expected_annotations
+                or common["request_sha256"] != checked_request_sha256
+                or common["source"] != source
+                or payload["product"] != checked_product
+                or payload["vfs_image"]
+                != _common_artifact(
+                    candidate_product.repository,
+                    candidate_product.vfs_layer_sha256,
+                    candidate_product.vfs_layer_bytes,
+                )
+                or payload["builder_report"]["sha256"]
+                != candidate_product.builder_report_sha256
+            ):
+                continue
+
+            config = _candidate_manifest_descriptor(
+                manifest["config"], "product evidence config"
+            )
+            config_artifact = {
+                "sha256": canonical_sha256(record),
+                "bytes": len(fetched.config.body),
+            }
+            _require_public_candidate_descriptor(
+                config,
+                artifact=config_artifact,
+                role="product-evidence-record",
+                media_type=PRODUCT_EVIDENCE_RECORD_MEDIA_TYPE,
+                title="product-evidence-record.json",
+                field="product evidence config",
+            )
+            descriptors = [
+                _candidate_manifest_descriptor(
+                    value, f"product evidence layer {index}"
+                )
+                for index, value in enumerate(
+                    _sequence(manifest["layers"], "product evidence layers")
+                )
+            ]
+            receipt_sha256s = payload["verification_receipt_sha256s"]
+            expected_roles = ["runtime-bundle", "resolved-inputs"] + [
+                f"receipt-{index:04d}" for index in range(len(receipt_sha256s))
+            ]
+            if [item["role"] for item in descriptors] != expected_roles:
+                raise ProductEvidenceError(
+                    "product evidence inventory layer roles changed"
+                )
+            if len(descriptors) != len(receipt_sha256s) + 2:
+                raise ProductEvidenceError(
+                    "product evidence inventory layer count changed"
+                )
+            if (
+                descriptors[0]["media_type"] != RUNTIME_BUNDLE_MEDIA_TYPE
+                or descriptors[0]["title"] != "runtime-bundle.json"
+                or descriptors[0]["digest"]
+                != "sha256:" + checked_runtime_sha256
+                or descriptors[1]["media_type"] != RESOLVED_INPUTS_MEDIA_TYPE
+                or descriptors[1]["title"] != "resolved-inputs.json"
+                or descriptors[1]["digest"]
+                != "sha256:" + payload["resolved_inputs_sha256"]
+            ):
+                continue
+            for index, (descriptor, receipt_sha256) in enumerate(
+                zip(descriptors[2:], receipt_sha256s, strict=True)
+            ):
+                if (
+                    descriptor["media_type"]
+                    != PRODUCT_EVIDENCE_RECEIPT_MEDIA_TYPE
+                    or descriptor["title"] != f"receipts/{index:04d}.json"
+                    or descriptor["digest"] != "sha256:" + receipt_sha256
+                ):
+                    raise ProductEvidenceError(
+                        "product evidence inventory receipt descriptor changed"
+                    )
+            results.append(
+                ProductEvidenceInventoryEntryV1(
+                    record=_plain(record),
+                    record_sha256=canonical_sha256(record),
+                    manifest_digest=fetched.digest,
+                    outcome=common["outcome"],
+                    immutable_reference=fetched.immutable_reference,
+                )
+            )
+    except (OciPublicationError, ValueError) as error:
+        if isinstance(error, ProductEvidenceError):
+            raise
+        raise ProductEvidenceError(
+            f"product evidence inventory is invalid: {error}"
+        ) from error
+    semantic_identities = {
+        (
+            item.record["product_evidence"]["runtime_evidence_sha256"],
+            item.record["common"]["outcome"],
+            item.record["common"]["promotion_state"],
+        )
+        for item in results
+    }
+    if len(semantic_identities) > 1:
+        raise ProductEvidenceError(
+            "product evidence inventory contains conflicting current aggregates"
+        )
+    results.sort(key=lambda item: item.record_sha256)
+    return tuple(results)
+
+
 def build_product_evidence_receipt_oci_plan(
     receipt: Mapping[str, Any],
     *,
@@ -2278,3 +4013,108 @@ def publish_product_evidence_record(
         transport=transport,
         expected_source_repository=expected_source_repository,
     )
+
+
+def publish_exact_product_evidence(
+    *,
+    request_digest: str,
+    product: Mapping[str, Any],
+    candidate_product: CandidateProductLocatorV1,
+    runtime_bundle_body: bytes,
+    resolved_inputs_body: bytes,
+    builder_report_body: bytes,
+    selecting_registries: Sequence[Mapping[str, Any]],
+    requirements: Sequence[Mapping[str, Any]],
+    results: Sequence[Mapping[str, Any]],
+    run: Mapping[str, Any],
+    transport: OciTransportV1,
+    expected_source_repository: str,
+) -> dict[str, Any]:
+    """Issue every factual receipt, then one exact aggregate evidence record."""
+
+    checked_requirements = [
+        _validate_requirement(value, f"product evidence requirement {index}")
+        for index, value in enumerate(requirements)
+    ]
+    requirement_keys = [
+        (value["host"], value["id"]) for value in checked_requirements
+    ]
+    if not checked_requirements or requirement_keys != sorted(set(requirement_keys)):
+        raise ProductEvidenceError(
+            "product evidence requirements must be sorted and duplicate-free"
+        )
+
+    results_by_key: dict[tuple[str, str], Mapping[str, Any]] = {}
+    for result in results:
+        validate_product_evidence_result(result)
+        key = (result["host"], result["definition"]["id"])
+        if key in results_by_key:
+            raise ProductEvidenceError(
+                "product evidence repeats a terminal host result"
+            )
+        results_by_key[key] = result
+    if set(results_by_key) != set(requirement_keys):
+        raise ProductEvidenceError(
+            "product evidence terminal result set is incomplete or unexpected"
+        )
+
+    receipts = []
+    receipt_plans = []
+    for requirement in checked_requirements:
+        key = (requirement["host"], requirement["id"])
+        result = results_by_key[key]
+        receipt = build_product_evidence_receipt(
+            result,
+            request_digest=request_digest,
+            product=product,
+            candidate_product=candidate_product,
+            runtime_bundle_body=runtime_bundle_body,
+            requirement=requirement,
+        )
+        receipts.append(receipt)
+        receipt_plans.append(
+            build_product_evidence_receipt_oci_plan(
+                receipt,
+                result=result,
+                candidate_product=candidate_product,
+            )
+        )
+
+    record = build_product_evidence_record(
+        request_digest=request_digest,
+        candidate_product=candidate_product,
+        resolved_inputs_body=resolved_inputs_body,
+        builder_report_body=builder_report_body,
+        runtime_bundle_body=runtime_bundle_body,
+        selecting_registries=selecting_registries,
+        requirements=checked_requirements,
+        receipts=receipts,
+        run=run,
+    )
+    aggregate_plan = build_product_evidence_oci_plan(
+        record,
+        candidate_product=candidate_product,
+        receipts=receipts,
+        runtime_bundle_body=runtime_bundle_body,
+        resolved_inputs_body=resolved_inputs_body,
+    )
+
+    receipt_locators = [
+        publish_product_evidence_receipt(
+            plan,
+            transport=transport,
+            expected_source_repository=expected_source_repository,
+        )
+        for plan in receipt_plans
+    ]
+    record_locator = publish_product_evidence_record(
+        aggregate_plan,
+        transport=transport,
+        expected_source_repository=expected_source_repository,
+    )
+    return {
+        "receipts": receipts,
+        "receipt_locators": receipt_locators,
+        "record": record,
+        "record_locator": record_locator,
+    }

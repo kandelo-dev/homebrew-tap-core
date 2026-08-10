@@ -446,6 +446,68 @@ def _fetch_descriptor(
     return FetchedOciBlobV1(body=body, **descriptor)
 
 
+def fetch_public_blob(
+    immutable_reference: str,
+    *,
+    expected_sha256: str,
+    expected_bytes: int,
+    transport: OciTransportV1,
+) -> bytes:
+    """Read one exact anonymous GHCR blob without accepting a mutable locator."""
+
+    match = re.fullmatch(
+        r"ghcr\.io/(?P<repository>"
+        r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+"
+        r")@sha256:(?P<digest>[0-9a-f]{64})",
+        immutable_reference,
+    )
+    if (
+        match is None
+        or re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None
+        or match.group("digest") != expected_sha256
+        or isinstance(expected_bytes, bool)
+        or not isinstance(expected_bytes, int)
+        or not 1 <= expected_bytes <= MAX_BLOB_BYTES
+    ):
+        raise OciPublicationError(
+            "public OCI blob identity is invalid",
+            guard_code="candidate_integrity_mismatch",
+        )
+    digest = "sha256:" + expected_sha256
+    response = _request(
+        transport,
+        "GET",
+        _registry_url(match.group("repository"), "blobs", digest),
+        authenticated=False,
+        guard_code="candidate_public_readback_failed",
+        maximum_bytes=expected_bytes,
+    )
+    if response.status != 200:
+        raise OciPublicationError(
+            f"public OCI blob returned HTTP {response.status}",
+            guard_code="candidate_public_readback_failed",
+        )
+    header_digest = _header(response, "docker-content-digest")
+    header_length = _header(response, "content-length")
+    if header_digest not in {None, digest} or (
+        header_length is not None
+        and (not header_length.isdigit() or int(header_length) != expected_bytes)
+    ):
+        raise OciPublicationError(
+            "public OCI blob metadata differs from its exact identity",
+            guard_code="candidate_integrity_mismatch",
+        )
+    if (
+        len(response.body) != expected_bytes
+        or hashlib.sha256(response.body).hexdigest() != expected_sha256
+    ):
+        raise OciPublicationError(
+            "public OCI blob bytes differ from their exact identity",
+            guard_code="candidate_integrity_mismatch",
+        )
+    return response.body
+
+
 def fetch_public_record(
     locator: Mapping[str, object],
     *,

@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from scripts.abi_staging import inventory as inventory_module
 from scripts.abi_staging.inventory import (
     InventoryError,
     inspect_candidate_reuse_repository,
@@ -68,6 +69,7 @@ class PublicInventoryTests(unittest.TestCase):
         self.assertEqual(inventory.records.candidates, ())
         self.assertEqual(inventory.records.verifications, ())
         self.assertEqual(inventory.candidate_locators, {})
+        self.assertEqual(inventory.source_custody_records, {})
 
     def test_verification_inventory_binds_candidate_subject_and_completion_clock(self) -> None:
         candidate_record = "c" * 64
@@ -258,6 +260,11 @@ class PublicInventoryTests(unittest.TestCase):
                 },
             )
             transport = FakeRegistryTransport()
+            publish_record(
+                source,
+                transport=transport,
+                expected_source_repository="kandelo-dev/homebrew-tap-core",
+            )
             published = publish_record(
                 candidate,
                 transport=transport,
@@ -277,6 +284,33 @@ class PublicInventoryTests(unittest.TestCase):
             layer_sha256 = candidate_record["candidate"]["bottle_layer"]["sha256"]
             self.assertFalse(
                 any(layer_sha256 in call[1] for call in scan_calls)
+            )
+
+            custody_reader = getattr(
+                inventory_module, "inspect_source_custody_records", None
+            )
+            self.assertIsNotNone(
+                custody_reader, "public source-custody reconstruction is absent"
+            )
+            transport.calls.clear()
+            custody = custody_reader(
+                {published.digest.removeprefix("sha256:"): candidate_record},
+                transport=transport,
+            )
+            self.assertEqual(
+                custody,
+                {source_digest: json.loads(source.config.body)},
+            )
+            source_layer_digests = {layer.digest for layer in source.layers}
+            self.assertFalse(
+                any(
+                    method == "GET"
+                    and any(digest in url for digest in source_layer_digests)
+                    for method, url, _authenticated in transport.calls
+                )
+            )
+            self.assertTrue(
+                all(not authenticated for _, _, authenticated in transport.calls)
             )
 
             transport.manifests[(CANDIDATE_REPOSITORY, "latest")] = build_oci_manifest(candidate)

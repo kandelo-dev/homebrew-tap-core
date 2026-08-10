@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .contract import load_canonical_mapping, validate_candidate_reuse_record
+from .custody import load_source_custody_manifest
 from .oci import (
     OciPublicationError,
     OciTransportV1,
@@ -25,6 +26,7 @@ from .records import (
     ATTEMPT_OUTCOME_MEDIA_TYPE,
     CANDIDATE_RECORD_MEDIA_TYPE,
     CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
+    SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
     validate_attempt_outcome_record,
     validate_candidate_record,
 )
@@ -71,6 +73,9 @@ class PublicSchedulingInventoryV1:
     records: SchedulingRecordsV1
     candidate_locators: Mapping[str, Mapping[str, str]]
     candidate_records: Mapping[str, Mapping[str, Any]]
+    source_custody_records: Mapping[str, Mapping[str, Any]] = field(
+        default_factory=dict
+    )
     verification_locators: Mapping[str, Mapping[str, str]] = field(
         default_factory=dict
     )
@@ -79,6 +84,100 @@ class PublicSchedulingInventoryV1:
     )
     reuse_locators: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
     reuse_records: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+
+
+def inspect_source_custody_records(
+    candidate_records: Mapping[str, Mapping[str, Any]],
+    *,
+    transport: OciTransportV1,
+) -> dict[str, Mapping[str, Any]]:
+    """Load exact custody configs named by candidates without source payloads."""
+
+    records: dict[str, Mapping[str, Any]] = {}
+    try:
+        for candidate_digest in sorted(candidate_records):
+            candidate = candidate_records[candidate_digest]
+            validate_candidate_record(candidate)
+            components = [
+                item["artifact"]
+                for item in candidate["candidate"]["normalized_components"]
+                if item["id"] == "source-custody"
+            ]
+            if len(components) != 1:
+                raise InventoryError(
+                    "candidate inventory lacks one source-custody link"
+                )
+            component = components[0]
+            reference = component["immutable_reference"]
+            if (
+                not isinstance(reference, str)
+                or not reference.startswith("ghcr.io/")
+                or "@sha256:" not in reference
+            ):
+                raise InventoryError(
+                    "candidate source-custody reference is not immutable"
+                )
+            repository, digest = reference.rsplit("@", 1)
+            if digest != "sha256:" + component["sha256"]:
+                raise InventoryError(
+                    "candidate source-custody reference differs from its digest"
+                )
+            locator = {
+                "repository": repository,
+                "digest": digest,
+                "immutable_reference": reference,
+            }
+            fetched = fetch_public_record(
+                locator,
+                transport=transport,
+                expected_artifact_type=SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
+                required_layer_roles=(),
+            )
+            if (
+                fetched.digest != digest
+                or len(fetched.manifest) != component["bytes"]
+                or fetched.config.role != "source-custody-manifest"
+                or fetched.config.media_type
+                != SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE
+                or fetched.config.title != "source-custody-manifest.json"
+            ):
+                raise InventoryError(
+                    "candidate source-custody OCI identity differs from its link"
+                )
+            custody = load_source_custody_manifest(fetched.config.body)
+            manifest = load_canonical_mapping(
+                fetched.manifest, "source-custody OCI manifest"
+            )
+            annotations = manifest.get("annotations")
+            expected_annotations = {
+                "dev.kandelo.abi-staging.capsule-sha256": custody[
+                    "capsule_sha256"
+                ],
+                "dev.kandelo.abi-staging.classification": (
+                    "factual-source-custody"
+                ),
+                "dev.kandelo.abi-staging.kind": "source-custody",
+                "org.opencontainers.image.source": (
+                    "https://github.com/" + custody["sources"][1]["repository"]
+                ),
+            }
+            if not isinstance(annotations, Mapping) or dict(annotations) != (
+                expected_annotations
+            ):
+                raise InventoryError(
+                    "source-custody OCI annotations differ from protected facts"
+                )
+            existing = records.get(component["sha256"])
+            if existing is not None and existing != custody:
+                raise InventoryError(
+                    "source-custody digest maps to conflicting records"
+                )
+            records[component["sha256"]] = custody
+    except (OciPublicationError, ValueError) as error:
+        if isinstance(error, InventoryError):
+            raise
+        raise InventoryError(f"source-custody inventory is invalid: {error}") from error
+    return {key: records[key] for key in sorted(records)}
 
 
 def inspect_verification_repository(
@@ -549,6 +648,11 @@ def scan_scheduling_inventory(
                 ]["bottle_layer"],
             }
 
+    source_custody_records = inspect_source_custody_records(
+        candidate_records,
+        transport=transport,
+    )
+
     for name in names:
         base = candidate_repository(policy, target_abi, formula=name)
         for definition in verification_tests:
@@ -599,6 +703,7 @@ def scan_scheduling_inventory(
         candidate_records={
             key: candidate_records[key] for key in sorted(candidate_records)
         },
+        source_custody_records=source_custody_records,
         verification_locators={
             key: verification_locators[key]
             for key in sorted(verification_locators)

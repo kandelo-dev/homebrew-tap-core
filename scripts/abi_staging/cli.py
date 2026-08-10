@@ -9,12 +9,18 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import selectors
+import signal
+import shutil
+import stat
+import subprocess
 import sys
 import tempfile
+import time
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
-from .canonical import canonical_bytes
+from .canonical import canonical_bytes, canonical_sha256
 from .contract import (
     ContractError,
     build_miniature_bottle_contract_fixture,
@@ -69,13 +75,44 @@ from .records import (
     build_source_custody_oci_plan,
     load_tap_plan_record,
 )
-from .product import ProductInputResolutionError, load_resolved_product_inputs
+from .product import (
+    MAX_INPUT_OBJECT_BYTES,
+    NONPUBLIC_PRODUCT_INPUT_KINDS,
+    ProductInputResolutionError,
+    load_product_input_object_inventory,
+    load_resolved_product_inputs,
+    materialize_resolved_product_input_objects,
+    product_runtime_identity,
+    resolve_product_from_checked_input_authority,
+    selected_product_formula_readiness,
+    select_product_execution_scope,
+    select_product_input_build_spec,
+    validate_private_product_authority_handoff,
+    validate_product_input_object_authority,
+    validate_product_build_handoff,
+    write_product_build_handoff,
+)
 from .product_evidence import (
     ProductEvidenceError,
+    build_candidate_product_oci_plan,
+    build_product_evidence_context,
+    candidate_product_repository,
+    inspect_candidate_product_repository,
+    inspect_product_evidence_repository,
+    load_candidate_product_locator,
+    publish_candidate_product,
+    publish_exact_product_evidence,
+    select_product_evidence_execution_scope,
+    select_product_evidence_publication_scope,
     validate_candidate_builder_report,
     validate_product_evidence_record,
+    validate_product_evidence_result,
 )
 from .reconcile import (
+    build_product_workflow_wave,
+    build_product_workflow_seed,
+    ProductProgressV1,
+    ProductSelectionV1,
     PullRequestLifecycleV1,
     ReconciliationDecisionV1,
     ReconciliationError,
@@ -162,6 +199,13 @@ def _parser() -> argparse.ArgumentParser:
     prepare_workflow.add_argument("--now", required=True)
     prepare_workflow.add_argument("--out", required=True)
     prepare_workflow.add_argument("--github-output", required=True)
+    plan_products = subcommands.add_parser("plan-workflow-products")
+    plan_products.add_argument("--coordination-root", required=True)
+    plan_products.add_argument("--runtime-root", required=True)
+    plan_products.add_argument("--kandelo-root", required=True)
+    plan_products.add_argument("--tap-root", required=True)
+    plan_products.add_argument("--out", required=True)
+    plan_products.add_argument("--github-output", required=True)
     policy_check = subcommands.add_parser("policy-check")
     policy_check.add_argument("--tap-root", required=True)
     policy_generate = subcommands.add_parser("policy-generate")
@@ -212,6 +256,81 @@ def _parser() -> argparse.ArgumentParser:
     execute_verification.add_argument("--run-attempt", required=True, type=int)
     execute_verification.add_argument("--workflow-ref", required=True)
     execute_verification.add_argument("--out", required=True)
+    execute_product = subcommands.add_parser("execute-product-work")
+    execute_product.add_argument("--coordination-root", required=True)
+    execute_product.add_argument("--runtime-artifact-id", required=True)
+    execute_product.add_argument("--runtime-artifact-digest", required=True)
+    execute_product.add_argument("--product-id", required=True)
+    execute_product.add_argument("--work-id", required=True)
+    execute_product.add_argument("--kandelo-root", required=True)
+    execute_product.add_argument("--kandelo-policy-root", required=True)
+    execute_product.add_argument("--tap-root", required=True)
+    execute_product.add_argument("--validate-builder-report", action="store_true")
+    execute_product.add_argument("--private-out", required=True)
+    execute_product.add_argument("--out", required=True)
+    execute_product_evidence = subcommands.add_parser(
+        "execute-product-evidence-work"
+    )
+    execute_product_evidence.add_argument(
+        "--host", required=True, choices=("node", "browser")
+    )
+    execute_product_evidence.add_argument("--definition-id", required=True)
+    execute_product_evidence.add_argument("--product-id", required=True)
+    execute_product_evidence.add_argument("--product-work-id", required=True)
+    execute_product_evidence.add_argument("--work-id", required=True)
+    execute_product_evidence.add_argument("--input-root", required=True)
+    execute_product_evidence.add_argument("--kandelo-root", required=True)
+    execute_product_evidence.add_argument("--kandelo-policy-root", required=True)
+    execute_product_evidence.add_argument("--tap-root", required=True)
+    execute_product_evidence.add_argument("--run-id", required=True, type=int)
+    execute_product_evidence.add_argument(
+        "--run-attempt", required=True, type=int
+    )
+    execute_product_evidence.add_argument("--workflow-ref", required=True)
+    execute_product_evidence.add_argument("--out", required=True)
+    publish_product = subcommands.add_parser(
+        "publish-workflow-product-candidate"
+    )
+    publish_product.add_argument("--run-id", required=True, type=int)
+    publish_product.add_argument("--run-attempt", required=True, type=int)
+    publish_product.add_argument("--head-sha", required=True)
+    publish_product.add_argument("--product-id", required=True)
+    publish_product.add_argument("--work-id", required=True)
+    publish_product.add_argument("--handoff-artifact-name", required=True)
+    publish_product.add_argument("--private-artifact-name", required=True)
+    publish_product.add_argument("--kandelo-root", required=True)
+    publish_product.add_argument("--kandelo-policy-root", required=True)
+    publish_product.add_argument("--validate-builder-report", action="store_true")
+    publish_product.add_argument("--require-github-digest", action="store_true")
+    publish_product.add_argument("--anonymous-readback", action="store_true")
+    publish_product.add_argument("--immutable", action="store_true")
+    publish_product.add_argument("--out", required=True)
+    publish_product_evidence = subcommands.add_parser(
+        "publish-workflow-product-evidence"
+    )
+    publish_product_evidence.add_argument("--run-id", required=True, type=int)
+    publish_product_evidence.add_argument(
+        "--run-attempt", required=True, type=int
+    )
+    publish_product_evidence.add_argument("--head-sha", required=True)
+    publish_product_evidence.add_argument("--product-id", required=True)
+    publish_product_evidence.add_argument("--product-work-id", required=True)
+    publish_product_evidence.add_argument("--work-id", required=True)
+    publish_product_evidence.add_argument("--kandelo-root", required=True)
+    publish_product_evidence.add_argument(
+        "--kandelo-policy-root", required=True
+    )
+    publish_product_evidence.add_argument(
+        "--require-terminal-results", action="store_true"
+    )
+    publish_product_evidence.add_argument(
+        "--require-github-digest", action="store_true"
+    )
+    publish_product_evidence.add_argument(
+        "--anonymous-readback", action="store_true"
+    )
+    publish_product_evidence.add_argument("--immutable", action="store_true")
+    publish_product_evidence.add_argument("--out", required=True)
     publish = subcommands.add_parser("publish-candidate")
     publish.add_argument("--tap-root", required=True)
     publish.add_argument("--handoff", required=True)
@@ -336,8 +455,13 @@ def _discover_workflow_request(args: argparse.Namespace) -> None:
     tap_source = snapshot_tap_source(tap_root, staging_policy.tap_repository)
     selection = None
     outputs = {
+        "browser_evidence_matrix": '{"include":[]}',
         "build_matrix": '{"include":[]}',
         "mode": "observe",
+        "node_evidence_matrix": '{"include":[]}',
+        "product_matrix": '{"include":[]}',
+        "product_mode": "observe",
+        "request_digest": "",
         "reuse_matrix": '{"include":[]}',
         "selected": "false",
         "tap_commit": tap_source["commit"],
@@ -365,6 +489,7 @@ def _discover_workflow_request(args: argparse.Namespace) -> None:
                     "issuer_workflow_ref"
                 ].rsplit("@", 1)[1],
                 "kandelo_repository": candidate.request["build_source"]["repository"],
+                "request_digest": candidate.request_digest,
                 "selected": "true",
             }
         )
@@ -491,9 +616,20 @@ def _prepare_workflow(args: argparse.Namespace) -> None:
         policy=staging_policy,
         verification_tests=verification_tests,
     )
+    product_mode = load_product_evidence_activation(
+        tap_root / "Kandelo/staging/product-evidence-activation.toml"
+    )
+    product_workflow = build_product_workflow_seed(
+        request,
+        reconciliation,
+        activation_mode=product_mode,
+    )
     (output / "coordination.json").write_bytes(canonical_bytes(bundle))
     (output / "tap-plan.json").write_bytes(canonical_bytes(bundle["tap_plan"]))
     (output / "workflow-plan.json").write_bytes(canonical_bytes(bundle["workflow"]))
+    (output / "product-workflow-plan.json").write_bytes(
+        canonical_bytes(product_workflow)
+    )
     _write_github_outputs(
         Path(args.github_output),
         {
@@ -501,6 +637,23 @@ def _prepare_workflow(args: argparse.Namespace) -> None:
                 bundle["workflow"]["build_matrix"], separators=(",", ":"), sort_keys=True
             ),
             "mode": mode,
+            "product_mode": product_mode,
+            "request_digest": request_sha256,
+            "product_matrix": json.dumps(
+                product_workflow["product_matrix"],
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            "node_evidence_matrix": json.dumps(
+                product_workflow["node_matrix"],
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            "browser_evidence_matrix": json.dumps(
+                product_workflow["browser_matrix"],
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
             "reuse_matrix": json.dumps(
                 bundle["workflow"]["reuse_matrix"],
                 separators=(",", ":"),
@@ -508,6 +661,251 @@ def _prepare_workflow(args: argparse.Namespace) -> None:
             ),
             "verify_matrix": json.dumps(
                 bundle["workflow"]["verify_matrix"], separators=(",", ":"), sort_keys=True
+            ),
+        },
+    )
+
+
+def _plan_workflow_products(args: argparse.Namespace) -> None:
+    """Scan durable public facts after Formula jobs and emit one product DAG wave."""
+
+    tap_root = _protected_tap_root(args.tap_root)
+    output = _output_directory(args.out)
+    policy = load_tap_staging_policy(tap_root / "Kandelo/staging/tap-policy.toml")
+    coordination_root = Path(args.coordination_root).resolve(strict=True)
+    bundle = load_coordination_bundle(
+        coordination_root / "coordination.json", policy=policy
+    )
+    request = bundle["request"]
+    request_sha256 = bundle["request_sha256"]
+    source = request["build_source"]
+    kandelo_root = _checked_checkout_source(
+        args.kandelo_root,
+        repository=source["repository"],
+        commit=source["commit"],
+        tree=source["tree"],
+    )
+    if snapshot_tap_source(tap_root, policy.tap_repository) != bundle["tap_plan"][
+        "tap_source"
+    ]:
+        raise ReconciliationError(
+            "product workflow planner tap source differs from coordination"
+        )
+
+    runtime_root = Path(args.runtime_root).resolve(strict=True)
+    runtime_path = runtime_root / "runtime-bundle.json"
+    try:
+        runtime_body = runtime_path.read_bytes()
+        runtime = load_canonical_mapping(
+            runtime_body, "product workflow exact runtime bundle"
+        )
+    except (OSError, ContractError) as error:
+        raise ProductInputResolutionError(
+            f"product workflow runtime bundle is invalid: {error}"
+        ) from error
+    product_runtime_identity(runtime, request)
+    runtime_bundle_sha256 = hashlib.sha256(runtime_body).hexdigest()
+
+    catalog_path = kandelo_root / "images/vfs/products/generated/catalog.json"
+    try:
+        catalog = load_canonical_mapping(
+            catalog_path.read_bytes(), "product workflow catalog"
+        )
+    except (OSError, ContractError) as error:
+        raise ProductInputResolutionError(
+            f"product workflow catalog is invalid: {error}"
+        ) from error
+    verification_tests = load_verification_tests(
+        tap_root / "Kandelo/staging/verification-tests.toml"
+    )
+    transport = UrllibOciTransportV1(username="", token="")
+    public_inventory = scan_scheduling_inventory(
+        bundle["tap_plan"],
+        policy=policy,
+        verification_tests=verification_tests,
+        transport=transport,
+    )
+    formula_readiness = selected_product_formula_readiness(
+        request=request,
+        request_sha256=request_sha256,
+        catalog=catalog,
+        tap_plan=bundle["tap_plan"],
+        records=public_inventory.records,
+        candidate_records=public_inventory.candidate_records,
+        candidate_locators=public_inventory.candidate_locators,
+        source_custody_records=public_inventory.source_custody_records,
+        reuse_records=public_inventory.reuse_records,
+        verification_records=public_inventory.verification_records,
+        verification_locators=public_inventory.verification_locators,
+        verification_tests=verification_tests,
+    )
+
+    requirements = request.get("requirements")
+    if not isinstance(requirements, Mapping):
+        raise ReconciliationError("product workflow request lacks requirements")
+    selections = []
+    build_specs = {}
+    for value in requirements.get("evidence", []):
+        if not isinstance(value, Mapping):
+            raise ReconciliationError("product workflow evidence binding is invalid")
+        applicability = value.get("applicability")
+        if applicability == "not-applicable":
+            continue
+        product_id = value.get("product_id")
+        if not isinstance(product_id, str):
+            raise ReconciliationError("product workflow evidence product ID is invalid")
+        build_spec = select_product_input_build_spec(request, catalog, product_id)
+        build_specs[product_id] = build_spec
+        try:
+            selection = ProductSelectionV1(
+                product_id=product_id,
+                manifest_sha256=build_spec["manifest_sha256"],
+                applicability=applicability,
+                dependency_product_ids=tuple(build_spec["dependency_product_ids"]),
+                node_definition_ids=tuple(value.get("node", [])),
+                browser_definition_ids=tuple(value.get("browser", [])),
+            )
+        except (TypeError, ValueError) as error:
+            if isinstance(error, ReconciliationError):
+                raise
+            raise ReconciliationError(
+                f"product workflow selection is invalid: {error}"
+            ) from error
+        selections.append(selection)
+    selections.sort(
+        key=lambda item: (
+            0 if item.applicability == "required" else 1,
+            item.product_id,
+        )
+    )
+
+    lifecycle_value = bundle["lifecycle"]
+    lifecycle = PullRequestLifecycleV1(
+        lifecycle_value["state"],
+        lifecycle_value["current_head"],
+        lifecycle_value["merged_commit"],
+    )
+    discovered = DiscoveredRequestV1(
+        request_sha256,
+        Path(urlsplit(bundle["request_asset_url"]).path).name,
+        bundle["request_asset_url"],
+        "coordinated-request",
+        request,
+    )
+    decision = reconcile_request(discovered, lifecycle)
+    product_mode = load_product_evidence_activation(
+        tap_root / "Kandelo/staging/product-evidence-activation.toml"
+    )
+
+    progress = {}
+    for selection in selections:
+        build_spec = build_specs[selection.product_id]
+        repository = candidate_product_repository(
+            owner=policy.candidate_owner,
+            repository_prefix=policy.candidate_repository_prefix,
+            candidate_suffix=policy.candidate_suffix,
+            target_abi=request["target_abi"]["version"],
+            product_id=selection.product_id,
+        )
+        candidates = inspect_candidate_product_repository(
+            repository,
+            request=request,
+            request_sha256=request_sha256,
+            expected_source_repository=policy.tap_repository,
+            transport=transport,
+        )
+        current = [
+            item
+            for item in candidates
+            if item.runtime_bundle_sha256 == runtime_bundle_sha256
+        ]
+        current_identities = {
+            (
+                item.artifact.manifest_sha256,
+                item.artifact.architecture,
+                item.artifact.vfs_layer_sha256,
+                item.artifact.vfs_layer_bytes,
+                item.artifact.builder_report_sha256,
+            )
+            for item in current
+        }
+        if len(current_identities) > 1:
+            raise ProductEvidenceError(
+                f"product {selection.product_id} has conflicting current candidates"
+            )
+        for item in current:
+            if (
+                item.artifact.manifest_sha256 != build_spec["manifest_sha256"]
+                or item.artifact.architecture != build_spec["architecture"]
+            ):
+                raise ProductEvidenceError(
+                    f"product {selection.product_id} candidate differs from its catalog"
+                )
+
+        aggregate_entries = []
+        full_product = {
+            "id": build_spec["id"],
+            "manifest_path": build_spec["manifest_path"],
+            "manifest_sha256": build_spec["manifest_sha256"],
+            "architecture": build_spec["architecture"],
+            "output": build_spec["output"],
+        }
+        for item in sorted(current, key=lambda value: value.locator.manifest_digest):
+            aggregate_entries.extend(
+                inspect_product_evidence_repository(
+                    repository + "/evidence",
+                    request=request,
+                    request_sha256=request_sha256,
+                    product=full_product,
+                    candidate_product=item.locator,
+                    runtime_bundle_sha256=runtime_bundle_sha256,
+                    expected_source_repository=policy.tap_repository,
+                    transport=transport,
+                )
+            )
+        aggregate_identities = {
+            (
+                item.record["product_evidence"]["runtime_evidence_sha256"],
+                item.outcome,
+                item.record["common"]["promotion_state"],
+            )
+            for item in aggregate_entries
+        }
+        if len(aggregate_identities) > 1:
+            raise ProductEvidenceError(
+                f"product {selection.product_id} has conflicting current evidence"
+            )
+        progress[selection.product_id] = ProductProgressV1(
+            formulae_ready=formula_readiness[selection.product_id],
+            candidate_runtime_sha256=(runtime_bundle_sha256 if current else None),
+            terminal_results=(),
+            evidence_record_sha256=(
+                min(item.record_sha256 for item in aggregate_entries)
+                if aggregate_entries
+                else None
+            ),
+        )
+
+    wave = build_product_workflow_wave(
+        request,
+        decision,
+        tuple(selections),
+        runtime_bundle_sha256=runtime_bundle_sha256,
+        progress=progress,
+        activation_mode=product_mode,
+    )
+    (output / "product-workflow-wave.json").write_bytes(canonical_bytes(wave))
+    _write_github_outputs(
+        Path(args.github_output),
+        {
+            "browser_evidence_matrix": json.dumps(
+                wave["browser_matrix"], separators=(",", ":"), sort_keys=True
+            ),
+            "node_evidence_matrix": json.dumps(
+                wave["node_matrix"], separators=(",", ":"), sort_keys=True
+            ),
+            "product_matrix": json.dumps(
+                wave["product_matrix"], separators=(",", ":"), sort_keys=True
             ),
         },
     )
@@ -759,6 +1157,1954 @@ def _execute_verification(args: argparse.Namespace) -> int:
         run=run,
         output=Path(args.out),
     )
+
+
+def _product_subprocess_environment(
+    root: Path, *, ambient: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    """Create one private positive-allowlist environment for candidate work."""
+
+    source = os.environ if ambient is None else ambient
+    environment_root = Path(root)
+    try:
+        if environment_root.is_symlink():
+            raise ProductInputResolutionError(
+                "product subprocess environment root must not be a symlink"
+            )
+        environment_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        metadata = environment_root.lstat()
+    except OSError as error:
+        raise ProductInputResolutionError(
+            f"product subprocess environment root is unavailable: {error}"
+        ) from error
+    if not environment_root.is_dir() or stat.S_ISLNK(metadata.st_mode):
+        raise ProductInputResolutionError(
+            "product subprocess environment root must be a real directory"
+        )
+    environment_root = environment_root.resolve(strict=True)
+    private_paths = {
+        "HOME": environment_root / "home",
+        "TMPDIR": environment_root / "tmp",
+        "XDG_CACHE_HOME": environment_root / "cache",
+        "XDG_CONFIG_HOME": environment_root / "config",
+        "CARGO_HOME": environment_root / "cargo-home",
+        "NPM_CONFIG_CACHE": environment_root / "npm-cache",
+    }
+    for path in private_paths.values():
+        try:
+            path.mkdir(exist_ok=True, mode=0o700)
+            path.chmod(0o700)
+            path_metadata = path.lstat()
+        except OSError as error:
+            raise ProductInputResolutionError(
+                f"product subprocess private directory is unavailable: {error}"
+            ) from error
+        if stat.S_ISLNK(path_metadata.st_mode) or not stat.S_ISDIR(
+            path_metadata.st_mode
+        ):
+            raise ProductInputResolutionError(
+                "product subprocess private path must be a real directory"
+            )
+
+    allowed = (
+        "CI",
+        "GIT_SSL_CAINFO",
+        "KANDELO_DEV_SHELL_TOOL_PATH",
+        "KANDELO_NIX_BIN",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "LOGNAME",
+        "NIX_SSL_CERT_FILE",
+        "NO_COLOR",
+        "PATH",
+        "SOURCE_DATE_EPOCH",
+        "SSL_CERT_FILE",
+        "TERM",
+        "TZ",
+        "USER",
+    )
+    environment = {
+        name: source[name]
+        for name in allowed
+        if isinstance(source.get(name), str) and source[name]
+    }
+    environment.update({name: str(path) for name, path in private_paths.items()})
+    environment.update(
+        {
+            "CI": "true",
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+    )
+    return environment
+
+
+def _runtime_validation_arguments(
+    *,
+    kandelo_policy_root: Path,
+    bundle: Path,
+    artifact_root: Path,
+    source_root: Path,
+    source: Mapping[str, Any],
+    target_abi: Mapping[str, Any],
+    build_policy_sha256: str,
+) -> list[Path | str]:
+    """Build the protected exact-runtime validator argv without shell interpolation."""
+
+    command = r'''set -euo pipefail
+host_target="$(rustc -vV | awk '/^host/ {print $2}')"
+exec cargo run -p xtask --target "$host_target" --quiet -- \
+  abi-staging runtime-bundle validate "$@"
+'''
+    return [
+        kandelo_policy_root / "scripts/dev-shell.sh",
+        "bash",
+        "-c",
+        command,
+        "abi-staging-runtime",
+        "--bundle",
+        bundle,
+        "--artifact-root",
+        artifact_root,
+        "--source-root",
+        source_root,
+        "--repository",
+        str(source["repository"]),
+        "--commit",
+        str(source["commit"]),
+        "--tree",
+        str(source["tree"]),
+        "--abi",
+        str(target_abi["version"]),
+        "--snapshot-sha256",
+        str(target_abi["snapshot_sha256"]),
+        "--build-policy-sha256",
+        build_policy_sha256,
+    ]
+
+
+def _candidate_package_resolve_arguments(
+    *,
+    kandelo_root: Path,
+    cache_root: Path,
+    cargo_target: Path,
+    sysroot: Path,
+    architecture: str,
+    package: Mapping[str, Any],
+) -> list[Path | str]:
+    """Build one exact-head package through its normal resolver path."""
+
+    name = str(package["name"])
+    outputs = package["outputs"]
+    source_roles = package["source_roles"]
+    if (
+        architecture not in {"wasm32", "wasm64"}
+        or not isinstance(outputs, list)
+        or not isinstance(source_roles, list)
+        or any(not isinstance(value, str) for value in [name, *outputs, *source_roles])
+    ):
+        raise ProductInputResolutionError(
+            "candidate package projection is malformed"
+        )
+    command = r'''set -euo pipefail
+cache_root="$1"
+cargo_target="$2"
+sysroot="$3"
+private_root="$4"
+architecture="$5"
+package="$6"
+outputs="$7"
+source_roles="$8"
+export CARGO_TARGET_DIR="$cargo_target"
+export WASM_POSIX_BINARY_CACHE_ROOT="$cache_root"
+export WASM_POSIX_SYSROOT="$sysroot"
+export HOME="$private_root/home"
+export TMPDIR="$private_root/tmp"
+export KANDELO_VFS_PRODUCT_PACKAGE="$package"
+export KANDELO_VFS_PRODUCT_OUTPUTS="$outputs"
+export KANDELO_VFS_PRODUCT_SOURCE_ROLES="$source_roles"
+host_target="$(rustc -vV | awk '/^host/ {print $2}')"
+exec cargo run -p xtask --target "$host_target" --quiet -- \
+  build-deps "--arch=$architecture" --force-source-build resolve "$package"
+'''
+    return [
+        kandelo_root / "scripts/dev-shell.sh",
+        "bash",
+        "-c",
+        command,
+        "abi-staging-package",
+        cache_root,
+        cargo_target,
+        sysroot,
+        cache_root.parent,
+        architecture,
+        name,
+        ",".join(outputs),
+        ",".join(source_roles),
+    ]
+
+
+def _run_bounded_product_command(
+    command: list[Path | str],
+    *,
+    cwd: Path,
+    env: Mapping[str, str],
+    timeout_seconds: int,
+    stdout_limit: int,
+    stderr_limit: int,
+) -> subprocess.CompletedProcess[bytes]:
+    """Run one uncredentialed build command with killable bounded capture."""
+
+    if (
+        not command
+        or timeout_seconds < 1
+        or stdout_limit < 1
+        or stderr_limit < 1
+    ):
+        raise ProductInputResolutionError(
+            "product subprocess bounds are invalid"
+        )
+    arguments = [str(value) for value in command]
+    try:
+        process = subprocess.Popen(
+            arguments,
+            cwd=cwd,
+            env=dict(env),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except OSError as error:
+        raise ProductInputResolutionError(
+            f"cannot launch product subprocess: {error}"
+        ) from error
+    assert process.stdout is not None and process.stderr is not None
+    capture = {"stdout": bytearray(), "stderr": bytearray()}
+    limits = {"stdout": stdout_limit, "stderr": stderr_limit}
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+    selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+    deadline = time.monotonic() + timeout_seconds
+
+    def terminate() -> None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+    try:
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                terminate()
+                raise ProductInputResolutionError("product subprocess timed out")
+            for key, _mask in selector.select(min(remaining, 0.25)):
+                try:
+                    chunk = os.read(key.fileobj.fileno(), 64 * 1024)
+                except BlockingIOError:
+                    continue
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    key.fileobj.close()
+                    continue
+                stream = key.data
+                capture[stream].extend(chunk)
+                if len(capture[stream]) > limits[stream]:
+                    terminate()
+                    raise ProductInputResolutionError(
+                        f"product subprocess {stream} output exceeded its capture bound"
+                    )
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            terminate()
+            raise ProductInputResolutionError("product subprocess timed out")
+        try:
+            return_code = process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired as error:
+            terminate()
+            raise ProductInputResolutionError("product subprocess timed out") from error
+    finally:
+        selector.close()
+        for stream in (process.stdout, process.stderr):
+            if not stream.closed:
+                stream.close()
+    return subprocess.CompletedProcess(
+        arguments,
+        return_code,
+        bytes(capture["stdout"]),
+        bytes(capture["stderr"]),
+    )
+
+
+def _product_input_collector_arguments(
+    *,
+    kandelo_root: Path,
+    kandelo_policy_root: Path,
+    catalog: Path,
+    product_id: str,
+    source: Mapping[str, Any],
+    target_abi: Mapping[str, Any],
+    policy_sha256: str,
+    dev_shell_lock_sha256: str,
+    package_roots: Path,
+    archive_files: Path,
+    runtime_root: Path,
+    out: Path,
+) -> list[Path | str]:
+    """Build the closed protected collector argv inside the exact-head shell."""
+
+    return [
+        kandelo_root / "scripts/dev-shell.sh",
+        "npx",
+        "--no-install",
+        "tsx",
+        kandelo_policy_root / "scripts/abi-staging-collect-product-inputs.ts",
+        "--archive-files",
+        archive_files,
+        "--catalog",
+        catalog,
+        "--dev-shell-lock-sha256",
+        dev_shell_lock_sha256,
+        "--out",
+        out,
+        "--package-roots",
+        package_roots,
+        "--policy-sha256",
+        policy_sha256,
+        "--product-id",
+        product_id,
+        "--program-index",
+        kandelo_root / "packages/registry/program-packages.json",
+        "--runtime-root",
+        runtime_root,
+        "--snapshot-sha256",
+        target_abi["snapshot_sha256"],
+        "--source-commit",
+        source["commit"],
+        "--source-repository",
+        source["repository"],
+        "--source-root",
+        kandelo_root,
+        "--source-tree",
+        source["tree"],
+        "--target-abi",
+        str(target_abi["version"]),
+    ]
+
+
+def _vfs_product_builder_arguments(
+    *,
+    kandelo_root: Path,
+    kandelo_policy_root: Path,
+    manifest: Path,
+    resolved_inputs: Path,
+    work_dir: Path,
+    output: Path,
+    report: Path,
+) -> list[Path | str]:
+    """Build the closed protected VFS runner argv for one candidate builder."""
+
+    return [
+        kandelo_root / "scripts/dev-shell.sh",
+        "npx",
+        "--no-install",
+        "tsx",
+        kandelo_policy_root / "scripts/run-vfs-product-builder.ts",
+        "--inputs",
+        resolved_inputs,
+        "--manifest",
+        manifest,
+        "--output",
+        output,
+        "--report",
+        report,
+        "--work-dir",
+        work_dir,
+    ]
+
+
+class _ProductWorkTerminal(Exception):
+    def __init__(
+        self,
+        *,
+        outcome: str,
+        guard_code: str,
+        exit_code: int,
+        summary: bytes,
+    ) -> None:
+        super().__init__(guard_code)
+        self.outcome = outcome
+        self.guard_code = guard_code
+        self.exit_code = exit_code
+        self.summary = summary
+
+
+def _product_diagnostic_summary(label: str, detail: bytes | str = b"") -> bytes:
+    """Produce one bounded, non-secret terminal diagnostic summary."""
+
+    if isinstance(detail, bytes):
+        text = detail.decode("utf-8", errors="replace")
+    else:
+        text = str(detail)
+    normalized = text.replace("\0", "").strip()
+    combined = label if not normalized else f"{label}: {normalized}"
+    body = (combined + "\n").encode("utf-8")
+    if len(body) > 64 * 1024:
+        body = body[: 64 * 1024 - len("\n".encode())].decode(
+            "utf-8", errors="ignore"
+        ).encode("utf-8") + b"\n"
+    return body
+
+
+def _archive_download_arguments(
+    *, kandelo_policy_root: Path, archive: Mapping[str, Any], output: Path
+) -> list[Path | str]:
+    """Build a credential-free bounded HTTPS download command."""
+
+    url = str(archive["url"])
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+    ):
+        raise ProductInputResolutionError(
+            "product source archive URL is not one credential-free HTTPS URL"
+        )
+    return [
+        kandelo_policy_root / "scripts/dev-shell.sh",
+        "curl",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--location",
+        "--proto",
+        "=https",
+        "--proto-redir",
+        "=https",
+        "--max-time",
+        "900",
+        "--max-filesize",
+        str(MAX_INPUT_OBJECT_BYTES),
+        "--output",
+        output,
+        "--",
+        url,
+    ]
+
+
+def _resolve_candidate_package_roots(
+    *,
+    build_spec: Mapping[str, Any],
+    kandelo_root: Path,
+    runtime_root: Path,
+    work_root: Path,
+    environment: Mapping[str, str],
+) -> dict[str, str]:
+    cache_root = (work_root / "package-cache").resolve(strict=False)
+    cargo_target = (work_root / "cargo-target").resolve(strict=False)
+    cache_root.mkdir(mode=0o700)
+    cargo_target.mkdir(mode=0o700)
+    package_roots: dict[str, str] = {}
+    for package in build_spec["packages"]:
+        command = _candidate_package_resolve_arguments(
+            kandelo_root=kandelo_root,
+            cache_root=cache_root,
+            cargo_target=cargo_target,
+            sysroot=runtime_root
+            / "toolchain"
+            / f"{build_spec['architecture']}-sysroot",
+            architecture=build_spec["architecture"],
+            package=package,
+        )
+        try:
+            completed = _run_bounded_product_command(
+                command,
+                cwd=kandelo_root,
+                env=environment,
+                timeout_seconds=3 * 60 * 60,
+                stdout_limit=64 * 1024,
+                stderr_limit=1024 * 1024,
+            )
+        except ProductInputResolutionError as error:
+            raise _ProductWorkTerminal(
+                outcome="blocked",
+                guard_code="product_inputs_unavailable",
+                exit_code=78,
+                summary=_product_diagnostic_summary(
+                    f"package {package['name']} could not be resolved", error
+                ),
+            ) from error
+        if completed.returncode != 0:
+            raise _ProductWorkTerminal(
+                outcome="blocked",
+                guard_code="product_inputs_unavailable",
+                exit_code=78,
+                summary=_product_diagnostic_summary(
+                    f"package {package['name']} build failed", completed.stderr
+                ),
+            )
+        try:
+            lines = completed.stdout.decode("utf-8", errors="strict").splitlines()
+        except UnicodeDecodeError as error:
+            raise ProductInputResolutionError(
+                f"package {package['name']} resolver output is not UTF-8"
+            ) from error
+        if len(lines) != 1 or not lines[0]:
+            raise ProductInputResolutionError(
+                f"package {package['name']} resolver did not emit one path"
+            )
+        candidate_path = Path(lines[0])
+        try:
+            metadata = candidate_path.lstat()
+            resolved = candidate_path.resolve(strict=True)
+            resolved.relative_to(cache_root.resolve(strict=True))
+        except (OSError, ValueError) as error:
+            raise ProductInputResolutionError(
+                f"package {package['name']} resolver path escapes its private cache"
+            ) from error
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise ProductInputResolutionError(
+                f"package {package['name']} resolver output is not a real directory"
+            )
+        package_roots[package["name"]] = str(resolved)
+    return package_roots
+
+
+def _download_product_archives(
+    *,
+    build_spec: Mapping[str, Any],
+    kandelo_policy_root: Path,
+    work_root: Path,
+    environment: Mapping[str, str],
+) -> dict[str, str]:
+    archive_root = (work_root / "archives").resolve(strict=False)
+    archive_root.mkdir(mode=0o700)
+    archive_files: dict[str, str] = {}
+    for archive in build_spec["archives"]:
+        output = archive_root / archive["id"]
+        command = _archive_download_arguments(
+            kandelo_policy_root=kandelo_policy_root,
+            archive=archive,
+            output=output,
+        )
+        try:
+            completed = _run_bounded_product_command(
+                command,
+                cwd=kandelo_policy_root,
+                env=environment,
+                timeout_seconds=20 * 60,
+                stdout_limit=64 * 1024,
+                stderr_limit=1024 * 1024,
+            )
+        except ProductInputResolutionError as error:
+            raise _ProductWorkTerminal(
+                outcome="blocked",
+                guard_code="product_inputs_unavailable",
+                exit_code=78,
+                summary=_product_diagnostic_summary(
+                    f"archive {archive['id']} is unavailable", error
+                ),
+            ) from error
+        if completed.returncode != 0:
+            raise _ProductWorkTerminal(
+                outcome="blocked",
+                guard_code="product_inputs_unavailable",
+                exit_code=78,
+                summary=_product_diagnostic_summary(
+                    f"archive {archive['id']} download failed", completed.stderr
+                ),
+            )
+        try:
+            metadata = output.lstat()
+            body = output.read_bytes()
+        except OSError as error:
+            raise ProductInputResolutionError(
+                f"archive {archive['id']} output is unavailable: {error}"
+            ) from error
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or not body
+            or len(body) > MAX_INPUT_OBJECT_BYTES
+            or hashlib.sha256(body).hexdigest() != archive["sha256"]
+        ):
+            raise ProductInputResolutionError(
+                f"archive {archive['id']} differs from its pinned identity"
+            )
+        archive_files[archive["id"]] = str(output.resolve(strict=True))
+    return archive_files
+
+
+def _dependency_product_artifacts(
+    *,
+    dependency_product_ids: list[str],
+    request: Mapping[str, Any],
+    request_sha256: str,
+    runtime_bundle_sha256: str,
+    policy: Any,
+    transport: UrllibOciTransportV1,
+) -> tuple[Any, ...]:
+    artifacts = []
+    for product_id in dependency_product_ids:
+        repository = candidate_product_repository(
+            owner=policy.candidate_owner,
+            repository_prefix=policy.candidate_repository_prefix,
+            candidate_suffix=policy.candidate_suffix,
+            target_abi=request["target_abi"]["version"],
+            product_id=product_id,
+        )
+        entries = inspect_candidate_product_repository(
+            repository,
+            request=request,
+            request_sha256=request_sha256,
+            expected_source_repository=policy.tap_repository,
+            transport=transport,
+        )
+        current = [
+            entry
+            for entry in entries
+            if entry.runtime_bundle_sha256 == runtime_bundle_sha256
+        ]
+        if not current:
+            raise _ProductWorkTerminal(
+                outcome="blocked",
+                guard_code="product_dependency_unavailable",
+                exit_code=78,
+                summary=_product_diagnostic_summary(
+                    f"dependency product {product_id} has no current candidate"
+                ),
+            )
+        if len(current) != 1:
+            raise ProductInputResolutionError(
+                f"dependency product {product_id} has ambiguous current candidates"
+            )
+        artifacts.append(current[0].artifact)
+    return tuple(artifacts)
+
+
+def _write_private_product_authority(
+    root: Path,
+    *,
+    request_sha256: str,
+    work_id: str,
+    product: Mapping[str, Any],
+    runtime_artifact_id: int,
+    runtime_artifact_digest: str,
+    runtime_bundle_sha256: str,
+    outcome: str,
+    guard_code: str | None,
+    input_inventory_sha256: str | None,
+    resolved_inputs_sha256: str | None,
+) -> None:
+    destination = Path(root)
+    try:
+        destination.mkdir(parents=True, exist_ok=True, mode=0o700)
+        metadata = destination.lstat()
+    except OSError as error:
+        raise ProductInputResolutionError(
+            f"private product authority root is unavailable: {error}"
+        ) from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise ProductInputResolutionError(
+            "private product authority root is not a real directory"
+        )
+    body = canonical_bytes(
+        {
+            "schema": 1,
+            "kind": "kandelo-abi-staging-private-product-authority",
+            "request_sha256": request_sha256,
+            "work_id": work_id,
+            "product": dict(product),
+            "runtime_artifact": {
+                "id": runtime_artifact_id,
+                "digest": runtime_artifact_digest,
+            },
+            "runtime_bundle_sha256": runtime_bundle_sha256,
+            "outcome": outcome,
+            "guard_code": guard_code,
+            "input_inventory_sha256": input_inventory_sha256,
+            "resolved_inputs_sha256": resolved_inputs_sha256,
+        }
+    )
+    path = destination / "authority.json"
+    try:
+        with path.open("xb") as output:
+            output.write(body)
+        path.chmod(0o600)
+    except OSError as error:
+        raise ProductInputResolutionError(
+            f"cannot write private product authority: {error}"
+        ) from error
+
+
+def _execute_product_work(args: argparse.Namespace) -> int:
+    """Compose one exact candidate product from protected and public authority."""
+
+    tap_root = _protected_tap_root(args.tap_root)
+    policy = load_tap_staging_policy(tap_root / "Kandelo/staging/tap-policy.toml")
+    input_root = Path(args.coordination_root).resolve(strict=True)
+    bundle = load_coordination_bundle(
+        input_root / "coordination/coordination.json", policy=policy
+    )
+    request = bundle["request"]
+    request_sha256 = bundle["request_sha256"]
+    scope = select_product_execution_scope(
+        request,
+        request_sha256=request_sha256,
+        product_id=args.product_id,
+        work_id=args.work_id,
+    )
+    source = request["build_source"]
+    kandelo_root = _checked_checkout_source(
+        args.kandelo_root,
+        repository=source["repository"],
+        commit=source["commit"],
+        tree=source["tree"],
+    )
+    policy_commit = request["issuance"]["issuer_workflow_ref"].rsplit("@", 1)[-1]
+    kandelo_policy_root = _checked_checkout_source(
+        args.kandelo_policy_root,
+        repository=source["repository"],
+        commit=policy_commit,
+        tree=None,
+    )
+    if (
+        not str(args.runtime_artifact_id).isdigit()
+        or int(args.runtime_artifact_id) < 1
+        or len(args.runtime_artifact_digest) != 64
+        or any(character not in "0123456789abcdef" for character in args.runtime_artifact_digest)
+    ):
+        raise ProductInputResolutionError(
+            "runtime workflow artifact identity is malformed"
+        )
+    runtime_artifact_id = int(args.runtime_artifact_id)
+    runtime_bundle_path = input_root / "runtime/runtime-bundle.json"
+    runtime_root = input_root / "runtime/runtime"
+    try:
+        runtime_body = runtime_bundle_path.read_bytes()
+        runtime = load_canonical_mapping(runtime_body, "exact product runtime bundle")
+    except (OSError, ContractError) as error:
+        raise ProductInputResolutionError(
+            f"exact product runtime bundle is invalid: {error}"
+        ) from error
+    runtime_bundle_sha256 = hashlib.sha256(runtime_body).hexdigest()
+    catalog_path = kandelo_root / "images/vfs/products/generated/catalog.json"
+    try:
+        catalog = load_canonical_mapping(
+            catalog_path.read_bytes(), "exact candidate product catalog"
+        )
+    except (OSError, ContractError) as error:
+        raise ProductInputResolutionError(
+            f"exact candidate product catalog is invalid: {error}"
+        ) from error
+    build_spec = select_product_input_build_spec(
+        request, catalog, args.product_id
+    )
+    product = {
+        "id": build_spec["id"],
+        "manifest_sha256": build_spec["manifest_sha256"],
+        "output": build_spec["output"],
+    }
+    output = Path(args.out)
+    private_output = Path(args.private_out)
+    if (
+        output.exists()
+        or output.is_symlink()
+        or private_output.exists()
+        or private_output.is_symlink()
+    ):
+        raise ProductInputResolutionError(
+            "product public and private outputs must both be new"
+        )
+    output.parent.resolve(strict=True)
+    private_parent = private_output.parent.resolve(strict=True)
+    identity = product_runtime_identity(runtime, request)
+
+    def terminal(
+        *, outcome: str, guard_code: str, exit_code: int, summary: bytes
+    ) -> int:
+        write_product_build_handoff(
+            output,
+            request_sha256=request_sha256,
+            work_id=scope["work_id"],
+            product=product,
+            runtime_bundle_body=runtime_body,
+            outcome=outcome,
+            guard_code=guard_code,
+            exit_code=exit_code,
+            diagnostic_summary=summary,
+        )
+        _write_private_product_authority(
+            private_output,
+            request_sha256=request_sha256,
+            work_id=scope["work_id"],
+            product=product,
+            runtime_artifact_id=runtime_artifact_id,
+            runtime_artifact_digest=args.runtime_artifact_digest,
+            runtime_bundle_sha256=runtime_bundle_sha256,
+            outcome=outcome,
+            guard_code=guard_code,
+            input_inventory_sha256=None,
+            resolved_inputs_sha256=None,
+        )
+        return 0 if outcome == "blocked" else exit_code
+
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix="abi-staging-product-work-", dir=private_parent
+        ) as temporary:
+            work_root = Path(temporary).resolve(strict=True)
+            environment = _product_subprocess_environment(
+                work_root, ambient=os.environ
+            )
+            runtime_validation = _run_bounded_product_command(
+                _runtime_validation_arguments(
+                    kandelo_policy_root=kandelo_policy_root,
+                    bundle=runtime_bundle_path,
+                    artifact_root=runtime_root,
+                    source_root=kandelo_root,
+                    source=source,
+                    target_abi=request["target_abi"],
+                    build_policy_sha256=identity["policy_sha256"],
+                ),
+                cwd=kandelo_policy_root,
+                env=environment,
+                timeout_seconds=30 * 60,
+                stdout_limit=64 * 1024,
+                stderr_limit=1024 * 1024,
+            )
+            if runtime_validation.returncode != 0:
+                raise ProductInputResolutionError(
+                    "exact runtime validation failed: "
+                    + runtime_validation.stderr.decode("utf-8", errors="replace")
+                )
+
+            package_roots = _resolve_candidate_package_roots(
+                build_spec=build_spec,
+                kandelo_root=kandelo_root,
+                runtime_root=runtime_root,
+                work_root=work_root,
+                environment=environment,
+            )
+            archive_files = _download_product_archives(
+                build_spec=build_spec,
+                kandelo_policy_root=kandelo_policy_root,
+                work_root=work_root,
+                environment=environment,
+            )
+            package_map = work_root / "package-roots.json"
+            archive_map = work_root / "archive-files.json"
+            package_map.write_bytes(canonical_bytes(package_roots))
+            archive_map.write_bytes(canonical_bytes(archive_files))
+            collector = _run_bounded_product_command(
+                _product_input_collector_arguments(
+                    kandelo_root=kandelo_root,
+                    kandelo_policy_root=kandelo_policy_root,
+                    catalog=catalog_path,
+                    product_id=args.product_id,
+                    source=source,
+                    target_abi=request["target_abi"],
+                    policy_sha256=identity["policy_sha256"],
+                    dev_shell_lock_sha256=identity["dev_shell_lock_sha256"],
+                    package_roots=package_map,
+                    archive_files=archive_map,
+                    runtime_root=runtime_root,
+                    out=private_output,
+                ),
+                cwd=kandelo_root,
+                env=environment,
+                timeout_seconds=60 * 60,
+                stdout_limit=4 * 1024 * 1024,
+                stderr_limit=1024 * 1024,
+            )
+            if collector.returncode != 0:
+                raise _ProductWorkTerminal(
+                    outcome="blocked",
+                    guard_code="product_inputs_unavailable",
+                    exit_code=78,
+                    summary=_product_diagnostic_summary(
+                        "protected product input collection failed", collector.stderr
+                    ),
+                )
+            inventory_path = private_output / "inputs/artifacts.json"
+            inventory_body = inventory_path.read_bytes()
+            inventory = load_product_input_object_inventory(inventory_body)
+            checked_inventory = validate_product_input_object_authority(
+                inventory,
+                request=request,
+                request_sha256=request_sha256,
+                catalog=catalog,
+                runtime_bundle=runtime,
+                object_root=private_output,
+                source_root=kandelo_root,
+                runtime_root=runtime_root,
+            )
+
+            transport = UrllibOciTransportV1(username="", token="")
+            verification_tests = load_verification_tests(
+                tap_root / "Kandelo/staging/verification-tests.toml"
+            )
+            public_inventory = scan_scheduling_inventory(
+                bundle["tap_plan"],
+                policy=policy,
+                verification_tests=verification_tests,
+                transport=transport,
+            )
+            product_artifacts = _dependency_product_artifacts(
+                dependency_product_ids=build_spec["dependency_product_ids"],
+                request=request,
+                request_sha256=request_sha256,
+                runtime_bundle_sha256=runtime_bundle_sha256,
+                policy=policy,
+                transport=transport,
+            )
+            resolution = resolve_product_from_checked_input_authority(
+                checked_inventory,
+                request=request,
+                request_sha256=request_sha256,
+                catalog=catalog,
+                tap_plan=bundle["tap_plan"],
+                records=public_inventory.records,
+                candidate_records=public_inventory.candidate_records,
+                candidate_locators=public_inventory.candidate_locators,
+                source_custody_records=public_inventory.source_custody_records,
+                reuse_records=public_inventory.reuse_records,
+                verification_records=public_inventory.verification_records,
+                verification_locators=public_inventory.verification_locators,
+                verification_tests=verification_tests,
+                runtime_bundle=runtime,
+                product_artifacts=product_artifacts,
+            )
+            resolved_body = canonical_bytes(resolution.resolved_inputs)
+            closed_input_root = work_root / "closed-inputs"
+            closed_object_root = closed_input_root / "inputs/objects"
+            closed_object_root.mkdir(parents=True, mode=0o700)
+            for item in checked_inventory["objects"]:
+                source_path = private_output.joinpath(*item["path"].split("/"))
+                destination_path = closed_input_root.joinpath(
+                    *item["path"].split("/")
+                )
+                destination_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                try:
+                    with source_path.open("rb") as source_file, destination_path.open(
+                        "xb"
+                    ) as destination_file:
+                        shutil.copyfileobj(
+                            source_file, destination_file, length=1024 * 1024
+                        )
+                    destination_path.chmod(0o600)
+                except OSError as error:
+                    raise ProductInputResolutionError(
+                        f"cannot close private product input {item['id']}: {error}"
+                    ) from error
+            resolved_path = materialize_resolved_product_input_objects(
+                resolved_body,
+                root=closed_input_root,
+                transport=transport,
+            )
+
+            builder_root = work_root / "builder"
+            builder_root.mkdir(mode=0o700)
+            vfs_path = builder_root / build_spec["output"]
+            report_path = builder_root / "builder-report.json"
+            try:
+                builder = _run_bounded_product_command(
+                    _vfs_product_builder_arguments(
+                        kandelo_root=kandelo_root,
+                        kandelo_policy_root=kandelo_policy_root,
+                        manifest=kandelo_root / build_spec["manifest_path"],
+                        resolved_inputs=resolved_path,
+                        work_dir=builder_root,
+                        output=vfs_path,
+                        report=report_path,
+                    ),
+                    cwd=kandelo_root,
+                    env=environment,
+                    timeout_seconds=3 * 60 * 60,
+                    stdout_limit=1024 * 1024,
+                    stderr_limit=4 * 1024 * 1024,
+                )
+            except ProductInputResolutionError as error:
+                guard = (
+                    "product_builder_timeout"
+                    if "timed out" in str(error)
+                    else "product_builder_failed"
+                )
+                raise _ProductWorkTerminal(
+                    outcome="failure",
+                    guard_code=guard,
+                    exit_code=1,
+                    summary=_product_diagnostic_summary(
+                        "candidate VFS product builder did not complete", error
+                    ),
+                ) from error
+            if builder.returncode != 0:
+                raise _ProductWorkTerminal(
+                    outcome="failure",
+                    guard_code="product_builder_failed",
+                    exit_code=1,
+                    summary=_product_diagnostic_summary(
+                        "candidate VFS product builder failed", builder.stderr
+                    ),
+                )
+            report_body = report_path.read_bytes()
+            vfs_body = vfs_path.read_bytes()
+            if not args.validate_builder_report:
+                raise ProductInputResolutionError(
+                    "protected builder-report validation is required"
+                )
+            validate_candidate_builder_report(report_body)
+            result = write_product_build_handoff(
+                output,
+                request_sha256=request_sha256,
+                work_id=scope["work_id"],
+                product=product,
+                runtime_bundle_body=runtime_body,
+                outcome="success",
+                guard_code=None,
+                exit_code=0,
+                diagnostic_summary=b"exact product composition completed\n",
+                resolved_inputs_body=resolved_body,
+                builder_report_body=report_body,
+                vfs_body=vfs_body,
+            )
+            _write_private_product_authority(
+                private_output,
+                request_sha256=request_sha256,
+                work_id=scope["work_id"],
+                product=product,
+                runtime_artifact_id=runtime_artifact_id,
+                runtime_artifact_digest=args.runtime_artifact_digest,
+                runtime_bundle_sha256=runtime_bundle_sha256,
+                outcome=result["outcome"],
+                guard_code=None,
+                input_inventory_sha256=hashlib.sha256(inventory_body).hexdigest(),
+                resolved_inputs_sha256=hashlib.sha256(resolved_body).hexdigest(),
+            )
+            return 0
+    except _ProductWorkTerminal as terminal_state:
+        return terminal(
+            outcome=terminal_state.outcome,
+            guard_code=terminal_state.guard_code,
+            exit_code=terminal_state.exit_code,
+            summary=terminal_state.summary,
+        )
+    except (InventoryError, ProductEvidenceError) as error:
+        return terminal(
+            outcome="failure",
+            guard_code="product_integrity_mismatch",
+            exit_code=1,
+            summary=_product_diagnostic_summary(
+                "protected product authority validation failed", error
+            ),
+        )
+    except ProductInputResolutionError as error:
+        return terminal(
+            outcome="failure",
+            guard_code="product_integrity_mismatch",
+            exit_code=1,
+            summary=_product_diagnostic_summary(
+                "exact product composition was rejected", error
+            ),
+        )
+
+
+def _private_lazy_input_bodies(
+    *,
+    resolved_inputs: Mapping[str, Any],
+    checked_inventory: Mapping[str, Any],
+    private_root: Path,
+) -> dict[str, bytes]:
+    """Recover only exact nonpublic lazy bytes admitted by the manifest."""
+
+    objects = {item["id"]: item for item in checked_inventory["objects"]}
+    expected = {
+        item["id"]: item
+        for item in resolved_inputs["inputs"]
+        if item["effective_materialization"] == "lazy-reference"
+        and item["kind"] in NONPUBLIC_PRODUCT_INPUT_KINDS
+    }
+    if set(expected) != set(objects).intersection(expected):
+        raise ProductInputResolutionError(
+            "private lazy product object closure is incomplete"
+        )
+    bodies: dict[str, bytes] = {}
+    for input_id in sorted(expected):
+        item = objects[input_id]
+        resolved = expected[input_id]
+        if (
+            item["sha256"] != resolved["sha256"]
+            or item["bytes"] != resolved["bytes"]
+            or item["kind"] != resolved["kind"]
+        ):
+            raise ProductInputResolutionError(
+                f"private lazy product object {input_id} differs from resolution"
+            )
+        path = private_root.joinpath(*item["path"].split("/"))
+        try:
+            metadata = path.lstat()
+            body = path.read_bytes()
+        except OSError as error:
+            raise ProductInputResolutionError(
+                f"private lazy product object {input_id} is unavailable: {error}"
+            ) from error
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or len(body) != resolved["bytes"]
+            or hashlib.sha256(body).hexdigest() != resolved["sha256"]
+        ):
+            raise ProductInputResolutionError(
+                f"private lazy product object {input_id} changed"
+            )
+        bodies[input_id] = body
+    return bodies
+
+
+def _publish_workflow_product_candidate(args: argparse.Namespace) -> None:
+    """Publish one candidate only after a fresh protected reconstruction."""
+
+    _require_workflow_publication_guards(args)
+    if not args.validate_builder_report:
+        raise WorkflowPublicationError(
+            "product candidate publication requires builder-report validation"
+        )
+    tap_root = TAP_ROOT.resolve(strict=True)
+    policy = load_tap_staging_policy(tap_root / "Kandelo/staging/tap-policy.toml")
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    workflow_ref = os.environ.get("GITHUB_WORKFLOW_REF", "")
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if repository != policy.tap_repository:
+        raise WorkflowPublicationError(
+            "current workflow repository differs from tap policy"
+        )
+    tap_source = snapshot_tap_source(tap_root, policy.tap_repository)
+    if tap_source["commit"] != args.head_sha:
+        raise WorkflowPublicationError(
+            "protected product publisher checkout differs from workflow head"
+        )
+    _recheck_workflow_activation(tap_root)
+    client = GitHubWorkflowArtifactClientV1(
+        repository,
+        token,
+        run_id=args.run_id,
+        run_attempt=args.run_attempt,
+        head_sha=args.head_sha,
+        workflow_ref=workflow_ref,
+    )
+    expected_handoff_name = (
+        f"abi-staging-product-build-{args.product_id}-{args.work_id}-"
+        f"{args.run_id}-{args.run_attempt}"
+    )
+    expected_private_name = (
+        f"abi-staging-product-private-{args.product_id}-{args.work_id}-"
+        f"{args.run_id}-{args.run_attempt}"
+    )
+    if (
+        args.handoff_artifact_name != expected_handoff_name
+        or args.private_artifact_name != expected_private_name
+    ):
+        raise WorkflowPublicationError(
+            "product publisher artifact names differ from protected scope"
+        )
+
+    with tempfile.TemporaryDirectory(
+        prefix="abi-staging-product-publication-"
+    ) as temporary:
+        root = Path(temporary)
+        coordination_artifact = client.artifact_by_name(
+            name=f"abi-staging-coordination-{args.run_id}-{args.run_attempt}"
+        )
+        coordination_root = root / "coordination"
+        client.extract_artifact(
+            coordination_artifact,
+            coordination_root,
+            max_files=policy.max_handoff_files,
+            max_bytes=policy.max_handoff_bytes,
+        )
+        bundle = load_coordination_bundle(
+            coordination_root / "coordination.json", policy=policy
+        )
+        request = bundle["request"]
+        request_sha256 = bundle["request_sha256"]
+        scope = select_product_execution_scope(
+            request,
+            request_sha256=request_sha256,
+            product_id=args.product_id,
+            work_id=args.work_id,
+        )
+        source = request["build_source"]
+        kandelo_root = _checked_checkout_source(
+            args.kandelo_root,
+            repository=source["repository"],
+            commit=source["commit"],
+            tree=source["tree"],
+        )
+        policy_commit = request["issuance"]["issuer_workflow_ref"].rsplit(
+            "@", 1
+        )[-1]
+        _checked_checkout_source(
+            args.kandelo_policy_root,
+            repository=source["repository"],
+            commit=policy_commit,
+            tree=None,
+        )
+
+        runtime_artifact = client.artifact_by_name(
+            name=(
+                f"abi-staging-runtime-{request_sha256}-"
+                f"{args.run_id}-{args.run_attempt}"
+            )
+        )
+        runtime_artifact_root = root / "runtime"
+        client.extract_artifact(
+            runtime_artifact,
+            runtime_artifact_root,
+            max_files=65_536,
+            max_bytes=8 * 1024**3,
+        )
+        runtime_bundle_path = runtime_artifact_root / "runtime-bundle.json"
+        runtime_root = runtime_artifact_root / "runtime"
+        try:
+            runtime_body = runtime_bundle_path.read_bytes()
+            runtime = load_canonical_mapping(
+                runtime_body, "protected product publication runtime"
+            )
+        except (OSError, ContractError) as error:
+            raise WorkflowPublicationError(
+                f"product publication runtime is invalid: {error}"
+            ) from error
+        runtime_sha256 = hashlib.sha256(runtime_body).hexdigest()
+        product_runtime_identity(runtime, request)
+
+        handoff_artifact = client.artifact_by_name(name=expected_handoff_name)
+        handoff_root = root / "handoff"
+        client.extract_artifact(
+            handoff_artifact,
+            handoff_root,
+            max_files=policy.max_handoff_files,
+            max_bytes=policy.max_handoff_bytes,
+        )
+        product_result = validate_product_build_handoff(
+            handoff_root,
+            expected_product_id=args.product_id,
+            expected_work_id=scope["work_id"],
+            expected_request_sha256=request_sha256,
+            expected_runtime_bundle_sha256=runtime_sha256,
+            max_files=policy.max_handoff_files,
+            max_bytes=policy.max_handoff_bytes,
+        )
+        if product_result["outcome"] != "success":
+            raise WorkflowPublicationError(
+                "protected publisher cannot publish an unsuccessful product handoff"
+            )
+        product = product_result["product"]
+
+        private_artifact = client.artifact_by_name(name=expected_private_name)
+        private_root = root / "private"
+        client.extract_artifact(
+            private_artifact,
+            private_root,
+            max_files=policy.max_handoff_files,
+            max_bytes=policy.max_handoff_bytes,
+        )
+        private = validate_private_product_authority_handoff(
+            private_root,
+            expected_request_sha256=request_sha256,
+            expected_work_id=scope["work_id"],
+            expected_product=product,
+            expected_runtime_artifact_id=runtime_artifact.id,
+            expected_runtime_artifact_digest=runtime_artifact.sha256,
+            expected_runtime_bundle_sha256=runtime_sha256,
+            max_files=policy.max_handoff_files,
+            max_bytes=policy.max_handoff_bytes,
+        )
+
+        catalog_path = kandelo_root / "images/vfs/products/generated/catalog.json"
+        try:
+            catalog = load_canonical_mapping(
+                catalog_path.read_bytes(), "protected candidate product catalog"
+            )
+        except (OSError, ContractError) as error:
+            raise WorkflowPublicationError(
+                f"product publication catalog is invalid: {error}"
+            ) from error
+        build_spec = select_product_input_build_spec(
+            request, catalog, args.product_id
+        )
+        if (
+            build_spec["manifest_sha256"] != product["manifest_sha256"]
+            or build_spec["output"] != product["output"]
+        ):
+            raise WorkflowPublicationError(
+                "product publication scope differs from exact catalog"
+            )
+        checked_inventory = validate_product_input_object_authority(
+            private["inventory"],
+            request=request,
+            request_sha256=request_sha256,
+            catalog=catalog,
+            runtime_bundle=runtime,
+            object_root=private_root,
+            source_root=kandelo_root,
+            runtime_root=runtime_root,
+        )
+        transport = UrllibOciTransportV1(username="", token="")
+        verification_tests = load_verification_tests(
+            tap_root / "Kandelo/staging/verification-tests.toml"
+        )
+        public_inventory = scan_scheduling_inventory(
+            bundle["tap_plan"],
+            policy=policy,
+            verification_tests=verification_tests,
+            transport=transport,
+        )
+        product_artifacts = _dependency_product_artifacts(
+            dependency_product_ids=build_spec["dependency_product_ids"],
+            request=request,
+            request_sha256=request_sha256,
+            runtime_bundle_sha256=runtime_sha256,
+            policy=policy,
+            transport=transport,
+        )
+        resolution = resolve_product_from_checked_input_authority(
+            checked_inventory,
+            request=request,
+            request_sha256=request_sha256,
+            catalog=catalog,
+            tap_plan=bundle["tap_plan"],
+            records=public_inventory.records,
+            candidate_records=public_inventory.candidate_records,
+            candidate_locators=public_inventory.candidate_locators,
+            source_custody_records=public_inventory.source_custody_records,
+            reuse_records=public_inventory.reuse_records,
+            verification_records=public_inventory.verification_records,
+            verification_locators=public_inventory.verification_locators,
+            verification_tests=verification_tests,
+            runtime_bundle=runtime,
+            product_artifacts=product_artifacts,
+        )
+        resolved_body = canonical_bytes(resolution.resolved_inputs)
+        if (
+            hashlib.sha256(resolved_body).hexdigest()
+            != private["resolved_inputs_sha256"]
+            or (handoff_root / "resolved-inputs.json").read_bytes()
+            != resolved_body
+        ):
+            raise WorkflowPublicationError(
+                "product handoff resolved inputs differ from protected reconstruction"
+            )
+        lazy_input_bodies = _private_lazy_input_bodies(
+            resolved_inputs=resolution.resolved_inputs,
+            checked_inventory=checked_inventory,
+            private_root=private_root,
+        )
+        candidate_repository_name = candidate_product_repository(
+            owner=policy.candidate_owner,
+            repository_prefix=policy.candidate_repository_prefix,
+            candidate_suffix=policy.candidate_suffix,
+            target_abi=request["target_abi"]["version"],
+            product_id=args.product_id,
+        )
+        candidate_plan = build_candidate_product_oci_plan(
+            repository=candidate_repository_name,
+            publisher_repository=policy.tap_repository,
+            input_plan=resolution.plan,
+            vfs_body=(handoff_root / product["output"]).read_bytes(),
+            builder_report_body=(handoff_root / "builder-report.json").read_bytes(),
+            resolved_inputs_body=resolved_body,
+            runtime_bundle_body=runtime_body,
+            runtime_root=runtime_root,
+            lazy_input_bodies=lazy_input_bodies,
+        )
+        username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
+        package_token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
+        _recheck_workflow_activation(tap_root)
+        with isolated_oras_transport(
+            username=username, token=package_token
+        ) as publication_transport:
+            locator = publish_candidate_product(
+                candidate_plan,
+                transport=publication_transport,
+                expected_source_repository=policy.tap_repository,
+            )
+        output = Path(args.out)
+        if output.exists() or output.is_symlink():
+            raise WorkflowPublicationError(
+                "product candidate locator output must be new"
+            )
+        output.write_bytes(canonical_bytes(asdict(locator)))
+
+
+def _product_evidence_runner_arguments(
+    *,
+    host: str,
+    builder_report: Path,
+    candidate_locator: Path,
+    context: Path,
+    definitions: Path,
+    output: Path,
+    products: Path,
+    resolved_inputs: Path,
+    runtime_bundle: Path,
+    runtime_root: Path,
+    source_root: Path,
+    vfs: Path,
+) -> list[Path | str]:
+    """Build the closed protected runner argv for exactly one host."""
+
+    if host not in {"node", "browser"}:
+        raise ProductEvidenceError("product evidence runner host is unsupported")
+    try:
+        policy_root = definitions.parents[2]
+    except IndexError as error:
+        raise ProductEvidenceError(
+            "protected evidence definition path is outside its checkout"
+        ) from error
+    script = policy_root / "scripts" / (
+        "abi-staging-product-node-evidence.ts"
+        if host == "node"
+        else "abi-staging-product-browser-evidence.ts"
+    )
+    arguments: list[Path | str] = [
+        script,
+        "--builder-report",
+        builder_report,
+        "--candidate-locator",
+        candidate_locator,
+        "--context",
+        context,
+        "--definitions",
+        definitions,
+        "--output",
+        output,
+        "--products",
+        products,
+        "--resolved-inputs",
+        resolved_inputs,
+        "--runtime-bundle",
+        runtime_bundle,
+        "--runtime-root",
+        runtime_root,
+        "--vfs",
+        vfs,
+    ]
+    if host == "node":
+        arguments.extend(("--source-root", source_root))
+    else:
+        arguments.extend(
+            (
+                "--pages",
+                source_root
+                / "apps/browser-demos/pages/kandelo/kernel-host/"
+                "pages-vfs-products.generated.json",
+                "--tests",
+                source_root / "tests/vfs-products.generated.json",
+            )
+        )
+    return arguments
+
+
+def _checked_checkout_source(
+    root_value: str, *, repository: str, commit: str, tree: str | None
+) -> Path:
+    root = Path(root_value).resolve(strict=True)
+    observed = snapshot_tap_source(root, repository)
+    if observed["commit"] != commit or (
+        tree is not None and observed["tree"] != tree
+    ):
+        raise ProductEvidenceError(
+            "evidence checkout differs from its protected exact source identity"
+        )
+    try:
+        status = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain=v1", "--untracked-files=all"],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise ProductEvidenceError(
+            f"cannot inspect exact evidence checkout: {error}"
+        ) from error
+    if status.stdout:
+        raise ProductEvidenceError("exact evidence checkout contains changes")
+    return root
+
+
+def _execute_product_evidence_work(args: argparse.Namespace) -> int:
+    """Validate inert handoffs, derive context, and run one protected host probe."""
+
+    tap_root = _protected_tap_root(args.tap_root)
+    policy = load_tap_staging_policy(
+        tap_root / "Kandelo/staging/tap-policy.toml"
+    )
+    input_root = Path(args.input_root).resolve(strict=True)
+    coordination_path = input_root / "coordination/coordination.json"
+    bundle = load_coordination_bundle(coordination_path, policy=policy)
+    request = bundle["request"]
+    request_digest = bundle["request_sha256"]
+    scope = select_product_evidence_execution_scope(
+        request,
+        request_sha256=request_digest,
+        product_id=args.product_id,
+        product_work_id=args.product_work_id,
+        host=args.host,
+        definition_id=args.definition_id,
+        work_id=args.work_id,
+    )
+    source = request["build_source"]
+    kandelo_root = _checked_checkout_source(
+        args.kandelo_root,
+        repository=source["repository"],
+        commit=source["commit"],
+        tree=source["tree"],
+    )
+    workflow_ref = request["issuance"]["issuer_workflow_ref"]
+    policy_commit = workflow_ref.rsplit("@", 1)[-1]
+    kandelo_policy_root = _checked_checkout_source(
+        args.kandelo_policy_root,
+        repository=source["repository"],
+        commit=policy_commit,
+        tree=None,
+    )
+
+    runtime_bundle = input_root / "runtime/runtime-bundle.json"
+    runtime_root = input_root / "runtime/runtime"
+    runtime_body = runtime_bundle.read_bytes()
+    runtime_sha256 = hashlib.sha256(runtime_body).hexdigest()
+    product_root = input_root / "product"
+    product_result = validate_product_build_handoff(
+        product_root,
+        expected_product_id=args.product_id,
+        expected_work_id=args.product_work_id,
+        expected_request_sha256=request_digest,
+        expected_runtime_bundle_sha256=runtime_sha256,
+        max_files=16,
+        max_bytes=3 * 1024 * 1024 * 1024,
+    )
+    if product_result["outcome"] != "success":
+        raise ProductEvidenceError(
+            "product evidence cannot run without one successful exact composition"
+        )
+    expected_repository = "ghcr.io/" + candidate_product_repository(
+        owner=policy.tap_repository.split("/", 1)[0],
+        repository_prefix=policy.tap_repository.split("/", 1)[1] + "-abi-",
+        candidate_suffix="-candidates",
+        target_abi=request["target_abi"]["version"],
+        product_id=args.product_id,
+    )
+    candidate_locator_path = input_root / "candidate/product-candidate.json"
+    candidate = load_candidate_product_locator(
+        candidate_locator_path.read_bytes(), expected_repository=expected_repository
+    )
+    if (
+        candidate.vfs_layer_sha256 != product_result["vfs"]["sha256"]
+        or candidate.vfs_layer_bytes != product_result["vfs"]["bytes"]
+        or candidate.builder_report_sha256
+        != product_result["builder_report_sha256"]
+    ):
+        raise ProductEvidenceError(
+            "candidate locator differs from the exact composition handoff"
+        )
+
+    products_path = kandelo_root / "images/vfs/products/generated/catalog.json"
+    definitions_path = (
+        kandelo_policy_root / "abi/staging/evidence-definitions.generated.json"
+    )
+    catalog = load_canonical_mapping(
+        products_path.read_bytes(), "exact candidate product catalog"
+    )
+    definitions = load_canonical_mapping(
+        definitions_path.read_bytes(), "protected evidence definitions"
+    )
+    run = {
+        "repository": policy.tap_repository,
+        "workflow_ref": args.workflow_ref,
+        "run_id": args.run_id,
+        "job_id": f"{args.host}-product-evidence",
+        "attempt": args.run_attempt,
+    }
+    context = build_product_evidence_context(
+        request=request,
+        request_digest=request_digest,
+        catalog=catalog,
+        definitions=definitions,
+        candidate_product=candidate,
+        runtime_bundle_body=runtime_body,
+        host=args.host,
+        definition_id=args.definition_id,
+        run=run,
+    )
+    output = Path(args.out)
+    if output.exists() or output.is_symlink():
+        raise ProductEvidenceError("product evidence result path must be new")
+    output_parent = output.parent.resolve(strict=True)
+    with tempfile.TemporaryDirectory(
+        prefix="abi-staging-product-evidence-", dir=output_parent
+    ) as temporary:
+        context_path = Path(temporary) / "context.json"
+        context_path.write_bytes(canonical_bytes(context))
+        runner_arguments = _product_evidence_runner_arguments(
+            host=args.host,
+            builder_report=product_root / "builder-report.json",
+            candidate_locator=candidate_locator_path,
+            context=context_path,
+            definitions=definitions_path,
+            output=output,
+            products=products_path,
+            resolved_inputs=product_root / "resolved-inputs.json",
+            runtime_bundle=runtime_bundle,
+            runtime_root=runtime_root,
+            source_root=kandelo_root,
+            vfs=product_root / product_result["product"]["output"],
+        )
+        try:
+            completed = subprocess.run(
+                ["npx", "tsx", *(str(value) for value in runner_arguments)],
+                cwd=kandelo_policy_root,
+                env=dict(os.environ),
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=None,
+                stderr=None,
+                timeout=3 * 60 * 60 + 120,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise ProductEvidenceError(
+                f"protected product evidence runner failed to complete: {error}"
+            ) from error
+        if completed.returncode != 0 or not output.is_file():
+            raise ProductEvidenceError(
+                "protected product evidence runner emitted no terminal result"
+            )
+    result = load_canonical_mapping(
+        output.read_bytes(), "protected product evidence result"
+    )
+    validate_product_evidence_result(result)
+    if (
+        result["request_digest"] != request_digest
+        or result["product"]["id"] != scope["id"]
+        or result["candidate_product"] != candidate.evidence_identity()
+        or result["host"] != args.host
+        or result["definition"]["id"] != args.definition_id
+        or result["run"] != run
+    ):
+        raise ProductEvidenceError(
+            "terminal product evidence result differs from protected work scope"
+        )
+    return 0
+
+
+def _publish_workflow_product_evidence(args: argparse.Namespace) -> None:
+    """Publish exact receipts and one aggregate from current-run inert results."""
+
+    _require_workflow_publication_guards(args)
+    if not args.require_terminal_results:
+        raise WorkflowPublicationError(
+            "product evidence publication requires every terminal host result"
+        )
+    tap_root = TAP_ROOT.resolve(strict=True)
+    policy = load_tap_staging_policy(tap_root / "Kandelo/staging/tap-policy.toml")
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    workflow_ref = os.environ.get("GITHUB_WORKFLOW_REF", "")
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if repository != policy.tap_repository:
+        raise WorkflowPublicationError(
+            "current workflow repository differs from tap policy"
+        )
+    tap_source = snapshot_tap_source(tap_root, policy.tap_repository)
+    if tap_source["commit"] != args.head_sha:
+        raise WorkflowPublicationError(
+            "protected product evidence publisher differs from workflow head"
+        )
+    _recheck_workflow_activation(tap_root)
+    client = GitHubWorkflowArtifactClientV1(
+        repository,
+        token,
+        run_id=args.run_id,
+        run_attempt=args.run_attempt,
+        head_sha=args.head_sha,
+        workflow_ref=workflow_ref,
+    )
+
+    with tempfile.TemporaryDirectory(
+        prefix="abi-staging-product-evidence-publication-"
+    ) as temporary:
+        root = Path(temporary)
+        coordination_name = (
+            f"abi-staging-coordination-{args.run_id}-{args.run_attempt}"
+        )
+        coordination_artifact = client.artifact_by_name(name=coordination_name)
+        coordination_root = root / "coordination"
+        client.extract_artifact(
+            coordination_artifact,
+            coordination_root,
+            max_files=policy.max_handoff_files,
+            max_bytes=policy.max_handoff_bytes,
+        )
+        bundle = load_coordination_bundle(
+            coordination_root / "coordination.json", policy=policy
+        )
+        request = bundle["request"]
+        request_digest = bundle["request_sha256"]
+        source = request["build_source"]
+        kandelo_root = _checked_checkout_source(
+            args.kandelo_root,
+            repository=source["repository"],
+            commit=source["commit"],
+            tree=source["tree"],
+        )
+        policy_commit = request["issuance"]["issuer_workflow_ref"].rsplit(
+            "@", 1
+        )[-1]
+        kandelo_policy_root = _checked_checkout_source(
+            args.kandelo_policy_root,
+            repository=source["repository"],
+            commit=policy_commit,
+            tree=None,
+        )
+        definitions_path = (
+            kandelo_policy_root
+            / "abi/staging/evidence-definitions.generated.json"
+        )
+        try:
+            definitions = load_canonical_mapping(
+                definitions_path.read_bytes(),
+                "protected product evidence definitions",
+            )
+        except (OSError, ContractError) as error:
+            raise WorkflowPublicationError(
+                f"protected product evidence definitions are invalid: {error}"
+            ) from error
+        scope = select_product_evidence_publication_scope(
+            request,
+            request_sha256=request_digest,
+            product_id=args.product_id,
+            product_work_id=args.product_work_id,
+            work_id=args.work_id,
+            definitions=definitions,
+        )
+
+        runtime_name = (
+            f"abi-staging-runtime-{request_digest}-"
+            f"{args.run_id}-{args.run_attempt}"
+        )
+        runtime_artifact = client.artifact_by_name(name=runtime_name)
+        runtime_root = root / "runtime"
+        client.extract_artifact(
+            runtime_artifact,
+            runtime_root,
+            max_files=65_536,
+            max_bytes=8 * 1024**3,
+        )
+        try:
+            runtime_body = (runtime_root / "runtime-bundle.json").read_bytes()
+            runtime = load_canonical_mapping(
+                runtime_body, "protected product evidence runtime"
+            )
+        except (OSError, ContractError) as error:
+            raise WorkflowPublicationError(
+                f"protected product evidence runtime is invalid: {error}"
+            ) from error
+        product_runtime_identity(runtime, request)
+        runtime_sha256 = hashlib.sha256(runtime_body).hexdigest()
+
+        handoff_name = (
+            f"abi-staging-product-build-{args.product_id}-"
+            f"{args.product_work_id}-{args.run_id}-{args.run_attempt}"
+        )
+        handoff_artifact = client.artifact_by_name(name=handoff_name)
+        handoff_root = root / "product"
+        client.extract_artifact(
+            handoff_artifact,
+            handoff_root,
+            max_files=policy.max_handoff_files,
+            max_bytes=policy.max_handoff_bytes,
+        )
+        product_result = validate_product_build_handoff(
+            handoff_root,
+            expected_product_id=args.product_id,
+            expected_work_id=args.product_work_id,
+            expected_request_sha256=request_digest,
+            expected_runtime_bundle_sha256=runtime_sha256,
+            max_files=policy.max_handoff_files,
+            max_bytes=policy.max_handoff_bytes,
+        )
+        if product_result["outcome"] != "success":
+            raise WorkflowPublicationError(
+                "product evidence requires one successful exact composition"
+            )
+
+        candidate_name = (
+            f"abi-staging-product-candidate-{args.product_id}-"
+            f"{args.product_work_id}-{args.run_id}-{args.run_attempt}"
+        )
+        candidate_artifact = client.artifact_by_name(name=candidate_name)
+        candidate_root = root / "candidate"
+        client.extract_artifact(
+            candidate_artifact,
+            candidate_root,
+            max_files=8,
+            max_bytes=4 * 1024 * 1024,
+        )
+        expected_candidate_repository = "ghcr.io/" + candidate_product_repository(
+            owner=policy.tap_repository.split("/", 1)[0],
+            repository_prefix=(
+                policy.tap_repository.split("/", 1)[1] + "-abi-"
+            ),
+            candidate_suffix="-candidates",
+            target_abi=request["target_abi"]["version"],
+            product_id=args.product_id,
+        )
+        candidate_path = candidate_root / "product-candidate.json"
+        candidate = load_candidate_product_locator(
+            candidate_path.read_bytes(),
+            expected_repository=expected_candidate_repository,
+        )
+        if (
+            candidate.product_id != product_result["product"]["id"]
+            or candidate.builder_report_sha256
+            != product_result["builder_report_sha256"]
+            or candidate.vfs_layer_sha256 != product_result["vfs"]["sha256"]
+            or candidate.vfs_layer_bytes != product_result["vfs"]["bytes"]
+        ):
+            raise WorkflowPublicationError(
+                "candidate locator differs from exact product composition"
+            )
+
+        results = []
+        for work in scope["evidence_work"]:
+            host = work["host"]
+            result_name = (
+                f"abi-staging-product-{host}-{args.product_id}-"
+                f"{work['work_id']}-{args.run_id}-{args.run_attempt}"
+            )
+            artifact = client.artifact_by_name(name=result_name)
+            result_root = root / f"result-{host}-{work['definition_id']}"
+            client.extract_artifact(
+                artifact,
+                result_root,
+                max_files=4,
+                max_bytes=8 * 1024 * 1024,
+            )
+            result_path = result_root / f"{host}-result"
+            try:
+                result = load_canonical_mapping(
+                    result_path.read_bytes(),
+                    f"terminal {host} product evidence result",
+                )
+            except (OSError, ContractError) as error:
+                raise WorkflowPublicationError(
+                    f"terminal {host} product evidence result is invalid: {error}"
+                ) from error
+            validate_product_evidence_result(result)
+            expected_run = {
+                "repository": repository,
+                "workflow_ref": workflow_ref,
+                "run_id": args.run_id,
+                "job_id": f"{host}-product-evidence",
+                "attempt": args.run_attempt,
+            }
+            if result["run"] != expected_run:
+                raise WorkflowPublicationError(
+                    "terminal product evidence result run identity changed"
+                )
+            results.append(result)
+
+        publication_run = {
+            "repository": repository,
+            "workflow_ref": workflow_ref,
+            "run_id": args.run_id,
+            "run_attempt": args.run_attempt,
+            "job": "publish-product-evidence",
+        }
+        try:
+            resolved_body = (handoff_root / "resolved-inputs.json").read_bytes()
+            resolved_inputs = load_resolved_product_inputs(resolved_body)
+            builder_report_body = (
+                handoff_root / "builder-report.json"
+            ).read_bytes()
+        except (OSError, ProductInputResolutionError) as error:
+            raise WorkflowPublicationError(
+                f"exact product evidence inputs are invalid: {error}"
+            ) from error
+        resolved_product = resolved_inputs["product"]
+        if {
+            "id": resolved_product["id"],
+            "manifest_sha256": resolved_product["manifest_sha256"],
+            "output": resolved_product["output"],
+        } != product_result["product"]:
+            raise WorkflowPublicationError(
+                "resolved product differs from exact composition result"
+            )
+        username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
+        package_token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
+        _recheck_workflow_activation(tap_root)
+        with isolated_oras_transport(
+            username=username, token=package_token
+        ) as publication_transport:
+            published = publish_exact_product_evidence(
+                request_digest=request_digest,
+                product=resolved_product,
+                candidate_product=candidate,
+                runtime_bundle_body=runtime_body,
+                resolved_inputs_body=resolved_body,
+                builder_report_body=builder_report_body,
+                selecting_registries=scope["selecting_registries"],
+                requirements=scope["requirements"],
+                results=results,
+                run=publication_run,
+                transport=publication_transport,
+                expected_source_repository=policy.tap_repository,
+            )
+
+        output = Path(args.out)
+        if output.exists() or output.is_symlink():
+            raise WorkflowPublicationError(
+                "product evidence publication output must be new"
+            )
+        output.write_bytes(
+            canonical_bytes(
+                {
+                    "schema": 1,
+                    "kind": "kandelo-vfs-product-evidence-publication",
+                    "request_sha256": request_digest,
+                    "product_id": args.product_id,
+                    "product_work_id": args.product_work_id,
+                    "work_id": args.work_id,
+                    "record_sha256": canonical_sha256(published["record"]),
+                    "record_locator": asdict(published["record_locator"]),
+                    "receipt_locators": [
+                        {
+                            "requirement": receipt["requirement"],
+                            "locator": asdict(locator),
+                        }
+                        for receipt, locator in zip(
+                            published["receipts"],
+                            published["receipt_locators"],
+                            strict=True,
+                        )
+                    ],
+                }
+            )
+        )
 
 
 def _require_workflow_publication_guards(args: argparse.Namespace) -> None:
@@ -1512,10 +3858,23 @@ def main(arguments: list[str] | None = None) -> int:
         if args.command == "prepare-workflow":
             _prepare_workflow(args)
             return 0
+        if args.command == "plan-workflow-products":
+            _plan_workflow_products(args)
+            return 0
         if args.command == "execute-build-work":
             return _execute_build(args)
         if args.command == "execute-verification-work":
             return _execute_verification(args)
+        if args.command == "execute-product-work":
+            return _execute_product_work(args)
+        if args.command == "execute-product-evidence-work":
+            return _execute_product_evidence_work(args)
+        if args.command == "publish-workflow-product-candidate":
+            _publish_workflow_product_candidate(args)
+            return 0
+        if args.command == "publish-workflow-product-evidence":
+            _publish_workflow_product_evidence(args)
+            return 0
         if args.command == "publish-workflow-candidate":
             _publish_workflow_candidate(args)
             return 0
