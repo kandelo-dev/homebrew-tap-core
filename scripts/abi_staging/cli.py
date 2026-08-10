@@ -20,6 +20,19 @@ import time
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
+from .abi_history import (
+    AbiHistoryError,
+    GitHubHistoryClient,
+    build_history_oci_plan,
+    build_history_plan,
+    build_history_record,
+    ensure_history_ref,
+    history_record_repository,
+    validate_history_creation_handoff,
+    validate_history_plan,
+    validate_protection_snapshot,
+    verify_history_snapshot,
+)
 from .canonical import canonical_bytes, canonical_sha256
 from .contract import (
     ContractError,
@@ -74,8 +87,14 @@ from .records import (
     build_candidate_oci_plan,
     build_source_custody_oci_plan,
     load_tap_plan_record,
+    validate_abi_history_record,
 )
-from .tap_metadata import TapMetadataError, check_tap_metadata
+from .tap_metadata import (
+    TapMetadataError,
+    check_tap_metadata,
+    load_promotion_activation,
+    load_promotion_policy,
+)
 from .product import (
     MAX_INPUT_OBJECT_BYTES,
     NONPUBLIC_PRODUCT_INPUT_KINDS,
@@ -211,6 +230,33 @@ def _parser() -> argparse.ArgumentParser:
     policy_check.add_argument("--tap-root", required=True)
     tap_metadata_check = subcommands.add_parser("tap-metadata-check")
     tap_metadata_check.add_argument("--tap-root", required=True)
+    plan_history = subcommands.add_parser("plan-history")
+    plan_history.add_argument("--tap-root", required=True)
+    plan_history.add_argument("--repository", required=True)
+    plan_history.add_argument("--out", required=True)
+    plan_history.add_argument("--github-output", required=True)
+    create_history = subcommands.add_parser("create-history-ref")
+    create_history.add_argument("--tap-root", required=True)
+    create_history.add_argument("--repository", required=True)
+    create_history.add_argument("--plan", required=True)
+    create_history.add_argument("--out", required=True)
+    create_history.add_argument("--github-output", required=True)
+    verify_history = subcommands.add_parser("verify-history")
+    verify_history.add_argument("--tap-root", required=True)
+    verify_history.add_argument("--history-root", required=True)
+    verify_history.add_argument("--repository", required=True)
+    verify_history.add_argument("--plan", required=True)
+    verify_history.add_argument("--creation", required=True)
+    verify_history.add_argument("--out", required=True)
+    verify_history.add_argument("--github-output", required=True)
+    verify_history.add_argument("--anonymous-readback", action="store_true")
+    publish_history = subcommands.add_parser("publish-history-record")
+    publish_history.add_argument("--tap-root", required=True)
+    publish_history.add_argument("--repository", required=True)
+    publish_history.add_argument("--record", required=True)
+    publish_history.add_argument("--anonymous-readback", action="store_true")
+    publish_history.add_argument("--immutable", action="store_true")
+    publish_history.add_argument("--out", required=True)
     policy_generate = subcommands.add_parser("policy-generate")
     policy_generate.add_argument("--tap-root", required=True)
     policy_generate.add_argument("--out", required=True)
@@ -3852,9 +3898,270 @@ def _publish_workflow_receipt(args: argparse.Namespace) -> None:
         Path(args.out).write_bytes(canonical_bytes(result))
 
 
+def _history_output_directory(value: str) -> Path:
+    path = Path(value)
+    if path.is_symlink() or (path.exists() and not path.is_dir()):
+        raise AbiHistoryError("history output must be a real directory")
+    path.mkdir(parents=True, exist_ok=True)
+    if any(path.iterdir()):
+        raise AbiHistoryError("history output directory must begin empty")
+    return path.resolve(strict=True)
+
+
+def _history_repository(tap_root: Path, repository: str) -> tuple[Any, Any]:
+    policy = load_promotion_policy(
+        tap_root / "Kandelo/staging/promotion-policy.toml"
+    )
+    activation = load_promotion_activation(
+        tap_root / "Kandelo/staging/promotion-activation.toml"
+    )
+    if repository.lower() != policy.tap_repository.lower():
+        raise AbiHistoryError("workflow repository differs from promotion policy")
+    return policy, activation
+
+
+def _history_client(repository: str) -> GitHubHistoryClient:
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if not token:
+        raise AbiHistoryError("protected history command requires GITHUB_TOKEN")
+    return GitHubHistoryClient(repository, token)
+
+
+def _git_identity(root: Path) -> tuple[str, str]:
+    def read(revision: str) -> str:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", revision],
+                cwd=root,
+                check=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            raise AbiHistoryError(f"cannot read exact tap Git identity: {error}") from error
+        value = result.stdout.strip()
+        if len(value) != 40 or any(character not in "0123456789abcdef" for character in value):
+            raise AbiHistoryError("tap Git identity is not a full lowercase SHA")
+        return value
+
+    return read("HEAD"), read("HEAD^{tree}")
+
+
+def _load_history_plan(path: str) -> dict[str, Any]:
+    try:
+        value = load_canonical_mapping(
+            Path(path).resolve(strict=True).read_bytes(), "ABI history plan"
+        )
+    except (OSError, ValueError) as error:
+        raise AbiHistoryError(f"cannot load ABI history plan: {error}") from error
+    return validate_history_plan(value)
+
+
+def _plan_history(args: argparse.Namespace) -> None:
+    tap_root = _protected_tap_root(args.tap_root)
+    policy, activation = _history_repository(tap_root, args.repository)
+    output = _history_output_directory(args.out)
+    commit, tree = _git_identity(tap_root)
+    plan = build_history_plan(
+        tap_root,
+        preactivation_tap_commit=commit,
+        preactivation_tap_tree=tree,
+    )
+    client = _history_client(policy.tap_repository)
+    snapshot = client.protection_snapshot(plan["branch"], phase="precreate")
+    decision = ensure_history_ref(
+        plan,
+        client,
+        snapshot,
+        mode="observe",
+        expected_repository=policy.tap_repository,
+    )
+    (output / "plan.json").write_bytes(canonical_bytes(plan))
+    (output / "precreate-protection.json").write_bytes(canonical_bytes(snapshot))
+    (output / "decision.json").write_bytes(
+        canonical_bytes(
+            {
+                "schema": 1,
+                "kind": "kandelo-abi-history-plan-decision",
+                "mode": activation.mode,
+                "write_enabled": activation.mode == "active",
+                "decision": decision,
+                "plan_sha256": canonical_sha256(plan),
+            }
+        )
+    )
+    _write_github_outputs(
+        Path(args.github_output),
+        {
+            "branch": plan["branch"],
+            "mode": activation.mode,
+            "tap_commit": commit,
+            "tap_tree": tree,
+            "write_enabled": "true" if activation.mode == "active" else "false",
+        },
+    )
+
+
+def _create_history_ref(args: argparse.Namespace) -> None:
+    tap_root = _protected_tap_root(args.tap_root)
+    policy, activation = _history_repository(tap_root, args.repository)
+    if activation.mode != "active":
+        raise AbiHistoryError("history ref creation requires active promotion mode")
+    plan = _load_history_plan(args.plan)
+    commit, tree = _git_identity(tap_root)
+    current = build_history_plan(
+        tap_root,
+        preactivation_tap_commit=commit,
+        preactivation_tap_tree=tree,
+    )
+    if canonical_bytes(current) != canonical_bytes(plan):
+        raise AbiHistoryError("history plan differs from the exact protected checkout")
+    output = _history_output_directory(args.out)
+    client = _history_client(policy.tap_repository)
+    snapshot = client.protection_snapshot(plan["branch"], phase="precreate")
+    creation = ensure_history_ref(
+        plan,
+        client,
+        snapshot,
+        mode="active",
+        expected_repository=policy.tap_repository,
+    )
+    result = {
+        "schema": 1,
+        "kind": "kandelo-abi-history-ref-creation",
+        "plan_sha256": canonical_sha256(plan),
+        **creation,
+    }
+    (output / "creation.json").write_bytes(canonical_bytes(result))
+    (output / "precreate-protection.json").write_bytes(canonical_bytes(snapshot))
+    _write_github_outputs(
+        Path(args.github_output),
+        {
+            "branch": plan["branch"],
+            "ref_object": plan["preactivation_tap_commit"],
+            "ref_tree": plan["preactivation_tap_tree"],
+        },
+    )
+
+
+def _verify_history(args: argparse.Namespace) -> None:
+    if not args.anonymous_readback:
+        raise AbiHistoryError("history verification requires anonymous readback")
+    tap_root = _protected_tap_root(args.tap_root)
+    policy, activation = _history_repository(tap_root, args.repository)
+    if activation.mode != "active":
+        raise AbiHistoryError("history publication requires active promotion mode")
+    plan = _load_history_plan(args.plan)
+    try:
+        creation = load_canonical_mapping(
+            Path(args.creation).resolve(strict=True).read_bytes(),
+            "history ref creation",
+        )
+    except (OSError, ValueError) as error:
+        raise AbiHistoryError(f"cannot load history ref creation: {error}") from error
+    validate_history_creation_handoff(plan, creation)
+    history_root = Path(args.history_root).resolve(strict=True)
+    output = _history_output_directory(args.out)
+    client = _history_client(policy.tap_repository)
+    snapshot = client.protection_snapshot(plan["branch"], phase="postcreate")
+    public_client = GitHubHistoryClient(policy.tap_repository, "")
+    verification = verify_history_snapshot(
+        history_root,
+        plan,
+        public_client,
+        snapshot,
+        expected_repository=policy.tap_repository,
+    )
+    try:
+        run_id = int(os.environ.get("GITHUB_RUN_ID", ""), 10)
+        run_attempt = int(os.environ.get("GITHUB_RUN_ATTEMPT", ""), 10)
+    except ValueError as error:
+        raise AbiHistoryError("history workflow run identity is invalid") from error
+    record = build_history_record(
+        plan,
+        created_ref_object=plan["preactivation_tap_commit"],
+        protection_evidence=verification["protection_evidence"],
+        metadata_verification_sha256=verification["metadata_verification_sha256"],
+        public_readback_sha256=verification["public_readback_sha256"],
+        run={
+            "repository": policy.tap_repository,
+            "workflow_ref": os.environ.get("GITHUB_WORKFLOW_REF", ""),
+            "run_id": run_id,
+            "run_attempt": run_attempt,
+            "job": "verify-and-publish-history",
+        },
+    )
+    (output / "record.json").write_bytes(canonical_bytes(record))
+    (output / "postcreate-protection.json").write_bytes(canonical_bytes(snapshot))
+    (output / "metadata-verification.json").write_bytes(
+        canonical_bytes(verification["metadata_verification"])
+    )
+    (output / "public-readback.json").write_bytes(
+        canonical_bytes(verification["public_readback"])
+    )
+    _write_github_outputs(
+        Path(args.github_output),
+        {"record_sha256": canonical_sha256(record)},
+    )
+
+
+def _publish_history_record(args: argparse.Namespace) -> None:
+    if not args.anonymous_readback or not args.immutable:
+        raise AbiHistoryError("history publication requires immutable anonymous readback")
+    tap_root = _protected_tap_root(args.tap_root)
+    policy, activation = _history_repository(tap_root, args.repository)
+    if activation.mode != "active":
+        raise AbiHistoryError("history publication requires active promotion mode")
+    try:
+        record = load_canonical_mapping(
+            Path(args.record).resolve(strict=True).read_bytes(), "ABI history record"
+        )
+    except (OSError, ValueError) as error:
+        raise AbiHistoryError(f"cannot load ABI history record: {error}") from error
+    validate_abi_history_record(record)
+    source_abi = record["plan"]["source_abi"]
+    plan = build_history_oci_plan(
+        record,
+        repository=history_record_repository(policy.tap_repository, source_abi),
+    )
+    username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
+    token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
+    with isolated_oras_transport(username=username, token=token) as transport:
+        published = publish_record(
+            plan,
+            transport=transport,
+            expected_source_repository=policy.tap_repository,
+        )
+    Path(args.out).write_bytes(
+        canonical_bytes(
+            {
+                "schema": 1,
+                "kind": "kandelo-abi-history-publication",
+                "record_sha256": canonical_sha256(record),
+                "locator": asdict(published),
+            }
+        )
+    )
+
+
 def main(arguments: list[str] | None = None) -> int:
     args = _parser().parse_args(arguments)
     try:
+        if args.command == "plan-history":
+            _plan_history(args)
+            return 0
+        if args.command == "create-history-ref":
+            _create_history_ref(args)
+            return 0
+        if args.command == "verify-history":
+            _verify_history(args)
+            return 0
+        if args.command == "publish-history-record":
+            _publish_history_record(args)
+            return 0
         if args.command == "discover-workflow-request":
             _discover_workflow_request(args)
             return 0
@@ -3997,6 +4304,9 @@ def main(arguments: list[str] | None = None) -> int:
             product_evidence = (
                 TAP_ROOT / "Kandelo/staging/fixtures/product/evidence-record.json"
             )
+            history_record = (
+                TAP_ROOT / "Kandelo/staging/fixtures/abi-history-record.json"
+            )
             if fixture == tap_plan.resolve(strict=True):
                 load_tap_plan_record(fixture.read_bytes())
             elif fixture == bottle_contract.resolve(strict=True):
@@ -4008,6 +4318,10 @@ def main(arguments: list[str] | None = None) -> int:
             elif fixture == product_evidence.resolve(strict=True):
                 validate_product_evidence_record(
                     load_canonical_mapping(fixture.read_bytes(), "product evidence fixture")
+                )
+            elif fixture == history_record.resolve(strict=True):
+                validate_abi_history_record(
+                    load_canonical_mapping(fixture.read_bytes(), "ABI history fixture")
                 )
             else:
                 raise TapRecordError(
@@ -4057,6 +4371,7 @@ def main(arguments: list[str] | None = None) -> int:
         CandidateReuseError,
         ProductInputResolutionError,
         ProductEvidenceError,
+        AbiHistoryError,
     ) as error:
         print(f"abi-staging {args.command}: {error}", file=sys.stderr)
         return 1

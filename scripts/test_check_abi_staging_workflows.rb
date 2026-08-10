@@ -22,6 +22,7 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     @reuse = load_workflow("abi-staging-reuse.yml")
     @verification = load_workflow("abi-staging-verification.yml")
     @maintenance = load_workflow("abi-staging-maintenance.yml")
+    @history = load_workflow("abi-staging-abi-history.yml")
   end
 
   def copy(value = @workflow)
@@ -78,12 +79,22 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     refute_empty error.message
   end
 
+  def assert_history_rejected(label)
+    changed = copy(@history)
+    yield changed
+    error = assert_raises(AbiStagingWorkflowCheck::Violation, label) do
+      AbiStagingWorkflowCheck.check_history(changed)
+    end
+    refute_empty error.message
+  end
+
   def test_reviewed_workflows_pass
     AbiStagingWorkflowCheck.check(@workflow)
     AbiStagingWorkflowCheck.check_reusable(@candidate, :candidate)
     AbiStagingWorkflowCheck.check_reuse(@reuse)
     AbiStagingWorkflowCheck.check_reusable(@verification, :verification)
     AbiStagingWorkflowCheck.check_maintenance(@maintenance)
+    AbiStagingWorkflowCheck.check_history(@history)
   end
 
   def test_discovery_uses_exact_candidate_data_and_immutable_policy_code
@@ -398,6 +409,48 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_maintenance_rejected("mutable receipt") do |workflow|
       step = workflow.dig("jobs", "maintain", "steps").last
       step["run"] = step["run"].sub("--immutable", "--replace")
+    end
+  end
+
+  def test_history_workflow_preserves_protection_and_ref_ordering
+    assert_history_rejected("create before protection preflight") do |workflow|
+      steps = workflow.dig("jobs", "plan-and-verify-policy", "steps")
+      command = steps.find { |step| step.key?("run") }
+      command["run"] = command["run"].sub("plan-history", "create-history-ref")
+    end
+    assert_history_rejected("administration permission") do |workflow|
+      workflow.dig("jobs", "create-history-ref", "permissions")["administration"] = "write"
+    end
+    assert_history_rejected("force update") do |workflow|
+      step = last_run_step(workflow, "create-history-ref")
+      step["run"] += "\ngit push --force origin HEAD:refs/heads/abi/7\n"
+    end
+    assert_history_rejected("candidate selected ref") do |workflow|
+      checkout = workflow.dig("jobs", "create-history-ref", "steps").find do |step|
+        step["uses"]&.start_with?(AbiStagingWorkflowCheck::CHECKOUT)
+      end
+      checkout.fetch("with")["ref"] = "${{ inputs.candidate_sha }}"
+    end
+    assert_history_rejected("promotion in history workflow") do |workflow|
+      last_run_step(workflow, "verify-and-publish-history")["run"] +=
+        "\npython3 -m scripts.abi_staging.cli promote-formula\n"
+    end
+    assert_history_rejected("candidate execution in writer") do |workflow|
+      last_run_step(workflow, "create-history-ref")["run"] +=
+        "\nbash Formula/build.sh\n"
+    end
+    assert_history_rejected("missing public verification") do |workflow|
+      step = last_run_step(workflow, "verify-and-publish-history")
+      step["run"] = step["run"].sub("--anonymous-readback", "")
+    end
+    assert_history_rejected("swallowed failure") do |workflow|
+      workflow.dig("jobs", "create-history-ref", "steps").last["continue-on-error"] = true
+    end
+    assert_history_rejected("undeclared Python") do |workflow|
+      setup = workflow.dig("jobs", "create-history-ref", "steps").find do |step|
+        step["uses"]&.start_with?(AbiStagingWorkflowCheck::SETUP_PYTHON)
+      end
+      setup.fetch("with")["python-version"] = "3.12"
     end
   end
 end
