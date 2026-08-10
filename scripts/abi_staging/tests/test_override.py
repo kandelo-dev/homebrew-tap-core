@@ -170,7 +170,9 @@ def _artifact(digest: str, size: int = 73) -> dict[str, object]:
 def _candidate(request_sha256: str) -> tuple[dict[str, object], str]:
     layer = _artifact("a" * 64)
     contract = _artifact(FORMULA["bottle_contract_sha256"], 61)
+    metadata = _artifact("d" * 64, 89)
     custody = _artifact("b" * 64, 79)
+    composition = _artifact("e" * 64, 105)
     record = {
         "schema": 1,
         "kind": "kandelo-abi-staging-candidate",
@@ -208,7 +210,12 @@ def _candidate(request_sha256: str) -> tuple[dict[str, object], str]:
             "bottle_layer": layer,
             "normalized_components": [
                 {"id": "bottle-contract", "artifact": contract},
+                {"id": "bottle-metadata", "artifact": metadata},
                 {"id": "source-custody", "artifact": custody},
+                {
+                    "id": "vfs-composition-descriptor",
+                    "artifact": composition,
+                },
             ],
             "direct_dependency_layers": [],
             "source_custody_sha256": custody["sha256"],
