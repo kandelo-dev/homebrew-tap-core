@@ -884,6 +884,153 @@ module AbiStagingWorkflowCheck
   rescue KeyError, NoMethodError => error
     raise Violation, "maintenance workflow structure is incomplete: #{error.message}"
   end
+
+  def check_history(workflow)
+    require_contract(workflow.fetch("permissions") == {},
+                     "history workflow permissions must be empty")
+    event = triggers(workflow)
+    require_contract(event.keys == ["workflow_dispatch"] &&
+                     event.fetch("workflow_dispatch").nil?,
+                     "history workflow must be input-free manual protected code")
+    require_contract(workflow.fetch("concurrency") == {
+                       "group" => "abi-staging-abi-history",
+                       "cancel-in-progress" => false
+                     }, "history concurrency changed")
+    jobs = workflow.fetch("jobs")
+    require_contract(jobs.keys == %w[plan-and-verify-policy create-history-ref verify-and-publish-history],
+                     "history workflow job split changed")
+    plan = jobs.fetch("plan-and-verify-policy")
+    create = jobs.fetch("create-history-ref")
+    verify = jobs.fetch("verify-and-publish-history")
+    require_contract(plan.fetch("permissions") == {"contents" => "read"},
+                     "history planner must remain contents-read only")
+    require_contract(create.fetch("permissions") == {"contents" => "write"},
+                     "history ref writer permissions changed")
+    require_contract(verify.fetch("permissions") == {
+                       "actions" => "read",
+                       "contents" => "read",
+                       "packages" => "write"
+                     }, "history publisher permissions changed")
+    require_contract(create.fetch("needs") == "plan-and-verify-policy" &&
+                     create.fetch("if") == "needs.plan-and-verify-policy.outputs.write-enabled == 'true'",
+                     "history ref creation is not gated by protected active mode")
+    require_contract(verify.fetch("needs") == %w[plan-and-verify-policy create-history-ref] &&
+                     verify.fetch("if") == "needs.plan-and-verify-policy.outputs.write-enabled == 'true'",
+                     "history publication is not gated by exact creation")
+    [plan, create, verify].each do |job|
+      require_contract(job.fetch("runs-on") == "ubuntu-latest" &&
+                       job.fetch("timeout-minutes").between?(1, 60),
+                       "history runner or timeout changed")
+      require_contract(!job.key?("environment") &&
+                       job.fetch("steps").none? { |step| step["continue-on-error"] == true },
+                       "history job gained a credentialed environment or swallowed failure")
+      check_actions(job)
+      setup = action_steps(job, SETUP_PYTHON)
+      require_contract(setup.length == 1 &&
+                       setup.fetch(0).dig("with", "python-version") == "3.13",
+                       "history job lacks declared Python")
+    end
+
+    plan_checkout = plan.fetch("steps").find do |step|
+      step["uses"]&.start_with?(CHECKOUT)
+    end
+    require_contract(plan_checkout&.fetch("with", {}) == {
+                       "ref" => "refs/heads/main",
+                       "fetch-depth" => 1,
+                       "persist-credentials" => false,
+                       "path" => "tap-authority"
+                     }, "history plan must execute protected tap main")
+    plan_commands = plan.fetch("steps").select { |step| step.key?("run") }
+    require_contract(plan_commands.length == 1,
+                     "history planning must use one protected coordinator")
+    plan_step = plan_commands.fetch(0)
+    plan_source = plan_step.fetch("run")
+    require_contract(plan_step.fetch("working-directory") == "tap-authority" &&
+                     plan_step.fetch("env") == {"GITHUB_TOKEN" => "${{ github.token }}"} &&
+                     plan_source.include?("python3 -m scripts.abi_staging.cli plan-history") &&
+                     plan_source.include?('--tap-root "$PWD"') &&
+                     plan_source.include?('--repository "$GITHUB_REPOSITORY"') &&
+                     plan_source.include?('--github-output "$GITHUB_OUTPUT"'),
+                     "history planner does not derive exact protected policy/protection")
+    require_contract(!plan_source.include?("create-history-ref") &&
+                     !plan_source.match?(/\b(?:git\s+push|promote|build|verify-bottle)\b/),
+                     "history planner writes or executes candidate work")
+
+    create_checkout = create.fetch("steps").find do |step|
+      step["uses"]&.start_with?(CHECKOUT)
+    end
+    require_contract(create_checkout&.fetch("with", {}) == {
+                       "ref" => "${{ needs.plan-and-verify-policy.outputs.tap-commit }}",
+                       "fetch-depth" => 1,
+                       "persist-credentials" => false,
+                       "path" => "tap-authority"
+                     }, "history writer does not use exact preactivation tap code")
+    create_download = create.fetch("steps").find do |step|
+      step["uses"]&.start_with?(DOWNLOAD_ARTIFACT)
+    end
+    require_contract(create_download&.dig("with", "artifact-ids") ==
+                     "${{ needs.plan-and-verify-policy.outputs.artifact-id }}",
+                     "history writer does not consume the exact protected plan")
+    create_commands = create.fetch("steps").select { |step| step.key?("run") }
+    require_contract(create_commands.length == 1,
+                     "history ref creation must use one reviewed writer")
+    create_step = create_commands.fetch(0)
+    create_source = create_step.fetch("run")
+    require_contract(create_step.fetch("working-directory") == "tap-authority" &&
+                     create_step.fetch("env") == {"GITHUB_TOKEN" => "${{ github.token }}"} &&
+                     create_source.include?("python3 -m scripts.abi_staging.cli create-history-ref") &&
+                     create_source.include?('--plan "$RUNNER_TEMP/abi-history-plan/plan.json"') &&
+                     create_source.include?('--tap-root "$PWD"') &&
+                     create_source.include?('--repository "$GITHUB_REPOSITORY"'),
+                     "history ref writer does not bind exact plan and protected code")
+    require_contract(!create_source.match?(/(?:--force|\bgit\s+(?:push|update-ref)\b|\b(?:bash|sh)\s+Formula\/|\bpromote\b)/),
+                     "history ref writer can force, promote, or execute candidate code")
+
+    verify_checkouts = verify.fetch("steps").select do |step|
+      step["uses"]&.start_with?(CHECKOUT)
+    end
+    require_contract(verify_checkouts.map { |step| step.dig("with", "ref") } == [
+                       "${{ needs.plan-and-verify-policy.outputs.tap-commit }}",
+                       "${{ needs.plan-and-verify-policy.outputs.branch }}"
+                     ] && verify_checkouts.map { |step| step.dig("with", "path") } ==
+                     %w[tap-authority history-checkout],
+                     "history verification does not separate protected code and exact history")
+    verify_downloads = verify.fetch("steps").select do |step|
+      step["uses"]&.start_with?(DOWNLOAD_ARTIFACT)
+    end
+    require_contract(verify_downloads.map { |step| step.dig("with", "artifact-ids") } == [
+                       "${{ needs.plan-and-verify-policy.outputs.artifact-id }}",
+                       "${{ needs.create-history-ref.outputs.artifact-id }}"
+                     ], "history publisher handoffs are not exact artifacts")
+    verify_commands = verify.fetch("steps").select { |step| step.key?("run") }
+    require_contract(verify_commands.length == 1,
+                     "history verification/publication must use one coordinator")
+    verify_step = verify_commands.fetch(0)
+    verify_source = verify_step.fetch("run")
+    require_contract(verify_step.fetch("working-directory") == "tap-authority" &&
+                     verify_step.fetch("env") == {
+                       "GITHUB_TOKEN" => "${{ github.token }}",
+                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
+                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}"
+                     }, "history publication authority changed")
+    require_contract(verify_source.include?("python3 -m scripts.abi_staging.cli verify-history") &&
+                     verify_source.include?("python3 -m scripts.abi_staging.cli publish-history-record") &&
+                     verify_source.include?('--history-root "$GITHUB_WORKSPACE/history-checkout"') &&
+                     verify_source.include?('--creation "$RUNNER_TEMP/abi-history-create/creation.json"') &&
+                     verify_source.scan("--anonymous-readback").length == 2 &&
+                     verify_source.include?("--immutable"),
+                     "history publisher omits public revalidation or immutability")
+    require_contract(!verify_source.match?(/\b(?:promote-formula|build|brew|make|cmake|cargo|npm|sleep)\b/) &&
+                     !verify_source.match?(/\b(?:eval|source|curl|wget)\b/),
+                     "history publisher promotes, executes candidate code, sleeps, or bypasses transport")
+
+    all_text = flatten(workflow).join("\n")
+    require_contract(!all_text.include?("${{ secrets."),
+                     "history workflow may not use repository secrets")
+    true
+  rescue KeyError, NoMethodError => error
+    raise Violation, "history workflow structure is incomplete: #{error.message}"
+  end
 end
 
 if $PROGRAM_NAME == __FILE__
@@ -895,12 +1042,14 @@ if $PROGRAM_NAME == __FILE__
         [File.join(root, ".github/workflows/abi-staging-candidate.yml"), :candidate],
         [File.join(root, ".github/workflows/abi-staging-reuse.yml"), :check_reuse],
         [File.join(root, ".github/workflows/abi-staging-verification.yml"), :verification],
-        [File.join(root, ".github/workflows/abi-staging-maintenance.yml"), :check_maintenance]
+        [File.join(root, ".github/workflows/abi-staging-maintenance.yml"), :check_maintenance],
+        [File.join(root, ".github/workflows/abi-staging-abi-history.yml"), :check_history]
       ]
     else
       ARGV.map do |path|
         method = case File.basename(path)
         when "abi-staging-maintenance.yml" then :check_maintenance
+        when "abi-staging-abi-history.yml" then :check_history
         when "abi-staging-candidate.yml" then :candidate
         when "abi-staging-reuse.yml" then :check_reuse
         when "abi-staging-verification.yml" then :verification

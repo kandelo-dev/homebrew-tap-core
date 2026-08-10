@@ -1,0 +1,187 @@
+name: Preserve protected ABI tap history
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: abi-staging-abi-history
+  cancel-in-progress: false
+
+jobs:
+  plan-and-verify-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      branch: ${{ steps.plan.outputs.branch }}
+      mode: ${{ steps.plan.outputs.mode }}
+      write-enabled: ${{ steps.plan.outputs.write_enabled }}
+      tap-commit: ${{ steps.plan.outputs.tap_commit }}
+      tap-tree: ${{ steps.plan.outputs.tap_tree }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
+    steps:
+      - name: Check out protected tap main
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: refs/heads/main
+          fetch-depth: 1
+          persist-credentials: false
+          path: tap-authority
+
+      - name: Set up declared Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Plan exact history and verify protection
+        id: plan
+        working-directory: tap-authority
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 -m scripts.abi_staging.cli plan-history \
+            --tap-root "$PWD" \
+            --repository "$GITHUB_REPOSITORY" \
+            --out "$RUNNER_TEMP/abi-history-plan" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Upload exact history plan
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: abi-history-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/abi-history-plan
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+          compression-level: 0
+
+  create-history-ref:
+    needs: plan-and-verify-policy
+    if: needs.plan-and-verify-policy.outputs.write-enabled == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
+    steps:
+      - name: Check out exact protected preactivation tap
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.plan-and-verify-policy.outputs.tap-commit }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: tap-authority
+
+      - name: Set up declared Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Download exact protected history plan
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.plan-and-verify-policy.outputs.artifact-id }}
+          path: ${{ runner.temp }}/abi-history-plan
+
+      - name: Create exact history ref without force
+        id: create
+        working-directory: tap-authority
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 -m scripts.abi_staging.cli create-history-ref \
+            --tap-root "$PWD" \
+            --repository "$GITHUB_REPOSITORY" \
+            --plan "$RUNNER_TEMP/abi-history-plan/plan.json" \
+            --out "$RUNNER_TEMP/abi-history-create" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Upload exact ref-creation result
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: abi-history-create-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/abi-history-create
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+          compression-level: 0
+
+  verify-and-publish-history:
+    needs:
+      - plan-and-verify-policy
+      - create-history-ref
+    if: needs.plan-and-verify-policy.outputs.write-enabled == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    steps:
+      - name: Check out exact protected workflow code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.plan-and-verify-policy.outputs.tap-commit }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: tap-authority
+
+      - name: Check out exact protected history branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.plan-and-verify-policy.outputs.branch }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: history-checkout
+
+      - name: Set up declared Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Download exact protected history plan
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.plan-and-verify-policy.outputs.artifact-id }}
+          path: ${{ runner.temp }}/abi-history-plan
+
+      - name: Download exact ref-creation result
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.create-history-ref.outputs.artifact-id }}
+          path: ${{ runner.temp }}/abi-history-create
+
+      - name: Verify public history and publish immutable record
+        working-directory: tap-authority
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          python3 -m scripts.abi_staging.cli verify-history \
+            --tap-root "$PWD" \
+            --history-root "$GITHUB_WORKSPACE/history-checkout" \
+            --repository "$GITHUB_REPOSITORY" \
+            --plan "$RUNNER_TEMP/abi-history-plan/plan.json" \
+            --creation "$RUNNER_TEMP/abi-history-create/creation.json" \
+            --anonymous-readback \
+            --out "$RUNNER_TEMP/abi-history-verified" \
+            --github-output "$GITHUB_OUTPUT"
+          python3 -m scripts.abi_staging.cli publish-history-record \
+            --tap-root "$PWD" \
+            --repository "$GITHUB_REPOSITORY" \
+            --record "$RUNNER_TEMP/abi-history-verified/record.json" \
+            --anonymous-readback \
+            --immutable \
+            --out "$RUNNER_TEMP/abi-history-publication.json"
