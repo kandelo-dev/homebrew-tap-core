@@ -15,6 +15,7 @@ from scripts.abi_staging.oci import (
     PublishedRecordLocatorV1,
     UrllibOciTransportV1,
     build_oci_manifest,
+    fetch_public_blob,
     isolated_oras_transport,
     list_public_record_locators,
     publish_record,
@@ -195,6 +196,40 @@ class FakeRegistryTransport:
                     },
                 )
         return self._response(404, url)
+
+
+class PublicBlobFetchTests(unittest.TestCase):
+    def test_fetches_only_the_exact_anonymous_digest_and_size(self) -> None:
+        transport = FakeRegistryTransport()
+        body = b"exact public lazy input\n"
+        digest = hashlib.sha256(body).hexdigest()
+        transport.blobs[(REPOSITORY, "sha256:" + digest)] = body
+
+        self.assertEqual(
+            fetch_public_blob(
+                f"ghcr.io/{REPOSITORY}@sha256:{digest}",
+                expected_sha256=digest,
+                expected_bytes=len(body),
+                transport=transport,
+            ),
+            body,
+        )
+        self.assertEqual(transport.calls[-1][2], False)
+
+        for reference, expected_sha256, expected_bytes in (
+            (f"https://ghcr.io/{REPOSITORY}@sha256:{digest}", digest, len(body)),
+            (f"ghcr.io/{REPOSITORY}@sha256:{'f' * 64}", digest, len(body)),
+            (f"ghcr.io/{REPOSITORY}@sha256:{digest}", digest, len(body) + 1),
+        ):
+            with self.subTest(reference=reference, size=expected_bytes), self.assertRaises(
+                OciPublicationError
+            ):
+                fetch_public_blob(
+                    reference,
+                    expected_sha256=expected_sha256,
+                    expected_bytes=expected_bytes,
+                    transport=transport,
+                )
 
 
 def _plan() -> OciRecordPlanV1:

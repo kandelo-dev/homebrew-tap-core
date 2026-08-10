@@ -277,6 +277,47 @@ class GitHubWorkflowArtifactClientV1:
             size_in_bytes=size,
         )
 
+    def artifact_by_name(self, *, name: str) -> WorkflowArtifactV1:
+        """Resolve one current-run unique name to an exact immutable ID/digest."""
+
+        self._validate_current_run()
+        expected_name = _text(name, "workflow artifact name", 512)
+        query = urllib.parse.urlencode(
+            {"name": expected_name, "page": 1, "per_page": 100}
+        )
+        inventory = self._api(
+            f"/repos/{self.repository}/actions/runs/{self.run_id}/artifacts?{query}"
+        )
+        artifacts = inventory.get("artifacts")
+        total = inventory.get("total_count")
+        if (
+            isinstance(total, bool)
+            or not isinstance(total, int)
+            or total != 1
+            or not isinstance(artifacts, list)
+            or len(artifacts) != 1
+        ):
+            raise WorkflowArtifactError(
+                "workflow artifact name is absent or ambiguous"
+            )
+        candidate = _mapping(artifacts[0], "workflow artifact inventory entry")
+        artifact_id = _positive(candidate.get("id"), "workflow artifact ID")
+        digest = candidate.get("digest")
+        if (
+            candidate.get("name") != expected_name
+            or not isinstance(digest, str)
+            or not digest.startswith("sha256:")
+            or SHA256.fullmatch(digest[len("sha256:") :]) is None
+        ):
+            raise WorkflowArtifactError(
+                "workflow artifact inventory identity is malformed"
+            )
+        return self.artifact_by_id(
+            artifact_id=artifact_id,
+            name=expected_name,
+            sha256=digest[len("sha256:") :],
+        )
+
     def extract_artifact(
         self,
         artifact: WorkflowArtifactV1,

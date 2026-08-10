@@ -101,6 +101,91 @@ def _opener(archive: bytes, *, artifact_name: str = ARTIFACT_NAME):
 
 
 class WorkflowArtifactTests(unittest.TestCase):
+    def test_protected_name_resolution_returns_one_exact_id_and_digest(self) -> None:
+        module = importlib.import_module("scripts.abi_staging.workflow_artifact")
+        archive = _archive({"result.json": b"{}\n"})
+        digest = hashlib.sha256(archive).hexdigest()
+        normal = _opener(archive)
+
+        def with_inventory(request):
+            parsed = urllib.parse.urlsplit(request.full_url)
+            if parsed.hostname == "api.github.com" and parsed.path.endswith(
+                f"/actions/runs/{RUN_ID}/artifacts"
+            ):
+                self.assertEqual(
+                    urllib.parse.parse_qs(parsed.query),
+                    {"name": [ARTIFACT_NAME], "page": ["1"], "per_page": ["100"]},
+                )
+                body = {
+                    "total_count": 1,
+                    "artifacts": [
+                        {
+                            "id": 1001,
+                            "name": ARTIFACT_NAME,
+                            "size_in_bytes": len(archive),
+                            "expired": False,
+                            "digest": "sha256:" + digest,
+                            "workflow_run": {"id": RUN_ID, "head_sha": HEAD},
+                        }
+                    ],
+                }
+                return Response(200, json.dumps(body).encode())
+            return normal(request)
+
+        client = module.GitHubWorkflowArtifactClientV1(
+            REPOSITORY,
+            "fixture-token",
+            run_id=RUN_ID,
+            run_attempt=RUN_ATTEMPT,
+            head_sha=HEAD,
+            workflow_ref=WORKFLOW_REF,
+            opener=with_inventory,
+        )
+        artifact = client.artifact_by_name(name=ARTIFACT_NAME)
+        self.assertEqual(artifact.id, 1001)
+        self.assertEqual(artifact.sha256, digest)
+
+    def test_protected_name_resolution_rejects_ambiguous_artifacts(self) -> None:
+        module = importlib.import_module("scripts.abi_staging.workflow_artifact")
+        archive = _archive({"result.json": b"{}\n"})
+        normal = _opener(archive)
+
+        def ambiguous(request):
+            parsed = urllib.parse.urlsplit(request.full_url)
+            if parsed.hostname == "api.github.com" and parsed.path.endswith(
+                f"/actions/runs/{RUN_ID}/artifacts"
+            ):
+                artifact = {
+                    "id": 1001,
+                    "name": ARTIFACT_NAME,
+                    "size_in_bytes": len(archive),
+                    "expired": False,
+                    "digest": "sha256:" + hashlib.sha256(archive).hexdigest(),
+                    "workflow_run": {"id": RUN_ID, "head_sha": HEAD},
+                }
+                return Response(
+                    200,
+                    json.dumps(
+                        {
+                            "total_count": 2,
+                            "artifacts": [artifact, {**artifact, "id": 1002}],
+                        }
+                    ).encode(),
+                )
+            return normal(request)
+
+        client = module.GitHubWorkflowArtifactClientV1(
+            REPOSITORY,
+            "fixture-token",
+            run_id=RUN_ID,
+            run_attempt=RUN_ATTEMPT,
+            head_sha=HEAD,
+            workflow_ref=WORKFLOW_REF,
+            opener=ambiguous,
+        )
+        with self.assertRaises(module.WorkflowArtifactError):
+            client.artifact_by_name(name=ARTIFACT_NAME)
+
     def test_artifact_service_server_failure_exposes_only_bounded_protected_facts(self) -> None:
         module = importlib.import_module("scripts.abi_staging.workflow_artifact")
         archive = _archive({"result.json": b"{}\n"})

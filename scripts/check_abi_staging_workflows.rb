@@ -55,8 +55,10 @@ module AbiStagingWorkflowCheck
   end
 
   def require_no_candidate_execution(source, field)
-    require_contract(!source.match?(/\b(?:eval|source|curl|wget|sleep)\b/) &&
+    require_contract(!source.match?(/(?:^|\s)(?:eval|source|curl|wget|sleep)(?:\s|$)/) &&
                      !source.match?(/abi-staging-(?:build|verify)-bottle/) &&
+                     !source.match?(/(?:build|run)-[^\s]*vfs[^\s]*\.(?:sh|ts)/) &&
+                     !source.match?(/execute-product-(?:work|evidence-work)/) &&
                      !source.match?(/(?:^|\s)(?:bash|sh)\s+(?:handoff|verification)[^\n]*/) &&
                      !source.match?(/\b(?:brew|make|cmake|cargo|npm)\b/) &&
                      !source.match?(/oras\s+push/) &&
@@ -140,7 +142,11 @@ module AbiStagingWorkflowCheck
                      "manual workflow gained another coordinator input")
 
     jobs = workflow.fetch("jobs")
-    expected_jobs = %w[discover-plan candidate verification reuse]
+    expected_jobs = %w[
+      discover-plan candidate verification reuse prepare-runtime
+      plan-products compose-product publish-product-candidate node-product-evidence
+      browser-product-evidence publish-product-evidence
+    ]
     require_contract(jobs.keys == expected_jobs,
                      "workflow job split changed")
 
@@ -309,6 +315,266 @@ module AbiStagingWorkflowCheck
                      !reuse.key?("secrets") && !reuse.key?("runs-on") &&
                      !reuse.key?("steps"),
                      "reuse caller changed authority or exact inputs")
+
+    planner = jobs.fetch("plan-products")
+    require_contract(
+      planner.fetch("needs") ==
+        %w[discover-plan candidate verification reuse prepare-runtime],
+      "product planner must wait for all Formula public facts"
+    )
+    require_contract(
+      planner.fetch("if") ==
+        "always() && needs.discover-plan.outputs.selected == 'true' && needs.prepare-runtime.result == 'success'",
+      "product planner is not exact-request and exact-runtime scoped"
+    )
+    require_contract(
+      planner.fetch("runs-on") == "ubuntu-latest" &&
+        planner.fetch("timeout-minutes") == 30 &&
+        planner.fetch("permissions") == {"contents" => "read"} &&
+        !planner.key?("environment") && !planner.key?("secrets") &&
+        planner.fetch("steps").none? do |step|
+          step["continue-on-error"] == true
+        end,
+      "product planner must remain contents-read only"
+    )
+    check_actions(planner)
+    require_contract(
+      planner.fetch("outputs") == {
+        "product-matrix" => "${{ steps.plan.outputs.product_matrix }}",
+        "node-evidence-matrix" => "${{ steps.plan.outputs.node_evidence_matrix }}",
+        "browser-evidence-matrix" => "${{ steps.plan.outputs.browser_evidence_matrix }}"
+      },
+      "product planner outputs are not the exact protected wave"
+    )
+    planner_checkouts = action_steps(planner, CHECKOUT)
+    require_contract(
+      planner_checkouts.length == 2 &&
+        planner_checkouts.any? do |step|
+          step.fetch("with") == {
+            "ref" => "${{ needs.discover-plan.outputs.tap-commit }}",
+            "fetch-depth" => 1,
+            "persist-credentials" => false,
+            "path" => "tap-authority"
+          }
+        end && planner_checkouts.any? do |step|
+          step.fetch("with") == {
+            "repository" => "${{ needs.discover-plan.outputs.kandelo-repository }}",
+            "ref" => "${{ needs.discover-plan.outputs.kandelo-head }}",
+            "fetch-depth" => 1,
+            "persist-credentials" => false,
+            "path" => "kandelo-source"
+          }
+        end,
+      "product planner does not use exact protected and inert source checkouts"
+    )
+    planner_setup = action_steps(planner, SETUP_PYTHON)
+    require_contract(
+      planner_setup.length == 1 &&
+        planner_setup.fetch(0).dig("with", "python-version") == "3.13",
+      "product planner lacks declared Python"
+    )
+    planner_steps = run_steps(planner)
+    planner_source = planner_steps.map { |step| step.fetch("run") }.join("\n")
+    require_contract(
+      planner_steps.length == 1 && planner_steps.fetch(0).fetch("id") == "plan" &&
+        planner_steps.fetch(0).fetch("working-directory") == "tap-authority" &&
+        planner_source.include?("python3 -m scripts.abi_staging.cli plan-workflow-products") &&
+        planner_source.include?('--coordination-root "$RUNNER_TEMP/product-planning/coordination"') &&
+        planner_source.include?('--runtime-root "$RUNNER_TEMP/product-planning/runtime"') &&
+        planner_source.include?('--kandelo-root "$GITHUB_WORKSPACE/kandelo-source"') &&
+        planner_source.include?('--tap-root "$PWD"') &&
+        planner_source.include?('--github-output "$GITHUB_OUTPUT"'),
+      "product planner does not derive the protected wave"
+    )
+    require_no_candidate_execution(planner_source, "product planner")
+    planner_uploads = action_steps(planner, UPLOAD_ARTIFACT)
+    require_contract(
+      planner_uploads.length == 1 &&
+        planner_uploads.fetch(0).dig("with", "name") ==
+          "abi-staging-product-wave-${{ needs.discover-plan.outputs.request-digest }}-${{ github.run_id }}-${{ github.run_attempt }}" &&
+        planner_uploads.fetch(0).dig("with", "path") ==
+          "${{ runner.temp }}/product-wave" &&
+        planner_uploads.fetch(0).dig("with", "if-no-files-found") == "error" &&
+        planner_uploads.fetch(0).dig("with", "compression-level") == 0,
+      "product planner does not preserve its exact protected wave"
+    )
+
+    product_permissions = {
+      "prepare-runtime" => {"contents" => "read"},
+      "plan-products" => {"contents" => "read"},
+      "compose-product" => {"contents" => "read"},
+      "publish-product-candidate" => {
+        "actions" => "read", "contents" => "read", "packages" => "write"
+      },
+      "node-product-evidence" => {"contents" => "read"},
+      "browser-product-evidence" => {"contents" => "read"},
+      "publish-product-evidence" => {
+        "actions" => "read", "contents" => "read", "packages" => "write"
+      }
+    }
+    product_permissions.each do |name, permissions|
+      job = jobs.fetch(name)
+      require_contract(job.fetch("permissions") == permissions &&
+                       !job.key?("environment") && !job.key?("secrets") &&
+                       job.fetch("steps").none? do |step|
+                         step["continue-on-error"] == true
+                       end, "#{name} changed its exact capability boundary")
+      check_actions(job)
+    end
+
+    %w[prepare-runtime compose-product node-product-evidence browser-product-evidence].each do |name|
+      require_contract(jobs.fetch(name).fetch("timeout-minutes") == 180,
+                       "#{name} must retain the exact three-hour product bound")
+    end
+    %w[publish-product-candidate publish-product-evidence].each do |name|
+      require_contract(jobs.fetch(name).fetch("timeout-minutes").between?(1, 30),
+                       "#{name} publisher timeout is not bounded")
+    end
+
+    product_matrix = "${{ fromJSON(needs.plan-products.outputs.product-matrix) }}"
+    node_matrix = "${{ fromJSON(needs.plan-products.outputs.node-evidence-matrix) }}"
+    browser_matrix = "${{ fromJSON(needs.plan-products.outputs.browser-evidence-matrix) }}"
+    product_matrix_jobs = %w[
+      compose-product publish-product-candidate publish-product-evidence
+    ]
+    require_contract(
+      product_matrix_jobs.all? do |name|
+        jobs.dig(name, "strategy", "matrix") == product_matrix
+      end && jobs.dig("node-product-evidence", "strategy", "matrix") == node_matrix &&
+        jobs.dig("browser-product-evidence", "strategy", "matrix") == browser_matrix,
+      "product matrices must come from the protected wave"
+    )
+    require_matrix(jobs.fetch("compose-product"), product_matrix, "compose-product")
+    require_matrix(
+      jobs.fetch("publish-product-candidate"), product_matrix,
+      "publish-product-candidate"
+    )
+    require_matrix(jobs.fetch("node-product-evidence"), node_matrix,
+                   "node-product-evidence")
+    require_matrix(jobs.fetch("browser-product-evidence"), browser_matrix,
+                   "browser-product-evidence")
+    require_matrix(jobs.fetch("publish-product-evidence"), product_matrix,
+                   "publish-product-evidence")
+
+    prepare = jobs.fetch("prepare-runtime")
+    require_contract(prepare.fetch("needs") == "discover-plan" &&
+                     prepare.fetch("if") ==
+                       "needs.discover-plan.outputs.selected == 'true'",
+                     "runtime preparation is not exact-request scoped")
+    prepare_source = run_steps(prepare).map { |step| step.fetch("run") }.join("\n")
+    require_contract(prepare_source.include?("abi-staging-prepare-runtime.sh") &&
+                     prepare_source.include?('--source-commit "${{ needs.discover-plan.outputs.kandelo-head }}"') &&
+                     prepare_source.include?(".issuance.policy_sha256") &&
+                     !prepare_source.include?(".requirements.digest") &&
+                     prepare_source.include?("env -u GITHUB_TOKEN") &&
+                     prepare_source.include?("-u ACTIONS_RUNTIME_TOKEN"),
+                     "runtime preparation is not the uncredentialed exact-head adapter")
+
+    compose = jobs.fetch("compose-product")
+    require_contract(compose.fetch("needs") ==
+                       %w[discover-plan prepare-runtime plan-products] &&
+                     compose.fetch("if") ==
+                       "always() && needs.plan-products.result == 'success' && needs.discover-plan.outputs.selected == 'true'",
+                     "product composition gates on a global Formula outcome")
+    compose_source = run_steps(compose).map { |step| step.fetch("run") }.join("\n")
+    require_contract(compose_source.include?("execute-product-work") &&
+                     compose_source.include?("--validate-builder-report") &&
+                     compose_source.include?('--private-out "$RUNNER_TEMP/product-private"') &&
+                     compose_source.include?("env -u GITHUB_TOKEN") &&
+                     compose_source.include?("-u ACTIONS_RUNTIME_TOKEN"),
+                     "product composition lacks the protected report boundary")
+    compose_uploads = action_steps(compose, UPLOAD_ARTIFACT)
+    require_contract(compose_uploads.length == 2 &&
+                     compose_uploads.any? do |step|
+                       step.dig("with", "name") ==
+                         "abi-staging-product-private-${{ matrix.product_id }}-${{ matrix.work_id }}-${{ github.run_id }}-${{ github.run_attempt }}" &&
+                         step.dig("with", "path") ==
+                           "${{ runner.temp }}/product-private" &&
+                         step.dig("with", "if-no-files-found") == "error"
+                     end,
+                     "product composition omits its exact private authority artifact")
+
+    candidate_publisher = jobs.fetch("publish-product-candidate")
+    require_contract(candidate_publisher.fetch("needs") ==
+                       %w[discover-plan plan-products compose-product] &&
+                     candidate_publisher.fetch("if") ==
+                       "always() && needs.plan-products.result == 'success' && needs.discover-plan.outputs.selected == 'true'",
+                     "candidate product publisher is not independently resumable")
+    candidate_publish_source = run_steps(candidate_publisher)
+      .map { |step| step.fetch("run") }.join("\n")
+    require_contract(
+      candidate_publish_source.include?("publish-workflow-product-candidate") &&
+      candidate_publish_source.include?("--validate-builder-report") &&
+      candidate_publish_source.include?("--private-artifact-name") &&
+      candidate_publish_source.include?('--kandelo-root "$GITHUB_WORKSPACE/kandelo-source"') &&
+      candidate_publish_source.include?('--kandelo-policy-root "$GITHUB_WORKSPACE/kandelo-authority"') &&
+      candidate_publish_source.include?("--require-github-digest") &&
+      candidate_publish_source.include?("--anonymous-readback") &&
+      candidate_publish_source.include?("--immutable"),
+      "candidate product publisher lacks exact inert-data validation"
+    )
+    publisher_checkouts = action_steps(candidate_publisher, CHECKOUT)
+    require_contract(publisher_checkouts.length == 3 &&
+                     publisher_checkouts.any? do |step|
+                       step.dig("with", "path") == "kandelo-source" &&
+                         step.dig("with", "ref") ==
+                           "${{ needs.discover-plan.outputs.kandelo-head }}" &&
+                         step.dig("with", "persist-credentials") == false
+                     end && publisher_checkouts.any? do |step|
+                       step.dig("with", "path") == "kandelo-authority" &&
+                         step.dig("with", "ref") ==
+                           "${{ needs.discover-plan.outputs.kandelo-policy-commit }}" &&
+                         step.dig("with", "persist-credentials") == false
+                     end,
+                     "candidate product publisher lacks exact inert source authority")
+    require_no_candidate_execution(candidate_publish_source,
+                                   "candidate product publisher")
+
+    {
+      "node-product-evidence" => "node",
+      "browser-product-evidence" => "browser"
+    }.each do |name, host|
+      job = jobs.fetch(name)
+      require_contract(job.fetch("needs") ==
+                         %w[discover-plan plan-products prepare-runtime publish-product-candidate] &&
+                       job.fetch("if") ==
+                         "always() && needs.plan-products.result == 'success' && needs.discover-plan.outputs.selected == 'true'",
+                       "#{name} must gate on the protected product wave")
+      source_text = run_steps(job).map { |step| step.fetch("run") }.join("\n")
+      require_contract(source_text.include?("execute-product-evidence-work") &&
+                       source_text.include?("--host #{host}") &&
+                       source_text.include?("env -u GITHUB_TOKEN") &&
+                       source_text.include?("-u ACTIONS_RUNTIME_TOKEN"),
+                       "#{name} is not an uncredentialed exact product runner")
+    end
+
+    evidence_publisher = jobs.fetch("publish-product-evidence")
+    require_contract(evidence_publisher.fetch("needs") ==
+                       %w[discover-plan plan-products node-product-evidence browser-product-evidence] &&
+                     evidence_publisher.fetch("if") ==
+                       "always() && needs.plan-products.result == 'success' && needs.discover-plan.outputs.selected == 'true'",
+                     "product evidence publisher is not sibling-independent")
+    evidence_publish_steps = run_steps(evidence_publisher)
+    evidence_publish_source = evidence_publish_steps
+      .map { |step| step.fetch("run") }.join("\n")
+    evidence_publish_step = evidence_publish_steps.find do |step|
+      step.fetch("run").include?("publish-workflow-product-evidence")
+    end
+    evidence_publish_env = evidence_publish_step&.fetch("env", {})
+    require_contract(
+      evidence_publish_source.include?("publish-workflow-product-evidence") &&
+      evidence_publish_source.include?('--product-work-id "$PRODUCT_WORK_ID"') &&
+      evidence_publish_source.include?("--require-terminal-results") &&
+      evidence_publish_source.include?("--require-github-digest") &&
+      evidence_publish_source.include?("--anonymous-readback") &&
+      evidence_publish_source.include?("--immutable") &&
+      evidence_publish_env["PRODUCT_WORK_ID"] == "${{ matrix.work_id }}" &&
+      evidence_publish_env["WORK_ID"] == "${{ matrix.publication_work_id }}" &&
+      !evidence_publish_source.match?(/PRODUCER_CONCLUSION\s*=\s*skipped/),
+      "product evidence publisher accepts incomplete or skipped evidence"
+    )
+    require_no_candidate_execution(evidence_publish_source,
+                                   "product evidence publisher")
 
     all_text = flatten(workflow).join("\n")
     require_contract(!all_text.match?(/\bsecrets\b/i),

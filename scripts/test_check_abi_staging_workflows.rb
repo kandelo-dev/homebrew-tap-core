@@ -41,6 +41,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     refute_empty error.message
   end
 
+  def assert_rejected_matching(label, pattern)
+    changed = copy
+    yield changed
+    error = assert_raises(AbiStagingWorkflowCheck::Violation, label) do
+      AbiStagingWorkflowCheck.check(changed)
+    end
+    assert_match pattern, error.message
+  end
+
   def assert_reusable_rejected(kind, label)
     original = kind == :candidate ? @candidate : @verification
     changed = copy(original)
@@ -118,6 +127,119 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       assert_equal "${{ needs.discover-plan.outputs.coordination-artifact-digest }}",
                    job.dig("with", "coordination-artifact-digest")
       refute job.key?("secrets")
+    end
+  end
+
+  def test_product_jobs_split_uncredentialed_execution_from_protected_writes
+    expected = {
+      "prepare-runtime" => {"contents" => "read"},
+      "plan-products" => {"contents" => "read"},
+      "compose-product" => {"contents" => "read"},
+      "publish-product-candidate" => {
+        "actions" => "read", "contents" => "read", "packages" => "write"
+      },
+      "node-product-evidence" => {"contents" => "read"},
+      "browser-product-evidence" => {"contents" => "read"},
+      "publish-product-evidence" => {
+        "actions" => "read", "contents" => "read", "packages" => "write"
+      }
+    }
+    expected.each do |name, permissions|
+      job = @workflow.dig("jobs", name)
+      refute_nil job, "missing #{name}"
+      assert_equal permissions, job["permissions"]
+      refute job.key?("secrets")
+    end
+    %w[prepare-runtime compose-product node-product-evidence browser-product-evidence].each do |name|
+      assert_equal 180, @workflow.dig("jobs", name, "timeout-minutes")
+    end
+    assert_equal 30, @workflow.dig("jobs", "plan-products", "timeout-minutes")
+  end
+
+  def test_product_planner_mutations_are_rejected_at_the_planning_boundary
+    assert_rejected_matching(
+      "planner skips a Formula lane", /product planner must wait for all Formula public facts/
+    ) do |workflow|
+      workflow.dig("jobs", "plan-products", "needs").delete("reuse")
+    end
+    assert_rejected_matching(
+      "planner gains write authority", /product planner must remain contents-read only/
+    ) do |workflow|
+      workflow.dig("jobs", "plan-products", "permissions")["packages"] = "write"
+    end
+    assert_rejected_matching(
+      "planner omits protected projection", /product planner does not derive the protected wave/
+    ) do |workflow|
+      step = last_run_step(workflow, "plan-products")
+      step["run"] = step["run"].sub("plan-workflow-products", "prepare-workflow")
+    end
+    assert_rejected_matching(
+      "planner executes candidate code", /product planner executes candidate data/
+    ) do |workflow|
+      last_run_step(workflow, "plan-products")["run"] <<
+        "\nbash kandelo-source/images/vfs/scripts/build-node-vfs-image.sh\n"
+    end
+    assert_rejected_matching(
+      "composition bypasses the wave", /product matrices must come from the protected wave/
+    ) do |workflow|
+      workflow.dig("jobs", "compose-product", "strategy")["matrix"] =
+        "${{ fromJSON(needs.discover-plan.outputs.product-matrix) }}"
+    end
+    assert_rejected_matching(
+      "evidence bypasses the wave", /node-product-evidence must gate on the protected product wave/
+    ) do |workflow|
+      workflow.dig("jobs", "node-product-evidence", "needs").delete("plan-products")
+    end
+  end
+
+  def test_runtime_binds_the_protected_request_policy_identity
+    source = last_run_step(@workflow, "prepare-runtime").fetch("run")
+    assert_includes source, ".issuance.policy_sha256"
+    refute_includes source, ".requirements.digest"
+  end
+
+  def test_product_workflow_mutations_are_rejected
+    assert_rejected("composition writer") do |workflow|
+      workflow.dig("jobs", "compose-product", "permissions")["packages"] = "write"
+    end
+    assert_rejected("publisher candidate execution") do |workflow|
+      last_run_step(workflow, "publish-product-candidate")["run"] <<
+        "\nbash kandelo-source/images/vfs/scripts/build-node-vfs-image.sh\n"
+    end
+    assert_rejected("missing report validation") do |workflow|
+      step = last_run_step(workflow, "publish-product-candidate")
+      step["run"] = step["run"].sub("--validate-builder-report", "")
+    end
+    assert_rejected("missing private product authority") do |workflow|
+      step = last_run_step(workflow, "compose-product")
+      step["run"] = step["run"].sub(
+        /\s+--private-out\s+"\$RUNNER_TEMP\/product-private"\s+\\/, ""
+      )
+    end
+    assert_rejected("publisher omits private product authority") do |workflow|
+      step = last_run_step(workflow, "publish-product-candidate")
+      step["run"] = step["run"].sub(
+        /\s+--private-artifact-name\s+"[^"]+"\s+\\/, ""
+      )
+    end
+    assert_rejected("missing browser evidence") do |workflow|
+      workflow.fetch("jobs").delete("browser-product-evidence")
+    end
+    assert_rejected("skipped evidence accepted") do |workflow|
+      step = last_run_step(workflow, "publish-product-evidence")
+      step["run"] << "\nPRODUCER_CONCLUSION=skipped\n"
+    end
+    assert_rejected("evidence publisher loses parent product identity") do |workflow|
+      step = last_run_step(workflow, "publish-product-evidence")
+      step["run"] = step["run"].sub(
+        /\s+--product-work-id\s+"\$PRODUCT_WORK_ID"\s+\\/, ""
+      )
+    end
+    assert_rejected("global product transaction") do |workflow|
+      workflow.dig("jobs", "compose-product").delete("strategy")
+    end
+    assert_rejected("sleeping product") do |workflow|
+      last_run_step(workflow, "node-product-evidence")["run"] << "\nsleep 60\n"
     end
   end
 
