@@ -15,7 +15,12 @@ from .canonical import (
     parse_canonical_bytes,
 )
 from .oci import OciTransportV1, PublishedRecordLocatorV1, publish_record
-from .product import ProductInputResolutionError, load_resolved_product_inputs
+from .plan import PlanError, parse_formula_subject
+from .product import (
+    ProductInputPlanV1,
+    ProductInputResolutionError,
+    load_resolved_product_inputs,
+)
 from .records import OciBlobV1, OciRecordPlanV1
 
 
@@ -643,10 +648,64 @@ def _load_resolved(body: bytes) -> Mapping[str, Any]:
     return value
 
 
+def _validate_protected_input_plan(
+    plan: ProductInputPlanV1,
+    *,
+    resolved: Mapping[str, Any],
+    resolved_body: bytes,
+    runtime_bundle_body: bytes,
+) -> None:
+    if not isinstance(plan, ProductInputPlanV1):
+        raise ProductEvidenceError("candidate publication lacks a protected product input plan")
+    product = resolved["product"]
+    expected_product = (
+        product["id"],
+        product["manifest_path"],
+        product["manifest_sha256"],
+        product["architecture"],
+        resolved["reference_class"],
+    )
+    actual_product = (
+        plan.product_id,
+        plan.manifest_path,
+        plan.manifest_sha256,
+        plan.architecture,
+        plan.reference_class,
+    )
+    if actual_product != expected_product:
+        raise ProductEvidenceError(
+            "candidate publication product differs from its protected input plan"
+        )
+    if plan.resolved_inputs_sha256 != _sha(resolved_body):
+        raise ProductEvidenceError(
+            "candidate publication resolved inputs differ from their protected input plan"
+        )
+    if plan.runtime_bundle_sha256 != _sha(runtime_bundle_body):
+        raise ProductEvidenceError(
+            "candidate publication runtime bundle differs from its protected input plan"
+        )
+    for label, values in (
+        ("dependency products", plan.dependency_product_ids),
+        ("Formula subjects", plan.required_formula_subjects),
+    ):
+        if not isinstance(values, tuple) or values != tuple(sorted(set(values))):
+            raise ProductEvidenceError(
+                f"protected product input plan {label} are not sorted and unique"
+            )
+    for value in plan.dependency_product_ids:
+        _stable_id(value, "protected product input plan dependency products")
+    for value in plan.required_formula_subjects:
+        try:
+            parse_formula_subject(value, "protected product input plan Formula subject")
+        except PlanError as error:
+            raise ProductEvidenceError(str(error)) from error
+
+
 def build_candidate_product_oci_plan(
     *,
     repository: str,
     publisher_repository: str,
+    input_plan: ProductInputPlanV1,
     vfs_body: bytes,
     builder_report_body: bytes,
     resolved_inputs_body: bytes,
@@ -667,6 +726,12 @@ def build_candidate_product_oci_plan(
             "candidate product publisher repository is not owner/name"
         )
     resolved = _load_resolved(resolved_inputs_body)
+    _validate_protected_input_plan(
+        input_plan,
+        resolved=resolved,
+        resolved_body=resolved_inputs_body,
+        runtime_bundle_body=runtime_bundle_body,
+    )
     product = resolved["product"]
     _validate_product_repository(repository, product["id"], resolved["target_abi"]["version"])
     report = _validate_builder_report(
