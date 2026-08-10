@@ -1057,6 +1057,517 @@ def build_candidate_reuse_oci_plan(
     )
 
 
+def _record_link(value: Any, field: str) -> dict[str, str]:
+    link = _mapping(value, field)
+    _exact_keys(link, frozenset({"record_sha256", "immutable_reference"}), field)
+    digest = _digest(link["record_sha256"], f"{field} digest")
+    reference = _text(link["immutable_reference"], f"{field} reference", 4096)
+    if f"sha256:{digest}" not in reference or any(
+        character.isspace() for character in reference
+    ):
+        raise TapRecordError(f"{field} reference does not bind its digest")
+    return {"record_sha256": digest, "immutable_reference": reference}
+
+
+def _architecture(value: Any, field: str) -> str:
+    if value not in {"wasm32", "wasm64"}:
+        raise TapRecordError(f"{field} is unsupported")
+    return value
+
+
+def _maintainer(value: Any, field: str) -> dict[str, str]:
+    maintainer = _mapping(value, field)
+    _exact_keys(
+        maintainer,
+        frozenset({"login", "permission", "authorization_reference"}),
+        field,
+    )
+    permission = _text(maintainer["permission"], f"{field} permission", 128)
+    if permission not in {"maintain", "admin"}:
+        raise TapRecordError(f"{field} lacks maintain permission")
+    return {
+        "login": _stable_id(maintainer["login"], f"{field} login"),
+        "permission": permission,
+        "authorization_reference": _text(
+            maintainer["authorization_reference"], f"{field} reference", 2048
+        ),
+    }
+
+
+def _policy_identity(value: Any, field: str) -> dict[str, Any]:
+    policy = _mapping(value, field)
+    _exact_keys(
+        policy,
+        frozenset(
+            {
+                "policy_version",
+                "policy_sha256",
+                "guard_registry_version",
+                "guard_registry_sha256",
+            }
+        ),
+        field,
+    )
+    return {
+        "policy_version": _positive_integer(
+            policy["policy_version"], f"{field} version"
+        ),
+        "policy_sha256": _digest(policy["policy_sha256"], f"{field} digest"),
+        "guard_registry_version": _positive_integer(
+            policy["guard_registry_version"], f"{field} guard registry version"
+        ),
+        "guard_registry_sha256": _digest(
+            policy["guard_registry_sha256"], f"{field} guard registry digest"
+        ),
+    }
+
+
+def validate_abi_history_record(record: Mapping[str, Any]) -> None:
+    value = _mapping(record, "ABI history record")
+    _exact_keys(
+        value,
+        frozenset(
+            {
+                "schema",
+                "kind",
+                "plan",
+                "created_ref_object",
+                "protection_evidence",
+                "metadata_verification_sha256",
+                "public_readback_sha256",
+                "run",
+            }
+        ),
+        "ABI history record",
+    )
+    if value["schema"] != 1 or value["kind"] != "kandelo-abi-history-record":
+        raise TapRecordError("ABI history record protocol is unsupported")
+    plan = _mapping(value["plan"], "ABI history plan")
+    _exact_keys(
+        plan,
+        frozenset(
+            {
+                "source_abi",
+                "successor_abi",
+                "preactivation_tap_commit",
+                "preactivation_tap_tree",
+                "branch",
+                "expected_current_metadata_sha256",
+                "protection_requirement_sha256",
+            }
+        ),
+        "ABI history plan",
+    )
+    source_abi = _nonnegative_integer(plan["source_abi"], "history source ABI")
+    successor_abi = _nonnegative_integer(
+        plan["successor_abi"], "history successor ABI"
+    )
+    if successor_abi != source_abi + 1:
+        raise TapRecordError("ABI history transition must be exactly N to N+1")
+    commit = _git_sha(plan["preactivation_tap_commit"], "history tap commit")
+    tree = _git_sha(plan["preactivation_tap_tree"], "history tap tree")
+    branch = _text(plan["branch"], "history branch", 128)
+    if branch != f"abi/{source_abi}":
+        raise TapRecordError("ABI history branch is not exact")
+    _digest(
+        plan["expected_current_metadata_sha256"], "history expected metadata"
+    )
+    requirement = _digest(
+        plan["protection_requirement_sha256"], "history protection requirement"
+    )
+    if _git_sha(value["created_ref_object"], "created history ref") != commit:
+        raise TapRecordError("created history ref differs from preactivation commit")
+    evidence = _mapping(value["protection_evidence"], "history protection evidence")
+    _exact_keys(
+        evidence,
+        frozenset(
+            {
+                "branch",
+                "covered",
+                "observed_protection_sha256",
+                "protection_requirement_sha256",
+                "ref_object",
+                "ref_tree",
+                "source",
+            }
+        ),
+        "history protection evidence",
+    )
+    if evidence["covered"] is not True:
+        raise TapRecordError("ABI history branch is not protected")
+    if evidence["source"] not in {"branch-protection", "ruleset"}:
+        raise TapRecordError("ABI history protection source is unsupported")
+    if (
+        evidence["branch"] != branch
+        or _git_sha(evidence["ref_object"], "protected history ref") != commit
+        or _git_sha(evidence["ref_tree"], "protected history tree") != tree
+        or _digest(
+            evidence["protection_requirement_sha256"],
+            "observed history protection requirement",
+        )
+        != requirement
+    ):
+        raise TapRecordError("ABI history ref/tree/protection evidence differs from its plan")
+    _digest(evidence["observed_protection_sha256"], "observed protection snapshot")
+    _digest(value["metadata_verification_sha256"], "history metadata verification")
+    _digest(value["public_readback_sha256"], "history public readback")
+    _run(value["run"], "history run")
+    if len(canonical_bytes(value)) > MAX_RECORD_BYTES:
+        raise TapRecordError("ABI history record exceeds its byte bound")
+
+
+def validate_historical_maintenance_authorization(
+    record: Mapping[str, Any],
+) -> None:
+    value = _mapping(record, "historical maintenance authorization")
+    _exact_keys(
+        value,
+        frozenset(
+            {
+                "schema",
+                "kind",
+                "abi",
+                "branch",
+                "source",
+                "formula",
+                "reason",
+                "maintainer",
+                "policy",
+                "history_record",
+                "run",
+            }
+        ),
+        "historical maintenance authorization",
+    )
+    if (
+        value["schema"] != 1
+        or value["kind"]
+        != "kandelo-abi-historical-maintenance-authorization"
+    ):
+        raise TapRecordError("historical maintenance protocol is unsupported")
+    abi = _nonnegative_integer(value["abi"], "historical maintenance ABI")
+    branch = _text(value["branch"], "historical maintenance branch", 128)
+    if branch != f"abi/{abi}":
+        raise TapRecordError("historical maintenance must target exact abi/N")
+    source = _record_source(value["source"], "historical maintenance source")
+    formula = _mapping(value["formula"], "historical maintenance Formula")
+    _exact_keys(
+        formula,
+        frozenset({"tap", "formula", "architecture"}),
+        "historical maintenance Formula",
+    )
+    if _repository(formula["tap"], "historical Formula tap") != source["repository"]:
+        raise TapRecordError("historical Formula tap differs from protected source")
+    _stable_id(formula["formula"], "historical Formula name")
+    _architecture(formula["architecture"], "historical Formula architecture")
+    if value["reason"] not in {"failed-package-repair", "security-rebuild"}:
+        raise TapRecordError("historical maintenance reason is not a repair reason")
+    _maintainer(value["maintainer"], "historical maintenance maintainer")
+    _policy_identity(value["policy"], "historical maintenance policy")
+    _record_link(value["history_record"], "historical maintenance history record")
+    _run(value["run"], "historical maintenance run")
+    if len(canonical_bytes(value)) > MAX_RECORD_BYTES:
+        raise TapRecordError("historical maintenance authorization exceeds its byte bound")
+
+
+def _epoch_subject(value: Any, field: str) -> tuple[str, str]:
+    subject = _mapping(value, field)
+    _exact_keys(subject, frozenset({"formula", "architecture"}), field)
+    return (
+        _stable_id(subject["formula"], f"{field} Formula"),
+        _architecture(subject["architecture"], f"{field} architecture"),
+    )
+
+
+def validate_abi_epoch_status(record: Mapping[str, Any]) -> None:
+    value = _mapping(record, "ABI epoch status")
+    _exact_keys(
+        value,
+        frozenset(
+            {
+                "schema",
+                "kind",
+                "abi",
+                "scheduled_subjects",
+                "terminal_outcomes",
+                "state",
+                "repair_links",
+                "run",
+            }
+        ),
+        "ABI epoch status",
+    )
+    if value["schema"] != 1 or value["kind"] != "kandelo-abi-epoch-status":
+        raise TapRecordError("ABI epoch status protocol is unsupported")
+    _nonnegative_integer(value["abi"], "epoch ABI")
+    scheduled = [
+        _epoch_subject(candidate, f"scheduled subject {index}")
+        for index, candidate in enumerate(
+            _sequence(value["scheduled_subjects"], "scheduled subjects")
+        )
+    ]
+    if not scheduled or scheduled != sorted(set(scheduled)):
+        raise TapRecordError("scheduled epoch subjects must be sorted and duplicate-free")
+    terminal: list[tuple[str, str]] = []
+    for index, candidate in enumerate(
+        _sequence(value["terminal_outcomes"], "terminal outcomes")
+    ):
+        outcome = _mapping(candidate, f"terminal outcome {index}")
+        _exact_keys(
+            outcome,
+            frozenset({"subject", "outcome", "record"}),
+            f"terminal outcome {index}",
+        )
+        subject = _epoch_subject(outcome["subject"], f"terminal outcome {index} subject")
+        if outcome["outcome"] not in {"success", "failure", "timeout", "canceled"}:
+            raise TapRecordError("epoch terminal outcome is not terminal for retirement")
+        _record_link(outcome["record"], f"terminal outcome {index} record")
+        terminal.append(subject)
+    if terminal != sorted(set(terminal)) or not set(terminal).issubset(scheduled):
+        raise TapRecordError("epoch terminal subjects differ from its schedule")
+    state = value["state"]
+    if state not in {"active", "retiring", "retired"}:
+        raise TapRecordError("ABI epoch state is unsupported")
+    if state == "retired" and terminal != scheduled:
+        raise TapRecordError("retired ABI epoch still has nonterminal scheduled subjects")
+    if state == "retiring" and terminal == scheduled:
+        raise TapRecordError("fully terminal ABI epoch must be retired")
+    repair_links = [
+        _record_link(candidate, f"repair link {index}")
+        for index, candidate in enumerate(_sequence(value["repair_links"], "repair links"))
+    ]
+    repair_digests = [link["record_sha256"] for link in repair_links]
+    if repair_digests != sorted(set(repair_digests)):
+        raise TapRecordError("repair links must be sorted and duplicate-free")
+    _run(value["run"], "ABI epoch run")
+    if len(canonical_bytes(value)) > MAX_RECORD_BYTES:
+        raise TapRecordError("ABI epoch status exceeds its byte bound")
+
+
+def _formula_metadata_update(
+    value: Any,
+    *,
+    tap_source: Mapping[str, str],
+    canonical: Mapping[str, Any],
+    layer: Mapping[str, Any],
+) -> dict[str, Any]:
+    update = _mapping(value, "Formula metadata update")
+    _exact_keys(
+        update,
+        frozenset(
+            {
+                "formula",
+                "architecture",
+                "expected_main_commit",
+                "expected_normalized_formula_sha256",
+                "expected_generated_metadata_sha256",
+                "allowed_paths",
+                "canonical_manifest_digest",
+                "bottle_layer_sha256",
+                "bottle_layer_bytes",
+                "target_abi",
+            }
+        ),
+        "Formula metadata update",
+    )
+    formula = _stable_id(update["formula"], "metadata Formula")
+    architecture = _architecture(update["architecture"], "metadata architecture")
+    if _git_sha(update["expected_main_commit"], "metadata expected main") != tap_source[
+        "commit"
+    ]:
+        raise TapRecordError("Formula metadata update expected main differs from tap source")
+    _digest(
+        update["expected_normalized_formula_sha256"],
+        "metadata normalized Formula",
+    )
+    _digest(
+        update["expected_generated_metadata_sha256"],
+        "metadata generated projection",
+    )
+    allowed = list(_sequence(update["allowed_paths"], "metadata allowed paths"))
+    expected_paths = [
+        f"Formula/{formula}.rb",
+        f"Kandelo/formula/{formula}.json",
+        "Kandelo/metadata.json",
+    ]
+    if allowed != expected_paths:
+        raise TapRecordError("Formula metadata update path set is not exact")
+    if (
+        _digest(update["canonical_manifest_digest"], "metadata canonical manifest")
+        != canonical["sha256"]
+        or _digest(update["bottle_layer_sha256"], "metadata bottle layer")
+        != layer["sha256"]
+        or _positive_integer(update["bottle_layer_bytes"], "metadata bottle bytes")
+        != layer["bytes"]
+    ):
+        raise TapRecordError("Formula metadata update differs from promoted layer/readback")
+    _nonnegative_integer(update["target_abi"], "metadata target ABI")
+    return {"formula": formula, "architecture": architecture}
+
+
+def validate_admission_record(record: Mapping[str, Any]) -> None:
+    value = _mapping(record, "admission record")
+    _exact_keys(
+        value,
+        frozenset({"schema", "kind", "common", "admission"}),
+        "admission record",
+    )
+    if value["schema"] != 1 or value["kind"] != "kandelo-abi-staging-admission":
+        raise TapRecordError("admission record protocol is unsupported")
+    common = _mapping(value["common"], "admission common")
+    _exact_keys(
+        common,
+        frozenset(
+            {
+                "request_sha256",
+                "subject",
+                "source",
+                "run",
+                "guard_codes",
+                "work_state",
+                "outcome",
+                "artifact_class",
+                "artifact",
+                "promotion_state",
+                "retry_state",
+                "blockers",
+            }
+        ),
+        "admission common",
+    )
+    _digest(common["request_sha256"], "admission request")
+    source = _record_source(common["source"], "admission source")
+    _run(common["run"], "admission run")
+    canonical_common = _validated_artifact(common["artifact"], "admission artifact")
+    if (
+        common["guard_codes"] != []
+        or common["work_state"] != "complete"
+        or common["outcome"] != "success"
+        or common["artifact_class"] != "canonical"
+        or common["promotion_state"] != "promoted"
+        or common["blockers"] != []
+        or common["retry_state"]
+        != {
+            "attempts": 0,
+            "eligible": False,
+            "exhausted": False,
+            "next_action": "none",
+        }
+    ):
+        raise TapRecordError("admission common state is contradictory")
+    subject = _mapping(common["subject"], "admission subject")
+    _exact_keys(subject, frozenset({"kind", "identity"}), "admission subject")
+    if subject["kind"] != "candidate":
+        raise TapRecordError("admission subject must be the candidate record")
+    payload = _mapping(value["admission"], "admission payload")
+    _exact_keys(
+        payload,
+        frozenset(
+            {
+                "candidate_record_sha256",
+                "promoted_layer",
+                "qualifying_receipt_sha256s",
+                "merged_pull_request",
+                "tap_source",
+                "canonical",
+                "canonical_public_readback_sha256",
+                "formula_metadata_source",
+                "formula_metadata_update",
+                "original_producer",
+            }
+        ),
+        "admission payload",
+    )
+    candidate_digest = _digest(
+        payload["candidate_record_sha256"], "admission candidate record"
+    )
+    if subject["identity"] != candidate_digest:
+        raise TapRecordError("admission subject differs from candidate record")
+    layer = _validated_artifact(payload["promoted_layer"], "promoted bottle layer")
+    receipts = list(
+        _sequence(payload["qualifying_receipt_sha256s"], "admission receipts")
+    )
+    checked_receipts = [_digest(item, "admission receipt") for item in receipts]
+    if not checked_receipts or checked_receipts != sorted(set(checked_receipts)):
+        raise TapRecordError("admission receipts must be sorted and duplicate-free")
+    merged = _mapping(payload["merged_pull_request"], "admission merged PR")
+    _exact_keys(
+        merged,
+        frozenset({"repository", "number", "head", "merge_commit"}),
+        "admission merged PR",
+    )
+    merged_repository = _text(
+        merged["repository"], "admission PR repository", 255
+    )
+    if not re.fullmatch(
+        r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$", merged_repository
+    ):
+        raise TapRecordError("admission PR repository is not owner/name")
+    _positive_integer(merged["number"], "admission PR number")
+    merged_head = _git_sha(merged["head"], "admission PR head")
+    merge_commit = _git_sha(merged["merge_commit"], "admission merge commit")
+    if source["repository"].lower() != merged_repository.lower() or source[
+        "commit"
+    ] != merged_head:
+        raise TapRecordError("admission source differs from exact merged PR head")
+    tap_source = _record_source(payload["tap_source"], "admission tap source")
+    canonical = _validated_artifact(payload["canonical"], "admission canonical artifact")
+    if canonical != canonical_common:
+        raise TapRecordError("admission common artifact differs from canonical artifact")
+    if (
+        _digest(payload["canonical_public_readback_sha256"], "canonical readback")
+        != canonical["sha256"]
+    ):
+        raise TapRecordError("canonical readback differs from admitted manifest")
+    metadata_source = _record_source(
+        payload["formula_metadata_source"], "Formula metadata source"
+    )
+    if (
+        metadata_source["repository"].lower() != tap_source["repository"].lower()
+        or metadata_source["commit"] == tap_source["commit"]
+        or tap_source["repository"].lower() == merged_repository.lower()
+    ):
+        raise TapRecordError("Formula metadata update source is absent or wrong")
+    _formula_metadata_update(
+        payload["formula_metadata_update"],
+        tap_source=tap_source,
+        canonical=canonical,
+        layer=layer,
+    )
+    producer = _mapping(payload["original_producer"], "admission original producer")
+    _exact_keys(
+        producer,
+        frozenset({"request_sha256", "head", "run_id"}),
+        "admission original producer",
+    )
+    _digest(producer["request_sha256"], "original producer request")
+    producer_head = _git_sha(producer["head"], "original producer head")
+    _positive_integer(producer["run_id"], "original producer run ID")
+    if producer_head == merge_commit:
+        raise TapRecordError("admission rewrote original producer to the merge commit")
+    if len(canonical_bytes(value)) > MAX_RECORD_BYTES:
+        raise TapRecordError("admission record exceeds its byte bound")
+
+
+def validate_durable_record(record: Mapping[str, Any]) -> None:
+    value = _mapping(record, "durable record")
+    kind = value.get("kind")
+    validators = {
+        "kandelo-abi-history-record": validate_abi_history_record,
+        "kandelo-abi-historical-maintenance-authorization": (
+            validate_historical_maintenance_authorization
+        ),
+        "kandelo-abi-epoch-status": validate_abi_epoch_status,
+        "kandelo-abi-staging-admission": validate_admission_record,
+        "kandelo-abi-staging-candidate": validate_candidate_record,
+        "kandelo-abi-staging-attempt-outcome": validate_attempt_outcome_record,
+    }
+    validator = validators.get(kind)
+    if validator is None:
+        raise TapRecordError(f"unknown durable record kind {kind!r}")
+    validator(value)
+
+
 def _plain(value: Any) -> Any:
     if isinstance(value, Mapping):
         return {key: _plain(child) for key, child in value.items()}

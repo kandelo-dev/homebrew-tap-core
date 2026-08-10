@@ -75,6 +75,7 @@ from .records import (
     build_source_custody_oci_plan,
     load_tap_plan_record,
 )
+from .tap_metadata import TapMetadataError, check_tap_metadata
 from .product import (
     MAX_INPUT_OBJECT_BYTES,
     NONPUBLIC_PRODUCT_INPUT_KINDS,
@@ -208,6 +209,8 @@ def _parser() -> argparse.ArgumentParser:
     plan_products.add_argument("--github-output", required=True)
     policy_check = subcommands.add_parser("policy-check")
     policy_check.add_argument("--tap-root", required=True)
+    tap_metadata_check = subcommands.add_parser("tap-metadata-check")
+    tap_metadata_check.add_argument("--tap-root", required=True)
     policy_generate = subcommands.add_parser("policy-generate")
     policy_generate.add_argument("--tap-root", required=True)
     policy_generate.add_argument("--out", required=True)
@@ -3889,6 +3892,7 @@ def main(arguments: list[str] | None = None) -> int:
             return 0
         if args.command in {
             "policy-check",
+            "tap-metadata-check",
             "policy-generate",
             "formula-inventory-fixture",
             "plan-request",
@@ -3900,6 +3904,8 @@ def main(arguments: list[str] | None = None) -> int:
                 raise PolicyError("--tap-root must name this protected tap checkout")
             if args.command == "policy-check":
                 check_policy_files(tap_root)
+            elif args.command == "tap-metadata-check":
+                sys.stdout.buffer.write(canonical_bytes(check_tap_metadata(tap_root)))
             elif args.command == "policy-generate":
                 write_formula_capture_catalog(tap_root, Path(args.out))
             elif args.command == "formula-inventory-fixture":
@@ -4036,6 +4042,7 @@ def main(arguments: list[str] | None = None) -> int:
         PlanError,
         ContractError,
         TapRecordError,
+        TapMetadataError,
         PublicGitHubError,
         ReconciliationError,
         RequestValidationError,

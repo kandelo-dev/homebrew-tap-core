@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from scripts.abi_staging.canonical import canonical_bytes
+from scripts.abi_staging.canonical import canonical_bytes, canonical_sha256
 from scripts.abi_staging.cli import _local_locator, _publication_result
 from scripts.abi_staging.contract import (
     build_bottle_contract,
@@ -30,7 +30,12 @@ from scripts.abi_staging.records import (
     build_attempt_outcome_oci_plan,
     build_attempt_outcome_record,
     build_source_custody_oci_plan,
+    validate_abi_epoch_status,
+    validate_abi_history_record,
+    validate_admission_record,
     validate_candidate_record,
+    validate_durable_record,
+    validate_historical_maintenance_authorization,
     validate_attempt_outcome_record,
 )
 from scripts.abi_staging.tests.test_contract import (
@@ -47,6 +52,12 @@ CANDIDATE_REPOSITORY = (
     "kandelo-dev/homebrew-tap-core-abi-8-candidates/mini-tool"
 )
 SOURCE_REPOSITORY = "kandelo-dev/homebrew-tap-core-abi-8-source-custody"
+SHA_A = "a" * 64
+SHA_B = "b" * 64
+SHA_C = "c" * 64
+COMMIT_A = "1" * 40
+COMMIT_B = "2" * 40
+TREE_A = "2" * 40
 
 
 def _artifact(body: bytes) -> dict[str, object]:
@@ -98,6 +109,195 @@ def _write_custody(root: Path) -> None:
     }
     manifest["capsule_sha256"] = source_capsule_digest(manifest)
     (root / "manifest.json").write_bytes(canonical_bytes(manifest))
+
+
+def _run() -> dict[str, object]:
+    return {
+        "repository": "kandelo-dev/homebrew-tap-core",
+        "workflow_ref": ".github/workflows/abi-history.yml@refs/heads/main",
+        "run_id": 9,
+        "run_attempt": 1,
+        "job": "verify-history",
+    }
+
+
+def _record_link(digest: str = SHA_A) -> dict[str, str]:
+    return {
+        "record_sha256": digest,
+        "immutable_reference": (
+            "ghcr.io/kandelo-dev/homebrew-tap-core-abi-7-records/history@sha256:"
+            + digest
+        ),
+    }
+
+
+def _history_record() -> dict[str, object]:
+    return {
+        "schema": 1,
+        "kind": "kandelo-abi-history-record",
+        "plan": {
+            "source_abi": 7,
+            "successor_abi": 8,
+            "preactivation_tap_commit": COMMIT_A,
+            "preactivation_tap_tree": TREE_A,
+            "branch": "abi/7",
+            "expected_current_metadata_sha256": SHA_A,
+            "protection_requirement_sha256": SHA_B,
+        },
+        "created_ref_object": COMMIT_A,
+        "protection_evidence": {
+            "branch": "abi/7",
+            "covered": True,
+            "observed_protection_sha256": SHA_C,
+            "protection_requirement_sha256": SHA_B,
+            "ref_object": COMMIT_A,
+            "ref_tree": TREE_A,
+            "source": "ruleset",
+        },
+        "metadata_verification_sha256": SHA_B,
+        "public_readback_sha256": SHA_C,
+        "run": _run(),
+    }
+
+
+def _maintenance_authorization() -> dict[str, object]:
+    return {
+        "schema": 1,
+        "kind": "kandelo-abi-historical-maintenance-authorization",
+        "abi": 7,
+        "branch": "abi/7",
+        "source": {
+            "repository": "kandelo-dev/homebrew-tap-core",
+            "commit": COMMIT_A,
+            "tree": TREE_A,
+        },
+        "formula": {
+            "tap": "kandelo-dev/homebrew-tap-core",
+            "formula": "bash",
+            "architecture": "wasm32",
+        },
+        "reason": "failed-package-repair",
+        "maintainer": {
+            "login": "maintainer",
+            "permission": "maintain",
+            "authorization_reference": (
+                "https://github.com/kandelo-dev/homebrew-tap-core/issues/9#issuecomment-1"
+            ),
+        },
+        "policy": {
+            "policy_version": 1,
+            "policy_sha256": SHA_A,
+            "guard_registry_version": 1,
+            "guard_registry_sha256": SHA_B,
+        },
+        "history_record": _record_link(SHA_A),
+        "run": _run(),
+    }
+
+
+def _epoch_status(*, state: str = "retired") -> dict[str, object]:
+    subject = {"formula": "bash", "architecture": "wasm32"}
+    return {
+        "schema": 1,
+        "kind": "kandelo-abi-epoch-status",
+        "abi": 7,
+        "scheduled_subjects": [subject],
+        "terminal_outcomes": [
+            {"subject": subject, "outcome": "failure", "record": _record_link()}
+        ],
+        "state": state,
+        "repair_links": [],
+        "run": _run(),
+    }
+
+
+def _admission_record() -> dict[str, object]:
+    candidate_layer = {
+        "sha256": SHA_A,
+        "bytes": 12,
+        "immutable_reference": (
+            "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/bash@sha256:"
+            + SHA_A
+        ),
+    }
+    canonical = {
+        "sha256": SHA_B,
+        "bytes": 99,
+        "immutable_reference": (
+            "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8/bash@sha256:" + SHA_B
+        ),
+    }
+    return {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-admission",
+        "common": {
+            "request_sha256": SHA_C,
+            "subject": {"kind": "candidate", "identity": SHA_C},
+            "source": {
+                "repository": "Automattic/kandelo",
+                "commit": COMMIT_A,
+                "tree": TREE_A,
+            },
+            "run": _run(),
+            "guard_codes": [],
+            "work_state": "complete",
+            "outcome": "success",
+            "artifact_class": "canonical",
+            "artifact": canonical,
+            "promotion_state": "promoted",
+            "retry_state": {
+                "attempts": 0,
+                "eligible": False,
+                "exhausted": False,
+                "next_action": "none",
+            },
+            "blockers": [],
+        },
+        "admission": {
+            "candidate_record_sha256": SHA_C,
+            "promoted_layer": candidate_layer,
+            "qualifying_receipt_sha256s": [SHA_A],
+            "merged_pull_request": {
+                "repository": "Automattic/kandelo",
+                "number": 19,
+                "head": COMMIT_A,
+                "merge_commit": COMMIT_B,
+            },
+            "tap_source": {
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": COMMIT_A,
+                "tree": TREE_A,
+            },
+            "canonical": canonical,
+            "canonical_public_readback_sha256": SHA_B,
+            "formula_metadata_source": {
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": COMMIT_B,
+                "tree": "4" * 40,
+            },
+            "formula_metadata_update": {
+                "formula": "bash",
+                "architecture": "wasm32",
+                "expected_main_commit": COMMIT_A,
+                "expected_normalized_formula_sha256": SHA_A,
+                "expected_generated_metadata_sha256": SHA_B,
+                "allowed_paths": [
+                    "Formula/bash.rb",
+                    "Kandelo/formula/bash.json",
+                    "Kandelo/metadata.json",
+                ],
+                "canonical_manifest_digest": SHA_B,
+                "bottle_layer_sha256": SHA_A,
+                "bottle_layer_bytes": 12,
+                "target_abi": 8,
+            },
+            "original_producer": {
+                "request_sha256": SHA_C,
+                "head": COMMIT_A,
+                "run_id": 8,
+            },
+        },
+    }
 
 
 def _write_handoff(root: Path) -> None:
@@ -418,6 +618,99 @@ class CandidateRecordTests(unittest.TestCase):
                 },
                 published_candidate_locator=candidate_locator,
             )
+
+    def test_history_record_binds_adjacent_abi_ref_tree_and_protection(self) -> None:
+        record = _history_record()
+        validate_abi_history_record(record)
+        validate_durable_record(record)
+        self.assertEqual(
+            canonical_sha256(record),
+            "c804a1d25a868967caacb74fe3316f1066c9e95f1214c1518197fe6359410219",
+        )
+
+        for field, value in (
+            ("successor_abi", 9),
+            ("branch", "abi/6"),
+            ("preactivation_tap_tree", "9" * 40),
+        ):
+            changed = json.loads(canonical_bytes(record))
+            changed["plan"][field] = value
+            with self.subTest(field=field), self.assertRaises(TapRecordError):
+                validate_abi_history_record(changed)
+
+        unprotected = json.loads(canonical_bytes(record))
+        unprotected["protection_evidence"]["covered"] = False
+        with self.assertRaisesRegex(TapRecordError, "protected"):
+            validate_abi_history_record(unprotected)
+
+    def test_historical_maintenance_is_not_an_override_or_candidate_identity(self) -> None:
+        record = _maintenance_authorization()
+        validate_historical_maintenance_authorization(record)
+        validate_durable_record(record)
+        self.assertEqual(
+            canonical_sha256(record),
+            "b9e3f502307e79990ea51650b6e4f3f9a50a598b1260439aedd3c9c1a6651781",
+        )
+
+        for field, value in (
+            ("reason", "override"),
+            ("candidate_record_sha256", SHA_A),
+            ("branch", "main"),
+        ):
+            changed = json.loads(canonical_bytes(record))
+            changed[field] = value
+            with self.subTest(field=field), self.assertRaises(TapRecordError):
+                validate_historical_maintenance_authorization(changed)
+
+    def test_retired_epoch_requires_every_scheduled_subject_terminal(self) -> None:
+        record = _epoch_status()
+        validate_abi_epoch_status(record)
+        validate_durable_record(record)
+        self.assertEqual(
+            canonical_sha256(record),
+            "8d5aad3c929647e5c3bb51c1eabf688c804a9c722999ba5ce1069023de359df9",
+        )
+
+        incomplete = json.loads(canonical_bytes(record))
+        incomplete["terminal_outcomes"] = []
+        with self.assertRaisesRegex(TapRecordError, "retired"):
+            validate_abi_epoch_status(incomplete)
+
+        skipped = json.loads(canonical_bytes(record))
+        skipped["terminal_outcomes"][0]["outcome"] = "skipped"
+        with self.assertRaisesRegex(TapRecordError, "terminal"):
+            validate_abi_epoch_status(skipped)
+
+    def test_admission_binds_layer_readback_producer_and_metadata_update(self) -> None:
+        record = _admission_record()
+        validate_admission_record(record)
+        validate_durable_record(record)
+
+        mutations = {
+            "readback": lambda changed: changed["admission"].__setitem__(
+                "canonical_public_readback_sha256", SHA_C
+            ),
+            "layer": lambda changed: changed["admission"][
+                "formula_metadata_update"
+            ].__setitem__("bottle_layer_sha256", SHA_C),
+            "producer": lambda changed: changed["admission"][
+                "original_producer"
+            ].__setitem__("head", COMMIT_B),
+            "metadata": lambda changed: changed["admission"].pop(
+                "formula_metadata_update"
+            ),
+        }
+        for name, mutate in mutations.items():
+            changed = json.loads(canonical_bytes(record))
+            mutate(changed)
+            with self.subTest(name=name), self.assertRaises(TapRecordError):
+                validate_admission_record(changed)
+
+    def test_unknown_durable_record_kind_fails_closed(self) -> None:
+        record = _history_record()
+        record["kind"] = "kandelo-abi-history-ish"
+        with self.assertRaisesRegex(TapRecordError, "unknown"):
+            validate_durable_record(record)
 
 
 if __name__ == "__main__":

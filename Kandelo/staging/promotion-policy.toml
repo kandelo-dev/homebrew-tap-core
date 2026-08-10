@@ -1,0 +1,11 @@
+schema = 1
+kind = "kandelo-abi-staging-promotion-policy"
+version = 1
+tap_repository = "kandelo-dev/homebrew-tap-core"
+kandelo_repository = "Automattic/kandelo"
+historical_branch_prefix = "abi/"
+require_branch_protection = true
+canonical_repository_prefix = "homebrew-tap-core-abi-"
+require_anonymous_readback = true
+allow_independent_formula_promotion = true
+allow_global_completion_gate = false
