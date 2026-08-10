@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import copy
 from dataclasses import asdict, replace
+import gzip
 import hashlib
+import io
 import json
 from pathlib import Path
 import shutil
+import tarfile
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -106,6 +109,39 @@ def _artifact(body: bytes, reference: str) -> dict[str, object]:
     }
 
 
+def _bottle_archive(formula: str, version: str) -> bytes:
+    output = io.BytesIO()
+    with gzip.GzipFile(fileobj=output, mode="wb", mtime=0) as compressed:
+        with tarfile.open(fileobj=compressed, mode="w") as archive:
+            payload_root = f"{formula}/{version}"
+            for path in (
+                formula,
+                payload_root,
+                f"{payload_root}/.brew",
+                f"{payload_root}/bin",
+            ):
+                member = tarfile.TarInfo(path)
+                member.type = tarfile.DIRTYPE
+                member.mode = 0o755
+                member.mtime = 0
+                archive.addfile(member)
+            files = {
+                f"{payload_root}/.brew/{formula}.rb": (
+                    b"class Fixture < Formula\nend\n",
+                    0o644,
+                ),
+                f"{payload_root}/INSTALL_RECEIPT.json": (b"{}\n", 0o644),
+                f"{payload_root}/bin/{formula}": (b"fixture executable\n", 0o755),
+            }
+            for path, (body, mode) in files.items():
+                member = tarfile.TarInfo(path)
+                member.size = len(body)
+                member.mode = mode
+                member.mtime = 0
+                archive.addfile(member, io.BytesIO(body))
+    return output.getvalue()
+
+
 def _locator(value) -> dict[str, str]:
     return {
         "repository": value.repository,
@@ -195,7 +231,13 @@ class PromotionTests(unittest.TestCase):
         self.contract = self._contract()
         self.contract_body = canonical_bytes(self.contract)
         self.contract_sha256 = hashlib.sha256(self.contract_body).hexdigest()
-        self.bottle_body = b"exact successor bash bottle\n"
+        identity = self.formula_plan["identity"]
+        pkg_version = (
+            identity["version"]
+            if identity["revision"] == 0
+            else f"{identity['version']}_{identity['revision']}"
+        )
+        self.bottle_body = _bottle_archive(FORMULA, pkg_version)
         self.bottle_sha256 = hashlib.sha256(self.bottle_body).hexdigest()
         self.dependency_body = b"exact successor ncurses bottle\n"
         self.dependency_artifact = _artifact(
@@ -226,7 +268,11 @@ class PromotionTests(unittest.TestCase):
             _locator(candidate_locator),
             transport=self.transport,
             expected_artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
-            required_layer_roles=("bottle-layer", "bottle-contract"),
+            required_layer_roles=(
+                "bottle-layer",
+                "bottle-metadata",
+                "bottle-contract",
+            ),
         )
         self.candidate_record = json.loads(self.candidate.config.body)
         self.candidate_digest = self.candidate.digest.removeprefix("sha256:")
@@ -280,7 +326,7 @@ class PromotionTests(unittest.TestCase):
                     "sha256": identity["normalized_formula_sha256"],
                 },
                 {
-                    "id": "support",
+                    "id": "tap-input-0000",
                     "sha256": capture["tap_input_components"][0]["sha256"],
                 },
             ],
@@ -1129,7 +1175,10 @@ class PromotionTests(unittest.TestCase):
                 "Formula/bash.rb",
                 "Kandelo/formula/bash.json",
                 "Kandelo/metadata.json",
+                "Kandelo/link/bash-1.0-rebuild1-wasm32.json",
             ],
+            "link_manifest_path": "Kandelo/link/bash-1.0-rebuild1-wasm32.json",
+            "link_manifest_sha256": "f" * 64,
             "canonical_manifest_digest": publication.artifact["sha256"],
             "bottle_layer_sha256": self.bottle_sha256,
             "bottle_layer_bytes": len(self.bottle_body),

@@ -207,7 +207,7 @@ def _bottle_span(lines: list[str]) -> tuple[int, int] | None:
     architectures: list[str] = []
     for line in sha_lines:
         match = re.fullmatch(
-            r'    sha256 cellar: (?:"[^"\n]+"|:any_skip_relocation), '
+            r'    sha256 cellar: (?:"[^"\n]+"|:any(?:_skip_relocation)?), '
             r'(wasm(?:32|64))_kandelo: "([0-9a-f]{64})"\n',
             line,
         )

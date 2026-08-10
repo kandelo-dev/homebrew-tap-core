@@ -13,12 +13,16 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
 import stat
+import subprocess
+import tempfile
 import tomllib
 from types import MappingProxyType
 from typing import Any, Literal
 
 from .canonical import CanonicalJsonError, canonical_bytes, canonical_sha256, parse_canonical_bytes
+from .bottle_link import BottleLinkError, link_manifest_bytes, validate_link_manifest
 from .formula_inventory import (
     FormulaInventoryError,
     _bottle_span,
@@ -82,6 +86,16 @@ class TapMetadataError(ValueError):
     """Raised when protected tap policy or metadata is ambiguous."""
 
 
+class TapMetadataWriteError(TapMetadataError):
+    """A protected contents-only write failed one registered CAS boundary."""
+
+    def __init__(self, message: str, *, guard_code: str) -> None:
+        super().__init__(message)
+        if guard_code not in {"tap_source_drift", "metadata_cas_conflict"}:
+            raise ValueError("tap metadata write guard is unsupported")
+        self.guard_code = guard_code
+
+
 @dataclass(frozen=True)
 class PromotionPolicyV1:
     schema: int
@@ -121,6 +135,53 @@ class AbiStateV1:
     current_abi: int
     current_snapshot_sha256: str
     activation: ManagedAbiActivationV1 | None
+
+
+@dataclass(frozen=True)
+class TapMetadataPatchV1:
+    operation: Literal["successor-activation", "formula-metadata"]
+    expected_main_commit: str
+    expected_main_tree: str
+    allowed_paths: tuple[str, ...]
+    expected_files_sha256: Mapping[str, str | None]
+    files: Mapping[str, bytes]
+
+
+@dataclass(frozen=True)
+class FormulaMetadataUpdateV1:
+    formula: str
+    architecture: str
+    expected_main_commit: str
+    expected_normalized_formula_sha256: str
+    expected_generated_metadata_sha256: str
+    allowed_paths: tuple[str, ...]
+    link_manifest_path: str
+    link_manifest_sha256: str
+    canonical_manifest_digest: str
+    bottle_layer_sha256: str
+    bottle_layer_bytes: int
+    target_abi: int
+
+
+@dataclass(frozen=True)
+class PromotedBottleMetadataV1:
+    formula: str
+    architecture: str
+    version: str
+    revision: int
+    rebuild: int
+    canonical_root_url: str
+    cellar: str
+    built_by: str
+    built_from: Mapping[str, str]
+    link_manifest: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class TapMetadataWriteResultV1:
+    status: Literal["committed", "already-landed"]
+    source: Mapping[str, str]
+    changed_paths: tuple[str, ...]
 
 
 def _exact_keys(value: Mapping[str, Any], expected: frozenset[str], field: str) -> None:
@@ -239,6 +300,127 @@ def _load_toml(path: Path, field: str) -> Mapping[str, Any]:
     except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
         raise TapMetadataError(f"{field} is invalid TOML: {error}") from error
     return _mapping(value, field)
+
+
+def _git_bytes(root: Path, *arguments: str) -> bytes:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), *arguments],
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except OSError as error:
+        raise TapMetadataError(f"cannot inspect tap Git source: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace")[:4096]
+        raise TapMetadataError(f"cannot inspect tap Git source: {detail}")
+    return result.stdout
+
+
+def _git(root: Path, *arguments: str) -> str:
+    try:
+        return _git_bytes(root, *arguments).decode("utf-8", errors="strict").strip()
+    except UnicodeDecodeError as error:
+        raise TapMetadataError("tap Git output is not UTF-8") from error
+
+
+def _checked_source(root: Path, source: Mapping[str, Any]) -> dict[str, str]:
+    checked = _mapping(source, "tap main source")
+    _exact_keys(
+        checked,
+        frozenset({"repository", "commit", "tree"}),
+        "tap main source",
+    )
+    result = {
+        "repository": _repository(checked["repository"], "tap main repository"),
+        "commit": _git_sha(checked["commit"], "tap main commit"),
+        "tree": _git_sha(checked["tree"], "tap main tree"),
+    }
+    actual_root = Path(_git(root, "rev-parse", "--show-toplevel")).resolve(strict=True)
+    if actual_root != root:
+        raise TapMetadataError("tap metadata root differs from its Git root")
+    if (
+        _git(root, "rev-parse", "HEAD") != result["commit"]
+        or _git(root, "rev-parse", "HEAD^{tree}") != result["tree"]
+    ):
+        raise TapMetadataError("tap main moved from the expected commit/tree")
+    if _git(root, "status", "--porcelain=v1", "--untracked-files=all"):
+        raise TapMetadataError("tap metadata checkout has an unexpected file change")
+    return result
+
+
+def _pretty_json_bytes(value: Mapping[str, Any]) -> bytes:
+    return json.dumps(value, indent=2, sort_keys=True).encode("utf-8") + b"\n"
+
+
+def _without_bottle_block(source: bytes) -> bytes:
+    try:
+        lines = _decode_formula(source).splitlines(keepends=True)
+        span = _bottle_span(lines)
+    except FormulaInventoryError as error:
+        raise TapMetadataError(f"Formula bottle removal is unsafe: {error}") from error
+    if span is None:
+        return source
+    start, end = span
+    removal_start = start - 1 if start > 0 and lines[start - 1] == "\n" else start
+    del lines[removal_start : end + 1]
+    return "".join(lines).encode("utf-8")
+
+
+_BOTTLE_SELECTION_FIELDS = frozenset(
+    {
+        "url",
+        "sha256",
+        "bytes",
+        "cache_key_sha",
+        "link_manifest",
+        "fallback_url",
+        "fallback_sha256",
+        "fallback_bytes",
+        "fallback_cache_key_sha",
+        "fallback_link_manifest",
+        "fallback_built_at",
+    }
+)
+
+
+def _pending_bottle(
+    value: Any,
+    *,
+    target_abi: int,
+    kandelo_commit: str,
+    tap_commit: str,
+    normalized_formula_sha256: str,
+    field: str,
+) -> dict[str, Any]:
+    bottle = dict(_mapping(value, field))
+    for key in _BOTTLE_SELECTION_FIELDS:
+        bottle.pop(key, None)
+    bottle["status"] = "pending"
+    bottle["kandelo_abi"] = target_abi
+    built_from = _mapping(bottle.get("built_from"), f"{field} build source")
+    _exact_keys(
+        built_from,
+        frozenset(
+            {
+                "formula_sha256",
+                "kandelo_commit",
+                "kandelo_repository",
+                "tap_commit",
+                "tap_repository",
+            }
+        ),
+        f"{field} build source",
+    )
+    bottle["built_from"] = {
+        **dict(built_from),
+        "formula_sha256": normalized_formula_sha256,
+        "kandelo_commit": kandelo_commit,
+        "tap_commit": tap_commit,
+    }
+    return bottle
 
 
 def load_promotion_policy(path: Path) -> PromotionPolicyV1:
@@ -404,7 +586,7 @@ def _formula_bottle_projection(path: Path) -> dict[str, Any]:
                 rebuild = int(rebuilt.group(1))
                 continue
             sha = re.fullmatch(
-                r'    sha256 cellar: ("[^"\n]+"|:any_skip_relocation), '
+                r'    sha256 cellar: ("[^"\n]+"|:any(?:_skip_relocation)?), '
                 r'(wasm(?:32|64))_kandelo: "([0-9a-f]{64})"\n',
                 line,
             )
@@ -434,8 +616,19 @@ def _validate_active_bottle(value: Any, *, current_abi: int, field: str) -> dict
         raise TapMetadataError(f"{field} platform tag is not ABI-neutral")
     if bottle.get("kandelo_abi") != current_abi:
         raise TapMetadataError(f"{field} silently serves a different ABI")
-    _digest(bottle.get("sha256"), f"{field} SHA-256")
-    _positive_integer(bottle.get("bytes"), f"{field} bytes")
+    status = bottle.get("status")
+    if status == "success":
+        _digest(bottle.get("sha256"), f"{field} SHA-256")
+        _positive_integer(bottle.get("bytes"), f"{field} bytes")
+        _text(bottle.get("url"), f"{field} URL", 4096)
+    elif status == "pending":
+        selected = sorted(_BOTTLE_SELECTION_FIELDS.intersection(bottle))
+        if selected:
+            raise TapMetadataError(
+                f"{field} pending bottle retains selectable fields {selected!r}"
+            )
+    else:
+        raise TapMetadataError(f"{field} status is not a current selection state")
     return dict(bottle)
 
 
@@ -567,7 +760,11 @@ def check_tap_metadata(tap_root: Path) -> dict[str, Any]:
     for package in packages:
         name = package["name"]
         bottle = formula_by_name[name]["bottle"]
-        sidecar_bottles = {item["arch"]: item["sha256"] for item in package["bottles"]}
+        sidecar_bottles = {
+            item["arch"]: item["sha256"]
+            for item in package["bottles"]
+            if item.get("status") == "success"
+        }
         formula_bottles = (
             {}
             if bottle is None
@@ -596,3 +793,1111 @@ def check_tap_metadata(tap_root: Path) -> dict[str, Any]:
         "detached_active_formula_blocks": detached,
         "metadata_sha256": canonical_sha256(metadata),
     }
+
+
+def plan_successor_activation_patch(
+    tap_root: Path,
+    *,
+    current_tap_source: Mapping[str, Any],
+    target_abi: int,
+    target_snapshot_sha256: str,
+    activation: Mapping[str, Any],
+) -> TapMetadataPatchV1:
+    """Build one deterministic N -> N+1 generated-metadata transition."""
+
+    root = tap_root.resolve(strict=True)
+    source = _checked_source(root, current_tap_source)
+    target = _positive_integer(target_abi, "activation target ABI")
+    snapshot = _digest(target_snapshot_sha256, "activation target snapshot")
+    state = load_abi_state(root / "Kandelo/abi-state.json")
+    if state.activation is not None:
+        raise TapMetadataError("successor ABI is already managed")
+    if state.current_abi == 2**32 - 1 or target != state.current_abi + 1:
+        raise TapMetadataError("activation target is not the exact ABI successor")
+    managed = _managed_activation(activation, target)
+    if managed.prior_abi != state.current_abi:
+        raise TapMetadataError("activation prior ABI differs from current tap state")
+    before = check_tap_metadata(root)
+    metadata = dict(_load_json(root / "Kandelo/metadata.json", "top-level Formula metadata"))
+    packages = [dict(_mapping(item, "activation package")) for item in metadata["packages"]]
+    files: dict[str, bytes] = {}
+    projected_packages: list[dict[str, Any]] = []
+    merged_head = str(managed.merged_pull_request["head"])
+
+    for package in packages:
+        name = _stable_id(package["name"], "activation Formula")
+        formula_path = root / f"Formula/{name}.rb"
+        sidecar_path = root / f"Kandelo/formula/{name}.json"
+        formula_source = _read_regular(
+            formula_path, f"activation Formula {name}", MAX_METADATA_BYTES
+        )
+        try:
+            normalized = normalize_formula_source(formula_source)
+        except FormulaInventoryError as error:
+            raise TapMetadataError(
+                f"activation Formula normalization failed for {name}: {error}"
+            ) from error
+        normalized_digest = hashlib.sha256(normalized).hexdigest()
+        sidecar = dict(_load_json(sidecar_path, f"activation sidecar for {name}"))
+        pending = [
+            _pending_bottle(
+                bottle,
+                target_abi=target,
+                kandelo_commit=merged_head,
+                tap_commit=source["commit"],
+                normalized_formula_sha256=normalized_digest,
+                field=f"activation bottle {name}/{index}",
+            )
+            for index, bottle in enumerate(sidecar["bottles"])
+        ]
+        sidecar.update(
+            {
+                "bottles": pending,
+                "kandelo_abi": target,
+                "tap_commit": source["commit"],
+            }
+        )
+        files[f"Kandelo/formula/{name}.json"] = _pretty_json_bytes(sidecar)
+        projected = {
+            key: sidecar[key]
+            for key in PACKAGE_KEYS
+            if key != "formula_metadata"
+        }
+        projected["formula_metadata"] = f"Kandelo/formula/{name}.json"
+        projected_packages.append(projected)
+
+    metadata.update(
+        {
+            "generator": "kandelo-abi-staging 1",
+            "kandelo_abi": target,
+            "kandelo_commit": merged_head,
+            "packages": projected_packages,
+            "release_tag": f"bottles-abi-v{target}",
+            "tap_commit": source["commit"],
+        }
+    )
+    files["Kandelo/metadata.json"] = _pretty_json_bytes(metadata)
+    files["Kandelo/abi-state.json"] = canonical_bytes(
+        {
+            "activation": {
+                "abi_history_record_digest": managed.abi_history_record_digest,
+                "merge_commit": managed.merge_commit,
+                "merged_pull_request": dict(managed.merged_pull_request),
+                "prior_abi": managed.prior_abi,
+                "prior_branch": managed.prior_branch,
+                "request_digest": managed.request_digest,
+            },
+            "current_abi": target,
+            "current_snapshot_sha256": snapshot,
+            "kind": "kandelo-homebrew-abi-state",
+            "schema": 1,
+        }
+    )
+
+    for formula_path in sorted((root / "Formula").glob("*.rb"), key=lambda item: item.name):
+        source_bytes = _read_regular(
+            formula_path, f"activation Formula {formula_path.name}", MAX_METADATA_BYTES
+        )
+        without_bottle = _without_bottle_block(source_bytes)
+        if without_bottle != source_bytes:
+            files[f"Formula/{formula_path.name}"] = without_bottle
+
+    allowed = tuple(sorted(files))
+    expected = MappingProxyType(
+        {
+            path: hashlib.sha256((root / path).read_bytes()).hexdigest()
+            for path in allowed
+        }
+    )
+    patch = TapMetadataPatchV1(
+        operation="successor-activation",
+        expected_main_commit=source["commit"],
+        expected_main_tree=source["tree"],
+        allowed_paths=allowed,
+        expected_files_sha256=expected,
+        files=MappingProxyType(files),
+    )
+    validate_successor_activation_patch(root, patch)
+    if before["current_abi"] != state.current_abi:
+        raise TapMetadataError("activation input metadata changed while planning")
+    return patch
+
+
+def _copy_metadata_projection(root: Path, destination: Path) -> None:
+    shutil.copytree(root / "Formula", destination / "Formula")
+    shutil.copytree(root / "Kandelo/formula", destination / "Kandelo/formula")
+    shutil.copytree(root / "Kandelo/link", destination / "Kandelo/link")
+    (destination / "Kandelo/staging").mkdir(parents=True)
+    for name in ("promotion-policy.toml", "promotion-activation.toml"):
+        shutil.copy2(
+            root / f"Kandelo/staging/{name}",
+            destination / f"Kandelo/staging/{name}",
+        )
+    shutil.copy2(root / "Kandelo/metadata.json", destination / "Kandelo/metadata.json")
+    shutil.copy2(root / "Kandelo/abi-state.json", destination / "Kandelo/abi-state.json")
+
+
+def validate_successor_activation_patch(
+    tap_root: Path, patch: TapMetadataPatchV1
+) -> dict[str, Any]:
+    root = tap_root.resolve(strict=True)
+    if not isinstance(patch, TapMetadataPatchV1) or patch.operation != "successor-activation":
+        raise TapMetadataError("successor activation patch protocol is unsupported")
+    source = _checked_source(
+        root,
+        {
+            "repository": load_promotion_policy(
+                root / "Kandelo/staging/promotion-policy.toml"
+            ).tap_repository,
+            "commit": patch.expected_main_commit,
+            "tree": patch.expected_main_tree,
+        },
+    )
+    paths = list(patch.allowed_paths)
+    if paths != sorted(set(paths)) or set(paths) != set(patch.files) or set(paths) != set(
+        patch.expected_files_sha256
+    ):
+        raise TapMetadataError("successor activation path set is not exact")
+    if "Kandelo/abi-state.json" not in paths or "Kandelo/metadata.json" not in paths:
+        raise TapMetadataError("successor activation omits global generated metadata")
+    for path in paths:
+        if not re.fullmatch(
+            r"(?:Formula/[a-z0-9][a-z0-9+._-]*\.rb|"
+            r"Kandelo/formula/[a-z0-9][a-z0-9+._-]*\.json|"
+            r"Kandelo/(?:abi-state|metadata)\.json)",
+            path,
+        ):
+            raise TapMetadataError("successor activation names an unexpected path")
+        before = _read_regular(root / path, f"activation input {path}", MAX_METADATA_BYTES)
+        if hashlib.sha256(before).hexdigest() != _digest(
+            patch.expected_files_sha256[path], f"activation input digest {path}"
+        ):
+            raise TapMetadataError("successor activation generated metadata CAS changed")
+        body = patch.files[path]
+        if not isinstance(body, bytes) or not 1 <= len(body) <= MAX_METADATA_BYTES:
+            raise TapMetadataError("successor activation output bytes are outside their bound")
+        if body == before:
+            raise TapMetadataError("successor activation includes an unchanged path")
+
+    with tempfile.TemporaryDirectory() as temporary:
+        simulated = Path(temporary)
+        _copy_metadata_projection(root, simulated)
+        for path, body in patch.files.items():
+            destination = simulated / path
+            if not destination.is_file() or destination.is_symlink():
+                raise TapMetadataError("successor activation output path is not an existing file")
+            destination.write_bytes(body)
+        projection = check_tap_metadata(simulated)
+        state = load_abi_state(simulated / "Kandelo/abi-state.json")
+        if state.activation is None or state.activation.prior_abi + 1 != state.current_abi:
+            raise TapMetadataError("successor activation state is incomplete")
+        metadata = _load_json(
+            simulated / "Kandelo/metadata.json", "activated top-level metadata"
+        )
+        if (
+            metadata["kandelo_abi"] != state.current_abi
+            or metadata["release_tag"] != f"bottles-abi-v{state.current_abi}"
+            or metadata["kandelo_commit"] != state.activation.merged_pull_request["head"]
+            or metadata["tap_commit"] != source["commit"]
+        ):
+            raise TapMetadataError("successor activation global metadata drifted")
+        for package in metadata["packages"]:
+            bottles = _sequence(package["bottles"], "activated package bottles")
+            if not bottles or any(
+                _mapping(bottle, "activated bottle").get("status") != "pending"
+                for bottle in bottles
+            ):
+                raise TapMetadataError("successor activation waits on or selects a bottle")
+        for formula_path in sorted((simulated / "Formula").glob("*.rb")):
+            formula_lines = _decode_formula(formula_path.read_bytes()).splitlines(
+                keepends=True
+            )
+            if _bottle_span(formula_lines) is not None:
+                raise TapMetadataError("successor activation retains a prior bottle block")
+        before_projection = check_tap_metadata(root)
+        if projection["active_formulae"] != before_projection["active_formulae"]:
+            raise TapMetadataError("successor activation changed the active Formula inventory")
+        return projection
+
+
+def formula_generated_metadata_sha256(tap_root: Path, formula: str) -> str:
+    root = tap_root.resolve(strict=True)
+    name = _stable_id(formula, "generated metadata Formula")
+    formula_path = root / f"Formula/{name}.rb"
+    sidecar = _load_json(
+        root / f"Kandelo/formula/{name}.json", f"generated sidecar for {name}"
+    )
+    metadata = _load_json(root / "Kandelo/metadata.json", "generated metadata index")
+    matches = [
+        candidate
+        for candidate in _sequence(metadata.get("packages"), "generated packages")
+        if _mapping(candidate, "generated package").get("name") == name
+    ]
+    if len(matches) != 1:
+        raise TapMetadataError("generated metadata Formula is absent or duplicated")
+    formula_body = _read_regular(
+        formula_path, f"generated Formula {name}", MAX_METADATA_BYTES
+    )
+    return canonical_sha256(
+        {
+            "formula_sha256": hashlib.sha256(formula_body).hexdigest(),
+            "sidecar_sha256": canonical_sha256(sidecar),
+            "top_index_row_sha256": canonical_sha256(matches[0]),
+        }
+    )
+
+
+def _checked_formula_update(
+    update: FormulaMetadataUpdateV1,
+) -> FormulaMetadataUpdateV1:
+    if not isinstance(update, FormulaMetadataUpdateV1):
+        raise TapMetadataError("Formula metadata update protocol is unsupported")
+    formula = _stable_id(update.formula, "metadata Formula")
+    if update.architecture not in {"wasm32", "wasm64"}:
+        raise TapMetadataError("metadata Formula architecture is unsupported")
+    link_manifest_path = _text(
+        update.link_manifest_path, "metadata Formula link manifest", 4096
+    )
+    if re.fullmatch(
+        rf"Kandelo/link/{re.escape(formula)}-"
+        rf"[A-Za-z0-9][A-Za-z0-9._+,-]{{0,255}}-"
+        rf"rebuild(?:0|[1-9][0-9]{{0,9}})-{update.architecture}\.json",
+        link_manifest_path,
+    ) is None:
+        raise TapMetadataError("metadata Formula link manifest path is not exact")
+    expected_paths = (
+        f"Formula/{formula}.rb",
+        f"Kandelo/formula/{formula}.json",
+        "Kandelo/metadata.json",
+        link_manifest_path,
+    )
+    if update.allowed_paths != expected_paths:
+        raise TapMetadataError("Formula metadata update path set is not exact")
+    _git_sha(update.expected_main_commit, "metadata expected main")
+    _digest(update.expected_normalized_formula_sha256, "metadata normalized Formula")
+    _digest(update.expected_generated_metadata_sha256, "metadata generated projection")
+    _digest(update.link_manifest_sha256, "metadata link manifest")
+    _digest(update.canonical_manifest_digest, "metadata canonical manifest")
+    _digest(update.bottle_layer_sha256, "metadata bottle layer")
+    _positive_integer(update.bottle_layer_bytes, "metadata bottle bytes")
+    _positive_integer(update.target_abi, "metadata target ABI")
+    return update
+
+
+def _checked_promoted_bottle(
+    value: PromotedBottleMetadataV1,
+    update: FormulaMetadataUpdateV1,
+) -> PromotedBottleMetadataV1:
+    if not isinstance(value, PromotedBottleMetadataV1):
+        raise TapMetadataError("promoted bottle metadata protocol is unsupported")
+    if (
+        value.formula != update.formula
+        or value.architecture != update.architecture
+    ):
+        raise TapMetadataError("promoted bottle identity differs from its update")
+    _text(value.version, "promoted bottle version", 128)
+    _nonnegative_integer(value.revision, "promoted bottle revision")
+    _nonnegative_integer(value.rebuild, "promoted bottle rebuild")
+    root = _text(value.canonical_root_url, "promoted bottle root", 4096)
+    if re.fullmatch(
+        r"https://ghcr\.io/v2/[a-z0-9][a-z0-9._-]*/"
+        r"[a-z0-9][a-z0-9._/-]*",
+        root,
+    ) is None:
+        raise TapMetadataError("promoted bottle root is not exact HTTPS GHCR")
+    cellar = _text(value.cellar, "promoted bottle cellar", 4096)
+    if (
+        cellar
+        not in {"any", "any_skip_relocation", ":any", ":any_skip_relocation"}
+        and re.fullmatch(
+            r"/[A-Za-z0-9._/+:-]+(?:/[A-Za-z0-9._+:-]+)*", cellar
+        )
+        is None
+    ):
+        raise TapMetadataError("promoted bottle cellar is unsupported")
+    built_by = _text(value.built_by, "promoted bottle producer", 4096)
+    if re.fullmatch(
+        r"https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/actions/runs/[1-9][0-9]*",
+        built_by,
+    ) is None:
+        raise TapMetadataError("promoted bottle producer is not an exact workflow run")
+    built_from = _mapping(value.built_from, "promoted bottle build source")
+    _exact_keys(
+        built_from,
+        frozenset(
+            {
+                "formula_sha256",
+                "kandelo_commit",
+                "kandelo_repository",
+                "tap_commit",
+                "tap_repository",
+            }
+        ),
+        "promoted bottle build source",
+    )
+    _digest(built_from["formula_sha256"], "promoted bottle Formula source")
+    _git_sha(built_from["kandelo_commit"], "promoted bottle Kandelo commit")
+    _repository(built_from["kandelo_repository"], "promoted bottle Kandelo repository")
+    _git_sha(built_from["tap_commit"], "promoted bottle tap commit")
+    _repository(built_from["tap_repository"], "promoted bottle tap repository")
+    pkg_version = value.version if value.revision == 0 else f"{value.version}_{value.revision}"
+    link_value = _mapping(value.link_manifest, "promoted bottle link manifest")
+    try:
+        checked_link = validate_link_manifest(
+            link_value,
+            formula=value.formula,
+            version=pkg_version,
+            architecture=value.architecture,
+            target_abi=update.target_abi,
+            prefix=link_value.get("prefix"),
+            cellar=cellar,
+            bottle_url=(
+                root + "/blobs/sha256:" + update.bottle_layer_sha256
+            ),
+            bottle_sha256=update.bottle_layer_sha256,
+            bottle_bytes=update.bottle_layer_bytes,
+        )
+        link_sha256 = hashlib.sha256(link_manifest_bytes(checked_link)).hexdigest()
+    except BottleLinkError as error:
+        raise TapMetadataError(f"promoted bottle link manifest is invalid: {error}") from error
+    if link_sha256 != update.link_manifest_sha256:
+        raise TapMetadataError("promoted bottle link manifest identity changed")
+    return value
+
+
+def _formula_cellar(value: str) -> str:
+    if value in {"any", ":any"}:
+        return ":any"
+    if value in {"any_skip_relocation", ":any_skip_relocation"}:
+        return ":any_skip_relocation"
+    return json.dumps(value)
+
+
+def _compose_formula_bottles(
+    normalized: bytes,
+    *,
+    root_url: str,
+    rebuild: int,
+    bottles: Sequence[Mapping[str, Any]],
+) -> bytes:
+    lines = _decode_formula(normalized).splitlines(keepends=True)
+    inline_patch_markers = [
+        index for index, line in enumerate(lines) if line == "__END__\n"
+    ]
+    if len(inline_patch_markers) > 1:
+        raise TapMetadataError("Formula has multiple inline patch boundaries")
+    boundary = inline_patch_markers[0] if inline_patch_markers else len(lines)
+    final = boundary - 1
+    while final >= 0 and lines[final] == "\n":
+        final -= 1
+    if final < 0 or lines[final] != "end\n":
+        raise TapMetadataError("Formula has no canonical final class end")
+    successful = [bottle for bottle in bottles if bottle.get("status") == "success"]
+    architectures = [str(bottle.get("arch")) for bottle in successful]
+    if architectures != sorted(set(architectures)) or not successful:
+        raise TapMetadataError("Formula success bottle set is not sorted and unique")
+    body = ["\n", "  bottle do\n", f'    root_url "{root_url}"\n']
+    if rebuild:
+        body.append(f"    rebuild {rebuild}\n")
+    for bottle in successful:
+        body.append(
+            "    sha256 cellar: "
+            + _formula_cellar(str(bottle["cellar"]))
+            + f', {bottle["bottle_tag"]}: "{bottle["sha256"]}"\n'
+        )
+    body.append("  end\n")
+    lines[final:final] = body
+    result = "".join(lines).encode("utf-8")
+    try:
+        if normalize_formula_source(result) != normalized:
+            raise TapMetadataError("generated bottle block changed Formula intent")
+    except FormulaInventoryError as error:
+        raise TapMetadataError(f"generated bottle block is invalid: {error}") from error
+    return result
+
+
+def plan_formula_metadata_patch(
+    tap_root: Path,
+    *,
+    current_tap_source: Mapping[str, Any],
+    update: FormulaMetadataUpdateV1,
+    promoted: PromotedBottleMetadataV1,
+) -> TapMetadataPatchV1:
+    root = tap_root.resolve(strict=True)
+    checked_update = _checked_formula_update(update)
+    checked_promoted = _checked_promoted_bottle(promoted, checked_update)
+    policy = load_promotion_policy(root / "Kandelo/staging/promotion-policy.toml")
+    source = _checked_source(root, current_tap_source)
+    if source["repository"].lower() != policy.tap_repository.lower():
+        raise TapMetadataError("Formula metadata source names another tap")
+    if source["commit"] != checked_update.expected_main_commit:
+        raise TapMetadataError("Formula metadata expected main CAS changed")
+    state = load_abi_state(root / "Kandelo/abi-state.json")
+    if state.activation is None or state.current_abi != checked_update.target_abi:
+        raise TapMetadataError("Formula metadata target is not the active managed ABI")
+    check_tap_metadata(root)
+    name = checked_update.formula
+    formula_path = root / f"Formula/{name}.rb"
+    formula_source = _read_regular(
+        formula_path, f"metadata Formula {name}", MAX_METADATA_BYTES
+    )
+    try:
+        normalized = normalize_formula_source(formula_source)
+    except FormulaInventoryError as error:
+        raise TapMetadataError(f"metadata Formula is invalid: {error}") from error
+    if hashlib.sha256(normalized).hexdigest() != checked_update.expected_normalized_formula_sha256:
+        raise TapMetadataError("Formula source CAS changed")
+    if (
+        formula_generated_metadata_sha256(root, name)
+        != checked_update.expected_generated_metadata_sha256
+    ):
+        raise TapMetadataError("Formula generated metadata CAS changed")
+
+    sidecar_path = root / f"Kandelo/formula/{name}.json"
+    sidecar = dict(_load_json(sidecar_path, f"metadata sidecar for {name}"))
+    bottles = [dict(_mapping(item, "metadata bottle")) for item in sidecar["bottles"]]
+    pkg_version = (
+        checked_promoted.version
+        if checked_promoted.revision == 0
+        else f"{checked_promoted.version}_{checked_promoted.revision}"
+    )
+    current_versioning = (
+        sidecar["version"],
+        sidecar["formula_revision"],
+        sidecar["bottle_rebuild"],
+    )
+    promoted_versioning = (
+        pkg_version,
+        checked_promoted.revision,
+        checked_promoted.rebuild,
+    )
+    if any(bottle.get("status") == "success" for bottle in bottles):
+        if current_versioning != promoted_versioning:
+            raise TapMetadataError(
+                "promoted bottle versioning differs from an already selected architecture"
+            )
+    else:
+        sidecar.update(
+            {
+                "version": pkg_version,
+                "formula_revision": checked_promoted.revision,
+                "bottle_rebuild": checked_promoted.rebuild,
+            }
+        )
+    matches = [
+        index
+        for index, bottle in enumerate(bottles)
+        if bottle.get("arch") == checked_update.architecture
+    ]
+    if len(matches) != 1:
+        raise TapMetadataError("metadata architecture is absent or duplicated")
+    index = matches[0]
+    existing = bottles[index]
+    link_manifest = checked_update.link_manifest_path
+    for key in (
+        "error",
+        "last_attempt",
+        "last_attempt_by",
+        "queued_at",
+        "built_at",
+        *_BOTTLE_SELECTION_FIELDS,
+    ):
+        existing.pop(key, None)
+    existing.update(
+        {
+            "arch": checked_update.architecture,
+            "bottle_tag": f"{checked_update.architecture}_kandelo",
+            "built_by": checked_promoted.built_by,
+            "built_from": dict(checked_promoted.built_from),
+            "bytes": checked_update.bottle_layer_bytes,
+            "cache_key_sha": checked_update.bottle_layer_sha256,
+            "cellar": checked_promoted.cellar,
+            "kandelo_abi": checked_update.target_abi,
+            "link_manifest": link_manifest,
+            "prefix": checked_promoted.link_manifest["prefix"],
+            "sha256": checked_update.bottle_layer_sha256,
+            "status": "success",
+            "url": (
+                checked_promoted.canonical_root_url
+                + "/blobs/sha256:"
+                + checked_update.bottle_layer_sha256
+            ),
+        }
+    )
+    bottles[index] = existing
+    bottles.sort(key=lambda item: str(item["arch"]))
+    sidecar["bottles"] = bottles
+    formula_output = _compose_formula_bottles(
+        normalized,
+        root_url=checked_promoted.canonical_root_url,
+        rebuild=checked_promoted.rebuild,
+        bottles=bottles,
+    )
+    sidecar_output = _pretty_json_bytes(sidecar)
+    metadata = dict(_load_json(root / "Kandelo/metadata.json", "metadata top index"))
+    packages = [dict(_mapping(item, "metadata package")) for item in metadata["packages"]]
+    package_matches = [index for index, item in enumerate(packages) if item["name"] == name]
+    if len(package_matches) != 1:
+        raise TapMetadataError("metadata top-index Formula is absent or duplicated")
+    projected = {
+        key: sidecar[key] for key in PACKAGE_KEYS if key != "formula_metadata"
+    }
+    projected["formula_metadata"] = f"Kandelo/formula/{name}.json"
+    packages[package_matches[0]] = projected
+    metadata["packages"] = packages
+    metadata_output = _pretty_json_bytes(metadata)
+    outputs = {
+        f"Formula/{name}.rb": formula_output,
+        f"Kandelo/formula/{name}.json": sidecar_output,
+        "Kandelo/metadata.json": metadata_output,
+        link_manifest: link_manifest_bytes(checked_promoted.link_manifest),
+    }
+    changed = {
+        path: body
+        for path, body in outputs.items()
+        if not (root / path).is_file() or (root / path).read_bytes() != body
+    }
+    expected_files: dict[str, str | None] = {}
+    for path in checked_update.allowed_paths:
+        candidate = root / path
+        if candidate.is_symlink():
+            raise TapMetadataError("Formula generated metadata CAS path is a symlink")
+        if candidate.exists():
+            if not candidate.is_file():
+                raise TapMetadataError("Formula generated metadata CAS path is not a file")
+            expected_files[path] = hashlib.sha256(candidate.read_bytes()).hexdigest()
+        elif path == link_manifest:
+            expected_files[path] = None
+        else:
+            raise TapMetadataError("Formula generated metadata CAS path is absent")
+    patch = TapMetadataPatchV1(
+        operation="formula-metadata",
+        expected_main_commit=source["commit"],
+        expected_main_tree=source["tree"],
+        allowed_paths=checked_update.allowed_paths,
+        expected_files_sha256=MappingProxyType(expected_files),
+        files=MappingProxyType(changed),
+    )
+    validate_formula_metadata_patch(root, patch, checked_update)
+    return patch
+
+
+def validate_formula_metadata_patch(
+    tap_root: Path,
+    patch: TapMetadataPatchV1,
+    update: FormulaMetadataUpdateV1,
+) -> dict[str, Any]:
+    root = tap_root.resolve(strict=True)
+    checked = _checked_formula_update(update)
+    if not isinstance(patch, TapMetadataPatchV1) or patch.operation != "formula-metadata":
+        raise TapMetadataError("Formula metadata patch protocol is unsupported")
+    if (
+        patch.expected_main_commit != checked.expected_main_commit
+        or patch.allowed_paths != checked.allowed_paths
+        or set(patch.expected_files_sha256) != set(checked.allowed_paths)
+        or not set(patch.files).issubset(checked.allowed_paths)
+    ):
+        raise TapMetadataError("Formula metadata patch CAS or path set changed")
+    source = _checked_source(
+        root,
+        {
+            "repository": load_promotion_policy(
+                root / "Kandelo/staging/promotion-policy.toml"
+            ).tap_repository,
+            "commit": patch.expected_main_commit,
+            "tree": patch.expected_main_tree,
+        },
+    )
+    for path in checked.allowed_paths:
+        expected_digest = patch.expected_files_sha256[path]
+        candidate = root / path
+        if expected_digest is None:
+            if path != checked.link_manifest_path or candidate.exists() or candidate.is_symlink():
+                raise TapMetadataError("Formula generated metadata creation CAS changed")
+        else:
+            before = _read_regular(
+                candidate, f"Formula metadata input {path}", MAX_METADATA_BYTES
+            )
+            if hashlib.sha256(before).hexdigest() != _digest(
+                expected_digest, f"Formula metadata input digest {path}"
+            ):
+                raise TapMetadataError("Formula generated metadata CAS changed")
+    for path, body in patch.files.items():
+        if not isinstance(body, bytes) or not 1 <= len(body) <= MAX_METADATA_BYTES:
+            raise TapMetadataError("Formula metadata output bytes are outside their bound")
+        if (root / path).is_file() and body == (root / path).read_bytes():
+            raise TapMetadataError("Formula metadata patch includes an unchanged path")
+
+    if patch.files and set(patch.files) != set(checked.allowed_paths):
+        raise TapMetadataError("Formula metadata patch does not update its exact generated set")
+    with tempfile.TemporaryDirectory() as temporary:
+        simulated = Path(temporary)
+        _copy_metadata_projection(root, simulated)
+        for path, body in patch.files.items():
+            (simulated / path).parent.mkdir(parents=True, exist_ok=True)
+            (simulated / path).write_bytes(body)
+        projection = check_tap_metadata(simulated)
+        state = load_abi_state(simulated / "Kandelo/abi-state.json")
+        if state.current_abi != checked.target_abi:
+            raise TapMetadataError("Formula metadata patch changed current ABI binding")
+        sidecar = _load_json(
+            simulated / f"Kandelo/formula/{checked.formula}.json",
+            "updated Formula sidecar",
+        )
+        matches = [
+            bottle
+            for bottle in sidecar["bottles"]
+            if bottle.get("arch") == checked.architecture
+        ]
+        if len(matches) != 1 or matches[0].get("status") != "success" or (
+            matches[0].get("sha256") != checked.bottle_layer_sha256
+            or matches[0].get("bytes") != checked.bottle_layer_bytes
+        ):
+            raise TapMetadataError("Formula metadata patch does not select the exact layer")
+        selected = matches[0]
+        if selected.get("link_manifest") != checked.link_manifest_path:
+            raise TapMetadataError("Formula metadata patch selects another link manifest")
+        link_body = _read_regular(
+            simulated / checked.link_manifest_path,
+            "updated Formula link manifest",
+            MAX_METADATA_BYTES,
+        )
+        if hashlib.sha256(link_body).hexdigest() != checked.link_manifest_sha256:
+            raise TapMetadataError("Formula metadata patch changed link manifest identity")
+        link = _load_json(
+            simulated / checked.link_manifest_path,
+            "updated Formula link manifest",
+        )
+        try:
+            validate_link_manifest(
+                link,
+                formula=checked.formula,
+                version=sidecar["version"],
+                architecture=checked.architecture,
+                target_abi=checked.target_abi,
+                prefix=selected.get("prefix"),
+                cellar=selected.get("cellar"),
+                bottle_url=selected.get("url"),
+                bottle_sha256=checked.bottle_layer_sha256,
+                bottle_bytes=checked.bottle_layer_bytes,
+            )
+        except BottleLinkError as error:
+            raise TapMetadataError(
+                f"Formula metadata patch link manifest is invalid: {error}"
+            ) from error
+        formula_projection = _formula_bottle_projection(
+            simulated / f"Formula/{checked.formula}.rb"
+        )
+        bottle = formula_projection["bottle"]
+        policy = load_promotion_policy(
+            simulated / "Kandelo/staging/promotion-policy.toml"
+        )
+        owner = policy.tap_repository.split("/", 1)[0]
+        expected_root = (
+            "https://ghcr.io/v2/"
+            + owner
+            + "/"
+            + policy.canonical_repository_prefix
+            + str(checked.target_abi)
+            + "/"
+            + checked.formula
+        )
+        expected_architectures = [
+            {
+                "architecture": str(item["arch"]),
+                "cellar": _formula_cellar(str(item["cellar"])),
+                "sha256": str(item["sha256"]),
+            }
+            for item in sidecar["bottles"]
+            if item.get("status") == "success"
+        ]
+        if (
+            bottle is None
+            or bottle["root_url"] != expected_root
+            or bottle["rebuild"] != sidecar["bottle_rebuild"]
+            or bottle["architectures"] != expected_architectures
+            or checked.formula in projection["detached_active_formula_blocks"]
+        ):
+            raise TapMetadataError(
+                "Formula bottle block differs from exact canonical metadata"
+            )
+        if source["commit"] != patch.expected_main_commit:
+            raise TapMetadataError("Formula metadata source moved during validation")
+        return projection
+
+
+class GitTapMetadataStore:
+    """One disposable protected checkout with an optional normal Git remote."""
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        remote: str | None = None,
+        branch: str = "main",
+    ) -> None:
+        self.root = root.resolve(strict=True)
+        actual = Path(_git(self.root, "rev-parse", "--show-toplevel")).resolve(
+            strict=True
+        )
+        if actual != self.root:
+            raise TapMetadataWriteError(
+                "metadata writer root differs from its Git checkout",
+                guard_code="tap_source_drift",
+            )
+        if branch != "main" and re.fullmatch(r"abi/(0|[1-9][0-9]{0,9})", branch) is None:
+            raise TapMetadataWriteError(
+                "metadata writer branch is unsupported",
+                guard_code="tap_source_drift",
+            )
+        if remote is not None and (
+            not isinstance(remote, str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", remote) is None
+        ):
+            raise TapMetadataWriteError(
+                "metadata writer remote is unsupported",
+                guard_code="tap_source_drift",
+            )
+        self.remote = remote
+        self.branch = branch
+
+    def local_source(self) -> dict[str, str]:
+        policy = load_promotion_policy(
+            self.root / "Kandelo/staging/promotion-policy.toml"
+        )
+        return {
+            "repository": policy.tap_repository,
+            "commit": _git(self.root, "rev-parse", "HEAD"),
+            "tree": _git(self.root, "rev-parse", "HEAD^{tree}"),
+        }
+
+    def require_clean(self) -> None:
+        if _git(self.root, "status", "--porcelain=v1", "--untracked-files=all"):
+            raise TapMetadataWriteError(
+                "metadata writer checkout has an unexpected file change",
+                guard_code="tap_source_drift",
+            )
+
+    def remote_main(self) -> str | None:
+        if self.remote is None:
+            return None
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(self.root),
+                    "ls-remote",
+                    "--refs",
+                    self.remote,
+                    f"refs/heads/{self.branch}",
+                ],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except OSError as error:
+            raise TapMetadataWriteError(
+                f"cannot read metadata remote: {error}",
+                guard_code="tap_source_drift",
+            ) from error
+        if result.returncode != 0:
+            detail = result.stderr.decode("utf-8", errors="replace")[:4096]
+            raise TapMetadataWriteError(
+                f"cannot read metadata remote: {detail}",
+                guard_code="tap_source_drift",
+            )
+        try:
+            output = result.stdout.decode("ascii", errors="strict").strip()
+        except UnicodeDecodeError as error:
+            raise TapMetadataWriteError(
+                "metadata remote response is not ASCII",
+                guard_code="tap_source_drift",
+            ) from error
+        lines = output.splitlines() if output else []
+        if len(lines) != 1:
+            raise TapMetadataWriteError(
+                "metadata remote main ref is absent or ambiguous",
+                guard_code="tap_source_drift",
+            )
+        match = re.fullmatch(
+            rf"([0-9a-f]{{40}})\trefs/heads/{re.escape(self.branch)}", lines[0]
+        )
+        if match is None:
+            raise TapMetadataWriteError(
+                "metadata remote main ref is malformed",
+                guard_code="tap_source_drift",
+            )
+        return match.group(1)
+
+    def commit(
+        self, patch: TapMetadataPatchV1, *, commit_message: str
+    ) -> dict[str, str]:
+        message = _text(commit_message, "metadata commit message", 4096)
+        self.require_clean()
+        if not patch.files:
+            raise TapMetadataWriteError(
+                "metadata writer cannot commit an empty patch",
+                guard_code="tap_source_drift",
+        )
+        for path, body in patch.files.items():
+            destination = self.root / path
+            expected_digest = patch.expected_files_sha256[path]
+            if expected_digest is None:
+                if destination.exists() or destination.is_symlink():
+                    raise TapMetadataWriteError(
+                        "metadata generated file creation raced another writer",
+                        guard_code="tap_source_drift",
+                    )
+                try:
+                    parent = destination.parent.resolve(strict=True)
+                except OSError as error:
+                    raise TapMetadataWriteError(
+                        f"metadata output parent is unavailable: {error}",
+                        guard_code="tap_source_drift",
+                    ) from error
+                if parent != self.root / "Kandelo/link":
+                    raise TapMetadataWriteError(
+                        "metadata created path escaped the exact link directory",
+                        guard_code="tap_source_drift",
+                    )
+            else:
+                try:
+                    metadata = destination.lstat()
+                except OSError as error:
+                    raise TapMetadataWriteError(
+                        f"metadata output path is unavailable: {error}",
+                        guard_code="tap_source_drift",
+                    ) from error
+                if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                    raise TapMetadataWriteError(
+                        "metadata output path is not a regular file",
+                        guard_code="tap_source_drift",
+                    )
+                if hashlib.sha256(destination.read_bytes()).hexdigest() != expected_digest:
+                    raise TapMetadataWriteError(
+                        "metadata generated file changed before commit",
+                        guard_code="tap_source_drift",
+                    )
+            destination.write_bytes(body)
+        try:
+            changed_bytes = _git_bytes(
+                self.root, "diff", "--name-only", "-z", "--"
+            ) + _git_bytes(
+                self.root,
+                "ls-files",
+                "--others",
+                "--exclude-standard",
+                "-z",
+            )
+            changed = {
+                path.decode("utf-8", errors="strict")
+                for path in changed_bytes.split(b"\0")
+                if path
+            }
+        except (TapMetadataError, UnicodeDecodeError) as error:
+            raise TapMetadataWriteError(
+                f"cannot enumerate metadata writer changes: {error}",
+                guard_code="tap_source_drift",
+            ) from error
+        if changed != set(patch.files):
+            raise TapMetadataWriteError(
+                "metadata writer changed an unexpected path: "
+                f"expected {sorted(patch.files)!r}, observed {sorted(changed)!r}",
+                guard_code="tap_source_drift",
+            )
+        _git(self.root, "add", "--", *patch.files)
+        staged = set(
+            filter(
+                None,
+                _git(self.root, "diff", "--cached", "--name-only", "--").splitlines(),
+            )
+        )
+        if staged != set(patch.files):
+            raise TapMetadataWriteError(
+                "metadata writer staged an unexpected path",
+                guard_code="tap_source_drift",
+            )
+        _git(self.root, "commit", "-m", message)
+        if _git(self.root, "rev-parse", "HEAD^") != patch.expected_main_commit:
+            raise TapMetadataWriteError(
+                "metadata commit parent differs from expected main",
+                guard_code="tap_source_drift",
+            )
+        committed = set(
+            filter(
+                None,
+                _git(
+                    self.root,
+                    "diff-tree",
+                    "--no-commit-id",
+                    "--name-only",
+                    "-r",
+                    "HEAD",
+                ).splitlines(),
+            )
+        )
+        if committed != set(patch.files):
+            raise TapMetadataWriteError(
+                "metadata commit contains an unexpected path",
+                guard_code="tap_source_drift",
+            )
+        self.require_clean()
+        return self.local_source()
+
+    def push(self, expected_main: str, new_commit: str) -> None:
+        _git_sha(expected_main, "metadata push expected main")
+        _git_sha(new_commit, "metadata push commit")
+        if self.remote is None:
+            return
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(self.root),
+                    "push",
+                    self.remote,
+                    f"{new_commit}:refs/heads/{self.branch}",
+                ],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except OSError as error:
+            raise TapMetadataWriteError(
+                f"metadata CAS push failed: {error}",
+                guard_code="metadata_cas_conflict",
+            ) from error
+        if result.returncode != 0:
+            detail = result.stderr.decode("utf-8", errors="replace")[:4096]
+            raise TapMetadataWriteError(
+                f"metadata CAS push was rejected: {detail}",
+                guard_code="metadata_cas_conflict",
+            )
+
+
+def apply_metadata_patch(
+    tap_root: Path,
+    patch: TapMetadataPatchV1,
+    *,
+    formula_update: FormulaMetadataUpdateV1 | None = None,
+    commit_message: str,
+    store: GitTapMetadataStore | None = None,
+) -> TapMetadataWriteResultV1:
+    root = tap_root.resolve(strict=True)
+    if not isinstance(patch, TapMetadataPatchV1):
+        raise TapMetadataWriteError(
+            "metadata patch protocol is unsupported",
+            guard_code="tap_source_drift",
+        )
+    try:
+        if patch.operation == "successor-activation":
+            if formula_update is not None:
+                raise TapMetadataError(
+                    "successor activation cannot carry a Formula update"
+                )
+            validate_successor_activation_patch(root, patch)
+        elif patch.operation == "formula-metadata":
+            if formula_update is None:
+                raise TapMetadataError(
+                    "Formula metadata writer requires its exact update"
+                )
+            validate_formula_metadata_patch(root, patch, formula_update)
+        else:
+            raise TapMetadataError("metadata patch operation is unsupported")
+    except TapMetadataError as error:
+        raise TapMetadataWriteError(
+            f"metadata patch failed semantic revalidation: {error}",
+            guard_code="tap_source_drift",
+        ) from error
+    writer = GitTapMetadataStore(root) if store is None else store
+    if not isinstance(writer, GitTapMetadataStore) or writer.root != root:
+        raise TapMetadataWriteError(
+            "metadata writer does not own this exact checkout",
+            guard_code="tap_source_drift",
+        )
+    try:
+        writer.require_clean()
+        current = writer.local_source()
+    except TapMetadataWriteError:
+        raise
+    except TapMetadataError as error:
+        raise TapMetadataWriteError(
+            f"cannot verify metadata source: {error}",
+            guard_code="tap_source_drift",
+        ) from error
+    if (
+        current["commit"] != patch.expected_main_commit
+        or current["tree"] != patch.expected_main_tree
+    ):
+        raise TapMetadataWriteError(
+            "tap main moved before metadata commit",
+            guard_code="tap_source_drift",
+        )
+    if (
+        list(patch.allowed_paths) != list(dict.fromkeys(patch.allowed_paths))
+        or set(patch.expected_files_sha256) != set(patch.allowed_paths)
+        or not set(patch.files).issubset(patch.allowed_paths)
+    ):
+        raise TapMetadataWriteError(
+            "metadata patch path set is not exact",
+            guard_code="tap_source_drift",
+        )
+    for path in patch.allowed_paths:
+        destination = root / path
+        expected_digest = patch.expected_files_sha256[path]
+        if expected_digest is None:
+            if (
+                formula_update is None
+                or path != formula_update.link_manifest_path
+                or destination.exists()
+                or destination.is_symlink()
+            ):
+                raise TapMetadataWriteError(
+                    "metadata generated file creation changed before CAS",
+                    guard_code="tap_source_drift",
+                )
+            continue
+        if (
+            not destination.is_file()
+            or destination.is_symlink()
+            or hashlib.sha256(destination.read_bytes()).hexdigest() != expected_digest
+        ):
+            raise TapMetadataWriteError(
+                "metadata generated file changed before CAS",
+                guard_code="tap_source_drift",
+            )
+    remote_before = writer.remote_main()
+    if remote_before is not None and remote_before != patch.expected_main_commit:
+        raise TapMetadataWriteError(
+            "tap main moved before metadata commit",
+            guard_code="tap_source_drift",
+        )
+    if not patch.files:
+        return TapMetadataWriteResultV1(
+            status="already-landed",
+            source=MappingProxyType(current),
+            changed_paths=(),
+        )
+    committed = writer.commit(patch, commit_message=commit_message)
+    remote_recheck = writer.remote_main()
+    if remote_recheck is not None and remote_recheck != patch.expected_main_commit:
+        raise TapMetadataWriteError(
+            "tap main moved immediately before metadata push",
+            guard_code="tap_source_drift",
+        )
+    writer.push(patch.expected_main_commit, committed["commit"])
+    remote_after = writer.remote_main()
+    if remote_after is not None and remote_after != committed["commit"]:
+        raise TapMetadataWriteError(
+            "metadata push lacks exact public ref readback",
+            guard_code="metadata_cas_conflict",
+        )
+    return TapMetadataWriteResultV1(
+        status="committed",
+        source=MappingProxyType(committed),
+        changed_paths=tuple(sorted(patch.files)),
+    )

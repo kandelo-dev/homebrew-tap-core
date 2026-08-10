@@ -1362,6 +1362,8 @@ def _formula_metadata_update(
                 "expected_normalized_formula_sha256",
                 "expected_generated_metadata_sha256",
                 "allowed_paths",
+                "link_manifest_path",
+                "link_manifest_sha256",
                 "canonical_manifest_digest",
                 "bottle_layer_sha256",
                 "bottle_layer_bytes",
@@ -1384,11 +1386,23 @@ def _formula_metadata_update(
         update["expected_generated_metadata_sha256"],
         "metadata generated projection",
     )
+    link_manifest_path = _title(
+        update["link_manifest_path"], "metadata link manifest path"
+    )
+    if re.fullmatch(
+        rf"Kandelo/link/{re.escape(formula)}-"
+        rf"[A-Za-z0-9][A-Za-z0-9._+,-]{{0,255}}-"
+        rf"rebuild(?:0|[1-9][0-9]{{0,9}})-{architecture}\.json",
+        link_manifest_path,
+    ) is None:
+        raise TapRecordError("Formula metadata link manifest path is not exact")
+    _digest(update["link_manifest_sha256"], "metadata link manifest")
     allowed = list(_sequence(update["allowed_paths"], "metadata allowed paths"))
     expected_paths = [
         f"Formula/{formula}.rb",
         f"Kandelo/formula/{formula}.json",
         "Kandelo/metadata.json",
+        link_manifest_path,
     ]
     if allowed != expected_paths:
         raise TapRecordError("Formula metadata update path set is not exact")
