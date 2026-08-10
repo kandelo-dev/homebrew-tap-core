@@ -11,6 +11,7 @@ on:
           - authorize-capture
           - accept-artifact-risk
           - retry-exhausted
+          - historical-repair
       evidence_artifact_id:
         description: "Numeric ID of protected reconciliation evidence"
         required: true
@@ -32,6 +33,7 @@ concurrency:
 
 jobs:
   maintain:
+    if: inputs.command != 'historical-repair'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -77,3 +79,64 @@ jobs:
             --authorization-reference "$AUTHORIZATION_REFERENCE" \
             --verify-actor-permission \
             --immutable
+
+  authorize-historical-repair:
+    if: inputs.command == 'historical-repair'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    steps:
+      - name: Check out protected tap main
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: refs/heads/main
+          fetch-depth: 1
+          persist-credentials: false
+          path: tap-authority
+
+      - name: Set up declared Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Authorize one exact protected historical repair
+        working-directory: tap-authority
+        env:
+          AUTHORIZATION_REFERENCE: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+          EVIDENCE_ARTIFACT_ID: ${{ inputs.evidence_artifact_id }}
+          EVIDENCE_SHA256: ${{ inputs.evidence_sha256 }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
+          JUSTIFICATION: ${{ inputs.justification }}
+        run: |
+          set -euo pipefail
+          python3 -m scripts.abi_staging.historical_maintenance authorize \
+            --evidence-artifact-id "$EVIDENCE_ARTIFACT_ID" \
+            --evidence-sha256 "$EVIDENCE_SHA256" \
+            --justification "$JUSTIFICATION" \
+            --actor "$GITHUB_ACTOR" \
+            --authorization-reference "$AUTHORIZATION_REFERENCE" \
+            --verify-actor-permission \
+            --fresh-protection \
+            --require-history-record \
+            --preserve-prior-records \
+            --immutable \
+            --out "$RUNNER_TEMP/historical-maintenance-result.json"
+
+      - name: Upload exact historical repair authorization
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: abi-staging-historical-repair-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/historical-maintenance-result.json
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+          compression-level: 0

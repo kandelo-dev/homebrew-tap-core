@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 import sys
 import tempfile
 import unittest
@@ -23,6 +23,7 @@ from scripts.abi_staging.reconcile import (
     build_product_workflow_wave,
     build_product_workflow_seed,
     build_promotion_workflow_plan,
+    HistoricalMaintenanceWorkScopeV1,
     ProductProgressV1,
     ProductSelectionV1,
     PromotionEpochV1,
@@ -33,6 +34,7 @@ from scripts.abi_staging.reconcile import (
     build_promotion_plan_document,
     load_reconciliation_activation,
     load_promotion_plan_document,
+    historical_maintenance_work_scope,
     plan_product_reconciliation,
     reconcile_request,
     select_promotion_plan_work,
@@ -50,6 +52,56 @@ POLICY = load_request_issuer_policy(
 )
 
 
+def historical_repair_plan() -> dict[str, object]:
+    abi = 7
+    source = {
+        "repository": "kandelo-dev/homebrew-tap-core",
+        "commit": "1" * 40,
+        "tree": "2" * 40,
+    }
+    identity = {
+        "authorization_sha256": "a" * 64,
+        "history_record_sha256": "b" * 64,
+        "abi": abi,
+        "branch": f"abi/{abi}",
+        "source": source,
+        "formula": {
+            "tap": source["repository"],
+            "formula": "bash",
+            "architecture": "wasm32",
+        },
+        "reason": "failed-package-repair",
+        "expected_contract_sha256": "c" * 64,
+        "dependencies": [],
+        "reuse_record_sha256": None,
+    }
+    return {
+        "schema": 1,
+        "kind": "kandelo-abi-historical-repair-plan",
+        "work_id": canonical_sha256(identity),
+        "identity": identity,
+        "metadata_branch": f"abi/{abi}",
+        "candidate_repository": (
+            "ghcr.io/kandelo-dev/homebrew-tap-core-abi-7-candidates/bash"
+        ),
+        "canonical_repository": (
+            "ghcr.io/kandelo-dev/homebrew-tap-core-abi-7/bash"
+        ),
+        "build_required": True,
+        "stages": [
+            "build-uncredentialed",
+            "publish-candidate-protected",
+            "verify-uncredentialed",
+            "publish-receipt-protected",
+            "publish-canonical-protected",
+            "update-historical-metadata-protected",
+            "publish-admission-protected",
+        ],
+        "override_receipts": [],
+        "preserve_prior_records": True,
+    }
+
+
 def discovered(name: str = "current-request.json") -> DiscoveredRequestV1:
     body = (FIXTURES / name).read_bytes()
     raw = json.loads(body)
@@ -62,6 +114,38 @@ def discovered(name: str = "current-request.json") -> DiscoveredRequestV1:
 
 
 class ReconciliationTests(unittest.TestCase):
+    def test_historical_maintenance_reuses_normal_lane_without_gating_successor(self) -> None:
+        plan = historical_repair_plan()
+        scope = historical_maintenance_work_scope(plan)
+
+        self.assertEqual(scope.work_id, plan["work_id"])
+        self.assertEqual(scope.target_abi, 7)
+        self.assertEqual(scope.metadata_branch, "abi/7")
+        self.assertEqual(scope.build_action, "build-uncredentialed")
+        self.assertEqual(scope.permitted_stages, tuple(plan["stages"]))
+        self.assertEqual(
+            scope.formula_subject,
+            exact_formula_subject("bash", "wasm32"),
+        )
+        self.assertFalse(scope.gates_successor)
+
+        changed = copy.deepcopy(plan)
+        changed["metadata_branch"] = "main"
+        with self.assertRaises(ReconciliationError):
+            historical_maintenance_work_scope(changed)
+
+        with self.assertRaises(ReconciliationError):
+            HistoricalMaintenanceWorkScopeV1(
+                work_id=scope.work_id,
+                authorization_sha256=scope.authorization_sha256,
+                formula_subject=scope.formula_subject,
+                target_abi=scope.target_abi,
+                tap_source=MappingProxyType(dict(scope.tap_source)),
+                metadata_branch=scope.metadata_branch,
+                build_action=scope.build_action,
+                permitted_stages=("build-uncredentialed",),
+            )
+
     def test_promotion_reconstructs_formula_roots_without_parallel_authority(self) -> None:
         tap_plan = build_miniature_tap_plan_fixture(TAP_ROOT)
         requirements = cli_module._formula_requirements_from_tap_plan(tap_plan)

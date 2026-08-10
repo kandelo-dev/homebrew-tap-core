@@ -1016,7 +1016,7 @@ module AbiStagingWorkflowCheck
                      "maintenance workflow gained a free-form selector")
     command = inputs.fetch("command")
     require_contract(command.fetch("required") == true && command.fetch("type") == "choice" &&
-                     command.fetch("options") == %w[authorize-capture accept-artifact-risk retry-exhausted],
+                     command.fetch("options") == %w[authorize-capture accept-artifact-risk retry-exhausted historical-repair],
                      "maintenance commands must remain a closed choice")
     %w[evidence_artifact_id evidence_sha256 justification].each do |name|
       input = inputs.fetch(name)
@@ -1025,9 +1025,11 @@ module AbiStagingWorkflowCheck
     end
 
     jobs = workflow.fetch("jobs")
-    require_contract(jobs.keys == ["maintain"],
-                     "maintenance workflow must have one protected writer")
+    require_contract(jobs.keys.sort == %w[authorize-historical-repair maintain],
+                     "maintenance workflow job split changed")
     job = jobs.fetch("maintain")
+    require_contract(job.fetch("if") == "inputs.command != 'historical-repair'",
+                     "override maintenance may run for historical repair")
     require_contract(job.fetch("permissions") == {
                        "actions" => "read",
                        "contents" => "read",
@@ -1088,6 +1090,82 @@ module AbiStagingWorkflowCheck
                      !source.match?(/\b(?:brew|make|cmake|cargo|npm)\b/) &&
                      !source.include?("--replace"),
                      "write-capable maintenance executes candidate code or mutable publication")
+
+    historical = jobs.fetch("authorize-historical-repair")
+    require_contract(historical.fetch("if") == "inputs.command == 'historical-repair'",
+                     "historical repair authorization condition changed")
+    require_contract(historical.fetch("permissions") == {
+                       "actions" => "read",
+                       "contents" => "read",
+                       "packages" => "write"
+                     }, "historical authorization permissions changed")
+    require_contract(historical.fetch("runs-on") == "ubuntu-latest" &&
+                     historical.fetch("timeout-minutes").between?(1, 30) &&
+                     !historical.key?("environment"),
+                     "historical authorization execution boundary changed")
+    require_contract(historical.fetch("steps").none? { |step| step["continue-on-error"] == true },
+                     "historical authorization may not swallow failure")
+    check_actions(historical)
+    historical_checkout = historical.fetch("steps").find do |step|
+      step["uses"]&.start_with?(CHECKOUT)
+    end
+    historical_python = historical.fetch("steps").find do |step|
+      step["uses"]&.start_with?(SETUP_PYTHON)
+    end
+    require_contract(historical_checkout&.fetch("with", {}) == {
+                       "ref" => "refs/heads/main",
+                       "fetch-depth" => 1,
+                       "persist-credentials" => false,
+                       "path" => "tap-authority"
+                     }, "historical authorizer must execute protected tap main")
+    require_contract(historical_python&.fetch("with", {})&.fetch("python-version") == "3.13",
+                     "historical authorizer Python version changed")
+    historical_commands = historical.fetch("steps").select { |step| step.key?("run") }
+    require_contract(historical_commands.length == 1,
+                     "historical authorization must use one reviewed coordinator")
+    historical_command = historical_commands.fetch(0)
+    require_contract(historical_command.fetch("working-directory") == "tap-authority",
+                     "historical authorization bypasses protected tap-main code")
+    require_contract(historical_command.fetch("env") == {
+                       "AUTHORIZATION_REFERENCE" => "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}",
+                       "EVIDENCE_ARTIFACT_ID" => "${{ inputs.evidence_artifact_id }}",
+                       "EVIDENCE_SHA256" => "${{ inputs.evidence_sha256 }}",
+                       "GITHUB_ACTOR" => "${{ github.actor }}",
+                       "GITHUB_REPOSITORY" => "${{ github.repository }}",
+                       "GITHUB_RUN_ATTEMPT" => "${{ github.run_attempt }}",
+                       "GITHUB_RUN_ID" => "${{ github.run_id }}",
+                       "GITHUB_TOKEN" => "${{ github.token }}",
+                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
+                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
+                       "JUSTIFICATION" => "${{ inputs.justification }}"
+                     }, "historical inputs are not isolated as inert evidence")
+    historical_source = historical_command.fetch("run")
+    historical_flags = [
+      "python3 -m scripts.abi_staging.historical_maintenance authorize",
+      '--evidence-artifact-id "$EVIDENCE_ARTIFACT_ID"',
+      '--evidence-sha256 "$EVIDENCE_SHA256"',
+      "--verify-actor-permission",
+      "--fresh-protection",
+      "--require-history-record",
+      "--preserve-prior-records",
+      "--immutable"
+    ]
+    require_contract(historical_flags.all? { |flag| historical_source.include?(flag) },
+                     "historical repair lacks exact authority or preservation guards")
+    require_contract(!historical_source.match?(/\b(?:eval|source|curl|wget|sleep)\b/) &&
+                     !historical_source.match?(/abi-staging-(?:build|verify)-bottle/) &&
+                     !historical_source.match?(/\b(?:brew|make|cmake|cargo|npm)\b/) &&
+                     !historical_source.match?(/git\s+push.*(?:--force|-f\b)/) &&
+                     !historical_source.match?(/(?:oras|gh)\s+.*(?:delete|remove)/) &&
+                     !historical_source.include?("--replace") &&
+                     !historical_source.include?("--allow-cross-abi") &&
+                     !historical_source.include?("scripts.abi_staging.override"),
+                     "historical write-capable job gained build, override, force, cross-ABI, or deletion authority")
+    historical_uploads = action_steps(historical, UPLOAD_ARTIFACT)
+    require_contract(historical_uploads.length == 1 &&
+                     historical_uploads.fetch(0).dig("with", "if-no-files-found") == "error" &&
+                     historical_uploads.fetch(0).dig("with", "compression-level") == 0,
+                     "historical authorization handoff is not retained exactly")
     true
   rescue KeyError, NoMethodError => error
     raise Violation, "maintenance workflow structure is incomplete: #{error.message}"
