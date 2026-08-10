@@ -62,6 +62,77 @@ class ReconciliationWorkScopeV1:
 
 
 @dataclass(frozen=True)
+class HistoricalMaintenanceWorkScopeV1:
+    """One exact historical subject routed through the ordinary stage split."""
+
+    work_id: str
+    authorization_sha256: str
+    formula_subject: str
+    target_abi: int
+    tap_source: MappingProxyType[str, str]
+    metadata_branch: str
+    build_action: Literal["build-uncredentialed", "reuse-exact-candidate"]
+    permitted_stages: tuple[str, ...]
+    gates_successor: bool = False
+
+    def __post_init__(self) -> None:
+        _digest(self.work_id, "historical maintenance work")
+        _digest(self.authorization_sha256, "historical maintenance authorization")
+        try:
+            parse_formula_subject(
+                self.formula_subject, "historical maintenance Formula subject"
+            )
+        except PlanError as error:
+            raise ReconciliationError(
+                f"historical maintenance Formula subject is invalid: {error}"
+            ) from error
+        if (
+            isinstance(self.target_abi, bool)
+            or not isinstance(self.target_abi, int)
+            or not 0 <= self.target_abi <= 2**32 - 1
+            or self.metadata_branch != f"abi/{self.target_abi}"
+        ):
+            raise ReconciliationError(
+                "historical maintenance target is not exact abi/N"
+            )
+        source = dict(self.tap_source)
+        if set(source) != {"repository", "commit", "tree"}:
+            raise ReconciliationError("historical maintenance tap source changed")
+        if REPOSITORY.fullmatch(source["repository"]) is None:
+            raise ReconciliationError(
+                "historical maintenance tap repository is invalid"
+            )
+        _git_sha(source["commit"], "historical maintenance tap commit")
+        _git_sha(source["tree"], "historical maintenance tap tree")
+        if self.build_action not in {
+            "build-uncredentialed",
+            "reuse-exact-candidate",
+        }:
+            raise ReconciliationError(
+                "historical maintenance build action is unsupported"
+            )
+        expected_stages = (
+            self.build_action,
+            (
+                "publish-candidate-protected"
+                if self.build_action == "build-uncredentialed"
+                else "publish-reuse-protected"
+            ),
+            "verify-uncredentialed",
+            "publish-receipt-protected",
+            "publish-canonical-protected",
+            "update-historical-metadata-protected",
+            "publish-admission-protected",
+        )
+        if self.permitted_stages != expected_stages:
+            raise ReconciliationError(
+                "historical maintenance stages differ from the ordinary split lane"
+            )
+        if self.gates_successor:
+            raise ReconciliationError("historical maintenance cannot gate a successor")
+
+
+@dataclass(frozen=True)
 class ProductEvidenceWorkScopeV1:
     allow_required: bool
     allow_background: bool
@@ -1036,6 +1107,51 @@ def reconciliation_work_scope(
     }:
         return ReconciliationWorkScopeV1(True, True)
     return ReconciliationWorkScopeV1(False, False)
+
+
+def historical_maintenance_work_scope(
+    repair_plan: Mapping[str, Any],
+) -> HistoricalMaintenanceWorkScopeV1:
+    """Route an authorized repair without inventing a second build lane.
+
+    The historical plan owns only the exact subject and branch selection.  Its
+    stage names deliberately reuse the ordinary uncredentialed build/verify
+    and separated protected publishers, while the metadata writer is narrowed
+    to the exact ``abi/N`` ref.  The derived scope is never a successor gate.
+    """
+
+    from .historical_maintenance import (
+        HistoricalMaintenanceError,
+        validate_historical_repair_plan,
+    )
+
+    try:
+        checked = validate_historical_repair_plan(repair_plan)
+    except HistoricalMaintenanceError as error:
+        raise ReconciliationError(
+            f"historical maintenance plan is invalid: {error}"
+        ) from error
+    identity = checked["identity"]
+    formula = identity["formula"]
+    try:
+        subject = exact_formula_subject(
+            formula["formula"], formula["architecture"]
+        )
+    except PlanError as error:
+        raise ReconciliationError(
+            f"historical maintenance Formula is invalid: {error}"
+        ) from error
+    return HistoricalMaintenanceWorkScopeV1(
+        work_id=checked["work_id"],
+        authorization_sha256=identity["authorization_sha256"],
+        formula_subject=subject,
+        target_abi=identity["abi"],
+        tap_source=MappingProxyType(dict(identity["source"])),
+        metadata_branch=checked["metadata_branch"],
+        build_action=checked["stages"][0],
+        permitted_stages=tuple(checked["stages"]),
+        gates_successor=False,
+    )
 
 
 def product_evidence_work_scope(

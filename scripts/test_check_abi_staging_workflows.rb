@@ -515,6 +515,46 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     end
   end
 
+  def test_historical_maintenance_rejects_build_override_force_and_arbitrary_ref
+    assert_maintenance_rejected("historical build with write credentials") do |workflow|
+      last_run_step(workflow, "authorize-historical-repair")["run"] +=
+        "\nbash scripts/abi-staging-build-bottle.sh\n"
+    end
+    assert_maintenance_rejected("historical override receipt") do |workflow|
+      last_run_step(workflow, "authorize-historical-repair")["run"] +=
+        "\npython3 -m scripts.abi_staging.override accept-artifact-risk\n"
+    end
+    assert_maintenance_rejected("historical force push") do |workflow|
+      last_run_step(workflow, "authorize-historical-repair")["run"] +=
+        "\ngit push --force origin HEAD:refs/heads/abi/7\n"
+    end
+    assert_maintenance_rejected("historical arbitrary ref") do |workflow|
+      checkout = workflow.dig("jobs", "authorize-historical-repair", "steps").find do |step|
+        step["uses"]&.start_with?(AbiStagingWorkflowCheck::CHECKOUT)
+      end
+      checkout.fetch("with")["ref"] = "refs/heads/abi/7"
+    end
+  end
+
+  def test_historical_maintenance_requires_history_same_abi_and_record_preservation
+    assert_maintenance_rejected("historical missing history record") do |workflow|
+      step = last_run_step(workflow, "authorize-historical-repair")
+      step["run"] = step["run"].sub("--require-history-record", "")
+    end
+    assert_maintenance_rejected("historical cross ABI dependency") do |workflow|
+      last_run_step(workflow, "authorize-historical-repair")["run"] +=
+        "\n--allow-cross-abi\n"
+    end
+    assert_maintenance_rejected("historical failed-record deletion") do |workflow|
+      last_run_step(workflow, "authorize-historical-repair")["run"] +=
+        "\noras manifest delete ghcr.io/example/failed@sha256:#{'a' * 64}\n"
+    end
+    assert_maintenance_rejected("historical mutable prior records") do |workflow|
+      step = last_run_step(workflow, "authorize-historical-repair")
+      step["run"] = step["run"].sub("--preserve-prior-records", "")
+    end
+  end
+
   def test_history_workflow_preserves_protection_and_ref_ordering
     assert_history_rejected("create before protection preflight") do |workflow|
       steps = workflow.dig("jobs", "plan-and-verify-policy", "steps")
