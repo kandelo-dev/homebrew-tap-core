@@ -21,6 +21,7 @@ from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 from .abi_history import (
+    HISTORY_RECORD_MEDIA_TYPE,
     AbiHistoryError,
     GitHubHistoryClient,
     build_history_oci_plan,
@@ -47,6 +48,7 @@ from .coordination import (
     CoordinationError,
     coordinate_planned_request,
 )
+from .custody import CustodyError, load_source_custody_manifest
 from .execution import (
     ExecutionError,
     execute_build_work,
@@ -64,9 +66,13 @@ from .handoff import (
     validate_handoff,
 )
 from .oci import (
+    FetchedOciRecordV1,
     OciPublicationError,
+    PublishedRecordLocatorV1,
     build_oci_manifest,
+    fetch_public_record,
     isolated_oras_transport,
+    list_public_record_locators,
     publish_record,
     UrllibOciTransportV1,
 )
@@ -75,12 +81,17 @@ from .formula_inventory import FormulaInventoryError, write_formula_inventory_fi
 from .plan import (
     PlanError,
     build_miniature_tap_plan_fixture,
+    exact_formula_subject,
     load_formula_requirements,
+    parse_formula_subject,
     plan_exact_tap_request,
     snapshot_tap_source,
     write_canonical_plan,
 )
 from .records import (
+    CANDIDATE_RECORD_MEDIA_TYPE,
+    CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
+    SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
     OciRecordPlanV1,
     TapRecordError,
     build_attempt_outcome_oci_plan,
@@ -89,13 +100,44 @@ from .records import (
     load_tap_plan_record,
     validate_admission_record,
     validate_abi_history_record,
+    validate_candidate_record,
 )
-from .promotion import PromotionError, validate_promotion_decision
+from .promotion import (
+    ADMISSION_RECORD_MEDIA_TYPE,
+    CanonicalBottlePublicationV1,
+    PromotionDecisionV1,
+    PromotionError,
+    admission_repository,
+    build_canonical_bottle_plan,
+    evaluate_promotion,
+    expected_canonical_publication,
+    finalize_admission_record,
+    metadata_patch_document,
+    prepare_admission,
+    prepare_formula_metadata_patch,
+    prepare_successor_activation_patch,
+    publish_admission_record,
+    publish_canonical_bottle,
+    promotion_override_identity,
+    read_canonical_publication,
+    validate_promotion_history_barrier,
+    validate_promotion_candidate_binding,
+    validate_promotion_decision,
+)
 from .tap_metadata import (
+    FormulaMetadataUpdateV1,
+    GitTapMetadataStore,
     TapMetadataError,
+    TapMetadataWriteError,
+    apply_metadata_patch,
     check_tap_metadata,
+    formula_generated_metadata_sha256,
+    load_abi_state,
     load_promotion_activation,
     load_promotion_policy,
+    recover_landed_formula_metadata_commit,
+    validate_formula_admission_projection,
+    validate_landed_formula_metadata_commit,
 )
 from .product import (
     MAX_INPUT_OBJECT_BYTES,
@@ -131,16 +173,23 @@ from .product_evidence import (
     validate_product_evidence_result,
 )
 from .reconcile import (
+    build_promotion_plan_document,
+    build_promotion_workflow_plan,
     build_product_workflow_wave,
     build_product_workflow_seed,
     ProductProgressV1,
     ProductSelectionV1,
+    PromotionEpochV1,
+    PromotionProgressV1,
+    PromotionSubjectV1,
     PullRequestLifecycleV1,
     ReconciliationDecisionV1,
     ReconciliationError,
+    load_promotion_plan_document,
     load_product_evidence_activation,
     load_reconciliation_activation,
     reconcile_request,
+    select_promotion_plan_work,
     select_reconciliation_cycle,
 )
 from .request import RequestValidationError, load_request_issuer_policy, validate_request
@@ -168,12 +217,14 @@ from .workflow_publication import (
     build_protected_verification_outcome,
 )
 from .verification import (
+    VERIFICATION_RECEIPT_MEDIA_TYPE,
     VerificationError,
     VerificationPublicationError,
     load_verification_result,
     publish_protected_verification_outcome,
     publish_verification_receipt,
 )
+from .override import OVERRIDE_RECEIPT_MEDIA_TYPE
 
 
 TAP_ROOT = Path(__file__).resolve().parents[2]
@@ -228,6 +279,61 @@ def _parser() -> argparse.ArgumentParser:
     plan_products.add_argument("--tap-root", required=True)
     plan_products.add_argument("--out", required=True)
     plan_products.add_argument("--github-output", required=True)
+    plan_promotion = subcommands.add_parser("plan-workflow-promotion")
+    plan_promotion.add_argument("--coordination-root", required=True)
+    plan_promotion.add_argument("--kandelo-root", default="")
+    plan_promotion.add_argument("--tap-root", required=True)
+    plan_promotion.add_argument("--require-merged", action="store_true")
+    plan_promotion.add_argument("--require-history-record", action="store_true")
+    plan_promotion.add_argument("--out", required=True)
+    plan_promotion.add_argument("--github-output", required=True)
+    publish_canonical = subcommands.add_parser("publish-workflow-canonical")
+    publish_canonical.add_argument("--run-id", required=True, type=int)
+    publish_canonical.add_argument("--run-attempt", required=True, type=int)
+    publish_canonical.add_argument("--head-sha", required=True)
+    publish_canonical.add_argument("--request-digest", required=True)
+    publish_canonical.add_argument("--work-id", required=True)
+    publish_canonical.add_argument("--plan-artifact-id", required=True)
+    publish_canonical.add_argument("--plan-artifact-digest", required=True)
+    publish_canonical.add_argument("--require-unchanged-layer", action="store_true")
+    publish_canonical.add_argument("--require-history-barrier", action="store_true")
+    publish_canonical.add_argument("--require-github-digest", action="store_true")
+    publish_canonical.add_argument("--anonymous-readback", action="store_true")
+    publish_canonical.add_argument("--immutable", action="store_true")
+    publish_canonical.add_argument("--out", required=True)
+    update_tap_metadata = subcommands.add_parser("update-workflow-tap-metadata")
+    update_tap_metadata.add_argument("--run-id", required=True, type=int)
+    update_tap_metadata.add_argument("--run-attempt", required=True, type=int)
+    update_tap_metadata.add_argument("--head-sha", required=True)
+    update_tap_metadata.add_argument("--request-digest", required=True)
+    update_tap_metadata.add_argument("--work-id", required=True)
+    update_tap_metadata.add_argument(
+        "--operation",
+        required=True,
+        choices=("successor-activation", "formula-metadata"),
+    )
+    update_tap_metadata.add_argument("--plan-artifact-id", required=True)
+    update_tap_metadata.add_argument("--plan-artifact-digest", required=True)
+    update_tap_metadata.add_argument("--contents-only", action="store_true")
+    update_tap_metadata.add_argument("--normal-push", action="store_true")
+    update_tap_metadata.add_argument("--post-write-readback", action="store_true")
+    update_tap_metadata.add_argument("--require-history-barrier", action="store_true")
+    update_tap_metadata.add_argument("--out", required=True)
+    publish_admission = subcommands.add_parser("publish-workflow-admission")
+    publish_admission.add_argument("--run-id", required=True, type=int)
+    publish_admission.add_argument("--run-attempt", required=True, type=int)
+    publish_admission.add_argument("--head-sha", required=True)
+    publish_admission.add_argument("--request-digest", required=True)
+    publish_admission.add_argument("--work-id", required=True)
+    publish_admission.add_argument("--plan-artifact-id", required=True)
+    publish_admission.add_argument("--plan-artifact-digest", required=True)
+    publish_admission.add_argument("--metadata-root", required=True)
+    publish_admission.add_argument("--require-metadata-readback", action="store_true")
+    publish_admission.add_argument("--require-history-barrier", action="store_true")
+    publish_admission.add_argument("--require-github-digest", action="store_true")
+    publish_admission.add_argument("--anonymous-readback", action="store_true")
+    publish_admission.add_argument("--immutable", action="store_true")
+    publish_admission.add_argument("--out", required=True)
     policy_check = subcommands.add_parser("policy-check")
     policy_check.add_argument("--tap-root", required=True)
     tap_metadata_check = subcommands.add_parser("tap-metadata-check")
@@ -512,6 +618,7 @@ def _discover_workflow_request(args: argparse.Namespace) -> None:
         "node_evidence_matrix": '{"include":[]}',
         "product_matrix": '{"include":[]}',
         "product_mode": "observe",
+        "promotion_eligible": "false",
         "request_digest": "",
         "reuse_matrix": '{"include":[]}',
         "selected": "false",
@@ -542,6 +649,9 @@ def _discover_workflow_request(args: argparse.Namespace) -> None:
                 "kandelo_repository": candidate.request["build_source"]["repository"],
                 "request_digest": candidate.request_digest,
                 "selected": "true",
+                "promotion_eligible": (
+                    "true" if decision.action == "observe-merged" else "false"
+                ),
             }
         )
     discovery = {
@@ -960,6 +1070,1142 @@ def _plan_workflow_products(args: argparse.Namespace) -> None:
             ),
         },
     )
+
+
+def _plan_workflow_promotion(args: argparse.Namespace) -> None:
+    """Emit one exact protected promotion artifact; disabled mode is empty."""
+
+    if not args.require_merged or not args.require_history_record:
+        raise ReconciliationError(
+            "promotion planning requires merged-PR and history-record guards"
+        )
+    tap_root = _protected_tap_root(args.tap_root)
+    output = _output_directory(args.out)
+    policy = load_tap_staging_policy(tap_root / "Kandelo/staging/tap-policy.toml")
+    coordination_root = Path(args.coordination_root).resolve(strict=True)
+    bundle = load_coordination_bundle(
+        coordination_root / "coordination.json", policy=policy
+    )
+    request = bundle["request"]
+    request_sha256 = bundle["request_sha256"]
+    tap_source = snapshot_tap_source(tap_root, policy.tap_repository)
+    if bundle["tap_plan"]["tap_source"] != tap_source:
+        raise ReconciliationError(
+            "promotion planner tap source differs from exact coordination"
+        )
+    issuer_policy = load_request_issuer_policy(
+        tap_root / "Kandelo/staging/request-issuers.toml",
+        expected_tap=policy.tap_repository,
+    )
+    lifecycle = GitHubPublicClient(issuer_policy).pull_request_lifecycle(
+        request["pull_request"]["number"]
+    )
+    asset_path = Path(urlsplit(bundle["request_asset_url"]).path)
+    discovered = DiscoveredRequestV1(
+        request_sha256,
+        asset_path.name,
+        bundle["request_asset_url"],
+        asset_path.parts[-2],
+        request,
+    )
+    reconciliation = reconcile_request(discovered, lifecycle)
+    if (
+        reconciliation.lifecycle.state != "merged"
+        or reconciliation.action != "observe-merged"
+        or not reconciliation.current_for_pull_request
+    ):
+        raise ReconciliationError(
+            "promotion planning requires the exact merged pull-request head"
+        )
+    activation = load_promotion_activation(
+        tap_root / "Kandelo/staging/promotion-activation.toml"
+    )
+    if activation.mode == "disabled":
+        epoch = PromotionEpochV1(
+            request_digest=request_sha256,
+            history_record_sha256=None,
+            activation_patch_sha256=canonical_sha256(
+                {
+                    "mode": activation.mode,
+                    "request_sha256": request_sha256,
+                    "tap_source": tap_source,
+                }
+            ),
+            activation_record_sha256=None,
+            current_tap_commit=tap_source["commit"],
+            current_tap_tree=tap_source["tree"],
+        )
+        planned = build_promotion_workflow_plan(
+            reconciliation,
+            (),
+            epoch=epoch,
+            progress={},
+            activation_mode=activation.mode,
+        )
+        work_details = {
+            "activation": {},
+            "canonical": {},
+            "metadata": {},
+            "admission": {},
+        }
+    else:
+        planned, work_details = _collect_active_promotion_inputs(
+            tap_root=tap_root,
+            kandelo_root=args.kandelo_root,
+            bundle=bundle,
+            reconciliation=reconciliation,
+            tap_source=tap_source,
+            activation_mode=activation.mode,
+        )
+    document = build_promotion_plan_document(
+        planned,
+        tap_source=tap_source,
+        work_details=work_details,
+    )
+    (output / "promotion-plan.json").write_bytes(canonical_bytes(document))
+    _write_github_outputs(
+        Path(args.github_output),
+        {
+            "admission_matrix": json.dumps(
+                document["matrices"]["admission"],
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            "canonical_matrix": json.dumps(
+                document["matrices"]["canonical"],
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            "metadata_matrix": json.dumps(
+                document["matrices"]["metadata"],
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            "mode": activation.mode,
+            "request_digest": request_sha256,
+        },
+    )
+
+
+def _formula_requirements_from_tap_plan(
+    tap_plan: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Reconstruct selected Formula roots from the existing product authority."""
+
+    grouped: dict[tuple[str, str, str], list[dict[str, str]]] = {}
+    products = tap_plan.get("selected_products")
+    if not isinstance(products, (list, tuple)):
+        raise ReconciliationError("promotion tap plan products are not an array")
+    for product in products:
+        if not isinstance(product, Mapping):
+            raise ReconciliationError("promotion tap plan product is not an object")
+        product_id = product.get("id")
+        roots = product.get("formula_roots")
+        if not isinstance(product_id, str) or not isinstance(roots, (list, tuple)):
+            raise ReconciliationError("promotion tap plan product roots are invalid")
+        for root in roots:
+            if not isinstance(root, Mapping):
+                raise ReconciliationError("promotion Formula root is not an object")
+            key = (root.get("tap"), root.get("formula"), root.get("architecture"))
+            if not all(isinstance(value, str) for value in key):
+                raise ReconciliationError("promotion Formula root identity is invalid")
+            grouped.setdefault(key, []).append(
+                {
+                    "product_id": product_id,
+                    "materialization": root.get("materialization"),
+                }
+            )
+    requirements = [
+        {
+            "tap": tap,
+            "formula": formula,
+            "architecture": architecture,
+            "uses": sorted(
+                uses,
+                key=lambda item: (item["product_id"], item["materialization"]),
+            ),
+        }
+        for (tap, formula, architecture), uses in sorted(grouped.items())
+    ]
+    try:
+        return load_formula_requirements(canonical_bytes(requirements))
+    except PlanError as error:
+        raise ReconciliationError(
+            f"promotion Formula roots cannot be reconstructed: {error}"
+        ) from error
+
+
+def _select_exact_history_record(
+    records: tuple[FetchedOciRecordV1, ...],
+    *,
+    target_abi: int,
+    planned_tap_source: Mapping[str, Any],
+) -> FetchedOciRecordV1:
+    """Select one durable history record for the exact planned N -> N+1 epoch."""
+
+    matches: list[FetchedOciRecordV1] = []
+    for fetched in records:
+        try:
+            record = load_canonical_mapping(fetched.config.body, "ABI history record")
+            validate_abi_history_record(record)
+        except (ContractError, TapRecordError, ValueError) as error:
+            raise ReconciliationError(
+                f"public ABI history record is invalid: {error}"
+            ) from error
+        plan = record["plan"]
+        if (
+            plan["source_abi"] + 1 == target_abi
+            and plan["successor_abi"] == target_abi
+            and plan["preactivation_tap_commit"] == planned_tap_source.get("commit")
+            and plan["preactivation_tap_tree"] == planned_tap_source.get("tree")
+        ):
+            matches.append(fetched)
+    if len(matches) != 1:
+        raise ReconciliationError(
+            "promotion requires one exact protected ABI history record"
+        )
+    return matches[0]
+
+
+def _fetch_exact_history_record(
+    *,
+    policy: Any,
+    target_abi: int,
+    planned_tap_source: Mapping[str, Any],
+    expected_digest: str | None = None,
+    transport: UrllibOciTransportV1,
+) -> FetchedOciRecordV1:
+    source_abi = target_abi - 1
+    if source_abi < 0:
+        raise ReconciliationError("promotion target ABI has no predecessor")
+    repository = history_record_repository(policy.tap_repository, source_abi)
+    if expected_digest is not None:
+        if (
+            not isinstance(expected_digest, str)
+            or len(expected_digest) != 64
+            or any(character not in "0123456789abcdef" for character in expected_digest)
+        ):
+            raise ReconciliationError(
+                "activated promotion history digest is invalid"
+            )
+        reference = "ghcr.io/" + repository + "@sha256:" + expected_digest
+        fetched = fetch_public_record(
+            {
+                "repository": "ghcr.io/" + repository,
+                "digest": "sha256:" + expected_digest,
+                "immutable_reference": reference,
+            },
+            transport=transport,
+            expected_artifact_type=HISTORY_RECORD_MEDIA_TYPE,
+            required_layer_roles=("immutable-record-bytes",),
+        )
+        if fetched.digest != "sha256:" + expected_digest:
+            raise ReconciliationError(
+                "activated promotion history record identity changed"
+            )
+        return fetched
+    fetched = tuple(
+        fetch_public_record(
+            locator,
+            transport=transport,
+            expected_artifact_type=HISTORY_RECORD_MEDIA_TYPE,
+            required_layer_roles=("immutable-record-bytes",),
+        )
+        for locator in list_public_record_locators(
+            repository,
+            transport=transport,
+            max_records=256,
+        )
+    )
+    return _select_exact_history_record(
+        fetched,
+        target_abi=target_abi,
+        planned_tap_source=planned_tap_source,
+    )
+
+
+def _history_epoch_authority(
+    history: FetchedOciRecordV1,
+    *,
+    policy: Any,
+    target_abi: int,
+) -> tuple[dict[str, str], str]:
+    """Recover the immutable preactivation source independently of current main."""
+
+    try:
+        record = load_canonical_mapping(history.config.body, "ABI history record")
+        validate_abi_history_record(record)
+    except (ContractError, TapRecordError, ValueError) as error:
+        raise ReconciliationError(
+            f"public ABI history record is invalid: {error}"
+        ) from error
+    plan = record["plan"]
+    source_abi = plan["source_abi"]
+    branch = policy.historical_branch_prefix + str(source_abi)
+    expected_repository = (
+        "ghcr.io/"
+        + history_record_repository(policy.tap_repository, source_abi)
+    )
+    if (
+        plan["successor_abi"] != target_abi
+        or source_abi + 1 != target_abi
+        or plan["branch"] != branch
+        or history.repository != expected_repository
+    ):
+        raise ReconciliationError(
+            "public ABI history record names another successor epoch"
+        )
+    return (
+        {
+            "repository": policy.tap_repository,
+            "commit": plan["preactivation_tap_commit"],
+            "tree": plan["preactivation_tap_tree"],
+        },
+        branch,
+    )
+
+
+def _public_locator(fetched: FetchedOciRecordV1) -> dict[str, str]:
+    return {
+        "repository": fetched.repository,
+        "digest": fetched.digest,
+        "immutable_reference": fetched.immutable_reference,
+    }
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise ValueError(f"JSON object repeats field {key!r}")
+        value[key] = child
+    return value
+
+
+def _fetch_candidate_record(
+    locator: Mapping[str, Any], *, transport: UrllibOciTransportV1
+) -> FetchedOciRecordV1:
+    return fetch_public_record(
+        locator,
+        transport=transport,
+        expected_artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
+        required_layer_roles=("bottle-layer", "bottle-metadata", "bottle-contract"),
+    )
+
+
+def _fetch_candidate_reuse(
+    locator: Mapping[str, Any], *, transport: UrllibOciTransportV1
+) -> FetchedOciRecordV1:
+    return fetch_public_record(
+        locator,
+        transport=transport,
+        expected_artifact_type=CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
+        required_layer_roles=("immutable-record-bytes",),
+    )
+
+
+def _fetch_candidate_custody(
+    candidate: FetchedOciRecordV1, *, transport: UrllibOciTransportV1
+) -> FetchedOciRecordV1:
+    record = load_canonical_mapping(candidate.config.body, "promotion candidate")
+    matches = [
+        item["artifact"]
+        for item in record["candidate"]["normalized_components"]
+        if item["id"] == "source-custody"
+    ]
+    if len(matches) != 1:
+        raise ReconciliationError("promotion candidate has no exact custody record")
+    artifact = matches[0]
+    reference = artifact["immutable_reference"]
+    if not isinstance(reference, str) or "@sha256:" not in reference:
+        raise ReconciliationError("promotion custody reference is not immutable")
+    repository, digest = reference.rsplit("@", 1)
+    locator = {
+        "repository": repository,
+        "digest": digest,
+        "immutable_reference": reference,
+    }
+    first = fetch_public_record(
+        locator,
+        transport=transport,
+        expected_artifact_type=SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
+        required_layer_roles=(),
+    )
+    try:
+        custody = load_source_custody_manifest(first.config.body)
+    except CustodyError as error:
+        raise ReconciliationError(
+            f"promotion source custody is invalid: {error}"
+        ) from error
+    roles = tuple(
+        sorted(
+            {
+                f"{item[identity]}-{suffix}"
+                for collection, identity in (
+                    (custody["sources"], "role"),
+                    (custody["submodules"], "id"),
+                )
+                for item in collection
+                for suffix in ("bundle", "tree")
+            }
+        )
+    )
+    fetched = fetch_public_record(
+        locator,
+        transport=transport,
+        expected_artifact_type=SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
+        required_layer_roles=roles,
+    )
+    if (
+        fetched.digest.removeprefix("sha256:") != artifact["sha256"]
+        or len(fetched.manifest) != artifact["bytes"]
+    ):
+        raise ReconciliationError("promotion custody differs from candidate link")
+    return fetched
+
+
+def _select_current_candidate_fact(
+    inventory: Any,
+    *,
+    request_sha256: str,
+    subject: str,
+    contract_sha256: str,
+) -> Any | None:
+    matches = [
+        fact
+        for fact in inventory.records.candidates
+        if fact.request_sha256 == request_sha256
+        and fact.subject == subject
+        and fact.contract_sha256 == contract_sha256
+    ]
+    if len({fact.bottle_layer_sha256 for fact in matches}) > 1:
+        raise ReconciliationError(
+            "promotion candidates conflict for one exact contract"
+        )
+    return min(
+        matches,
+        key=lambda fact: (
+            fact.record_sha256,
+            fact.binding_record_sha256 or fact.record_sha256,
+        ),
+        default=None,
+    )
+
+
+def _selected_verification_receipts(
+    inventory: Any,
+    *,
+    subject: str,
+    candidate_record_sha256: str,
+    verification_tests: tuple[Any, ...],
+    transport: UrllibOciTransportV1,
+) -> tuple[FetchedOciRecordV1, ...] | None:
+    selected = []
+    for definition in verification_tests:
+        for host in definition.hosts:
+            matches = [
+                fact
+                for fact in inventory.records.verifications
+                if fact.subject == subject
+                and fact.candidate_record_sha256 == candidate_record_sha256
+                and fact.test_definition_sha256 == definition.sha256
+                and fact.host == host
+            ]
+            successes = [fact for fact in matches if fact.outcome == "success"]
+            if successes:
+                fact = min(successes, key=lambda item: item.record_sha256)
+            elif matches:
+                ordinal = max(item.attempt_ordinal for item in matches)
+                fact = min(
+                    (item for item in matches if item.attempt_ordinal == ordinal),
+                    key=lambda item: (item.completed_at, item.record_sha256),
+                )
+            else:
+                return None
+            locator = inventory.verification_locators.get(fact.record_sha256)
+            if not isinstance(locator, Mapping):
+                raise ReconciliationError(
+                    "promotion verification locator is missing"
+                )
+            selected.append(
+                fetch_public_record(
+                    locator,
+                    transport=transport,
+                    expected_artifact_type=VERIFICATION_RECEIPT_MEDIA_TYPE,
+                    required_layer_roles=(),
+                )
+            )
+    return tuple(selected)
+
+
+def _fetch_candidate_overrides(
+    candidate: FetchedOciRecordV1, *, transport: UrllibOciTransportV1
+) -> tuple[FetchedOciRecordV1, ...]:
+    repository = candidate.repository.removeprefix("ghcr.io/") + "/receipts/overrides"
+    fetched = tuple(
+        fetch_public_record(
+            locator,
+            transport=transport,
+            expected_artifact_type=OVERRIDE_RECEIPT_MEDIA_TYPE,
+            required_layer_roles=(),
+        )
+        for locator in list_public_record_locators(
+            repository,
+            transport=transport,
+            max_records=1024,
+        )
+    )
+    try:
+        candidate_record = load_canonical_mapping(
+            candidate.config.body, "override candidate record"
+        )
+        validate_candidate_record(candidate_record)
+    except (ContractError, TapRecordError, ValueError) as error:
+        raise ReconciliationError(
+            f"override candidate record is invalid: {error}"
+        ) from error
+    candidate_digest = candidate.digest.removeprefix("sha256:")
+    common = candidate_record["common"]
+    bottle = candidate_record["candidate"]["bottle_layer"]
+    selected: list[FetchedOciRecordV1] = []
+    for receipt in fetched:
+        try:
+            identity = promotion_override_identity(receipt)
+        except PromotionError as error:
+            raise ReconciliationError(
+                f"public override receipt is invalid: {error}"
+            ) from error
+        if receipt.repository != "ghcr.io/" + repository:
+            raise ReconciliationError("public override escaped its exact repository")
+        if identity == {
+            "request_digest": common["request_sha256"],
+            "request_source": common["source"],
+            "candidate_digest": candidate_digest,
+            "bottle": bottle,
+        }:
+            selected.append(receipt)
+    return tuple(selected)
+
+
+def _current_dependency_layers(
+    tap_root: Path, formula_plan: Mapping[str, Any]
+) -> dict[str, dict[str, Any]]:
+    layers: dict[str, dict[str, Any]] = {}
+    for dependency in formula_plan["direct_dependencies"]:
+        subject = exact_formula_subject(
+            dependency["formula"], dependency["architecture"]
+        )
+        sidecar_path = tap_root / f"Kandelo/formula/{dependency['formula']}.json"
+        try:
+            body = sidecar_path.read_bytes()
+            if not 1 <= len(body) <= 32 * 1024 * 1024:
+                raise ValueError("sidecar size is outside its bound")
+            sidecar = json.loads(
+                body.decode("utf-8", errors="strict"),
+                object_pairs_hook=_unique_json_object,
+            )
+            if not isinstance(sidecar, Mapping):
+                raise ValueError("sidecar is not an object")
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            raise ReconciliationError(
+                f"promotion dependency metadata is invalid: {error}"
+            ) from error
+        matches = [
+            item
+            for item in sidecar["bottles"]
+            if item.get("arch") == dependency["architecture"]
+            and item.get("status") == "success"
+        ]
+        if len(matches) != 1:
+            raise ReconciliationError(
+                "promotion dependency has no exact selected bottle"
+            )
+        bottle = matches[0]
+        layers[subject] = {
+            "sha256": bottle["sha256"],
+            "bytes": bottle["bytes"],
+            "immutable_reference": bottle["url"],
+        }
+    return layers
+
+
+def _canonical_progress(
+    decision: Any,
+    *,
+    candidate: FetchedOciRecordV1,
+    policy: Any,
+    transport: UrllibOciTransportV1,
+) -> tuple[Any, PromotionProgressV1]:
+    expected = expected_canonical_publication(
+        decision,
+        candidate=candidate,
+        policy=policy,
+    )
+    repository = expected.locator.repository.removeprefix("ghcr.io/")
+    locators = list_public_record_locators(
+        repository,
+        transport=transport,
+        max_records=4096,
+    )
+    if not any(locator["digest"] == expected.locator.digest for locator in locators):
+        return expected, PromotionProgressV1()
+    readback = read_canonical_publication(
+        decision,
+        candidate=candidate,
+        policy=policy,
+        transport=transport,
+    )
+    return readback, PromotionProgressV1(
+        canonical_manifest_sha256=readback.artifact["sha256"],
+        canonical_readback_sha256=(
+            readback.locator.anonymous_readback_sha256
+        ),
+    )
+
+
+def _admission_progress(
+    current: PromotionProgressV1,
+    *,
+    tap_root: Path,
+    decision: Any,
+    canonical: Any,
+    policy: Any,
+    history_record_sha256: str,
+    preactivation_tap_source: Mapping[str, Any],
+    target_abi: int,
+    formula: str,
+    transport: UrllibOciTransportV1,
+) -> PromotionProgressV1:
+    if current.canonical_manifest_sha256 is None:
+        return current
+    matches: list[tuple[str, Mapping[str, Any]]] = []
+    stale_matches: list[tuple[str, Mapping[str, Any]]] = []
+    repository = admission_repository(policy, target_abi, formula)
+    for locator in list_public_record_locators(
+        repository,
+        transport=transport,
+        max_records=4096,
+    ):
+        fetched = fetch_public_record(
+            locator,
+            transport=transport,
+            expected_artifact_type=ADMISSION_RECORD_MEDIA_TYPE,
+            required_layer_roles=("immutable-record-bytes",),
+        )
+        record = load_canonical_mapping(fetched.config.body, "promotion admission")
+        try:
+            validate_admission_record(record)
+        except TapRecordError as error:
+            raise ReconciliationError(
+                f"public promotion admission is invalid: {error}"
+            ) from error
+        admission = record["admission"]
+        if (
+            record["common"]["request_sha256"] == decision.request_digest
+            and admission["candidate_record_sha256"]
+            == decision.candidate_record_digest
+            and admission["candidate_binding_sha256"]
+            == decision.candidate_binding_digest
+            and admission["abi_history_record_sha256"]
+            == history_record_sha256
+            and canonical_bytes(admission["preactivation_tap_source"])
+            == canonical_bytes(preactivation_tap_source)
+            and admission["merged_pull_request"]
+            == dict(decision.merged_pull_request)
+            and admission["canonical"] == dict(canonical.artifact)
+        ):
+            update_value = admission["formula_metadata_update"]
+            update = FormulaMetadataUpdateV1(
+                formula=update_value["formula"],
+                architecture=update_value["architecture"],
+                expected_main_commit=update_value["expected_main_commit"],
+                expected_normalized_formula_sha256=update_value[
+                    "expected_normalized_formula_sha256"
+                ],
+                expected_generated_metadata_sha256=update_value[
+                    "expected_generated_metadata_sha256"
+                ],
+                allowed_paths=tuple(update_value["allowed_paths"]),
+                link_manifest_path=update_value["link_manifest_path"],
+                link_manifest_sha256=update_value["link_manifest_sha256"],
+                canonical_manifest_digest=update_value[
+                    "canonical_manifest_digest"
+                ],
+                bottle_layer_sha256=update_value["bottle_layer_sha256"],
+                bottle_layer_bytes=update_value["bottle_layer_bytes"],
+                target_abi=update_value["target_abi"],
+            )
+            try:
+                validate_formula_admission_projection(tap_root, update)
+            except TapMetadataError:
+                stale_matches.append(
+                    (fetched.digest.removeprefix("sha256:"), record)
+                )
+                continue
+            matches.append((fetched.digest.removeprefix("sha256:"), record))
+    if not matches:
+        if not stale_matches:
+            return current
+        stale_identities = {
+            canonical_sha256(
+                {
+                    "source": record["admission"]["formula_metadata_source"],
+                    "formula_metadata_update": record["admission"][
+                        "formula_metadata_update"
+                    ],
+                }
+            )
+            for _digest_value, record in stale_matches
+        }
+        if len(stale_identities) != 1:
+            raise ReconciliationError(
+                "stale promotion admissions conflict on landed metadata"
+            )
+        return PromotionProgressV1(
+            canonical_manifest_sha256=current.canonical_manifest_sha256,
+            canonical_readback_sha256=current.canonical_readback_sha256,
+            stale_admission_record_sha256=min(
+                digest for digest, _record in stale_matches
+            ),
+        )
+    identities = {
+        canonical_sha256(
+            {
+                "source": record["admission"]["formula_metadata_source"],
+                "formula_metadata_update": record["admission"][
+                    "formula_metadata_update"
+                ],
+            }
+        )
+        for _digest_value, record in matches
+    }
+    if len(identities) != 1:
+        raise ReconciliationError("promotion admissions conflict on landed metadata")
+    digest, record = min(matches, key=lambda item: item[0])
+    admission = record["admission"]
+    source = admission["formula_metadata_source"]
+    update = admission["formula_metadata_update"]
+    return PromotionProgressV1(
+        canonical_manifest_sha256=current.canonical_manifest_sha256,
+        canonical_readback_sha256=current.canonical_readback_sha256,
+        metadata_commit=source["commit"],
+        metadata_tree=source["tree"],
+        metadata_update_sha256=canonical_sha256(update),
+        metadata_readback_sha256=canonical_sha256(
+            {"source": source, "formula_metadata_update": update}
+        ),
+        admission_record_sha256=digest,
+    )
+
+
+def _collect_active_promotion_inputs(
+    *,
+    tap_root: Path,
+    kandelo_root: str,
+    bundle: Mapping[str, Any],
+    reconciliation: ReconciliationDecisionV1,
+    tap_source: Mapping[str, Any],
+    activation_mode: str,
+) -> tuple[Any, dict[str, dict[str, Mapping[str, Any]]]]:
+    """Reconstruct one promotion wave from exact public facts and tap state."""
+
+    request = bundle["request"]
+    request_sha256 = bundle["request_sha256"]
+    tap_plan = bundle["tap_plan"]
+    target_abi = request["target_abi"]["version"]
+    target_snapshot = request["target_abi"]["snapshot_sha256"]
+    promotion_policy = load_promotion_policy(
+        tap_root / "Kandelo/staging/promotion-policy.toml"
+    )
+    staging_policy = load_tap_staging_policy(
+        tap_root / "Kandelo/staging/tap-policy.toml"
+    )
+    verification_tests = load_verification_tests(
+        tap_root / "Kandelo/staging/verification-tests.toml"
+    )
+    transport = UrllibOciTransportV1(username="", token="")
+    state = load_abi_state(tap_root / "Kandelo/abi-state.json")
+    history = _fetch_exact_history_record(
+        policy=promotion_policy,
+        target_abi=target_abi,
+        planned_tap_source=tap_plan["tap_source"],
+        expected_digest=(
+            None
+            if state.activation is None
+            else state.activation.abi_history_record_digest
+        ),
+        transport=transport,
+    )
+    history_tap_source, branch = _history_epoch_authority(
+        history,
+        policy=promotion_policy,
+        target_abi=target_abi,
+    )
+    history_snapshot = GitHubHistoryClient(
+        promotion_policy.tap_repository,
+        os.environ.get("GITHUB_TOKEN", ""),
+    ).protection_snapshot(branch, phase="postcreate")
+    merge = {
+        "repository": request["pull_request"]["repository"],
+        "number": request["pull_request"]["number"],
+        "head": request["build_source"]["commit"],
+        "merge_commit": reconciliation.lifecycle.merged_commit,
+    }
+    if merge["merge_commit"] is None:
+        raise ReconciliationError("promotion merge fact lost its commit")
+    history_digest = history.digest.removeprefix("sha256:")
+    history_locator = _public_locator(history)
+
+    if state.current_abi == target_abi - 1 and state.activation is None:
+        patch = prepare_successor_activation_patch(
+            tap_root=tap_root,
+            history=history,
+            history_protection_snapshot=history_snapshot,
+            current_tap_source=tap_source,
+            request_digest=request_sha256,
+            merged_pull_request=merge,
+            target_abi=target_abi,
+            target_snapshot_sha256=target_snapshot,
+            policy=promotion_policy,
+        )
+        patch_document = metadata_patch_document(patch, formula_update=None)
+        epoch = PromotionEpochV1(
+            request_digest=request_sha256,
+            history_record_sha256=history_digest,
+            activation_patch_sha256=canonical_sha256(patch_document),
+            activation_record_sha256=None,
+            current_tap_commit=tap_source["commit"],
+            current_tap_tree=tap_source["tree"],
+        )
+        planned = build_promotion_workflow_plan(
+            reconciliation,
+            (),
+            epoch=epoch,
+            progress={},
+            activation_mode=activation_mode,
+        )
+        details: dict[str, dict[str, Mapping[str, Any]]] = {
+            "activation": {},
+            "canonical": {},
+            "metadata": {},
+            "admission": {},
+        }
+        for work in planned.activation_work:
+            details["activation"][work["work_id"]] = {
+                "operation": "successor-activation",
+                "request_sha256": request_sha256,
+                "history_locator": history_locator,
+                "history_protection_snapshot": history_snapshot,
+                "metadata_patch": patch_document,
+            }
+        return planned, details
+
+    activation = state.activation
+    if (
+        state.current_abi != target_abi
+        or state.current_snapshot_sha256 != target_snapshot
+        or activation is None
+        or activation.request_digest != request_sha256
+        or dict(activation.merged_pull_request) != merge
+        or activation.merge_commit != merge["merge_commit"]
+        or activation.prior_abi != target_abi - 1
+        or activation.prior_branch != branch
+        or activation.abi_history_record_digest != history_digest
+    ):
+        raise ReconciliationError(
+            "current tap ABI state differs from exact successor activation"
+        )
+    activation_identity = asdict(activation)
+    epoch = PromotionEpochV1(
+        request_digest=request_sha256,
+        history_record_sha256=history_digest,
+        activation_patch_sha256=canonical_sha256(
+            {
+                "target_abi": request["target_abi"],
+                "activation": activation_identity,
+            }
+        ),
+        activation_record_sha256=canonical_sha256(activation_identity),
+        current_tap_commit=tap_source["commit"],
+        current_tap_tree=tap_source["tree"],
+    )
+
+    requirements = _formula_requirements_from_tap_plan(tap_plan)
+    current_plan = plan_exact_tap_request(
+        tap_root,
+        request,
+        request_digest=request_sha256,
+        request_asset_url=bundle["request_asset_url"],
+        formula_requirements=requirements,
+        tap_repository=promotion_policy.tap_repository,
+    )
+    original_formulae = {
+        exact_formula_subject(
+            item["identity"]["name"], item["identity"]["architecture"]
+        ): item
+        for item in tap_plan["formulae"]
+    }
+    current_formulae = {
+        exact_formula_subject(
+            item["identity"]["name"], item["identity"]["architecture"]
+        ): item
+        for item in current_plan["formulae"]
+    }
+    if set(original_formulae) != set(current_formulae):
+        raise ReconciliationError("current promotion Formula graph changed subjects")
+    inventory = scan_scheduling_inventory(
+        tap_plan,
+        policy=staging_policy,
+        verification_tests=verification_tests,
+        transport=transport,
+    )
+    exact_kandelo_root = _checked_checkout_source(
+        kandelo_root,
+        repository=request["build_source"]["repository"],
+        commit=request["build_source"]["commit"],
+        tree=request["build_source"]["tree"],
+    )
+
+    contexts: dict[str, dict[str, Any]] = {}
+    for subject in tap_plan["required_subjects"] + tap_plan["background_subjects"]:
+        formula_plan = original_formulae[subject]
+        contract_sha256 = formula_plan["contract_sha256"]
+        if not isinstance(contract_sha256, str):
+            continue
+        fact = _select_current_candidate_fact(
+            inventory,
+            request_sha256=request_sha256,
+            subject=subject,
+            contract_sha256=contract_sha256,
+        )
+        if fact is None:
+            continue
+        locator = inventory.candidate_locators.get(fact.record_sha256)
+        if not isinstance(locator, Mapping):
+            raise ReconciliationError("promotion candidate locator is missing")
+        candidate = _fetch_candidate_record(locator, transport=transport)
+        reuse_locator = None
+        candidate_reuse = None
+        if fact.binding_record_sha256 is not None:
+            reuse_locator = inventory.reuse_locators.get(
+                fact.binding_record_sha256
+            )
+            if not isinstance(reuse_locator, Mapping):
+                raise ReconciliationError(
+                    "promotion candidate reuse locator is missing"
+                )
+            candidate_reuse = _fetch_candidate_reuse(
+                reuse_locator, transport=transport
+            )
+        receipts = _selected_verification_receipts(
+            inventory,
+            subject=subject,
+            candidate_record_sha256=fact.record_sha256,
+            verification_tests=verification_tests,
+            transport=transport,
+        )
+        if receipts is None:
+            continue
+        custody = _fetch_candidate_custody(candidate, transport=transport)
+        decision = evaluate_promotion(
+            request=request,
+            request_digest=request_sha256,
+            merge_fact={**merge, "state": "merged"},
+            tap_plan=tap_plan,
+            tap_plan_digest=canonical_sha256(tap_plan),
+            candidate=candidate,
+            candidate_reuse=candidate_reuse,
+            source_custody=custody,
+            verification_receipts=receipts,
+            override_receipts=(
+                ()
+                if candidate_reuse is not None
+                else _fetch_candidate_overrides(candidate, transport=transport)
+            ),
+            history=history,
+            history_protection_snapshot=history_snapshot,
+            current_tap_source=tap_source,
+            current_formula=current_formulae[subject],
+            current_dependency_layers=_current_dependency_layers(
+                tap_root, current_formulae[subject]
+            ),
+            policy=promotion_policy,
+            expected_request_policy=request["issuance"],
+            verification_tests=verification_tests,
+            history_tap_source=history_tap_source,
+        )
+        formula, architecture = parse_formula_subject(subject, "promotion subject")
+        dependencies = tuple(
+            sorted(
+                exact_formula_subject(item["formula"], item["architecture"])
+                for item in formula_plan["direct_dependencies"]
+            )
+        )
+        canonical, progress = _canonical_progress(
+            decision,
+            candidate=candidate,
+            policy=promotion_policy,
+            transport=transport,
+        )
+        progress = _admission_progress(
+            progress,
+            tap_root=tap_root,
+            decision=decision,
+            canonical=canonical,
+            policy=promotion_policy,
+            history_record_sha256=history_digest,
+            preactivation_tap_source=history_tap_source,
+            target_abi=target_abi,
+            formula=formula,
+            transport=transport,
+        )
+        prepared = prepare_admission(
+            decision,
+            candidate=candidate,
+            candidate_reuse=candidate_reuse,
+            canonical_publication=canonical,
+            preactivation_tap_source=history_tap_source,
+            abi_history_record_sha256=history_digest,
+            policy=promotion_policy,
+        )
+        metadata = prepare_formula_metadata_patch(
+            tap_root=tap_root,
+            prepared=prepared,
+            history=history,
+            history_protection_snapshot=history_snapshot,
+            current_tap_source=tap_source,
+            expected_generated_metadata_sha256=(
+                formula_generated_metadata_sha256(tap_root, formula)
+            ),
+            guest_layout_bytes=(
+                exact_kandelo_root / "homebrew/kandelo-guest-layout.json"
+            ).read_bytes(),
+            policy=promotion_policy,
+        )
+        metadata_patch = metadata.patch
+        metadata_update = metadata.update
+        formula_metadata_base_source = dict(tap_source)
+        if (
+            not metadata_patch.files
+            and progress.admission_record_sha256 is None
+        ):
+            if progress.canonical_manifest_sha256 is None:
+                raise ReconciliationError(
+                    "landed Formula metadata has no canonical public readback"
+                )
+            try:
+                recovered = recover_landed_formula_metadata_commit(
+                    tap_root, current_update=metadata_update
+                )
+            except TapMetadataError as error:
+                raise ReconciliationError(
+                    f"landed Formula metadata cannot resume admission: {error}"
+                ) from error
+            metadata_patch = recovered.patch
+            metadata_update = recovered.update
+            formula_metadata_base_source = dict(recovered.base_source)
+            landed_source = dict(recovered.landed_source)
+            progress = PromotionProgressV1(
+                canonical_manifest_sha256=progress.canonical_manifest_sha256,
+                canonical_readback_sha256=progress.canonical_readback_sha256,
+                metadata_commit=landed_source["commit"],
+                metadata_tree=landed_source["tree"],
+                metadata_update_sha256=canonical_sha256(
+                    asdict(metadata_update)
+                ),
+                metadata_readback_sha256=canonical_sha256(
+                    {
+                        "source": landed_source,
+                        "formula_metadata_update": asdict(metadata_update),
+                    }
+                ),
+            )
+        contexts[subject] = {
+            "subject": PromotionSubjectV1(
+                decision,
+                formula_plan["work_class"],
+                dependencies,
+            ),
+            "progress": progress,
+            "candidate": candidate,
+            "candidate_locator": dict(locator),
+            "candidate_reuse_locator": (
+                None if reuse_locator is None else dict(reuse_locator)
+            ),
+            "canonical": canonical,
+            "metadata_patch": metadata_patch_document(
+                metadata_patch,
+                formula_update=metadata_update,
+            ),
+            "history_locator": history_locator,
+            "history_snapshot": history_snapshot,
+            "formula_metadata_base_source": formula_metadata_base_source,
+        }
+
+    # A subject is promotable only when its complete dependency closure has
+    # exact current-request authority. Missing background facts stay buildable
+    # by the ordinary reconciler and enter a later promotion wave.
+    changed = True
+    while changed:
+        changed = False
+        for subject, context in list(contexts.items()):
+            if any(
+                dependency not in contexts
+                for dependency in context["subject"].dependency_subjects
+            ):
+                del contexts[subject]
+                changed = True
+
+    subjects = tuple(contexts[key]["subject"] for key in sorted(contexts))
+    progress = {key: contexts[key]["progress"] for key in sorted(contexts)}
+    planned = build_promotion_workflow_plan(
+        reconciliation,
+        subjects,
+        epoch=epoch,
+        progress=progress,
+        activation_mode=activation_mode,
+    )
+    details = {
+        "activation": {},
+        "canonical": {},
+        "metadata": {},
+        "admission": {},
+    }
+    for stage, work_items in (
+        ("canonical", planned.canonical_work),
+        ("metadata", planned.metadata_work),
+        ("admission", planned.admission_work),
+    ):
+        for work in work_items:
+            context = contexts[work["formula_subject"]]
+            detail = {
+                "decision": asdict(context["subject"].decision),
+                "candidate_locator": context["candidate_locator"],
+                "candidate_reuse_locator": context[
+                    "candidate_reuse_locator"
+                ],
+                "canonical": {
+                    "locator": asdict(context["canonical"].locator),
+                    "artifact": dict(context["canonical"].artifact),
+                },
+                "history_locator": context["history_locator"],
+                "history_protection_snapshot": context["history_snapshot"],
+                "formula_metadata_base_source": context[
+                    "formula_metadata_base_source"
+                ],
+            }
+            if stage == "metadata":
+                detail["metadata_patch"] = context["metadata_patch"]
+                if "canonical_work_id" in work:
+                    detail["canonical_work_id"] = work["canonical_work_id"]
+            if stage == "admission":
+                detail["metadata_patch"] = context["metadata_patch"]
+                if "canonical_work_id" in work:
+                    detail["canonical_work_id"] = work["canonical_work_id"]
+                if "metadata_work_id" in work:
+                    detail["metadata_work_id"] = work["metadata_work_id"]
+            details[stage][work["work_id"]] = detail
+    return planned, details
 
 
 def _local_locator(repository: str, manifest: bytes) -> dict[str, str]:
@@ -3158,6 +4404,811 @@ def _publish_workflow_product_evidence(args: argparse.Namespace) -> None:
         )
 
 
+def _promotion_decision_from_detail(
+    detail: Mapping[str, Any],
+) -> PromotionDecisionV1:
+    value = detail.get("decision")
+    if not isinstance(value, Mapping):
+        raise WorkflowPublicationError("promotion work has no decision")
+    try:
+        validate_promotion_decision(value)
+        return PromotionDecisionV1(
+            request_digest=value["request_digest"],
+            merged_pull_request=dict(value["merged_pull_request"]),
+            formula_subject=value["formula_subject"],
+            tap_plan_digest=value["tap_plan_digest"],
+            candidate_record_digest=value["candidate_record_digest"],
+            candidate_binding_digest=value["candidate_binding_digest"],
+            bottle_layer_sha256=value["bottle_layer_sha256"],
+            bottle_layer_bytes=value["bottle_layer_bytes"],
+            source_custody_digest=value["source_custody_digest"],
+            qualifying_receipts=tuple(value["qualifying_receipts"]),
+            override_receipts=tuple(value["override_receipts"]),
+            tap_source_state=value["tap_source_state"],
+            eligibility=value["eligibility"],
+        )
+    except (KeyError, TypeError, PromotionError) as error:
+        raise WorkflowPublicationError(
+            f"promotion work decision is invalid: {error}"
+        ) from error
+
+
+def _promotion_candidate_and_canonical(
+    detail: Mapping[str, Any],
+    *,
+    policy: Any,
+    transport: Any,
+) -> tuple[
+    PromotionDecisionV1,
+    FetchedOciRecordV1,
+    FetchedOciRecordV1 | None,
+    CanonicalBottlePublicationV1,
+]:
+    decision = _promotion_decision_from_detail(detail)
+    locator = detail.get("candidate_locator")
+    if not isinstance(locator, Mapping):
+        raise WorkflowPublicationError("promotion work has no candidate locator")
+    candidate = _fetch_candidate_record(locator, transport=transport)
+    if candidate.digest.removeprefix("sha256:") != decision.candidate_record_digest:
+        raise WorkflowPublicationError(
+            "promotion candidate differs from protected decision"
+        )
+    reuse_locator = detail.get("candidate_reuse_locator")
+    candidate_reuse = None
+    if reuse_locator is not None:
+        if not isinstance(reuse_locator, Mapping):
+            raise WorkflowPublicationError(
+                "promotion candidate reuse locator is invalid"
+            )
+        candidate_reuse = _fetch_candidate_reuse(
+            reuse_locator, transport=transport
+        )
+    try:
+        validate_promotion_candidate_binding(
+            decision,
+            candidate=candidate,
+            candidate_reuse=candidate_reuse,
+        )
+    except PromotionError as error:
+        raise WorkflowPublicationError(
+            f"promotion candidate binding is invalid: {error}"
+        ) from error
+    expected = expected_canonical_publication(
+        decision,
+        candidate=candidate,
+        policy=policy,
+    )
+    declared = detail.get("canonical")
+    expected_value = {
+        "locator": asdict(expected.locator),
+        "artifact": dict(expected.artifact),
+    }
+    if not isinstance(declared, Mapping) or canonical_bytes(declared) != canonical_bytes(
+        expected_value
+    ):
+        raise WorkflowPublicationError(
+            "promotion canonical identity differs from unchanged-layer plan"
+        )
+    return decision, candidate, candidate_reuse, expected
+
+
+def _promotion_writer_authority(
+    args: argparse.Namespace,
+) -> tuple[Path, Any, dict[str, str], GitHubWorkflowArtifactClientV1]:
+    tap_root = TAP_ROOT.resolve(strict=True)
+    staging_policy = load_tap_staging_policy(
+        tap_root / "Kandelo/staging/tap-policy.toml"
+    )
+    promotion_policy = load_promotion_policy(
+        tap_root / "Kandelo/staging/promotion-policy.toml"
+    )
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    workflow_ref = os.environ.get("GITHUB_WORKFLOW_REF", "")
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if (
+        repository != staging_policy.tap_repository
+        or repository != promotion_policy.tap_repository
+    ):
+        raise WorkflowPublicationError(
+            "promotion writer repository differs from protected policy"
+        )
+    tap_source = snapshot_tap_source(tap_root, promotion_policy.tap_repository)
+    if tap_source["commit"] != args.head_sha:
+        raise WorkflowPublicationError(
+            "promotion writer checkout differs from protected workflow head"
+        )
+    if (
+        load_promotion_activation(
+            tap_root / "Kandelo/staging/promotion-activation.toml"
+        ).mode
+        != "active"
+    ):
+        raise WorkflowPublicationError("promotion writer is not active")
+    return (
+        tap_root,
+        promotion_policy,
+        tap_source,
+        GitHubWorkflowArtifactClientV1(
+            repository,
+            token,
+            run_id=args.run_id,
+            run_attempt=args.run_attempt,
+            head_sha=args.head_sha,
+            workflow_ref=workflow_ref,
+        ),
+    )
+
+
+def _require_promotion_history_barrier(
+    detail: Mapping[str, Any],
+    *,
+    policy: Any,
+    expected_target_abi: int | None,
+    transport: Any,
+) -> tuple[FetchedOciRecordV1, dict[str, str]]:
+    """Fetch and recheck the protected ABI history immediately before a write."""
+
+    locator = detail.get("history_locator")
+    if not isinstance(locator, Mapping):
+        raise WorkflowPublicationError(
+            "promotion work has no exact history locator"
+        )
+    history = fetch_public_record(
+        locator,
+        transport=transport,
+        expected_artifact_type=HISTORY_RECORD_MEDIA_TYPE,
+        required_layer_roles=("immutable-record-bytes",),
+    )
+    try:
+        history_record = load_canonical_mapping(
+            history.config.body, "writer ABI history"
+        )
+    except (ContractError, ValueError) as error:
+        raise WorkflowPublicationError(
+            f"writer ABI history is invalid: {error}"
+        ) from error
+    target_abi = history_record.get("plan", {}).get("successor_abi")
+    if (
+        not isinstance(target_abi, int)
+        or isinstance(target_abi, bool)
+        or (expected_target_abi is not None and target_abi != expected_target_abi)
+    ):
+        raise WorkflowPublicationError(
+            "writer ABI history names another target ABI"
+        )
+    source, branch = _history_epoch_authority(
+        history,
+        policy=policy,
+        target_abi=target_abi,
+    )
+    snapshot = GitHubHistoryClient(
+        policy.tap_repository,
+        os.environ.get("GITHUB_TOKEN", ""),
+    ).protection_snapshot(branch, phase="postcreate")
+    validate_promotion_history_barrier(
+        history,
+        protection_snapshot=snapshot,
+        target_abi=target_abi,
+        tap_source=source,
+        policy=policy,
+    )
+    return history, source
+
+
+def _candidate_target_abi(candidate: FetchedOciRecordV1) -> int:
+    try:
+        record = load_canonical_mapping(candidate.config.body, "candidate record")
+        validate_candidate_record(record)
+        target_abi = record["candidate"]["formula"]["target_abi"]
+    except (ContractError, KeyError, TapRecordError, TypeError) as error:
+        raise WorkflowPublicationError(
+            f"promotion candidate target ABI is invalid: {error}"
+        ) from error
+    if not isinstance(target_abi, int) or isinstance(target_abi, bool) or target_abi < 0:
+        raise WorkflowPublicationError("promotion candidate target ABI is invalid")
+    return target_abi
+
+
+def _load_named_workflow_document(
+    client: GitHubWorkflowArtifactClientV1,
+    *,
+    root: Path,
+    name: str,
+    filename: str,
+    field: str,
+) -> dict[str, Any]:
+    artifact = client.artifact_by_name(name=name)
+    destination = root / canonical_sha256({"name": name, "filename": filename})
+    client.extract_artifact(
+        artifact,
+        destination,
+        max_files=4,
+        max_bytes=64 * 1024 * 1024,
+    )
+    try:
+        return load_canonical_mapping(
+            (destination / filename).read_bytes(), field
+        )
+    except (OSError, ContractError) as error:
+        raise WorkflowPublicationError(f"{field} is invalid: {error}") from error
+
+
+def _published_canonical_from_document(
+    document: Mapping[str, Any],
+    *,
+    work_id: str,
+    request_digest: str,
+    expected: CanonicalBottlePublicationV1,
+) -> CanonicalBottlePublicationV1:
+    if set(document) != {
+        "schema",
+        "kind",
+        "request_sha256",
+        "work_id",
+        "candidate_record_sha256",
+        "canonical",
+    }:
+        raise WorkflowPublicationError("canonical publication fields changed")
+    canonical = document["canonical"]
+    expected_value = {
+        "locator": asdict(expected.locator),
+        "artifact": dict(expected.artifact),
+    }
+    if (
+        document["schema"] != 1
+        or document["kind"]
+        != "kandelo-abi-staging-canonical-publication"
+        or document["request_sha256"] != request_digest
+        or document["work_id"] != work_id
+        or canonical_bytes(canonical) != canonical_bytes(expected_value)
+    ):
+        raise WorkflowPublicationError(
+            "canonical publication differs from exact promotion work"
+        )
+    return expected
+
+
+def _publish_workflow_canonical(args: argparse.Namespace) -> None:
+    if not args.require_unchanged_layer or not args.require_history_barrier:
+        raise WorkflowPublicationError(
+            "canonical publication requires unchanged bytes and protected history"
+        )
+    _require_workflow_publication_guards(args)
+    tap_root, policy, tap_source, client = _promotion_writer_authority(args)
+    with tempfile.TemporaryDirectory(
+        prefix="kandelo-abi-staging-canonical-writer-"
+    ) as temporary:
+        root = Path(temporary)
+        work = _load_workflow_promotion_work(
+            client,
+            root=root,
+            run_id=args.run_id,
+            run_attempt=args.run_attempt,
+            request_digest=args.request_digest,
+            artifact_id=args.plan_artifact_id,
+            artifact_digest=args.plan_artifact_digest,
+            expected_tap_source=tap_source,
+            stage="canonical",
+            work_id=args.work_id,
+        )
+        detail = work["detail"]
+        username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
+        token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
+        with isolated_oras_transport(username=username, token=token) as transport:
+            decision, candidate, _candidate_reuse, expected = (
+                _promotion_candidate_and_canonical(
+                    detail,
+                    policy=policy,
+                    transport=transport,
+                )
+            )
+            _require_promotion_history_barrier(
+                detail,
+                policy=policy,
+                expected_target_abi=_candidate_target_abi(candidate),
+                transport=UrllibOciTransportV1(username="", token=""),
+            )
+            plan = build_canonical_bottle_plan(
+                decision,
+                candidate=candidate,
+                policy=policy,
+            )
+            published = publish_canonical_bottle(
+                plan,
+                decision=decision,
+                candidate=candidate,
+                policy=policy,
+                transport=transport,
+            )
+        if published != expected:
+            raise WorkflowPublicationError(
+                "canonical publication differs from protected expected readback"
+            )
+        Path(args.out).write_bytes(
+            canonical_bytes(
+                {
+                    "schema": 1,
+                    "kind": "kandelo-abi-staging-canonical-publication",
+                    "request_sha256": args.request_digest,
+                    "work_id": args.work_id,
+                    "candidate_record_sha256": decision.candidate_record_digest,
+                    "canonical": {
+                        "locator": asdict(published.locator),
+                        "artifact": dict(published.artifact),
+                    },
+                }
+            )
+        )
+
+
+def _metadata_readback_document(
+    *,
+    work_id: str,
+    request_digest: str,
+    result: Any,
+    patch_document: Mapping[str, Any],
+    formula_update: Any,
+    tap_root: Path,
+) -> dict[str, Any]:
+    files = []
+    for relative in result.changed_paths:
+        body = (tap_root / relative).read_bytes()
+        files.append(
+            {
+                "path": relative,
+                "sha256": hashlib.sha256(body).hexdigest(),
+                "bytes": len(body),
+            }
+        )
+    update = None if formula_update is None else asdict(formula_update)
+    post_write = {
+        "source": dict(result.source),
+        "formula_metadata_update": update,
+    }
+    return {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-metadata-readback",
+        "request_sha256": request_digest,
+        "work_id": work_id,
+        "operation": patch_document["operation"],
+        "status": result.status,
+        "source": dict(result.source),
+        "metadata_patch_sha256": canonical_sha256(patch_document),
+        "formula_metadata_update": update,
+        "post_write_readback": post_write,
+        "post_write_readback_sha256": canonical_sha256(post_write),
+        "changed_files": files,
+    }
+
+
+def _configure_metadata_committer(tap_root: Path) -> None:
+    actor = os.environ.get("GITHUB_ACTOR", "github-actions[bot]")
+    if not actor or any(character in actor for character in "\n\r\0"):
+        raise WorkflowPublicationError("metadata writer actor is invalid")
+    for key, value in (
+        ("user.name", actor),
+        ("user.email", actor + "@users.noreply.github.com"),
+    ):
+        completed = subprocess.run(
+            ["git", "-C", str(tap_root), "config", "--local", key, value],
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if completed.returncode != 0:
+            raise WorkflowPublicationError(
+                "metadata writer cannot configure its protected committer"
+            )
+
+
+def _update_workflow_tap_metadata(args: argparse.Namespace) -> None:
+    if not (
+        args.contents_only
+        and args.normal_push
+        and args.post_write_readback
+        and args.require_history_barrier
+    ):
+        raise WorkflowPublicationError(
+            "metadata writer requires contents-only push, readback, and history"
+        )
+    tap_root, policy, tap_source, client = _promotion_writer_authority(args)
+    stage = "activation" if args.operation == "successor-activation" else "metadata"
+    with tempfile.TemporaryDirectory(
+        prefix="kandelo-abi-staging-metadata-writer-"
+    ) as temporary:
+        root = Path(temporary)
+        work = _load_workflow_promotion_work(
+            client,
+            root=root,
+            run_id=args.run_id,
+            run_attempt=args.run_attempt,
+            request_digest=args.request_digest,
+            artifact_id=args.plan_artifact_id,
+            artifact_digest=args.plan_artifact_digest,
+            expected_tap_source=tap_source,
+            stage=stage,
+            work_id=args.work_id,
+        )
+        detail = work["detail"]
+        patch_value = detail.get("metadata_patch")
+        if not isinstance(patch_value, Mapping):
+            raise WorkflowPublicationError("metadata work has no exact patch")
+        patch, formula_update = load_metadata_patch_document(
+            canonical_bytes(patch_value)
+        )
+        if (formula_update is None) != (args.operation == "successor-activation"):
+            raise WorkflowPublicationError(
+                "metadata work operation differs from protected patch"
+            )
+        if formula_update is not None:
+            anonymous = UrllibOciTransportV1(username="", token="")
+            decision, candidate, _candidate_reuse, expected = (
+                _promotion_candidate_and_canonical(
+                    detail,
+                    policy=policy,
+                    transport=anonymous,
+                )
+            )
+            readback = read_canonical_publication(
+                decision,
+                candidate=candidate,
+                policy=policy,
+                transport=anonymous,
+            )
+            if readback != expected:
+                raise WorkflowPublicationError(
+                    "metadata writer lacks exact canonical public readback"
+                )
+            canonical_work_id = detail.get("canonical_work_id")
+            if canonical_work_id is not None:
+                publication = _load_named_workflow_document(
+                    client,
+                    root=root,
+                    name=(
+                        f"abi-staging-canonical-{canonical_work_id}-"
+                        f"{args.run_id}-{args.run_attempt}"
+                    ),
+                    filename="canonical-publication.json",
+                    field="canonical publication handoff",
+                )
+                _published_canonical_from_document(
+                    publication,
+                    work_id=canonical_work_id,
+                    request_digest=args.request_digest,
+                    expected=expected,
+                )
+        _require_promotion_history_barrier(
+            detail,
+            policy=policy,
+            expected_target_abi=(
+                None if formula_update is None else formula_update.target_abi
+            ),
+            transport=UrllibOciTransportV1(username="", token=""),
+        )
+        _configure_metadata_committer(tap_root)
+        result = apply_metadata_patch(
+            tap_root,
+            patch,
+            formula_update=formula_update,
+            commit_message=(
+                "[ABI] Activate protected successor metadata"
+                if formula_update is None
+                else "[Homebrew] Admit canonical " + formula_update.formula
+            ),
+            store=GitTapMetadataStore(tap_root, remote="origin"),
+        )
+        check_tap_metadata(tap_root)
+        output = _metadata_readback_document(
+            work_id=args.work_id,
+            request_digest=args.request_digest,
+            result=result,
+            patch_document=patch_value,
+            formula_update=formula_update,
+            tap_root=tap_root,
+        )
+        Path(args.out).write_bytes(canonical_bytes(output))
+
+
+def _load_metadata_handoff(
+    client: GitHubWorkflowArtifactClientV1,
+    *,
+    root: Path,
+    work_id: str,
+    run_id: int,
+    run_attempt: int,
+    request_digest: str,
+) -> dict[str, Any]:
+    document = _load_named_workflow_document(
+        client,
+        root=root,
+        name=f"abi-staging-metadata-{work_id}-{run_id}-{run_attempt}",
+        filename="metadata-readback.json",
+        field="metadata readback handoff",
+    )
+    expected_keys = {
+        "schema",
+        "kind",
+        "request_sha256",
+        "work_id",
+        "operation",
+        "status",
+        "source",
+        "metadata_patch_sha256",
+        "formula_metadata_update",
+        "post_write_readback",
+        "post_write_readback_sha256",
+        "changed_files",
+    }
+    if (
+        set(document) != expected_keys
+        or document["schema"] != 1
+        or document["kind"] != "kandelo-abi-staging-metadata-readback"
+        or document["request_sha256"] != request_digest
+        or document["work_id"] != work_id
+        or document["operation"] != "formula-metadata"
+        or document["status"] not in {"committed", "already-landed"}
+        or canonical_sha256(document["post_write_readback"])
+        != document["post_write_readback_sha256"]
+    ):
+        raise WorkflowPublicationError(
+            "metadata readback handoff differs from exact promotion work"
+        )
+    return document
+
+
+def _require_remote_metadata_source(
+    metadata_root: Path, source: Mapping[str, Any], *, repository: str
+) -> dict[str, str]:
+    current = snapshot_tap_source(metadata_root, repository)
+    store = GitTapMetadataStore(metadata_root, remote="origin")
+    if store.remote_main() != current["commit"]:
+        raise WorkflowPublicationError(
+            "metadata checkout is not current public main"
+        )
+    client = GitHubHistoryClient(
+        repository, os.environ.get("GITHUB_TOKEN", "")
+    )
+    reference = client.read("main")
+    if (
+        reference is None
+        or reference.object_sha != current["commit"]
+        or reference.tree_sha != current["tree"]
+    ):
+        raise WorkflowPublicationError(
+            "metadata checkout lacks exact public main commit/tree"
+        )
+    if source.get("repository", "").lower() != repository.lower():
+        raise WorkflowPublicationError("metadata readback names another tap")
+    try:
+        source_tree = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(metadata_root),
+                "rev-parse",
+                f"{source.get('commit')}^{{tree}}",
+            ],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        ).stdout.strip()
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(metadata_root),
+                "merge-base",
+                "--is-ancestor",
+                str(source.get("commit")),
+                "HEAD",
+            ],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise WorkflowPublicationError(
+            "metadata readback commit is not on current public main"
+        ) from error
+    if source_tree != source.get("tree"):
+        raise WorkflowPublicationError(
+            "metadata readback commit tree identity changed"
+        )
+    return current
+
+
+def _publish_workflow_admission(args: argparse.Namespace) -> None:
+    if not args.require_metadata_readback or not args.require_history_barrier:
+        raise WorkflowPublicationError(
+            "admission publication requires exact metadata and protected history"
+        )
+    _require_workflow_publication_guards(args)
+    tap_root, policy, tap_source, client = _promotion_writer_authority(args)
+    metadata_root = Path(args.metadata_root).resolve(strict=True)
+    with tempfile.TemporaryDirectory(
+        prefix="kandelo-abi-staging-admission-writer-"
+    ) as temporary:
+        root = Path(temporary)
+        work = _load_workflow_promotion_work(
+            client,
+            root=root,
+            run_id=args.run_id,
+            run_attempt=args.run_attempt,
+            request_digest=args.request_digest,
+            artifact_id=args.plan_artifact_id,
+            artifact_digest=args.plan_artifact_digest,
+            expected_tap_source=tap_source,
+            stage="admission",
+            work_id=args.work_id,
+        )
+        detail = work["detail"]
+        username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
+        token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
+        with isolated_oras_transport(username=username, token=token) as transport:
+            decision, candidate, candidate_reuse, expected = (
+                _promotion_candidate_and_canonical(
+                    detail,
+                    policy=policy,
+                    transport=transport,
+                )
+            )
+            canonical = read_canonical_publication(
+                decision,
+                candidate=candidate,
+                policy=policy,
+                transport=transport,
+            )
+            if canonical != expected:
+                raise WorkflowPublicationError(
+                    "admission lacks exact canonical public readback"
+                )
+            canonical_work_id = detail.get("canonical_work_id")
+            if canonical_work_id is not None:
+                publication = _load_named_workflow_document(
+                    client,
+                    root=root,
+                    name=(
+                        f"abi-staging-canonical-{canonical_work_id}-"
+                        f"{args.run_id}-{args.run_attempt}"
+                    ),
+                    filename="canonical-publication.json",
+                    field="canonical publication handoff",
+                )
+                _published_canonical_from_document(
+                    publication,
+                    work_id=canonical_work_id,
+                    request_digest=args.request_digest,
+                    expected=expected,
+                )
+            patch_value = detail.get("metadata_patch")
+            if not isinstance(patch_value, Mapping):
+                raise WorkflowPublicationError(
+                    "admission work has no Formula metadata authority"
+                )
+            _patch, formula_update = load_metadata_patch_document(
+                canonical_bytes(patch_value)
+            )
+            if formula_update is None:
+                raise WorkflowPublicationError(
+                    "admission work carries an activation patch"
+                )
+            metadata_work_id = detail.get("metadata_work_id")
+            if metadata_work_id is not None:
+                metadata = _load_metadata_handoff(
+                    client,
+                    root=root,
+                    work_id=metadata_work_id,
+                    run_id=args.run_id,
+                    run_attempt=args.run_attempt,
+                    request_digest=args.request_digest,
+                )
+                if (
+                    metadata["metadata_patch_sha256"]
+                    != canonical_sha256(patch_value)
+                    or canonical_bytes(metadata["formula_metadata_update"])
+                    != canonical_bytes(asdict(formula_update))
+                ):
+                    raise WorkflowPublicationError(
+                        "metadata handoff differs from admission authority"
+                    )
+                metadata_source = metadata["source"]
+                post_write = metadata["post_write_readback"]
+            else:
+                summary = work["summary"]
+                metadata_source = {
+                    "repository": policy.tap_repository,
+                    "commit": summary["metadata_commit"],
+                    "tree": summary["metadata_tree"],
+                }
+                post_write = {
+                    "source": metadata_source,
+                    "formula_metadata_update": asdict(formula_update),
+                }
+                if (
+                    canonical_sha256(asdict(formula_update))
+                    != summary["metadata_update_sha256"]
+                    or canonical_sha256(post_write)
+                    != summary["metadata_readback_sha256"]
+                ):
+                    raise WorkflowPublicationError(
+                        "resumed admission metadata identity changed"
+                    )
+            _require_remote_metadata_source(
+                metadata_root,
+                metadata_source,
+                repository=policy.tap_repository,
+            )
+            metadata_base_source = detail.get("formula_metadata_base_source")
+            if not isinstance(metadata_base_source, Mapping):
+                raise WorkflowPublicationError(
+                    "admission work has no exact Formula metadata base"
+                )
+            try:
+                validate_landed_formula_metadata_commit(
+                    metadata_root,
+                    base_source=metadata_base_source,
+                    landed_source=metadata_source,
+                    patch=_patch,
+                )
+                validate_formula_admission_projection(
+                    metadata_root, formula_update
+                )
+            except TapMetadataError as error:
+                raise WorkflowPublicationError(
+                    f"landed Formula metadata is invalid: {error}"
+                ) from error
+            _history, history_tap_source = _require_promotion_history_barrier(
+                detail,
+                policy=policy,
+                expected_target_abi=formula_update.target_abi,
+                transport=UrllibOciTransportV1(username="", token=""),
+            )
+            prepared = prepare_admission(
+                decision,
+                candidate=candidate,
+                candidate_reuse=candidate_reuse,
+                canonical_publication=canonical,
+                preactivation_tap_source=history_tap_source,
+                abi_history_record_sha256=_history.digest.removeprefix("sha256:"),
+                policy=policy,
+            )
+            record = finalize_admission_record(
+                prepared,
+                formula_metadata_base_source=metadata_base_source,
+                formula_metadata_source=metadata_source,
+                formula_metadata_update=asdict(formula_update),
+                post_write_readback=post_write,
+                run={
+                    "repository": policy.tap_repository,
+                    "workflow_ref": os.environ.get("GITHUB_WORKFLOW_REF", ""),
+                    "run_id": args.run_id,
+                    "run_attempt": args.run_attempt,
+                    "job": "publish-admission",
+                },
+            )
+            published = publish_admission_record(
+                record,
+                policy=policy,
+                transport=transport,
+            )
+        Path(args.out).write_bytes(
+            canonical_bytes(
+                {
+                    "schema": 1,
+                    "kind": "kandelo-abi-staging-admission-publication",
+                    "request_sha256": args.request_digest,
+                    "work_id": args.work_id,
+                    "record_sha256": canonical_sha256(record),
+                    "locator": asdict(published),
+                }
+            )
+        )
+
+
 def _require_workflow_publication_guards(args: argparse.Namespace) -> None:
     if not (
         args.require_github_digest and args.anonymous_readback and args.immutable
@@ -3190,6 +5241,58 @@ def _workflow_artifact_output(
         )
     except WorkflowArtifactError:
         raise
+
+
+def _load_workflow_promotion_work(
+    client: GitHubWorkflowArtifactClientV1,
+    *,
+    root: Path,
+    run_id: int,
+    run_attempt: int,
+    request_digest: str,
+    artifact_id: str,
+    artifact_digest: str,
+    expected_tap_source: Mapping[str, Any],
+    stage: str,
+    work_id: str,
+) -> dict[str, Any]:
+    artifact = _workflow_artifact_output(
+        client,
+        artifact_id=artifact_id,
+        artifact_digest=artifact_digest,
+        name=(
+            f"abi-staging-promotion-plan-{request_digest}-"
+            f"{run_id}-{run_attempt}"
+        ),
+        required=True,
+    )
+    if artifact is None:
+        raise WorkflowPublicationError("protected promotion plan is absent")
+    destination = root / "promotion-plan"
+    client.extract_artifact(
+        artifact,
+        destination,
+        max_files=4,
+        max_bytes=256 * 1024 * 1024,
+    )
+    try:
+        document = load_promotion_plan_document(
+            (destination / "promotion-plan.json").read_bytes()
+        )
+    except (OSError, ReconciliationError) as error:
+        raise ReconciliationError(
+            f"protected promotion plan cannot be loaded: {error}"
+        ) from error
+    if (
+        document["mode"] != "active"
+        or document["authoritative"] is not True
+        or document["request_sha256"] != request_digest
+        or document["tap_source"] != dict(expected_tap_source)
+    ):
+        raise ReconciliationError(
+            "protected promotion plan differs from current workflow authority"
+        )
+    return select_promotion_plan_work(document, stage=stage, work_id=work_id)
 
 
 def _workflow_job_from_needs(*, name: str, conclusion: str) -> WorkflowJobV1:
@@ -4172,6 +6275,18 @@ def main(arguments: list[str] | None = None) -> int:
             return 0
         if args.command == "plan-workflow-products":
             _plan_workflow_products(args)
+            return 0
+        if args.command == "plan-workflow-promotion":
+            _plan_workflow_promotion(args)
+            return 0
+        if args.command == "publish-workflow-canonical":
+            _publish_workflow_canonical(args)
+            return 0
+        if args.command == "update-workflow-tap-metadata":
+            _update_workflow_tap_metadata(args)
+            return 0
+        if args.command == "publish-workflow-admission":
+            _publish_workflow_admission(args)
             return 0
         if args.command == "execute-build-work":
             return _execute_build(args)

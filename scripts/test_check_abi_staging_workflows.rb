@@ -167,6 +167,109 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_equal 30, @workflow.dig("jobs", "plan-products", "timeout-minutes")
   end
 
+  def test_promotion_jobs_split_git_and_package_authority
+    expected = {
+      "plan-promotion" => {"contents" => "read"},
+      "publish-canonical" => {
+        "actions" => "read", "contents" => "read", "packages" => "write"
+      },
+      "update-tap-metadata" => {
+        "actions" => "read", "contents" => "write"
+      },
+      "publish-admission" => {
+        "actions" => "read", "contents" => "read", "packages" => "write"
+      }
+    }
+    expected.each do |name, permissions|
+      job = @workflow.dig("jobs", name)
+      refute_nil job, "missing #{name}"
+      assert_equal permissions, job["permissions"]
+      refute job.key?("secrets")
+    end
+    %w[publish-canonical update-tap-metadata publish-admission].each do |name|
+      strategy = @workflow.dig("jobs", name, "strategy")
+      assert_equal false, strategy["fail-fast"]
+      assert_operator strategy["max-parallel"], :<=, 16
+    end
+    assert_equal %w[discover-plan candidate verification reuse],
+                 @workflow.dig("jobs", "plan-promotion", "needs")
+    planner_tap = @workflow.dig("jobs", "plan-promotion", "steps").find do |step|
+      step.dig("with", "path") == "tap-authority"
+    end
+    assert_equal 0, planner_tap.dig("with", "fetch-depth")
+  end
+
+  def test_admission_reconstructs_the_landed_metadata_from_public_main
+    job = @workflow.dig("jobs", "publish-admission")
+    metadata = job.fetch("steps").find do |step|
+      step.dig("with", "path") == "tap-metadata"
+    end
+    refute_nil metadata
+    assert_equal "main", metadata.dig("with", "ref")
+    assert_equal 0, metadata.dig("with", "fetch-depth")
+    assert_equal false, metadata.dig("with", "persist-credentials")
+    assert_includes last_run_step(@workflow, "publish-admission").fetch("run"),
+                    '--metadata-root "$GITHUB_WORKSPACE/tap-metadata"'
+  end
+
+  def test_promotion_workflow_mutations_are_rejected
+    assert_rejected("open PR promotion") do |workflow|
+      workflow.dig("jobs", "plan-promotion")["if"] =
+        "always() && needs.discover-plan.outputs.selected == 'true'"
+    end
+    assert_rejected("main commit scan trigger") do |workflow|
+      event = workflow.key?("on") ? workflow["on"] : workflow[true]
+      event["push"] = {"branches" => ["main"]}
+    end
+    assert_rejected("history Boolean") do |workflow|
+      step = last_run_step(workflow, "plan-promotion")
+      step["run"] = step["run"].sub("--require-history-record", "--history-ready")
+    end
+    assert_rejected("promotion before protected history") do |workflow|
+      workflow.dig("jobs", "publish-canonical", "needs").delete("plan-promotion")
+    end
+    assert_rejected("shallow promotion history") do |workflow|
+      checkout = workflow.dig("jobs", "plan-promotion", "steps").find do |step|
+        step.dig("with", "path") == "tap-authority"
+      end
+      checkout["with"]["fetch-depth"] = 1
+    end
+    assert_rejected("changed layer") do |workflow|
+      step = last_run_step(workflow, "publish-canonical")
+      step["run"] = step["run"].sub("--require-unchanged-layer", "")
+    end
+    %w[publish-canonical update-tap-metadata publish-admission].each do |job|
+      assert_rejected("#{job} skips the protected history barrier") do |workflow|
+        step = last_run_step(workflow, job)
+        step["run"] = step["run"].sub("--require-history-barrier", "")
+      end
+    end
+    assert_rejected("combined package and Git writer") do |workflow|
+      workflow.dig("jobs", "publish-canonical", "permissions")["contents"] = "write"
+    end
+    assert_rejected("candidate execution in metadata writer") do |workflow|
+      last_run_step(workflow, "update-tap-metadata")["run"] +=
+        "\nbash scripts/abi-staging-build-bottle.sh\n"
+    end
+    assert_rejected("unbounded promotion matrix") do |workflow|
+      workflow.dig("jobs", "publish-canonical").delete("strategy")
+    end
+    assert_rejected("all Formula completion gate") do |workflow|
+      workflow.dig("jobs", "publish-admission")["if"] =
+        "needs.publish-canonical.result == 'success' && needs.update-tap-metadata.result == 'success'"
+    end
+    assert_rejected("metadata force push") do |workflow|
+      last_run_step(workflow, "update-tap-metadata")["run"] +=
+        "\ngit push --force origin HEAD:main\n"
+    end
+    assert_rejected("admission before metadata readback") do |workflow|
+      workflow.dig("jobs", "publish-admission", "needs").delete("update-tap-metadata")
+    end
+    assert_rejected("background failure cancels sibling") do |workflow|
+      workflow.dig("jobs", "publish-canonical", "strategy")["fail-fast"] = true
+    end
+  end
+
   def test_product_planner_mutations_are_rejected_at_the_planning_boundary
     assert_rejected_matching(
       "planner skips a Formula lane", /product planner must wait for all Formula public facts/

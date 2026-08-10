@@ -8,7 +8,7 @@ cannot disappear silently, but they are not promoted to current authority.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 from pathlib import Path
@@ -182,6 +182,14 @@ class TapMetadataWriteResultV1:
     status: Literal["committed", "already-landed"]
     source: Mapping[str, str]
     changed_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RecoveredFormulaMetadataCommitV1:
+    base_source: Mapping[str, str]
+    landed_source: Mapping[str, str]
+    update: FormulaMetadataUpdateV1
+    patch: TapMetadataPatchV1
 
 
 def _exact_keys(value: Mapping[str, Any], expected: frozenset[str], field: str) -> None:
@@ -1047,6 +1055,232 @@ def formula_generated_metadata_sha256(tap_root: Path, formula: str) -> str:
     )
 
 
+def _git_regular_blob(
+    root: Path,
+    commit: str,
+    path: str,
+    field: str,
+    *,
+    allow_absent: bool = False,
+) -> bytes | None:
+    listing = [
+        entry
+        for entry in _git_bytes(root, "ls-tree", "-z", commit, "--", path).split(b"\0")
+        if entry
+    ]
+    if not listing:
+        if allow_absent:
+            return None
+        raise TapMetadataError(f"{field} is absent from its exact Git source")
+    if len(listing) != 1:
+        raise TapMetadataError(f"{field} is ambiguous in its exact Git source")
+    match = re.fullmatch(
+        rb"(100644|100755) blob [0-9a-f]{40}\t([^\0]+)", listing[0]
+    )
+    if match is None or match.group(2) != path.encode("utf-8"):
+        raise TapMetadataError(f"{field} is not an exact regular Git blob")
+    body = _git_bytes(root, "show", f"{commit}:{path}")
+    if not 1 <= len(body) <= MAX_METADATA_BYTES:
+        raise TapMetadataError(f"{field} is outside its byte bound")
+    return body
+
+
+def _json_mapping_bytes(body: bytes, field: str) -> Mapping[str, Any]:
+    try:
+        value = json.loads(
+            body.decode("utf-8", errors="strict"),
+            object_pairs_hook=_object_without_duplicates,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, TapMetadataError) as error:
+        raise TapMetadataError(f"{field} is invalid JSON: {error}") from error
+    return _mapping(value, field)
+
+
+def _formula_generated_metadata_sha256_at_commit(
+    root: Path, commit: str, formula: str
+) -> str:
+    name = _stable_id(formula, "historical generated metadata Formula")
+    formula_body = _git_regular_blob(
+        root, commit, f"Formula/{name}.rb", f"historical Formula {name}"
+    )
+    sidecar_body = _git_regular_blob(
+        root,
+        commit,
+        f"Kandelo/formula/{name}.json",
+        f"historical Formula sidecar {name}",
+    )
+    metadata_body = _git_regular_blob(
+        root,
+        commit,
+        "Kandelo/metadata.json",
+        "historical generated metadata index",
+    )
+    assert formula_body is not None and sidecar_body is not None
+    assert metadata_body is not None
+    sidecar = _json_mapping_bytes(sidecar_body, f"historical sidecar for {name}")
+    metadata = _json_mapping_bytes(metadata_body, "historical generated metadata index")
+    matches = [
+        candidate
+        for candidate in _sequence(metadata.get("packages"), "historical packages")
+        if _mapping(candidate, "historical package").get("name") == name
+    ]
+    if len(matches) != 1:
+        raise TapMetadataError(
+            "historical generated metadata Formula is absent or duplicated"
+        )
+    return canonical_sha256(
+        {
+            "formula_sha256": hashlib.sha256(formula_body).hexdigest(),
+            "sidecar_sha256": canonical_sha256(sidecar),
+            "top_index_row_sha256": canonical_sha256(matches[0]),
+        }
+    )
+
+
+def recover_landed_formula_metadata_commit(
+    tap_root: Path, *, current_update: FormulaMetadataUpdateV1
+) -> RecoveredFormulaMetadataCommitV1:
+    """Recover the one exact metadata CAS commit after admission publication failed."""
+
+    root = tap_root.resolve(strict=True)
+    checked = _checked_formula_update(current_update)
+    policy = load_promotion_policy(root / "Kandelo/staging/promotion-policy.toml")
+    current_source = _checked_source(
+        root,
+        {
+            "repository": policy.tap_repository,
+            "commit": _git(root, "rev-parse", "HEAD"),
+            "tree": _git(root, "rev-parse", "HEAD^{tree}"),
+        },
+    )
+    if (
+        checked.expected_main_commit != current_source["commit"]
+        or formula_generated_metadata_sha256(root, checked.formula)
+        != checked.expected_generated_metadata_sha256
+    ):
+        raise TapMetadataError(
+            "current Formula metadata retry authority differs from tap main"
+        )
+    validate_formula_admission_projection(root, checked)
+
+    history = _git(
+        root,
+        "log",
+        "--first-parent",
+        "--format=%H",
+        "--max-count=4097",
+        "--",
+        checked.link_manifest_path,
+    ).splitlines()
+    if len(history) > 4096:
+        raise TapMetadataError("Formula metadata Git history exceeds its scan bound")
+    matches: list[RecoveredFormulaMetadataCommitV1] = []
+    for candidate_commit in history:
+        try:
+            landed_commit = _git_sha(
+                candidate_commit, "landed Formula metadata commit"
+            )
+            parents = _git(
+                root, "rev-list", "--parents", "-n", "1", landed_commit
+            ).split()
+            if len(parents) != 2 or parents[0] != landed_commit:
+                continue
+            base_commit = _git_sha(parents[1], "Formula metadata CAS base")
+            changed_paths = _git(
+                root,
+                "diff-tree",
+                "--no-commit-id",
+                "--name-only",
+                "-r",
+                landed_commit,
+            ).splitlines()
+            if sorted(changed_paths) != sorted(checked.allowed_paths):
+                continue
+            base_source = {
+                "repository": policy.tap_repository,
+                "commit": base_commit,
+                "tree": _git(root, "rev-parse", f"{base_commit}^{{tree}}"),
+            }
+            landed_source = {
+                "repository": policy.tap_repository,
+                "commit": landed_commit,
+                "tree": _git(root, "rev-parse", f"{landed_commit}^{{tree}}"),
+            }
+            expected_files: dict[str, str | None] = {}
+            files: dict[str, bytes] = {}
+            for path in checked.allowed_paths:
+                before = _git_regular_blob(
+                    root,
+                    base_commit,
+                    path,
+                    f"Formula metadata CAS input {path}",
+                    allow_absent=path == checked.link_manifest_path,
+                )
+                expected_files[path] = (
+                    None if before is None else hashlib.sha256(before).hexdigest()
+                )
+                after = _git_regular_blob(
+                    root, landed_commit, path, f"landed Formula metadata {path}"
+                )
+                assert after is not None
+                files[path] = after
+            if hashlib.sha256(files[checked.link_manifest_path]).hexdigest() != (
+                checked.link_manifest_sha256
+            ):
+                continue
+            base_formula = _git_regular_blob(
+                root,
+                base_commit,
+                f"Formula/{checked.formula}.rb",
+                "Formula metadata base source",
+            )
+            assert base_formula is not None
+            normalized = normalize_formula_source(base_formula)
+            if hashlib.sha256(normalized).hexdigest() != (
+                checked.expected_normalized_formula_sha256
+            ):
+                continue
+            recovered_update = replace(
+                checked,
+                expected_main_commit=base_commit,
+                expected_generated_metadata_sha256=(
+                    _formula_generated_metadata_sha256_at_commit(
+                        root, base_commit, checked.formula
+                    )
+                ),
+            )
+            recovered_patch = TapMetadataPatchV1(
+                operation="formula-metadata",
+                expected_main_commit=base_commit,
+                expected_main_tree=base_source["tree"],
+                allowed_paths=checked.allowed_paths,
+                expected_files_sha256=MappingProxyType(expected_files),
+                files=MappingProxyType(files),
+            )
+            validate_landed_formula_metadata_commit(
+                root,
+                base_source=base_source,
+                landed_source=landed_source,
+                patch=recovered_patch,
+            )
+            matches.append(
+                RecoveredFormulaMetadataCommitV1(
+                    base_source=MappingProxyType(base_source),
+                    landed_source=MappingProxyType(landed_source),
+                    update=recovered_update,
+                    patch=recovered_patch,
+                )
+            )
+        except (FormulaInventoryError, TapMetadataError):
+            continue
+    if len(matches) != 1:
+        raise TapMetadataError(
+            "Formula metadata has no unique exact landed CAS commit"
+        )
+    validate_formula_admission_projection(root, matches[0].update)
+    return matches[0]
+
+
 def _checked_formula_update(
     update: FormulaMetadataUpdateV1,
 ) -> FormulaMetadataUpdateV1:
@@ -1524,6 +1758,162 @@ def validate_formula_metadata_patch(
         if source["commit"] != patch.expected_main_commit:
             raise TapMetadataError("Formula metadata source moved during validation")
         return projection
+
+
+def validate_formula_admission_projection(
+    tap_root: Path,
+    update: FormulaMetadataUpdateV1,
+) -> dict[str, Any]:
+    """Require current main to retain the exact admitted four-path projection."""
+
+    root = tap_root.resolve(strict=True)
+    checked = _checked_formula_update(update)
+    projection = check_tap_metadata(root)
+    state = load_abi_state(root / "Kandelo/abi-state.json")
+    if (
+        state.current_abi != checked.target_abi
+        or checked.formula in projection["detached_active_formula_blocks"]
+    ):
+        raise TapMetadataError("admitted Formula is detached from current ABI metadata")
+    sidecar = _load_json(
+        root / f"Kandelo/formula/{checked.formula}.json",
+        "admitted Formula sidecar",
+    )
+    matches = [
+        bottle
+        for bottle in sidecar["bottles"]
+        if bottle.get("arch") == checked.architecture
+    ]
+    if len(matches) != 1 or matches[0].get("status") != "success":
+        raise TapMetadataError("admitted Formula selection is absent or duplicated")
+    selected = matches[0]
+    if (
+        selected.get("sha256") != checked.bottle_layer_sha256
+        or selected.get("bytes") != checked.bottle_layer_bytes
+        or selected.get("link_manifest") != checked.link_manifest_path
+    ):
+        raise TapMetadataError("admitted Formula selection differs from its exact layer")
+    link_body = _read_regular(
+        root / checked.link_manifest_path,
+        "admitted Formula link manifest",
+        MAX_METADATA_BYTES,
+    )
+    if hashlib.sha256(link_body).hexdigest() != checked.link_manifest_sha256:
+        raise TapMetadataError("admitted Formula link manifest identity changed")
+    link = _load_json(
+        root / checked.link_manifest_path,
+        "admitted Formula link manifest",
+    )
+    try:
+        validate_link_manifest(
+            link,
+            formula=checked.formula,
+            version=sidecar["version"],
+            architecture=checked.architecture,
+            target_abi=checked.target_abi,
+            prefix=selected.get("prefix"),
+            cellar=selected.get("cellar"),
+            bottle_url=selected.get("url"),
+            bottle_sha256=checked.bottle_layer_sha256,
+            bottle_bytes=checked.bottle_layer_bytes,
+        )
+    except BottleLinkError as error:
+        raise TapMetadataError(
+            f"admitted Formula link manifest is invalid: {error}"
+        ) from error
+    formula_projection = _formula_bottle_projection(
+        root / f"Formula/{checked.formula}.rb"
+    )
+    if (
+        formula_projection["normalized_formula_sha256"]
+        != checked.expected_normalized_formula_sha256
+    ):
+        raise TapMetadataError("admitted Formula source identity changed")
+    bottle = formula_projection["bottle"]
+    policy = load_promotion_policy(
+        root / "Kandelo/staging/promotion-policy.toml"
+    )
+    expected_root = (
+        "https://ghcr.io/v2/"
+        + policy.tap_repository.split("/", 1)[0]
+        + "/"
+        + policy.canonical_repository_prefix
+        + str(checked.target_abi)
+        + "/"
+        + checked.formula
+    )
+    expected_architectures = [
+        {
+            "architecture": str(item["arch"]),
+            "cellar": _formula_cellar(str(item["cellar"])),
+            "sha256": str(item["sha256"]),
+        }
+        for item in sidecar["bottles"]
+        if item.get("status") == "success"
+    ]
+    if (
+        bottle is None
+        or bottle["root_url"] != expected_root
+        or bottle["rebuild"] != sidecar["bottle_rebuild"]
+        or bottle["architectures"] != expected_architectures
+    ):
+        raise TapMetadataError("admitted Formula bottle projection changed")
+    return projection
+
+
+def validate_landed_formula_metadata_commit(
+    tap_root: Path,
+    *,
+    base_source: Mapping[str, Any],
+    landed_source: Mapping[str, Any],
+    patch: TapMetadataPatchV1,
+) -> None:
+    """Prove the landed Formula commit is the exact CAS patch from its base."""
+
+    root = tap_root.resolve(strict=True)
+    if not isinstance(patch, TapMetadataPatchV1) or patch.operation != "formula-metadata":
+        raise TapMetadataError("landed Formula metadata patch protocol changed")
+    base = _mapping(base_source, "Formula metadata base source")
+    landed = _mapping(landed_source, "Formula metadata landed source")
+    for value, field in ((base, "base"), (landed, "landed")):
+        _exact_keys(
+            value,
+            frozenset({"repository", "commit", "tree"}),
+            f"Formula metadata {field} source",
+        )
+        _git_sha(value["commit"], f"Formula metadata {field} commit")
+        _git_sha(value["tree"], f"Formula metadata {field} tree")
+    policy = load_promotion_policy(root / "Kandelo/staging/promotion-policy.toml")
+    if (
+        base["repository"].lower() != policy.tap_repository.lower()
+        or landed["repository"].lower() != policy.tap_repository.lower()
+        or patch.expected_main_commit != base["commit"]
+        or patch.expected_main_tree != base["tree"]
+    ):
+        raise TapMetadataError("landed Formula metadata names another CAS base")
+    if (
+        _git(root, "rev-parse", f"{base['commit']}^{{tree}}") != base["tree"]
+        or _git(root, "rev-parse", f"{landed['commit']}^{{tree}}")
+        != landed["tree"]
+    ):
+        raise TapMetadataError("landed Formula metadata Git tree identity changed")
+    parents = _git(root, "rev-list", "--parents", "-n", "1", landed["commit"]).split()
+    if len(parents) != 2 or parents[0] != landed["commit"] or parents[1] != base["commit"]:
+        raise TapMetadataError("landed Formula metadata is not the exact CAS child")
+    _git(root, "merge-base", "--is-ancestor", landed["commit"], "HEAD")
+    changed_paths = _git(
+        root,
+        "diff-tree",
+        "--no-commit-id",
+        "--name-only",
+        "-r",
+        landed["commit"],
+    ).splitlines()
+    if sorted(changed_paths) != sorted(patch.files):
+        raise TapMetadataError("landed Formula metadata changed another path set")
+    for path, expected in patch.files.items():
+        if _git_bytes(root, "show", f"{landed['commit']}:{path}") != expected:
+            raise TapMetadataError("landed Formula metadata bytes differ from the patch")
 
 
 class GitTapMetadataStore:

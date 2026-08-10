@@ -1425,9 +1425,12 @@ def build_admission_record(
     request_source: Mapping[str, Any],
     run: Mapping[str, Any],
     candidate_record_sha256: str,
+    candidate_binding_sha256: str,
     promoted_layer: Mapping[str, Any],
     qualifying_receipt_sha256s: Sequence[str],
     merged_pull_request: Mapping[str, Any],
+    abi_history_record_sha256: str,
+    preactivation_tap_source: Mapping[str, Any],
     tap_source: Mapping[str, Any],
     canonical: Mapping[str, Any],
     canonical_public_readback_sha256: str,
@@ -1462,9 +1465,16 @@ def build_admission_record(
         },
         "admission": {
             "candidate_record_sha256": candidate_digest,
+            "candidate_binding_sha256": _digest(
+                candidate_binding_sha256, "admission candidate binding"
+            ),
             "promoted_layer": _plain(promoted_layer),
             "qualifying_receipt_sha256s": list(qualifying_receipt_sha256s),
             "merged_pull_request": _plain(merged_pull_request),
+            "abi_history_record_sha256": _digest(
+                abi_history_record_sha256, "admission ABI history record"
+            ),
+            "preactivation_tap_source": _plain(preactivation_tap_source),
             "tap_source": _plain(tap_source),
             "canonical": _plain(canonical),
             "canonical_public_readback_sha256": _digest(
@@ -1539,9 +1549,12 @@ def validate_admission_record(record: Mapping[str, Any]) -> None:
         frozenset(
             {
                 "candidate_record_sha256",
+                "candidate_binding_sha256",
                 "promoted_layer",
                 "qualifying_receipt_sha256s",
                 "merged_pull_request",
+                "abi_history_record_sha256",
+                "preactivation_tap_source",
                 "tap_source",
                 "canonical",
                 "canonical_public_readback_sha256",
@@ -1555,6 +1568,7 @@ def validate_admission_record(record: Mapping[str, Any]) -> None:
     candidate_digest = _digest(
         payload["candidate_record_sha256"], "admission candidate record"
     )
+    _digest(payload["candidate_binding_sha256"], "admission candidate binding")
     if subject["identity"] != candidate_digest:
         raise TapRecordError("admission subject differs from candidate record")
     layer = _validated_artifact(payload["promoted_layer"], "promoted bottle layer")
@@ -1584,6 +1598,13 @@ def validate_admission_record(record: Mapping[str, Any]) -> None:
         "commit"
     ] != merged_head:
         raise TapRecordError("admission source differs from exact merged PR head")
+    _digest(
+        payload["abi_history_record_sha256"], "admission ABI history record"
+    )
+    preactivation_tap_source = _record_source(
+        payload["preactivation_tap_source"],
+        "admission preactivation tap source",
+    )
     tap_source = _record_source(payload["tap_source"], "admission tap source")
     canonical = _validated_artifact(payload["canonical"], "admission canonical artifact")
     if canonical != canonical_common:
@@ -1597,7 +1618,11 @@ def validate_admission_record(record: Mapping[str, Any]) -> None:
         payload["formula_metadata_source"], "Formula metadata source"
     )
     if (
-        metadata_source["repository"].lower() != tap_source["repository"].lower()
+        preactivation_tap_source["repository"].lower()
+        != tap_source["repository"].lower()
+        or preactivation_tap_source["commit"] == tap_source["commit"]
+        or metadata_source["repository"].lower()
+        != tap_source["repository"].lower()
         or metadata_source["commit"] == tap_source["commit"]
         or tap_source["repository"].lower() == merged_repository.lower()
     ):

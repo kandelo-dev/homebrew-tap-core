@@ -145,7 +145,8 @@ module AbiStagingWorkflowCheck
     expected_jobs = %w[
       discover-plan candidate verification reuse prepare-runtime
       plan-products compose-product publish-product-candidate node-product-evidence
-      browser-product-evidence publish-product-evidence
+      browser-product-evidence publish-product-evidence plan-promotion
+      publish-canonical update-tap-metadata publish-admission
     ]
     require_contract(jobs.keys == expected_jobs,
                      "workflow job split changed")
@@ -575,6 +576,213 @@ module AbiStagingWorkflowCheck
     )
     require_no_candidate_execution(evidence_publish_source,
                                    "product evidence publisher")
+
+    promotion_planner = jobs.fetch("plan-promotion")
+    require_contract(
+      promotion_planner.fetch("needs") == %w[
+        discover-plan candidate verification reuse
+      ] && promotion_planner.fetch("if") ==
+        "always() && needs.discover-plan.outputs.selected == 'true' && needs.discover-plan.outputs.promotion-eligible == 'true'" &&
+        promotion_planner.fetch("runs-on") == "ubuntu-latest" &&
+        promotion_planner.fetch("timeout-minutes") == 30 &&
+        promotion_planner.fetch("permissions") == {"contents" => "read"} &&
+        !promotion_planner.key?("environment") &&
+        !promotion_planner.key?("secrets"),
+      "promotion planner is not exact-merge and read-only scoped"
+    )
+    require_contract(
+      promotion_planner.fetch("outputs") == {
+        "canonical-matrix" => "${{ steps.plan.outputs.canonical_matrix }}",
+        "metadata-matrix" => "${{ steps.plan.outputs.metadata_matrix }}",
+        "admission-matrix" => "${{ steps.plan.outputs.admission_matrix }}",
+        "artifact-id" => "${{ steps.upload.outputs.artifact-id }}",
+        "artifact-digest" => "${{ steps.upload.outputs.artifact-digest }}"
+      },
+      "promotion planner outputs are not exact protected artifacts"
+    )
+    check_actions(promotion_planner)
+    planner_checkouts = action_steps(promotion_planner, CHECKOUT)
+    planner_tap_checkout = planner_checkouts.find do |step|
+      step.dig("with", "path") == "tap-authority"
+    end
+    planner_kandelo_checkout = planner_checkouts.find do |step|
+      step.dig("with", "path") == "kandelo-source"
+    end
+    require_contract(
+      planner_checkouts.length == 2 && planner_tap_checkout&.fetch("with") == {
+        "ref" => "${{ needs.discover-plan.outputs.tap-commit }}",
+        "fetch-depth" => 0,
+        "persist-credentials" => false,
+        "path" => "tap-authority"
+      } && planner_kandelo_checkout&.fetch("with") == {
+        "repository" => "${{ needs.discover-plan.outputs.kandelo-repository }}",
+        "ref" => "${{ needs.discover-plan.outputs.kandelo-head }}",
+        "fetch-depth" => 1,
+        "persist-credentials" => false,
+        "path" => "kandelo-source"
+      },
+      "promotion planner lacks exact protected code or inert exact-head input"
+    )
+    planner_commands = run_steps(promotion_planner)
+    planner_source = planner_commands.map { |step| step.fetch("run") }.join("\n")
+    require_contract(
+      planner_commands.length == 1 &&
+        planner_commands.fetch(0).fetch("working-directory") == "tap-authority" &&
+        planner_source.include?("plan-workflow-promotion") &&
+        planner_source.include?('--coordination-root "$RUNNER_TEMP/promotion-inputs/coordination"') &&
+        planner_source.include?('--kandelo-root "$GITHUB_WORKSPACE/kandelo-source"') &&
+        planner_source.include?("--require-merged") &&
+        planner_source.include?("--require-history-record") &&
+        planner_source.include?('--github-output "$GITHUB_OUTPUT"'),
+      "promotion planner does not require exact merged/history facts"
+    )
+    require_no_candidate_execution(planner_source, "promotion planner")
+    planner_downloads = action_steps(promotion_planner, DOWNLOAD_ARTIFACT)
+    require_contract(
+      planner_downloads.length == 1 &&
+        planner_downloads.fetch(0).dig("with", "artifact-ids") ==
+          "${{ needs.discover-plan.outputs.coordination-artifact-id }}" &&
+        planner_downloads.fetch(0).dig("with", "merge-multiple") == true,
+      "promotion planner does not consume exact protected coordination"
+    )
+    planner_uploads = action_steps(promotion_planner, UPLOAD_ARTIFACT)
+    require_contract(
+      planner_uploads.length == 1 &&
+        planner_uploads.fetch(0).fetch("id") == "upload" &&
+        planner_uploads.fetch(0).dig("with", "if-no-files-found") == "error" &&
+        planner_uploads.fetch(0).dig("with", "compression-level") == 0,
+      "promotion plan artifact is not exact and retained"
+    )
+
+    promotion_permissions = {
+      "publish-canonical" => {
+        "actions" => "read", "contents" => "read", "packages" => "write"
+      },
+      "update-tap-metadata" => {
+        "actions" => "read", "contents" => "write"
+      },
+      "publish-admission" => {
+        "actions" => "read", "contents" => "read", "packages" => "write"
+      }
+    }
+    promotion_permissions.each do |name, permissions|
+      job = jobs.fetch(name)
+      require_contract(
+        job.fetch("runs-on") == "ubuntu-latest" &&
+          job.fetch("timeout-minutes").between?(1, 30) &&
+          job.fetch("permissions") == permissions &&
+          !job.key?("environment") && !job.key?("secrets") &&
+          job.fetch("steps").none? { |step| step["continue-on-error"] == true },
+        "#{name} changed its exact promotion authority"
+      )
+      check_actions(job)
+      strategy = job.fetch("strategy")
+      require_contract(
+        strategy.fetch("fail-fast") == false &&
+          strategy.fetch("max-parallel").between?(1, 16),
+        "#{name} matrix must remain bounded and sibling-independent"
+      )
+    end
+    require_contract(
+      jobs.dig("publish-canonical", "strategy", "matrix") ==
+        "${{ fromJSON(needs.plan-promotion.outputs.canonical-matrix) }}" &&
+        jobs.dig("update-tap-metadata", "strategy", "matrix") ==
+          "${{ fromJSON(needs.plan-promotion.outputs.metadata-matrix) }}" &&
+        jobs.dig("publish-admission", "strategy", "matrix") ==
+          "${{ fromJSON(needs.plan-promotion.outputs.admission-matrix) }}",
+      "promotion matrices do not come from the exact protected plan"
+    )
+
+    canonical_publisher = jobs.fetch("publish-canonical")
+    require_contract(
+      canonical_publisher.fetch("needs") == %w[discover-plan plan-promotion] &&
+        canonical_publisher.fetch("if") ==
+          "always() && needs.plan-promotion.result == 'success'",
+      "canonical publisher may run before the protected promotion plan"
+    )
+    canonical_source = run_steps(canonical_publisher)
+      .map { |step| step.fetch("run") }.join("\n")
+    require_contract(
+      canonical_source.include?("publish-workflow-canonical") &&
+        canonical_source.include?("--require-unchanged-layer") &&
+        canonical_source.include?("--require-history-barrier") &&
+        canonical_source.include?("--require-github-digest") &&
+        canonical_source.include?("--anonymous-readback") &&
+        canonical_source.include?("--immutable") &&
+        canonical_source.include?("--request-digest") &&
+        canonical_source.include?("--plan-artifact-id") &&
+        canonical_source.include?("--plan-artifact-digest"),
+      "canonical publisher can rewrite bytes or lose exact plan identity"
+    )
+    require_no_candidate_execution(canonical_source, "canonical publisher")
+
+    metadata_writer = jobs.fetch("update-tap-metadata")
+    require_contract(
+      metadata_writer.fetch("needs") ==
+        %w[discover-plan plan-promotion publish-canonical] &&
+        metadata_writer.fetch("if") ==
+          "always() && needs.plan-promotion.result == 'success'" &&
+        metadata_writer.dig("strategy", "max-parallel") == 1,
+      "metadata writer is globally gated or can race another Formula CAS"
+    )
+    metadata_source = run_steps(metadata_writer)
+      .map { |step| step.fetch("run") }.join("\n")
+    require_contract(
+      metadata_source.include?("update-workflow-tap-metadata") &&
+        metadata_source.include?("--contents-only") &&
+        metadata_source.include?("--require-history-barrier") &&
+        metadata_source.include?("--normal-push") &&
+        metadata_source.include?("--post-write-readback") &&
+        metadata_source.include?("--request-digest") &&
+        metadata_source.include?('--operation "$OPERATION"') &&
+        run_steps(metadata_writer).fetch(0).dig("env", "OPERATION") ==
+          "${{ matrix.operation }}" &&
+        metadata_source.include?("--plan-artifact-id") &&
+        metadata_source.include?("--plan-artifact-digest") &&
+        !metadata_source.match?(/git\s+push[^\n]*(?:--force|-f\b)/),
+      "metadata writer bypasses contents-only CAS or force-pushes"
+    )
+    require_no_candidate_execution(metadata_source, "metadata writer")
+
+    admission_publisher = jobs.fetch("publish-admission")
+    require_contract(
+      admission_publisher.fetch("needs") == %w[
+        discover-plan plan-promotion publish-canonical update-tap-metadata
+      ] && admission_publisher.fetch("if") ==
+        "always() && needs.plan-promotion.result == 'success'",
+      "admission publisher may run before metadata/readback"
+    )
+    admission_source = run_steps(admission_publisher)
+      .map { |step| step.fetch("run") }.join("\n")
+    admission_metadata_checkout = action_steps(admission_publisher, CHECKOUT)
+      .find { |step| step.dig("with", "path") == "tap-metadata" }
+    require_contract(
+      admission_source.include?("publish-workflow-admission") &&
+        admission_metadata_checkout&.fetch("with") == {
+          "ref" => "main",
+          "fetch-depth" => 0,
+          "persist-credentials" => false,
+          "path" => "tap-metadata"
+        } &&
+        admission_source.include?('--metadata-root "$GITHUB_WORKSPACE/tap-metadata"') &&
+        admission_source.include?("--require-metadata-readback") &&
+        admission_source.include?("--require-history-barrier") &&
+        admission_source.include?("--require-github-digest") &&
+        admission_source.include?("--anonymous-readback") &&
+        admission_source.include?("--immutable") &&
+        admission_source.include?("--request-digest") &&
+        admission_source.include?("--plan-artifact-id") &&
+        admission_source.include?("--plan-artifact-digest"),
+      "admission publisher lacks landed metadata and exact readback identity"
+    )
+    require_no_candidate_execution(admission_source, "admission publisher")
+    jobs.each_value do |job|
+      permissions = job.fetch("permissions", {})
+      require_contract(
+        !(permissions["contents"] == "write" && permissions["packages"] == "write"),
+        "one job combines Git and package write authority"
+      )
+    end
 
     all_text = flatten(workflow).join("\n")
     require_contract(!all_text.match?(/\bsecrets\b/i),
