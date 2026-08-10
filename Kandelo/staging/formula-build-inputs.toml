@@ -8,6 +8,7 @@ kandelo_paths = [
   "crates/fork-instrument",
   "flake.lock",
   "flake.nix",
+  "homebrew/kandelo-guest-layout.json",
   "libc",
   "scripts/homebrew-bottle-build.sh",
   "scripts/run-wasm-fork-instrument.sh",

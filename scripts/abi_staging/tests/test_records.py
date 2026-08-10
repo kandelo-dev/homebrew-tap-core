@@ -285,7 +285,10 @@ def _admission_record() -> dict[str, object]:
                     "Formula/bash.rb",
                     "Kandelo/formula/bash.json",
                     "Kandelo/metadata.json",
+                    "Kandelo/link/bash-1.0-rebuild1-wasm32.json",
                 ],
+                "link_manifest_path": "Kandelo/link/bash-1.0-rebuild1-wasm32.json",
+                "link_manifest_sha256": SHA_C,
                 "canonical_manifest_digest": SHA_B,
                 "bottle_layer_sha256": SHA_A,
                 "bottle_layer_bytes": 12,
@@ -693,6 +696,9 @@ class CandidateRecordTests(unittest.TestCase):
             "layer": lambda changed: changed["admission"][
                 "formula_metadata_update"
             ].__setitem__("bottle_layer_sha256", SHA_C),
+            "link": lambda changed: changed["admission"][
+                "formula_metadata_update"
+            ].__setitem__("link_manifest_path", "../outside.json"),
             "producer": lambda changed: changed["admission"][
                 "original_producer"
             ].__setitem__("head", COMMIT_B),

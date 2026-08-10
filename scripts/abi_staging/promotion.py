@@ -16,6 +16,14 @@ from .abi_history import (
     validate_protection_snapshot,
 )
 from .canonical import CanonicalJsonError, canonical_bytes, canonical_sha256, parse_canonical_bytes
+from .bottle_link import (
+    BottleLinkError,
+    build_link_manifest,
+    inspect_bottle_link_inventory,
+    link_manifest_bytes,
+    load_guest_layout,
+    validate_bottle_link_inventory,
+)
 from .contract import ContractError, load_bottle_contract
 from .custody import CustodyError, load_source_custody_manifest
 from .github_public import GitHubPublicClient, PublicGitHubError
@@ -48,7 +56,17 @@ from .records import (
     validate_candidate_record,
 )
 from .policy import VerificationTestDefinitionV1
-from .tap_metadata import PromotionPolicyV1
+from .tap_metadata import (
+    FormulaMetadataUpdateV1,
+    PromotedBottleMetadataV1,
+    PromotionPolicyV1,
+    TapMetadataError,
+    TapMetadataPatchV1,
+    formula_generated_metadata_sha256,
+    load_abi_state,
+    plan_formula_metadata_patch,
+    plan_successor_activation_patch,
+)
 from .verification import (
     VERIFICATION_RECEIPT_MEDIA_TYPE,
     VerificationError,
@@ -99,6 +117,16 @@ class PreparedAdmissionV1:
     canonical_readback_evidence_sha256: str
     promoted_layer: Mapping[str, object]
     original_producer: Mapping[str, object]
+    candidate_formula: Mapping[str, object]
+    candidate_bottle_metadata: Mapping[str, object]
+    candidate_bottle_contract: Mapping[str, object]
+    candidate_bottle_inventory: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class PreparedFormulaMetadataUpdateV1:
+    update: FormulaMetadataUpdateV1
+    patch: TapMetadataPatchV1
 
 
 def _plain(value: Any) -> Any:
@@ -136,6 +164,18 @@ def _positive(value: Any, field: str) -> int:
 def _nonnegative(value: Any, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 2**32 - 1:
         raise PromotionError(f"{field} is not a bounded nonnegative integer")
+    return value
+
+
+def _text(value: Any, field: str, maximum: int = 4096) -> str:
+    if not isinstance(value, str):
+        raise PromotionError(f"{field} is not a string")
+    try:
+        encoded = value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as error:
+        raise PromotionError(f"{field} is not UTF-8") from error
+    if not encoded or len(encoded) > maximum or "\0" in value:
+        raise PromotionError(f"{field} is outside its string bound")
     return value
 
 
@@ -489,12 +529,29 @@ def _candidate_facts(
     formula_plan = _formula_entry(tap_plan, name, architecture)
     planned_identity = formula_plan["identity"]
     planned_contract = formula_plan["contract_sha256"]
+    expected_source_components = [
+        {
+            "id": "formula",
+            "sha256": planned_identity["normalized_formula_sha256"],
+        },
+        *(
+            {
+                "id": f"tap-input-{index:04d}",
+                "sha256": component["sha256"],
+            }
+            for index, component in enumerate(
+                formula_plan["capture"]["tap_input_components"]
+            )
+        ),
+    ]
     if (
         planned_identity["version"] != formula["version"]
         or planned_identity["revision"] != formula["revision"]
         or planned_identity["rebuild"] != formula["bottle_rebuild"]
         or contract["formula"]["normalized_source_sha256"]
         != formula_plan["capture"]["normalized_source_sha256"]
+        or contract["formula"]["source_components"]
+        != expected_source_components
         or planned_contract not in {None, contract_digest}
     ):
         raise PromotionError("candidate differs from the protected tap plan")
@@ -816,6 +873,87 @@ def _history(
         raise PromotionError("ABI history protection moved after record publication")
 
 
+def prepare_successor_activation_patch(
+    *,
+    tap_root: Any,
+    history: FetchedOciRecordV1 | None,
+    history_protection_snapshot: Mapping[str, Any],
+    current_tap_source: Mapping[str, Any],
+    request_digest: str,
+    merged_pull_request: Mapping[str, Any],
+    target_abi: int,
+    target_snapshot_sha256: str,
+    policy: PromotionPolicyV1,
+) -> TapMetadataPatchV1:
+    """Require exact protected history before planning the one-time ABI switch."""
+
+    if not isinstance(policy, PromotionPolicyV1):
+        raise PromotionError("successor activation policy is not protected schema 1")
+    source = _source(current_tap_source, "activation tap source")
+    if source["repository"].lower() != policy.tap_repository.lower():
+        raise PromotionError("activation tap source names another repository")
+    target = _nonnegative(target_abi, "activation target ABI")
+    snapshot = _digest(target_snapshot_sha256, "activation target snapshot")
+    request = _digest(request_digest, "activation request")
+    merged = _exact(
+        merged_pull_request,
+        frozenset({"repository", "number", "head", "merge_commit"}),
+        "activation merged pull request",
+    )
+    checked_merged = {
+        "repository": _repository(merged["repository"], "activation PR repository"),
+        "number": _positive(merged["number"], "activation PR number"),
+        "head": _git_sha(merged["head"], "activation PR head"),
+        "merge_commit": _git_sha(
+            merged["merge_commit"], "activation PR merge commit"
+        ),
+    }
+    if checked_merged["repository"].lower() != policy.kandelo_repository.lower():
+        raise PromotionError("activation PR names another Kandelo repository")
+    _history(
+        history,
+        protection_snapshot=history_protection_snapshot,
+        target_abi=target,
+        tap_source=source,
+        policy=policy,
+    )
+    assert history is not None
+    record = _canonical_mapping(history.config.body, "activation ABI history")
+    history_plan = _exact(
+        record["plan"],
+        frozenset(
+            {
+                "source_abi",
+                "successor_abi",
+                "preactivation_tap_commit",
+                "preactivation_tap_tree",
+                "branch",
+                "expected_current_metadata_sha256",
+                "protection_requirement_sha256",
+            }
+        ),
+        "activation history plan",
+    )
+    activation = {
+        "request_digest": request,
+        "merged_pull_request": checked_merged,
+        "merge_commit": checked_merged["merge_commit"],
+        "prior_abi": history_plan["source_abi"],
+        "prior_branch": history_plan["branch"],
+        "abi_history_record_digest": history.digest.removeprefix("sha256:"),
+    }
+    try:
+        return plan_successor_activation_patch(
+            tap_root,
+            current_tap_source=source,
+            target_abi=target,
+            target_snapshot_sha256=snapshot,
+            activation=activation,
+        )
+    except TapMetadataError as error:
+        raise PromotionError(f"successor activation metadata is invalid: {error}") from error
+
+
 def _formula_contract_changed(
     planned: Mapping[str, Any], current: Mapping[str, Any]
 ) -> bool:
@@ -1098,6 +1236,74 @@ def _candidate_layer(candidate: FetchedOciRecordV1) -> tuple[dict[str, Any], Fet
     return record, layers["bottle-layer"]
 
 
+def _candidate_bottle_metadata(
+    candidate: FetchedOciRecordV1,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    record, layers = _validated_fetched_record(
+        candidate,
+        artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
+        required_roles=("bottle-layer", "bottle-metadata", "bottle-contract"),
+        field="candidate bottle metadata",
+    )
+    try:
+        validate_candidate_record(record)
+    except TapRecordError as error:
+        raise PromotionError(f"candidate record is invalid: {error}") from error
+    components = [
+        item["artifact"]
+        for item in record["candidate"]["normalized_components"]
+        if item["id"] == "bottle-metadata"
+    ]
+    if len(components) != 1:
+        raise PromotionError("candidate has no exact bottle metadata identity")
+    component = _artifact(components[0], "candidate bottle metadata")
+    layer = layers["bottle-metadata"]
+    if (
+        component["sha256"] != layer.digest.removeprefix("sha256:")
+        or component["bytes"] != layer.size
+        or component["immutable_reference"]
+        != f"{candidate.repository}@{layer.digest}"
+    ):
+        raise PromotionError("candidate bottle metadata differs from its record")
+    return record, _canonical_mapping(layer.body, "candidate bottle metadata")
+
+
+def _candidate_bottle_contract(
+    candidate: FetchedOciRecordV1,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    record, layers = _validated_fetched_record(
+        candidate,
+        artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
+        required_roles=("bottle-layer", "bottle-metadata", "bottle-contract"),
+        field="candidate bottle contract",
+    )
+    try:
+        validate_candidate_record(record)
+    except TapRecordError as error:
+        raise PromotionError(f"candidate record is invalid: {error}") from error
+    components = [
+        item["artifact"]
+        for item in record["candidate"]["normalized_components"]
+        if item["id"] == "bottle-contract"
+    ]
+    if len(components) != 1:
+        raise PromotionError("candidate has no exact bottle contract identity")
+    component = _artifact(components[0], "candidate bottle contract")
+    layer = layers["bottle-contract"]
+    if (
+        component["sha256"] != layer.digest.removeprefix("sha256:")
+        or component["bytes"] != layer.size
+        or component["immutable_reference"]
+        != f"{candidate.repository}@{layer.digest}"
+    ):
+        raise PromotionError("candidate bottle contract differs from its record")
+    try:
+        contract = load_bottle_contract(layer.body)
+    except ContractError as error:
+        raise PromotionError(f"candidate bottle contract is invalid: {error}") from error
+    return record, contract
+
+
 def build_canonical_bottle_plan(
     decision: PromotionDecisionV1,
     *,
@@ -1266,6 +1472,27 @@ def prepare_admission(
     )
     expected = _canonical_publication_identity(expected_plan)
     record, layer = _candidate_layer(candidate)
+    metadata_record, bottle_metadata = _candidate_bottle_metadata(candidate)
+    contract_record, bottle_contract = _candidate_bottle_contract(candidate)
+    if (
+        canonical_bytes(metadata_record) != canonical_bytes(record)
+        or canonical_bytes(contract_record) != canonical_bytes(record)
+    ):
+        raise PromotionError("candidate bottle inputs changed their record identity")
+    candidate_formula = record["candidate"]["formula"]
+    pkg_version = (
+        candidate_formula["version"]
+        if candidate_formula["revision"] == 0
+        else f"{candidate_formula['version']}_{candidate_formula['revision']}"
+    )
+    try:
+        bottle_inventory = inspect_bottle_link_inventory(
+            layer.body,
+            formula=candidate_formula["formula"],
+            version=pkg_version,
+        )
+    except BottleLinkError as error:
+        raise PromotionError(f"candidate bottle link inventory is invalid: {error}") from error
     canonical = _artifact(canonical_publication.artifact, "canonical artifact")
     if (
         candidate.digest.removeprefix("sha256:") != decision.candidate_record_digest
@@ -1294,7 +1521,330 @@ def prepare_admission(
         original_producer=MappingProxyType(
             _plain(record["candidate"]["producer"])
         ),
+        candidate_formula=MappingProxyType(
+            _plain(candidate_formula)
+        ),
+        candidate_bottle_metadata=MappingProxyType(_plain(bottle_metadata)),
+        candidate_bottle_contract=MappingProxyType(_plain(bottle_contract)),
+        candidate_bottle_inventory=MappingProxyType(_plain(bottle_inventory)),
     )
+
+
+def prepare_formula_metadata_patch(
+    *,
+    tap_root: Any,
+    prepared: PreparedAdmissionV1,
+    history: FetchedOciRecordV1 | None,
+    history_protection_snapshot: Mapping[str, Any],
+    current_tap_source: Mapping[str, Any],
+    expected_generated_metadata_sha256: str,
+    guest_layout_bytes: bytes,
+    policy: PromotionPolicyV1,
+) -> PreparedFormulaMetadataUpdateV1:
+    """Plan one path-bounded Formula selection from authenticated promotion facts."""
+
+    if not isinstance(prepared, PreparedAdmissionV1):
+        raise PromotionError("prepared Formula admission facts are missing")
+    if not isinstance(policy, PromotionPolicyV1):
+        raise PromotionError("Formula metadata policy is not protected schema 1")
+    validate_promotion_decision(asdict(prepared.decision))
+    if prepared.decision.eligibility != "eligible":
+        raise PromotionError("ineligible promotion cannot update Formula metadata")
+    current = _source(current_tap_source, "current Formula metadata source")
+    if current["repository"].lower() != policy.tap_repository.lower():
+        raise PromotionError("Formula metadata source names another tap")
+    planned_tap = _source(prepared.tap_source, "prepared Formula tap source")
+    _history(
+        history,
+        protection_snapshot=history_protection_snapshot,
+        target_abi=_nonnegative(
+            prepared.candidate_formula.get("target_abi"), "metadata target ABI"
+        ),
+        tap_source=planned_tap,
+        policy=policy,
+    )
+    assert history is not None
+    history_digest = history.digest.removeprefix("sha256:")
+    try:
+        state = load_abi_state(tap_root / "Kandelo/abi-state.json")
+    except (OSError, TapMetadataError) as error:
+        raise PromotionError(f"current Formula ABI state is invalid: {error}") from error
+    activation = state.activation
+    if (
+        activation is None
+        or activation.request_digest != prepared.decision.request_digest
+        or dict(activation.merged_pull_request)
+        != _plain(prepared.decision.merged_pull_request)
+        or activation.abi_history_record_digest != history_digest
+    ):
+        raise PromotionError("Formula metadata update differs from ABI activation authority")
+
+    formula_value = _exact(
+        prepared.candidate_formula,
+        frozenset(
+            {
+                "tap",
+                "formula",
+                "version",
+                "revision",
+                "bottle_rebuild",
+                "architecture",
+                "target_abi",
+                "bottle_contract_sha256",
+            }
+        ),
+        "prepared candidate Formula",
+    )
+    name = _stable_id(formula_value["formula"], "metadata Formula")
+    architecture = formula_value["architecture"]
+    if architecture not in {"wasm32", "wasm64"}:
+        raise PromotionError("metadata architecture is unsupported")
+    target_abi = _nonnegative(formula_value["target_abi"], "metadata target ABI")
+    if (
+        state.current_abi != target_abi
+        or formula_value["tap"].lower() != policy.tap_repository.lower()
+        or prepared.decision.formula_subject
+        != exact_formula_subject(name, architecture)
+    ):
+        raise PromotionError("Formula metadata subject differs from current ABI authority")
+    version = _text(formula_value["version"], "metadata Formula version", 256)
+    revision = _nonnegative(formula_value["revision"], "metadata Formula revision")
+    rebuild = _nonnegative(
+        formula_value["bottle_rebuild"], "metadata Formula rebuild"
+    )
+    contract_digest = _digest(
+        formula_value["bottle_contract_sha256"], "metadata bottle contract"
+    )
+    try:
+        contract = load_bottle_contract(
+            canonical_bytes(_plain(prepared.candidate_bottle_contract))
+        )
+    except (CanonicalJsonError, ContractError) as error:
+        raise PromotionError(f"prepared bottle contract is invalid: {error}") from error
+    if (
+        hashlib.sha256(canonical_bytes(contract)).hexdigest() != contract_digest
+        or contract["target"]["abi"] != target_abi
+        or contract["target"]["architecture"] != architecture
+        or contract["formula"]["name"] != name
+        or contract["formula"]["version"] != version
+        or contract["formula"]["revision"] != revision
+        or contract["formula"]["rebuild"] != rebuild
+    ):
+        raise PromotionError("prepared bottle contract differs from the candidate Formula")
+    formula_components = [
+        component
+        for component in contract["formula"]["source_components"]
+        if component["id"] == "formula"
+    ]
+    if len(formula_components) != 1:
+        raise PromotionError("prepared bottle contract has no exact Formula source identity")
+    normalized = _digest(
+        formula_components[0]["sha256"], "authenticated normalized Formula"
+    )
+    guest_layout_inputs = [
+        component
+        for component in contract["kandelo_inputs"]
+        if component["path"] == "homebrew/kandelo-guest-layout.json"
+    ]
+    if (
+        len(guest_layout_inputs) != 1
+        or guest_layout_inputs[0]["kind"] != "file"
+        or not isinstance(guest_layout_bytes, bytes)
+        or hashlib.sha256(guest_layout_bytes).hexdigest()
+        != guest_layout_inputs[0]["sha256"]
+    ):
+        raise PromotionError("guest layout differs from the captured build input")
+    try:
+        guest_layout = load_guest_layout(guest_layout_bytes)
+    except BottleLinkError as error:
+        raise PromotionError(f"captured guest layout is invalid: {error}") from error
+    generated = _digest(
+        expected_generated_metadata_sha256, "expected generated Formula metadata"
+    )
+
+    canonical = _artifact(prepared.canonical, "prepared canonical bottle")
+    layer = _artifact(prepared.promoted_layer, "prepared promoted layer")
+    if (
+        layer["sha256"] != prepared.decision.bottle_layer_sha256
+        or layer["bytes"] != prepared.decision.bottle_layer_bytes
+    ):
+        raise PromotionError("Formula metadata layer differs from the promotion decision")
+    canonical_repository_name = canonical_repository(policy, target_abi, name)
+    canonical_repository_reference = "ghcr.io/" + canonical_repository_name
+    if canonical["immutable_reference"] != (
+        canonical_repository_reference + "@sha256:" + canonical["sha256"]
+    ):
+        raise PromotionError("Formula metadata canonical reference escaped its ABI namespace")
+    candidate_repository_name = canonical_repository(
+        policy, target_abi, name, candidate=True
+    )
+    if layer["immutable_reference"] != (
+        "ghcr.io/"
+        + candidate_repository_name
+        + "@sha256:"
+        + layer["sha256"]
+    ):
+        raise PromotionError("Formula metadata layer escaped its candidate namespace")
+
+    metadata = _exact(
+        prepared.candidate_bottle_metadata,
+        frozenset({name}),
+        "candidate Homebrew bottle metadata",
+    )
+    entry = _exact(
+        metadata[name],
+        frozenset({"formula", "bottle"}),
+        "candidate Homebrew bottle entry",
+    )
+    formula_metadata = _exact(
+        entry["formula"],
+        frozenset({"name", "path", "pkg_version"}),
+        "candidate Homebrew Formula metadata",
+    )
+    bottle_metadata = _exact(
+        entry["bottle"],
+        frozenset({"root_url", "cellar", "rebuild", "tags"}),
+        "candidate Homebrew bottle projection",
+    )
+    expected_formula_path = (
+        "Library/Taps/"
+        + policy.tap_repository.split("/", 1)[0]
+        + "/"
+        + policy.tap_repository.split("/", 1)[1]
+        + f"/Formula/{name}.rb"
+    )
+    expected_pkg_version = version if revision == 0 else f"{version}_{revision}"
+    tags = _exact(
+        bottle_metadata["tags"],
+        frozenset({f"{architecture}_kandelo"}),
+        "candidate Homebrew bottle tags",
+    )
+    tag = _exact(
+        tags[f"{architecture}_kandelo"],
+        frozenset({"sha256"}),
+        "candidate Homebrew bottle tag",
+    )
+    candidate_root = "https://ghcr.io/v2/" + candidate_repository_name
+    if (
+        formula_metadata["name"] != name
+        or formula_metadata["path"] != expected_formula_path
+        or formula_metadata["pkg_version"] != expected_pkg_version
+        or bottle_metadata["root_url"] != candidate_root
+        or _nonnegative(bottle_metadata["rebuild"], "candidate bottle rebuild")
+        != rebuild
+        or _digest(tag["sha256"], "candidate bottle layer") != layer["sha256"]
+    ):
+        raise PromotionError("candidate Homebrew metadata differs from exact Formula/layer")
+    candidate_cellar = _text(
+        bottle_metadata["cellar"], "candidate bottle cellar", 4096
+    )
+    if candidate_cellar not in {
+        "any",
+        "any_skip_relocation",
+        guest_layout["cellar"],
+    }:
+        raise PromotionError("candidate bottle cellar differs from the captured guest layout")
+    cellar = str(guest_layout["cellar"])
+    try:
+        inventory = validate_bottle_link_inventory(
+            prepared.candidate_bottle_inventory,
+            formula=name,
+            version=expected_pkg_version,
+        )
+        link_manifest = build_link_manifest(
+            inventory=inventory,
+            guest_layout=guest_layout,
+            formula=name,
+            version=expected_pkg_version,
+            architecture=architecture,
+            target_abi=target_abi,
+            bottle_url=(
+                "https://ghcr.io/v2/"
+                + canonical_repository_name
+                + "/blobs/sha256:"
+                + layer["sha256"]
+            ),
+            bottle_sha256=layer["sha256"],
+            bottle_bytes=layer["bytes"],
+        )
+    except BottleLinkError as error:
+        raise PromotionError(f"candidate link manifest cannot be derived: {error}") from error
+    link_manifest_path = (
+        f"Kandelo/link/{name}-{expected_pkg_version}-"
+        f"rebuild{rebuild}-{architecture}.json"
+    )
+    producer = _exact(
+        prepared.original_producer,
+        frozenset({"request_sha256", "head", "run_id"}),
+        "original candidate producer",
+    )
+    if (
+        _digest(producer["request_sha256"], "candidate producer request")
+        != prepared.decision.request_digest
+        or _git_sha(producer["head"], "candidate producer head")
+        != prepared.request_source["commit"]
+    ):
+        raise PromotionError("candidate producer differs from prepared admission source")
+    run_id = _positive(producer["run_id"], "candidate producer run")
+    request_source = _source(prepared.request_source, "prepared request source")
+    update = FormulaMetadataUpdateV1(
+        formula=name,
+        architecture=architecture,
+        expected_main_commit=current["commit"],
+        expected_normalized_formula_sha256=normalized,
+        expected_generated_metadata_sha256=generated,
+        allowed_paths=(
+            f"Formula/{name}.rb",
+            f"Kandelo/formula/{name}.json",
+            "Kandelo/metadata.json",
+            link_manifest_path,
+        ),
+        link_manifest_path=link_manifest_path,
+        link_manifest_sha256=hashlib.sha256(
+            link_manifest_bytes(link_manifest)
+        ).hexdigest(),
+        canonical_manifest_digest=canonical["sha256"],
+        bottle_layer_sha256=layer["sha256"],
+        bottle_layer_bytes=layer["bytes"],
+        target_abi=target_abi,
+    )
+    promoted = PromotedBottleMetadataV1(
+        formula=name,
+        architecture=architecture,
+        version=version,
+        revision=revision,
+        rebuild=rebuild,
+        canonical_root_url=(
+            "https://ghcr.io/v2/" + canonical_repository_name
+        ),
+        cellar=cellar,
+        built_by=(
+            "https://github.com/"
+            + policy.tap_repository
+            + "/actions/runs/"
+            + str(run_id)
+        ),
+        built_from=MappingProxyType(
+            {
+                "formula_sha256": normalized,
+                "kandelo_commit": request_source["commit"],
+                "kandelo_repository": request_source["repository"],
+                "tap_commit": planned_tap["commit"],
+                "tap_repository": planned_tap["repository"],
+            }
+        ),
+        link_manifest=MappingProxyType(_plain(link_manifest)),
+    )
+    try:
+        patch = plan_formula_metadata_patch(
+            tap_root,
+            current_tap_source=current,
+            update=update,
+            promoted=promoted,
+        )
+    except TapMetadataError as error:
+        raise PromotionError(f"Formula metadata patch is invalid: {error}") from error
+    return PreparedFormulaMetadataUpdateV1(update=update, patch=patch)
 
 
 def finalize_admission_record(
