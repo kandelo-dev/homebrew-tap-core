@@ -51,31 +51,74 @@ class Nethack < Formula
                     out_dir/"runtime/license"
   end
 
-  test do
-    runtime_files = {}
-    (share/"nethack").glob("**/*").select(&:file?).each do |path|
-      relative = path.relative_path_from(share/"nethack")
-      runtime_files["#{GUEST_HACKDIR}/#{relative}"] = path
+  def post_install
+    playground = HOMEBREW_PREFIX/"share/nethack"
+    save = playground/"save"
+    [playground, save].each(&:mkpath)
+    chmod 0755, playground
+    chmod 0755, save
+    %w[perm record logfile xlogfile].each do |name|
+      path = playground/name
+      touch path unless path.exist?
+      chmod 0600, path
     end
-    assert_path_exists share/"nethack/nhdat"
+  end
 
-    record = testpath/"record"
-    record.write("")
-    runtime_files["/home/.nethack/record"] = record
+  test do
+    playground = HOMEBREW_PREFIX/"share/nethack"
+    save = playground/"save"
+    assert_predicate playground, :directory?
+    assert_predicate save, :directory?
+    assert_equal 0755, playground.stat.mode & 0777
+    assert_equal 0755, save.stat.mode & 0777
+    %w[perm record logfile xlogfile].each do |name|
+      path = playground/name
+      assert_predicate path, :file?
+      assert_equal 0600, path.stat.mode & 0777
+    end
 
-    paths = kandelo_run_wasm(
-      bin/"nethack", ["-showpaths"],
-      env:         { "HOME" => "/home/player" },
-      guest_files: runtime_files
+    runtime_files = {}
+    libexec.glob("*").select(&:file?).each do |path|
+      runtime_files["#{GUEST_HACKDIR}/#{path.basename}"] = path
+    end
+    assert_path_exists libexec/"nhdat"
+
+    %w[perm record logfile xlogfile].each do |name|
+      runtime_files["#{GUEST_VAR_PLAYGROUND}/#{name}"] = playground/name
+    end
+
+    ["/home/player-one", "/home/player-two"].each do |home|
+      paths = kandelo_run_wasm(
+        bin/"nethack", ["-showpaths"],
+        env:         { "HOME" => home },
+        guest_files: runtime_files
+      )
+      assert_includes paths, GUEST_HACKDIR
+      assert_includes paths, GUEST_VAR_PLAYGROUND
+      assert_includes paths, "#{home}/.nethackrc"
+      refute_includes paths, File.join("/home", ".nethack")
+      refute_includes paths, Dir.home
+    end
+
+    output = kandelo_run_pty_wasm(
+      bin/"nethack", ["-u", "Kandelo-Arc-Hum-Mal-Law"],
+      argv0:                      "#{GUEST_OPT_PREFIX}/bin/nethack",
+      env:                        {
+        "HOME" => "/home/player",
+        "TERM" => "xterm",
+        "NETHACKOPTIONS" => "windowtype:tty",
+      },
+      inputs:                     [" ", "S", "y"],
+      rerun_inputs:               [" ", "S", "y"],
+      guest_files:                runtime_files,
+      guest_directories:          ["#{GUEST_VAR_PLAYGROUND}/save"],
+      writable_guest_directories: [GUEST_VAR_PLAYGROUND],
+      initial_delay_ms:           1200,
+      input_delay_ms:             350,
+      timeout_ms:                 120_000
     )
-    assert_includes paths, GUEST_HACKDIR
-    refute_includes paths, "/usr/share/nethack"
-
-    scores = kandelo_run_wasm(
-      bin/"nethack", ["-s", "all"],
-      env:         { "HOME" => "/home/player" },
-      guest_files: runtime_files, merge_stderr: true
-    )
-    refute_match(/Cannot (?:chdir|open record file)/i, scores)
+    assert_includes output, "Saving..."
+    assert_includes output, "Restoring save file"
+    refute_match(/Cannot open save file/i, output)
   end
 end

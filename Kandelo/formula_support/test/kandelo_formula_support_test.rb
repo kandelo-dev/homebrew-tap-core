@@ -3756,6 +3756,24 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_equal [%Q(  version "3.6.7"\n)], version_declarations
   end
 
+  def test_nethack_mirrors_upstream_installed_variable_state
+    formula = File.read(File.expand_path("../../../Formula/nethack.rb", __dir__))
+
+    assert_includes formula, 'GUEST_HACKDIR = "#{GUEST_OPT_PREFIX}/libexec".freeze'
+    assert_includes formula,
+                    'GUEST_VAR_PLAYGROUND = "#{GUEST_HOMEBREW_PREFIX}/share/nethack".freeze'
+    assert_includes formula, "  def post_install\n"
+    assert_includes formula, "%w[perm record logfile xlogfile]"
+    assert_includes formula, "chmod 0755, playground"
+    assert_includes formula, "chmod 0755, save"
+    assert_includes formula, "chmod 0600, path"
+    assert_includes formula, "touch path unless path.exist?"
+    assert_includes formula, "rerun_inputs:"
+    assert_includes formula, "writable_guest_directories: [GUEST_VAR_PLAYGROUND]"
+    assert_includes formula, "Restoring save file"
+    refute_includes formula, "/home/.nethack"
+  end
+
   def test_nethack_is_a_closed_tap_recipe_with_declared_tools
     formula = File.read(File.expand_path("../../../Formula/nethack.rb", __dir__))
 
