@@ -87,8 +87,10 @@ from .records import (
     build_candidate_oci_plan,
     build_source_custody_oci_plan,
     load_tap_plan_record,
+    validate_admission_record,
     validate_abi_history_record,
 )
+from .promotion import PromotionError, validate_promotion_decision
 from .tap_metadata import (
     TapMetadataError,
     check_tap_metadata,
@@ -4307,6 +4309,12 @@ def main(arguments: list[str] | None = None) -> int:
             history_record = (
                 TAP_ROOT / "Kandelo/staging/fixtures/abi-history-record.json"
             )
+            promotion_decision = (
+                TAP_ROOT / "Kandelo/staging/fixtures/promotion-decision.json"
+            )
+            admission_record = (
+                TAP_ROOT / "Kandelo/staging/fixtures/admission-record.json"
+            )
             if fixture == tap_plan.resolve(strict=True):
                 load_tap_plan_record(fixture.read_bytes())
             elif fixture == bottle_contract.resolve(strict=True):
@@ -4322,6 +4330,14 @@ def main(arguments: list[str] | None = None) -> int:
             elif fixture == history_record.resolve(strict=True):
                 validate_abi_history_record(
                     load_canonical_mapping(fixture.read_bytes(), "ABI history fixture")
+                )
+            elif fixture == promotion_decision.resolve(strict=True):
+                validate_promotion_decision(
+                    load_canonical_mapping(fixture.read_bytes(), "promotion fixture")
+                )
+            elif fixture == admission_record.resolve(strict=True):
+                validate_admission_record(
+                    load_canonical_mapping(fixture.read_bytes(), "admission fixture")
                 )
             else:
                 raise TapRecordError(
@@ -4372,6 +4388,7 @@ def main(arguments: list[str] | None = None) -> int:
         ProductInputResolutionError,
         ProductEvidenceError,
         AbiHistoryError,
+        PromotionError,
     ) as error:
         print(f"abi-staging {args.command}: {error}", file=sys.stderr)
         return 1
