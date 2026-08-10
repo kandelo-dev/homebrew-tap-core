@@ -825,7 +825,7 @@ def _fetched_candidate_material(
     record_sha256: str,
     record: Mapping[str, Any],
     locator: Mapping[str, Any],
-) -> tuple[bytes, bytes]:
+) -> tuple[bytes, bytes, bytes]:
     if (
         getattr(fetched, "artifact_type", None) != CANDIDATE_RECORD_MEDIA_TYPE
         or getattr(fetched, "digest", None) != "sha256:" + record_sha256
@@ -839,8 +839,11 @@ def _fetched_candidate_material(
     if [getattr(layer, "role", None) for layer in layers] != [
         "bottle-layer",
         "bottle-metadata",
+        "vfs-composition-descriptor",
     ]:
-        raise ExecutionError("fetched candidate lacks exact bottle and metadata layers")
+        raise ExecutionError(
+            "fetched candidate lacks exact bottle, metadata, and VFS composition layers"
+        )
     bottle = record["candidate"]["bottle_layer"]
     metadata_matches = [
         item["artifact"]
@@ -850,7 +853,21 @@ def _fetched_candidate_material(
     if len(metadata_matches) != 1:
         raise ExecutionError("candidate record lacks one bottle metadata identity")
     metadata = metadata_matches[0]
-    identities = ((layers[0], bottle), (layers[1], metadata))
+    composition_matches = [
+        item["artifact"]
+        for item in record["candidate"]["normalized_components"]
+        if item["id"] == "vfs-composition-descriptor"
+    ]
+    if len(composition_matches) != 1:
+        raise ExecutionError(
+            "candidate record lacks one VFS composition descriptor identity"
+        )
+    composition = composition_matches[0]
+    identities = (
+        (layers[0], bottle),
+        (layers[1], metadata),
+        (layers[2], composition),
+    )
     for layer, identity in identities:
         body = getattr(layer, "body", None)
         if (
@@ -863,9 +880,12 @@ def _fetched_candidate_material(
             raise ExecutionError("fetched candidate layer differs from its record")
     try:
         parse_canonical_bytes(layers[1].body, maximum_bytes=4 * 1024 * 1024)
+        parse_canonical_bytes(layers[2].body, maximum_bytes=16 * 1024 * 1024)
     except CanonicalJsonError as error:
-        raise ExecutionError(f"candidate bottle metadata is not canonical: {error}") from error
-    return layers[0].body, layers[1].body
+        raise ExecutionError(
+            f"candidate metadata or VFS composition descriptor is not canonical: {error}"
+        ) from error
+    return layers[0].body, layers[1].body, layers[2].body
 
 
 def prepare_verification_inputs(
@@ -892,7 +912,7 @@ def prepare_verification_inputs(
     closure = _candidate_closure(bundle, selected)
     prepared_candidates: list[dict[str, Any]] = []
     for record_sha256, record, locator in closure:
-        bottle, metadata = _fetched_candidate_material(
+        bottle, metadata, composition = _fetched_candidate_material(
             fetch_candidate(locator),
             record_sha256=record_sha256,
             record=record,
@@ -903,8 +923,10 @@ def prepare_verification_inputs(
         formula_root.mkdir()
         bottle_path = formula_root / "bottle.tar.gz"
         metadata_path = formula_root / "bottle-metadata.json"
+        composition_path = formula_root / "vfs-composition-descriptor.json"
         bottle_path.write_bytes(bottle)
         metadata_path.write_bytes(metadata)
+        composition_path.write_bytes(composition)
         prepared_candidates.append(
             {
                 "formula": formula["formula"],
@@ -916,6 +938,7 @@ def prepare_verification_inputs(
                 "bottle_layer": record["candidate"]["bottle_layer"],
                 "bottle": bottle_path,
                 "metadata": metadata_path,
+                "vfs_composition_descriptor": composition_path,
             }
         )
     target = next(
@@ -1120,7 +1143,11 @@ def execute_verification_work(
                 locator,
                 transport=transport,
                 expected_artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
-                required_layer_roles=("bottle-layer", "bottle-metadata"),
+                required_layer_roles=(
+                    "bottle-layer",
+                    "bottle-metadata",
+                    "vfs-composition-descriptor",
+                ),
             )
 
     with tempfile.TemporaryDirectory(prefix="kandelo-abi-staging-verification-") as temporary:

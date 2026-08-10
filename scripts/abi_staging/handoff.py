@@ -18,6 +18,12 @@ import tarfile
 from typing import Any
 
 from .canonical import CanonicalJsonError, canonical_bytes, parse_canonical_bytes
+from .bottle_link import (
+    BottleLinkError,
+    build_link_manifest,
+    inspect_bottle_link_inventory,
+    load_guest_layout,
+)
 from .contract import (
     validate_capture_assessment,
     load_bottle_contract,
@@ -38,6 +44,7 @@ MAX_PATH_BYTES = 4096
 MAX_ARCHIVE_ENTRIES = 200_000
 MAX_DIAGNOSTIC_BYTES = 4 * 1024 * 1024
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 REPOSITORY = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 INVENTORY_KEYS = frozenset({"schema", "kind", "subject", "outcome", "files"})
@@ -55,7 +62,12 @@ RESULT_KEYS = frozenset(
     }
 )
 CANDIDATE_KEYS = frozenset(
-    {"bottle_contract_sha256", "bottle_layer", "bottle_metadata"}
+    {
+        "bottle_contract_sha256",
+        "bottle_layer",
+        "bottle_metadata",
+        "vfs_composition_descriptor",
+    }
 )
 LOCAL_ARTIFACT_KEYS = frozenset({"sha256", "bytes"})
 ALLOWED_DIRECTORIES = frozenset(
@@ -74,7 +86,9 @@ REQUIRED_COMMON_PATHS = frozenset(
         "source-custody/tap-tree.tar",
     }
 )
-SUCCESS_PATHS = frozenset({"bottle.tar.gz", "bottle-metadata.json"})
+SUCCESS_PATHS = frozenset(
+    {"bottle.tar.gz", "bottle-metadata.json", "vfs-composition-descriptor.json"}
+)
 RUN_KEYS = frozenset({"repository", "workflow_ref", "run_id", "run_attempt", "job"})
 SECRET_PATTERNS = (
     re.compile(rb"gh[pousr]_[A-Za-z0-9_]{20,}"),
@@ -199,6 +213,216 @@ def _canonical_mapping(body: bytes, field: str) -> dict[str, Any]:
     return dict(_mapping(_plain(parsed), field))
 
 
+def _source_identity(value: Any, field: str) -> dict[str, str]:
+    source = _mapping(value, field)
+    _exact_keys(source, frozenset({"repository", "commit", "tree"}), field)
+    repository = _text(source["repository"], f"{field} repository", 255)
+    commit = source["commit"]
+    tree = source["tree"]
+    if (
+        REPOSITORY.fullmatch(repository) is None
+        or not isinstance(commit, str)
+        or GIT_SHA.fullmatch(commit) is None
+        or not isinstance(tree, str)
+        or GIT_SHA.fullmatch(tree) is None
+    ):
+        raise HandoffError(f"{field} identity is invalid")
+    return {"repository": repository, "commit": commit, "tree": tree}
+
+
+def _tap_name(repository: str) -> str:
+    owner, separator, name = repository.partition("/")
+    if not separator or not name.startswith("homebrew-") or name == "homebrew-":
+        raise HandoffError("tap repository cannot derive its Homebrew tap name")
+    return f"{owner}/{name.removeprefix('homebrew-')}"
+
+
+def _package_version(version: Any, revision: Any, field: str) -> str:
+    base = _text(version, f"{field} version", 256)
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+,-]{0,255}", base) is None:
+        raise HandoffError(f"{field} version is invalid")
+    checked_revision = _integer(revision, f"{field} revision")
+    return base if checked_revision == 0 else f"{base}_{checked_revision}"
+
+
+def prepare_composition_input(
+    *,
+    context: Mapping[str, Any],
+    bottle_body: bytes,
+    metadata_body: bytes,
+    guest_layout_body: bytes,
+) -> dict[str, Any]:
+    """Bind exact bottle bytes to inert VFS composition input for Kandelo."""
+
+    value = _mapping(context, "build context")
+    if value.get("schema") != 1 or value.get("kind") != "kandelo-abi-staging-build-context":
+        raise HandoffError("build context protocol is unsupported")
+    source = _source_identity(value.get("request_source"), "composition source")
+    tap_source = _source_identity(value.get("tap_source"), "composition tap source")
+    formula = _text(value.get("formula"), "composition Formula", 128)
+    if STABLE_ID.fullmatch(formula) is None:
+        raise HandoffError("composition Formula is invalid")
+    architecture = value.get("architecture")
+    if architecture not in {"wasm32", "wasm64"}:
+        raise HandoffError("composition architecture is unsupported")
+    target_abi = _integer(value.get("target_abi"), "composition target ABI", positive=True)
+    identity = _mapping(value.get("formula_identity"), "composition Formula identity")
+    _exact_keys(
+        identity,
+        frozenset(
+            {
+                "name",
+                "version",
+                "revision",
+                "rebuild",
+                "architecture",
+                "formula_path",
+                "normalized_formula_sha256",
+            }
+        ),
+        "composition Formula identity",
+    )
+    if (
+        identity["name"] != formula
+        or identity["architecture"] != architecture
+        or identity["formula_path"] != f"Formula/{formula}.rb"
+    ):
+        raise HandoffError("composition Formula identity differs from the build context")
+    version = _text(identity["version"], "composition Formula version", 256)
+    revision = _integer(identity["revision"], "composition Formula revision")
+    pkg_version = _package_version(version, revision, "composition Formula")
+    rebuild = _integer(identity["rebuild"], "composition Formula rebuild")
+    normalized_formula_sha256 = _digest(
+        identity["normalized_formula_sha256"], "composition normalized Formula"
+    )
+    roots = [
+        _text(item, f"composition root {index}", 128)
+        for index, item in enumerate(
+            _sequence(value.get("composition_roots"), "composition roots")
+        )
+    ]
+    if (
+        not roots
+        or len(roots) > 256
+        or roots != sorted(set(roots))
+        or any(STABLE_ID.fullmatch(root) is None for root in roots)
+    ):
+        raise HandoffError("composition roots are invalid")
+    if not isinstance(bottle_body, bytes) or not 1 <= len(bottle_body) <= 2 * 1024**3:
+        raise HandoffError("composition bottle bytes are outside their bound")
+    bottle_sha256 = hashlib.sha256(bottle_body).hexdigest()
+    if not isinstance(metadata_body, bytes) or not 1 <= len(metadata_body) <= MAX_JSON_BYTES:
+        raise HandoffError("composition bottle metadata bytes are outside their bound")
+    try:
+        metadata_value = json.loads(metadata_body.decode("utf-8", errors="strict"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise HandoffError(f"composition bottle metadata is not UTF-8 JSON: {error}") from error
+    metadata = _mapping(metadata_value, "composition bottle metadata")
+    tap_name = _tap_name(tap_source["repository"])
+    full_name = f"{tap_name}/{formula}"
+    if frozenset(metadata) != {full_name}:
+        raise HandoffError("composition bottle metadata names another Formula")
+    entry = _mapping(metadata[full_name], "composition bottle metadata entry")
+    _exact_keys(entry, frozenset({"formula", "bottle"}), "composition bottle metadata entry")
+    formula_metadata = _mapping(entry["formula"], "composition bottle Formula metadata")
+    _exact_keys(
+        formula_metadata,
+        frozenset({"name", "path", "pkg_version"}),
+        "composition bottle Formula metadata",
+    )
+    owner, tap = tap_name.split("/", 1)
+    expected_formula_path = f"Library/Taps/{owner}/homebrew-{tap}/Formula/{formula}.rb"
+    if formula_metadata != {
+        "name": formula,
+        "path": expected_formula_path,
+        "pkg_version": pkg_version,
+    }:
+        raise HandoffError("composition bottle Formula metadata differs from the plan")
+    bottle = _mapping(entry["bottle"], "composition bottle metadata payload")
+    _exact_keys(
+        bottle,
+        frozenset({"root_url", "cellar", "rebuild", "tags"}),
+        "composition bottle metadata payload",
+    )
+    root_url = _text(value.get("bottle_root_url"), "composition bottle root", 8192)
+    if (
+        not root_url.startswith("https://ghcr.io/v2/")
+        or root_url.endswith("/")
+        or bottle["root_url"] != root_url
+        or bottle["rebuild"] != rebuild
+    ):
+        raise HandoffError("composition bottle metadata uses another publication identity")
+    tag_name = f"{architecture}_kandelo"
+    tags = _mapping(bottle["tags"], "composition bottle tags")
+    if frozenset(tags) != {tag_name}:
+        raise HandoffError("composition bottle metadata has another architecture tag")
+    tag = _mapping(tags[tag_name], "composition bottle tag")
+    if frozenset(tag) not in {
+        frozenset({"local_filename", "sha256"}),
+        frozenset({"cellar", "local_filename", "sha256"}),
+    }:
+        raise HandoffError("composition bottle tag fields changed")
+    suffix = "" if rebuild == 0 else f".{rebuild}"
+    expected_filename = (
+        f"{formula}--{pkg_version}.{tag_name}.bottle{suffix}.tar.gz"
+    )
+    if (
+        tag.get("sha256") != bottle_sha256
+        or tag.get("local_filename") != expected_filename
+        or ("cellar" in tag and tag["cellar"] != bottle["cellar"])
+    ):
+        raise HandoffError("composition bottle tag differs from the exact bottle")
+    transport_url = f"{root_url}/blobs/sha256:{bottle_sha256}"
+    immutable_reference = (
+        "ghcr.io/" + root_url.removeprefix("https://ghcr.io/v2/")
+        + f"@sha256:{bottle_sha256}"
+    )
+    try:
+        inventory = inspect_bottle_link_inventory(
+            bottle_body, formula=formula, version=pkg_version
+        )
+        guest_layout = load_guest_layout(guest_layout_body)
+        link_manifest = build_link_manifest(
+            inventory=inventory,
+            guest_layout=guest_layout,
+            formula=formula,
+            version=pkg_version,
+            architecture=architecture,
+            target_abi=target_abi,
+            bottle_url=transport_url,
+            bottle_sha256=bottle_sha256,
+            bottle_bytes=len(bottle_body),
+        )
+    except BottleLinkError as error:
+        raise HandoffError(f"cannot derive composition link manifest: {error}") from error
+    result = {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-homebrew-composition-input",
+        "source": source,
+        "tap_source": tap_source,
+        "formula": {
+            "name": formula,
+            "full_name": full_name,
+            "version": version,
+            "pkg_version": pkg_version,
+            "revision": revision,
+            "rebuild": rebuild,
+            "architecture": architecture,
+            "target_abi": target_abi,
+            "normalized_formula_sha256": normalized_formula_sha256,
+        },
+        "bottle": {
+            "sha256": bottle_sha256,
+            "bytes": len(bottle_body),
+            "immutable_reference": immutable_reference,
+            "transport_url": transport_url,
+        },
+        "required_by": roots,
+        "link_manifest": link_manifest,
+    }
+    return json.loads(canonical_bytes(result))
+
+
 def load_build_run(body: bytes, *, expected_repository: str) -> dict[str, Any]:
     run = _canonical_mapping(body, "build run")
     _exact_keys(run, RUN_KEYS, "build run")
@@ -258,6 +482,10 @@ def validate_build_result(result: Mapping[str, Any]) -> None:
     _digest(candidate["bottle_contract_sha256"], "candidate bottle contract")
     _local_artifact(candidate["bottle_layer"], "candidate bottle layer")
     _local_artifact(candidate["bottle_metadata"], "candidate bottle metadata")
+    _local_artifact(
+        candidate["vfs_composition_descriptor"],
+        "candidate VFS composition descriptor",
+    )
 
 
 def load_build_result(body: bytes) -> dict[str, Any]:
@@ -303,6 +531,7 @@ def _role_for_path(path: str) -> str:
         "bottle-contract.json": "bottle-contract",
         "bottle-metadata.json": "bottle-metadata",
         "bottle.tar.gz": "bottle-layer",
+        "vfs-composition-descriptor.json": "vfs-composition-descriptor",
         "build-result.json": "build-result",
         "diagnostics/summary.txt": "diagnostic-summary",
         "source-custody/manifest.json": "source-custody-manifest",
@@ -793,6 +1022,86 @@ def _validate_capture_authorization(
     _digest(policy.get("guard_registry_sha256"), "capture authorization guard registry")
 
 
+def _composition_roots(
+    plan: Mapping[str, Any], formula_plan: Mapping[str, Any]
+) -> list[str]:
+    """Return every selected direct Formula root whose closure reaches this subject."""
+
+    target_identity = _mapping(
+        formula_plan.get("identity"), "composition target Formula identity"
+    )
+    target = (
+        _text(target_identity.get("name"), "composition target Formula", 128),
+        target_identity.get("architecture"),
+    )
+    formulae = [
+        _mapping(candidate, f"composition Formula {index}")
+        for index, candidate in enumerate(_sequence(plan.get("formulae"), "tap plan Formulae"))
+    ]
+    graph: dict[tuple[str, str], tuple[tuple[str, str], ...]] = {}
+    for index, candidate in enumerate(formulae):
+        identity = _mapping(candidate.get("identity"), f"composition Formula identity {index}")
+        subject = (
+            _text(identity.get("name"), f"composition Formula name {index}", 128),
+            identity.get("architecture"),
+        )
+        if subject[1] not in {"wasm32", "wasm64"} or subject in graph:
+            raise HandoffError("tap plan composition graph identity is invalid")
+        graph[subject] = tuple(
+            (
+                _text(dependency.get("formula"), "composition dependency", 128),
+                dependency.get("architecture"),
+            )
+            for dependency in (
+                _mapping(value, "composition dependency")
+                for value in _sequence(
+                    candidate.get("direct_dependencies"),
+                    "composition dependencies",
+                )
+            )
+        )
+    if target not in graph:
+        raise HandoffError("composition target Formula is absent from the tap graph")
+
+    memo: dict[tuple[str, str], frozenset[tuple[str, str]]] = {}
+
+    def closure(subject: tuple[str, str], trail: frozenset[tuple[str, str]]) -> frozenset[tuple[str, str]]:
+        if subject in memo:
+            return memo[subject]
+        if subject in trail or subject not in graph:
+            raise HandoffError("tap plan composition graph is cyclic or incomplete")
+        reached = {subject}
+        for dependency in graph[subject]:
+            reached.update(closure(dependency, trail | {subject}))
+        result = frozenset(reached)
+        memo[subject] = result
+        return result
+
+    tap_repository = _mapping(plan.get("tap_source"), "tap plan source").get("repository")
+    roots = set()
+    for product in (
+        _mapping(value, "selected composition product")
+        for value in _sequence(plan.get("selected_products"), "selected products")
+    ):
+        for root in (
+            _mapping(value, "selected composition root")
+            for value in _sequence(product.get("formula_roots"), "selected Formula roots")
+        ):
+            if root.get("tap") != tap_repository or root.get("architecture") != target[1]:
+                continue
+            root_subject = (
+                _text(root.get("formula"), "selected composition root Formula", 128),
+                root.get("architecture"),
+            )
+            if target in closure(root_subject, frozenset()):
+                roots.add(root_subject[0])
+    if roots:
+        return sorted(roots)
+    if formula_plan.get("work_class") != "background":
+        raise HandoffError("required Formula has no selected composition root")
+    return [target[0]]
+
+
 def prepare_build_context(
     *,
     kandelo_root: Path,
@@ -969,6 +1278,7 @@ def prepare_build_context(
         "tap_source": dict(tap_source),
         "subject": subject,
         "formula": formula,
+        "formula_identity": dict(identity),
         "architecture": architecture,
         "target_abi": contract["target"]["abi"],
         "run": run,
@@ -980,6 +1290,7 @@ def prepare_build_context(
         ).hexdigest(),
         "capture_authorization_sha256": authorization_digest,
         "dependency_layers": layers,
+        "composition_roots": _composition_roots(plan, formula_plan),
         "bottle_root_url": f"https://ghcr.io/v2/{candidate_root}",
     }
     return json.loads(canonical_bytes(context))
@@ -1161,18 +1472,29 @@ def assemble_handoff(
         bottles = raw_output / "bottles"
         archives = sorted(bottles.glob("*.tar.gz"))
         metadata_files = sorted(bottles.glob("*.bottle.json"))
-        if len(archives) != 1 or len(metadata_files) != 1:
-            raise HandoffError("successful normal build must emit one bottle and metadata file")
+        composition_files = sorted(bottles.glob("*.vfs-composition.json"))
+        if len(archives) != 1 or len(metadata_files) != 1 or len(composition_files) != 1:
+            raise HandoffError(
+                "successful normal build must emit one bottle, metadata file, and VFS composition descriptor"
+            )
         _copy_regular(archives[0], handoff / "bottle.tar.gz", "bottle archive")
         _copy_regular(
             metadata_files[0],
             handoff / "bottle-metadata.json",
             "bottle metadata",
         )
+        _copy_regular(
+            composition_files[0],
+            handoff / "vfs-composition-descriptor.json",
+            "VFS composition descriptor",
+        )
         candidate_identity = {
             "bottle_contract_sha256": context["bottle_contract_sha256"],
             "bottle_layer": _file_identity(handoff / "bottle.tar.gz"),
             "bottle_metadata": _file_identity(handoff / "bottle-metadata.json"),
+            "vfs_composition_descriptor": _file_identity(
+                handoff / "vfs-composition-descriptor.json"
+            ),
         }
     diagnostic_sha256 = hashlib.sha256(
         (handoff / "diagnostics/summary.txt").read_bytes()
@@ -1278,6 +1600,12 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--run", required=True)
     prepare.add_argument("--retry-ordinal", required=True, type=int)
     prepare.add_argument("--out", required=True)
+    composition = commands.add_parser("prepare-composition")
+    composition.add_argument("--context", required=True)
+    composition.add_argument("--bottle", required=True)
+    composition.add_argument("--metadata", required=True)
+    composition.add_argument("--guest-layout", required=True)
+    composition.add_argument("--out", required=True)
     assemble = commands.add_parser("assemble")
     assemble.add_argument("--context", required=True)
     assemble.add_argument("--raw-output", required=True)
@@ -1317,6 +1645,29 @@ def main(arguments: list[str] | None = None) -> int:
                 retry_ordinal=args.retry_ordinal,
             )
             Path(args.out).write_bytes(canonical_bytes(context))
+        elif args.command == "prepare-composition":
+            context = _canonical_mapping(
+                _read_regular(Path(args.context).resolve(strict=True), "build context"),
+                "build context",
+            )
+            prepared = prepare_composition_input(
+                context=context,
+                bottle_body=_read_regular(
+                    Path(args.bottle).resolve(strict=True),
+                    "composition bottle",
+                    2 * 1024**3,
+                ),
+                metadata_body=_read_regular(
+                    Path(args.metadata).resolve(strict=True),
+                    "composition bottle metadata",
+                ),
+                guest_layout_body=_read_regular(
+                    Path(args.guest_layout).resolve(strict=True),
+                    "composition guest layout",
+                    64 * 1024,
+                ),
+            )
+            Path(args.out).write_bytes(canonical_bytes(prepared))
         elif args.command == "assemble":
             assemble_handoff(
                 context_path=Path(args.context).resolve(strict=True),
@@ -1371,11 +1722,17 @@ def build_miniature_build_result_fixture(
         contract = {"sha256": "b" * 64, "bytes": 128}
         bottle = {"sha256": "c" * 64, "bytes": 256}
         metadata = {"sha256": "d" * 64, "bytes": 64}
-        diagnostic_digest = "e" * 64
+        composition = {"sha256": "e" * 64, "bytes": 128}
+        diagnostic_digest = "f" * 64
     else:
         contract = _file_identity(root / "bottle-contract.json")
         bottle = _file_identity(root / "bottle.tar.gz") if outcome == "success" else None
         metadata = _file_identity(root / "bottle-metadata.json") if outcome == "success" else None
+        composition = (
+            _file_identity(root / "vfs-composition-descriptor.json")
+            if outcome == "success"
+            else None
+        )
         diagnostic_digest = hashlib.sha256(
             (root / "diagnostics/summary.txt").read_bytes()
         ).hexdigest()
@@ -1391,6 +1748,7 @@ def build_miniature_build_result_fixture(
                 "bottle_contract_sha256": contract["sha256"],
                 "bottle_layer": bottle,
                 "bottle_metadata": metadata,
+                "vfs_composition_descriptor": composition,
             }
             if outcome == "success"
             else None
@@ -1414,6 +1772,12 @@ def build_miniature_handoff_inventory_fixture() -> dict[str, Any]:
         ("source-custody/manifest.json", "source-custody-manifest", "9", 128),
         ("source-custody/tap-tree.tar", "source-custody-tree", "a", 256),
         ("source-custody/tap.bundle", "source-custody-bundle", "b", 256),
+        (
+            "vfs-composition-descriptor.json",
+            "vfs-composition-descriptor",
+            "c",
+            128,
+        ),
     ]
     inventory = {
         "schema": 1,

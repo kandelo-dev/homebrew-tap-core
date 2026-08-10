@@ -19,6 +19,7 @@ from scripts.abi_staging.records import (
     BOTTLE_CONTRACT_MEDIA_TYPE,
     BOTTLE_LAYER_MEDIA_TYPE,
     BOTTLE_METADATA_MEDIA_TYPE,
+    VFS_COMPOSITION_DESCRIPTOR_MEDIA_TYPE,
     CANDIDATE_RECORD_MEDIA_TYPE,
     CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
     ATTEMPT_OUTCOME_MEDIA_TYPE,
@@ -319,6 +320,15 @@ def _write_handoff(root: Path) -> None:
     (root / "bottle-contract.json").write_bytes(contract)
     (root / "bottle.tar.gz").write_bytes(bottle)
     (root / "bottle-metadata.json").write_bytes(metadata)
+    (root / "vfs-composition-descriptor.json").write_bytes(
+        canonical_bytes(
+            {
+                "schema": 1,
+                "kind": "kandelo-homebrew-original-bottle-tree",
+                "formula": "mini-tool",
+            }
+        )
+    )
     attempt = {
         "schema": 1,
         "kind": "kandelo-abi-staging-attempt",
@@ -521,6 +531,10 @@ class CandidateRecordTests(unittest.TestCase):
             [
                 ("bottle-layer", BOTTLE_LAYER_MEDIA_TYPE),
                 ("bottle-metadata", BOTTLE_METADATA_MEDIA_TYPE),
+                (
+                    "vfs-composition-descriptor",
+                    VFS_COMPOSITION_DESCRIPTOR_MEDIA_TYPE,
+                ),
                 ("bottle-contract", BOTTLE_CONTRACT_MEDIA_TYPE),
                 ("attempt-record", "application/vnd.kandelo.abi-staging.attempt.v1+json"),
                 ("source-custody-record", OCI_MANIFEST_MEDIA_TYPE),

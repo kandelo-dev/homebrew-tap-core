@@ -1419,29 +1419,38 @@ def _claim(
     )
 
 
-def _candidate_bottle_metadata(record: Mapping[str, Any]) -> Mapping[str, Any]:
+def _candidate_vfs_composition_descriptor(
+    record: Mapping[str, Any], *, target_abi: int
+) -> Mapping[str, Any]:
     matches = [
         item["artifact"]
         for item in record["candidate"]["normalized_components"]
-        if item["id"] == "bottle-metadata"
+        if item["id"] == "vfs-composition-descriptor"
     ]
     if len(matches) != 1:
         raise ProductInputResolutionError(
-            "candidate lacks one authenticated bottle metadata component"
+            "candidate lacks one authenticated VFS composition descriptor"
         )
-    metadata = _exact(
+    descriptor = _exact(
         matches[0],
         frozenset({"sha256", "bytes", "immutable_reference"}),
-        "candidate bottle metadata",
+        "candidate VFS composition descriptor",
     )
-    _digest(metadata["sha256"], "candidate bottle metadata digest")
-    _integer(metadata["bytes"], "candidate bottle metadata bytes", positive=True)
+    _digest(descriptor["sha256"], "candidate VFS composition descriptor digest")
+    _integer(
+        descriptor["bytes"],
+        "candidate VFS composition descriptor bytes",
+        positive=True,
+    )
     _immutable_reference(
-        metadata["immutable_reference"],
-        metadata["sha256"],
-        "candidate bottle metadata reference",
+        descriptor["immutable_reference"],
+        descriptor["sha256"],
+        "candidate VFS composition descriptor reference",
+        kind="homebrew-bottle",
+        target_abi=target_abi,
+        require_candidate=True,
     )
-    return metadata
+    return descriptor
 
 
 def _check_exact_source_artifact(
@@ -1639,7 +1648,9 @@ def resolve_product_inputs(
             _fact, record = selected_candidates[subject]
             formula = record["candidate"]["formula"]["formula"]
             layer = record["candidate"]["bottle_layer"]
-            metadata = _candidate_bottle_metadata(record)
+            descriptor = _candidate_vfs_composition_descriptor(
+                record, target_abi=target_abi
+            )
             requests = global_formula_uses[subject]
             declared = (
                 "embedded"
@@ -1673,9 +1684,9 @@ def resolve_product_inputs(
                 globally_embedded=any(
                     item.materialization == "embedded" for item in requests
                 ),
-                descriptor_sha256=metadata["sha256"],
-                descriptor_bytes=metadata["bytes"],
-                descriptor_reference=metadata["immutable_reference"],
+                descriptor_sha256=descriptor["sha256"],
+                descriptor_bytes=descriptor["bytes"],
+                descriptor_reference=descriptor["immutable_reference"],
             )
             claims.append(claim)
             claims_by_product[product_id].append(claim)

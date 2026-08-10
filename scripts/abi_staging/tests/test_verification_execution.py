@@ -87,6 +87,48 @@ def _metadata(name: str, bottle: bytes) -> bytes:
     )
 
 
+def _composition(name: str, bottle: bytes) -> bytes:
+    repository = (
+        f"kandelo-dev/homebrew-tap-core-abi-{TARGET_ABI}-candidates/{name}"
+    )
+    bottle_sha256 = hashlib.sha256(bottle).hexdigest()
+    return canonical_bytes(
+        {
+            "architecture": ARCHITECTURE,
+            "formula": name,
+            "kind": "kandelo-homebrew-original-bottle-tree",
+            "required_by": [name],
+            "schema": 1,
+            "tap": TAP_SOURCE["repository"],
+            "tree": {
+                "activation": {
+                    "capabilities": [f"homebrew-bottle:{name}"],
+                    "mode": "first-use",
+                    "roots": [f"/opt/kandelo/homebrew/Cellar/{name}/1.0"],
+                },
+                "content": {
+                    "bytes": len(bottle),
+                    "decoder": "homebrew-bottle-tar-gzip-v1",
+                    "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+                    "sha256": bottle_sha256,
+                },
+                "id": name,
+                "inventory": {},
+                "package": f"kandelo-dev/tap-core/{name}",
+                "transports": [
+                    {
+                        "kind": "external-https",
+                        "url": (
+                            f"https://ghcr.io/v2/{repository}/blobs/"
+                            f"sha256:{bottle_sha256}"
+                        ),
+                    }
+                ],
+            },
+        }
+    )
+
+
 def _candidate(
     name: str,
     *,
@@ -100,6 +142,7 @@ def _candidate(
     )
     bottle_artifact = _artifact(repository, bottle)
     metadata_artifact = _artifact(repository, metadata)
+    composition_artifact = _artifact(repository, _composition(name, bottle))
     custody_sha256 = "e" * 64
     record = {
         "candidate": {
@@ -137,6 +180,10 @@ def _candidate(
                         "sha256": custody_sha256,
                     },
                     "id": "source-custody",
+                },
+                {
+                    "artifact": composition_artifact,
+                    "id": "vfs-composition-descriptor",
                 },
             ],
             "producer": {
@@ -320,6 +367,12 @@ def _fixture() -> tuple[dict[str, object], dict[str, FetchedOciRecordV1]]:
             for item in record["candidate"]["normalized_components"]
             if item["id"] == "bottle-metadata"
         )
+        composition = _composition(record["candidate"]["formula"]["formula"], bottle)
+        composition_identity = next(
+            item["artifact"]
+            for item in record["candidate"]["normalized_components"]
+            if item["id"] == "vfs-composition-descriptor"
+        )
         return FetchedOciRecordV1(
             repository=repository,
             digest=locator["digest"],
@@ -350,6 +403,17 @@ def _fixture() -> tuple[dict[str, object], dict[str, FetchedOciRecordV1]]:
                     size=metadata_identity["bytes"],
                     title="bottle-metadata.json",
                     body=metadata,
+                ),
+                FetchedOciBlobV1(
+                    role="vfs-composition-descriptor",
+                    media_type=(
+                        "application/vnd.kandelo.homebrew."
+                        "vfs-composition-descriptor.v1+json"
+                    ),
+                    digest="sha256:" + composition_identity["sha256"],
+                    size=composition_identity["bytes"],
+                    title="vfs-composition-descriptor.json",
+                    body=composition,
                 ),
             ),
         )
@@ -473,6 +537,11 @@ class VerificationExecutionTests(unittest.TestCase):
                 ["mini-base", "mini-tool"],
             )
             self.assertEqual(len(calls), 2)
+            for candidate in prepared["candidates"]:
+                self.assertEqual(
+                    candidate["vfs_composition_descriptor"].read_bytes(),
+                    _composition(candidate["formula"], candidate["bottle"].read_bytes()),
+                )
 
     def test_missing_transitive_candidate_fails_before_verification(self) -> None:
         from scripts.abi_staging import execution

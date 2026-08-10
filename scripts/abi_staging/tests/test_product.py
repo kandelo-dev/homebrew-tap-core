@@ -417,6 +417,9 @@ class ProductInputResolverTests(unittest.TestCase):
                 "immutable_reference": f"{candidate_repository}@sha256:{layer_sha256}",
             }
             bottle_metadata_sha256 = _digest(f"bottle-metadata-{subject}")
+            composition_descriptor_sha256 = _digest(
+                f"vfs-composition-descriptor-{subject}"
+            )
             candidate = {
                 "schema": 1,
                 "kind": "kandelo-abi-staging-candidate",
@@ -491,6 +494,17 @@ class ProductInputResolverTests(unittest.TestCase):
                                 "immutable_reference": (
                                     "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-sources/"
                                     f"{name}@sha256:{source_sha256}"
+                                ),
+                            },
+                        },
+                        {
+                            "id": "vfs-composition-descriptor",
+                            "artifact": {
+                                "sha256": composition_descriptor_sha256,
+                                "bytes": 96 + len(name),
+                                "immutable_reference": (
+                                    f"{candidate_repository}@sha256:"
+                                    f"{composition_descriptor_sha256}"
                                 ),
                             },
                         },
@@ -1070,15 +1084,15 @@ class ProductInputResolverTests(unittest.TestCase):
         stale = copy.deepcopy(self.candidate_records)
         next(iter(stale.values()))["common"]["source"]["tree"] = "f" * 40
         cases["stale custody"] = {"candidate_records": stale}
-        missing_metadata = copy.deepcopy(self.candidate_records)
-        first_missing = next(iter(missing_metadata.values()))
+        missing_descriptor = copy.deepcopy(self.candidate_records)
+        first_missing = next(iter(missing_descriptor.values()))
         first_missing["candidate"]["normalized_components"] = [
             item
             for item in first_missing["candidate"]["normalized_components"]
-            if item["id"] != "bottle-metadata"
+            if item["id"] != "vfs-composition-descriptor"
         ]
-        cases["missing bottle metadata"] = {
-            "candidate_records": missing_metadata
+        cases["missing VFS composition descriptor"] = {
+            "candidate_records": missing_descriptor
         }
         stale_capsule = copy.deepcopy(self.source_custody_records)
         first_capsule = next(iter(stale_capsule.values()))

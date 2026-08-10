@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 import base64
+import copy
 import hashlib
 import re
 from types import MappingProxyType
@@ -51,10 +52,12 @@ from .plan import (
 )
 from .records import (
     BOTTLE_LAYER_MEDIA_TYPE,
+    BOTTLE_METADATA_MEDIA_TYPE,
     CANDIDATE_RECORD_MEDIA_TYPE,
     CANDIDATE_REUSE_RECORD_MEDIA_TYPE,
     OCI_MANIFEST_MEDIA_TYPE,
     SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
+    VFS_COMPOSITION_DESCRIPTOR_MEDIA_TYPE,
     OciBlobV1,
     OciRecordPlanV1,
     TapRecordError,
@@ -1513,7 +1516,7 @@ def _candidate_layer(candidate: FetchedOciRecordV1) -> tuple[dict[str, Any], Fet
 
 def _candidate_bottle_metadata(
     candidate: FetchedOciRecordV1,
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any], FetchedOciBlobV1]:
     record, layers = _validated_fetched_record(
         candidate,
         artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
@@ -1540,7 +1543,7 @@ def _candidate_bottle_metadata(
         != f"{candidate.repository}@{layer.digest}"
     ):
         raise PromotionError("candidate bottle metadata differs from its record")
-    return record, _canonical_mapping(layer.body, "candidate bottle metadata")
+    return record, _canonical_mapping(layer.body, "candidate bottle metadata"), layer
 
 
 def _candidate_bottle_contract(
@@ -1579,6 +1582,178 @@ def _candidate_bottle_contract(
     return record, contract
 
 
+def _candidate_vfs_composition_descriptor(
+    candidate: FetchedOciRecordV1,
+) -> tuple[dict[str, Any], dict[str, Any], FetchedOciBlobV1]:
+    record, layers = _validated_fetched_record(
+        candidate,
+        artifact_type=CANDIDATE_RECORD_MEDIA_TYPE,
+        required_roles=(
+            "bottle-layer",
+            "vfs-composition-descriptor",
+        ),
+        field="candidate VFS composition descriptor",
+    )
+    try:
+        validate_candidate_record(record)
+    except TapRecordError as error:
+        raise PromotionError(f"candidate record is invalid: {error}") from error
+    components = [
+        item["artifact"]
+        for item in record["candidate"]["normalized_components"]
+        if item["id"] == "vfs-composition-descriptor"
+    ]
+    if len(components) != 1:
+        raise PromotionError("candidate has no exact VFS composition descriptor identity")
+    component = _artifact(components[0], "candidate VFS composition descriptor")
+    layer = layers["vfs-composition-descriptor"]
+    if (
+        component["sha256"] != layer.digest.removeprefix("sha256:")
+        or component["bytes"] != layer.size
+        or component["immutable_reference"]
+        != f"{candidate.repository}@{layer.digest}"
+        or layer.media_type != VFS_COMPOSITION_DESCRIPTOR_MEDIA_TYPE
+    ):
+        raise PromotionError(
+            "candidate VFS composition descriptor differs from its record"
+        )
+    return (
+        record,
+        _canonical_mapping(layer.body, "candidate VFS composition descriptor"),
+        layer,
+    )
+
+
+def _canonical_vfs_composition_descriptor(
+    descriptor: Mapping[str, Any],
+    *,
+    record: Mapping[str, Any],
+    candidate_repository: str,
+    canonical_repository_name: str,
+) -> bytes:
+    payload = _exact(
+        record["candidate"],
+        frozenset(
+            {
+                "formula",
+                "bottle_layer",
+                "normalized_components",
+                "direct_dependency_layers",
+                "source_custody_sha256",
+                "producer",
+                "nonendorsed",
+            }
+        ),
+        "candidate payload",
+    )
+    formula = _exact(
+        payload["formula"],
+        frozenset(
+            {
+                "tap",
+                "formula",
+                "version",
+                "revision",
+                "bottle_rebuild",
+                "architecture",
+                "target_abi",
+                "bottle_contract_sha256",
+            }
+        ),
+        "candidate Formula",
+    )
+    bottle = _artifact(payload["bottle_layer"], "candidate bottle layer")
+    value = _exact(
+        descriptor,
+        frozenset(
+            {
+                "schema",
+                "kind",
+                "architecture",
+                "tap",
+                "formula",
+                "required_by",
+                "tree",
+            }
+        ),
+        "candidate VFS composition descriptor",
+    )
+    roots = value["required_by"]
+    if (
+        value["schema"] != 1
+        or value["kind"] != "kandelo-homebrew-original-bottle-tree"
+        or value["architecture"] != formula["architecture"]
+        or value["tap"] != formula["tap"]
+        or value["formula"] != formula["formula"]
+        or not isinstance(roots, list)
+        or not roots
+        or len(roots) > 256
+        or any(not isinstance(root, str) or STABLE_ID.fullmatch(root) is None for root in roots)
+        or roots != sorted(set(roots))
+    ):
+        raise PromotionError("candidate VFS composition descriptor identity is invalid")
+    tree = _exact(
+        value["tree"],
+        frozenset(
+            {
+                "id",
+                "package",
+                "activation",
+                "content",
+                "transports",
+                "inventory",
+            }
+        ),
+        "candidate VFS composition tree",
+    )
+    content = _exact(
+        tree["content"],
+        frozenset({"media_type", "decoder", "sha256", "bytes"}),
+        "candidate VFS composition content",
+    )
+    candidate_repository_name = candidate_repository.removeprefix("ghcr.io/")
+    candidate_url = (
+        "https://ghcr.io/v2/"
+        + candidate_repository_name
+        + "/blobs/sha256:"
+        + str(bottle["sha256"])
+    )
+    transports = tree["transports"]
+    if (
+        tree["id"] != formula["formula"]
+        or not isinstance(tree["package"], str)
+        or not isinstance(tree["activation"], Mapping)
+        or not isinstance(tree["inventory"], Mapping)
+        or content
+        != {
+            "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "decoder": "homebrew-bottle-tar-gzip-v1",
+            "sha256": bottle["sha256"],
+            "bytes": bottle["bytes"],
+        }
+        or transports != [{"kind": "external-https", "url": candidate_url}]
+    ):
+        raise PromotionError(
+            "candidate VFS composition tree differs from its exact bottle"
+        )
+    canonical_url = (
+        "https://ghcr.io/v2/"
+        + canonical_repository_name
+        + "/blobs/sha256:"
+        + str(bottle["sha256"])
+    )
+    canonical = copy.deepcopy(_plain(value))
+    canonical["tree"]["transports"] = [
+        {"kind": "external-https", "url": canonical_url}
+    ]
+    body = canonical_bytes(canonical)
+    if b"-candidates/" in body:
+        raise PromotionError(
+            "canonical VFS composition descriptor retains candidate authority"
+        )
+    return body
+
+
 def build_canonical_bottle_plan(
     decision: PromotionDecisionV1,
     *,
@@ -1590,6 +1765,17 @@ def build_canonical_bottle_plan(
     if decision.eligibility != "eligible":
         raise PromotionError("ineligible candidate cannot receive a canonical manifest")
     record, layer = _candidate_layer(candidate)
+    metadata_record, _bottle_metadata, metadata_layer = _candidate_bottle_metadata(candidate)
+    (
+        descriptor_record,
+        candidate_descriptor,
+        _candidate_descriptor_layer,
+    ) = _candidate_vfs_composition_descriptor(candidate)
+    if (
+        canonical_bytes(metadata_record) != canonical_bytes(record)
+        or canonical_bytes(descriptor_record) != canonical_bytes(record)
+    ):
+        raise PromotionError("candidate metadata changed its record identity")
     formula = record["candidate"]["formula"]
     if decision.formula_subject != exact_formula_subject(
         formula["formula"], formula["architecture"]
@@ -1605,6 +1791,13 @@ def build_canonical_bottle_plan(
         or layer.size != decision.bottle_layer_bytes
     ):
         raise PromotionError("canonical plan candidate/layer differs from promotion decision")
+    canonical_descriptor_body = _canonical_vfs_composition_descriptor(
+        candidate_descriptor,
+        record=record,
+        candidate_repository=candidate.repository,
+        canonical_repository_name=destination,
+    )
+    canonical_descriptor_sha256 = hashlib.sha256(canonical_descriptor_body).hexdigest()
     metadata = {
         "schema": 1,
         "kind": "kandelo-homebrew-canonical-bottle",
@@ -1621,6 +1814,14 @@ def build_canonical_bottle_plan(
         "bottle_layer": {
             "sha256": decision.bottle_layer_sha256,
             "bytes": decision.bottle_layer_bytes,
+        },
+        "bottle_metadata": {
+            "sha256": metadata_layer.digest.removeprefix("sha256:"),
+            "bytes": metadata_layer.size,
+        },
+        "vfs_composition_descriptor": {
+            "sha256": canonical_descriptor_sha256,
+            "bytes": len(canonical_descriptor_body),
         },
     }
     return OciRecordPlanV1(
@@ -1639,6 +1840,19 @@ def build_canonical_bottle_plan(
                 body=layer.body,
                 title=layer.title,
                 mount_from=candidate.repository.removeprefix("ghcr.io/"),
+            ),
+            OciBlobV1(
+                role="bottle-metadata",
+                media_type=BOTTLE_METADATA_MEDIA_TYPE,
+                body=metadata_layer.body,
+                title=metadata_layer.title,
+                mount_from=candidate.repository.removeprefix("ghcr.io/"),
+            ),
+            OciBlobV1(
+                role="vfs-composition-descriptor",
+                media_type=VFS_COMPOSITION_DESCRIPTOR_MEDIA_TYPE,
+                body=canonical_descriptor_body,
+                title="vfs-composition-descriptor.json",
             ),
         ),
         annotations={
@@ -1768,15 +1982,25 @@ def read_canonical_publication(
         },
         transport=transport,
         expected_artifact_type=CANONICAL_BOTTLE_MANIFEST_MEDIA_TYPE,
-        required_layer_roles=("bottle-layer",),
+        required_layer_roles=(
+            "bottle-layer",
+            "bottle-metadata",
+            "vfs-composition-descriptor",
+        ),
     )
     plan = build_canonical_bottle_plan(decision, candidate=candidate, policy=policy)
     if (
         fetched.manifest != build_oci_manifest(plan)
         or fetched.config.body != plan.config.body
-        or len(fetched.layers) != 1
-        or fetched.layers[0].body != plan.layers[0].body
-        or fetched.layers[0].digest != plan.layers[0].digest
+        or len(fetched.layers) != len(plan.layers)
+        or any(
+            fetched_layer.body != planned_layer.body
+            or _descriptor_identity(fetched_layer)
+            != _descriptor_identity(planned_layer)
+            for fetched_layer, planned_layer in zip(
+                fetched.layers, plan.layers, strict=True
+            )
+        )
     ):
         raise PromotionError("canonical readback differs from the exact unchanged-layer plan")
     return expected
@@ -2168,7 +2392,7 @@ def prepare_admission(
     )
     expected = _canonical_publication_identity(expected_plan)
     record, layer = _candidate_layer(candidate)
-    metadata_record, bottle_metadata = _candidate_bottle_metadata(candidate)
+    metadata_record, bottle_metadata, _metadata_layer = _candidate_bottle_metadata(candidate)
     contract_record, bottle_contract = _candidate_bottle_contract(candidate)
     if (
         canonical_bytes(metadata_record) != canonical_bytes(record)
