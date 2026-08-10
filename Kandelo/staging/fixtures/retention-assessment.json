@@ -1,0 +1,27 @@
+{
+  "assessment": {
+    "artifact_class": "candidate",
+    "deletion_eligible": true,
+    "grace_complete": true,
+    "kind": "kandelo-abi-staging-retention-assessment",
+    "pins": [],
+    "reason": "unreferenced-grace-complete",
+    "schema": 1,
+    "target_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+    "unreferenced_since": "2026-07-11T12:00:00Z"
+  },
+  "kind": "kandelo-retention-fixture",
+  "schema": 1,
+  "target": {
+    "artifact_class": "candidate",
+    "immutable_reference": "ghcr.io/kandelo-dev/homebrew-tap-core-abi-7-candidates/bash@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "kind": "kandelo-abi-staging-retention-target",
+    "record_kind": "kandelo-abi-staging-candidate",
+    "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "repository": "ghcr.io/kandelo-dev/homebrew-tap-core-abi-7-candidates/bash",
+    "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "schema": 1,
+    "source_custody_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+    "target_digest": "1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

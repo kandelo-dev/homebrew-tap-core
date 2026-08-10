@@ -23,6 +23,7 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     @verification = load_workflow("abi-staging-verification.yml")
     @maintenance = load_workflow("abi-staging-maintenance.yml")
     @history = load_workflow("abi-staging-abi-history.yml")
+    @cleanup = load_workflow("abi-staging-candidate-cleanup.yml")
   end
 
   def copy(value = @workflow)
@@ -88,6 +89,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     refute_empty error.message
   end
 
+  def assert_cleanup_rejected(label)
+    changed = copy(@cleanup)
+    yield changed
+    error = assert_raises(AbiStagingWorkflowCheck::Violation, label) do
+      AbiStagingWorkflowCheck.check_cleanup(changed)
+    end
+    refute_empty error.message
+  end
+
   def test_reviewed_workflows_pass
     AbiStagingWorkflowCheck.check(@workflow)
     AbiStagingWorkflowCheck.check_reusable(@candidate, :candidate)
@@ -95,6 +105,54 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     AbiStagingWorkflowCheck.check_reusable(@verification, :verification)
     AbiStagingWorkflowCheck.check_maintenance(@maintenance)
     AbiStagingWorkflowCheck.check_history(@history)
+    AbiStagingWorkflowCheck.check_cleanup(@cleanup)
+  end
+
+  def test_cleanup_separates_read_only_planning_from_exact_digest_deletion
+    assert_cleanup_rejected("planner gained package writes") do |workflow|
+      workflow.dig("jobs", "plan-cleanup", "permissions")["packages"] = "write"
+    end
+    assert_cleanup_rejected("writer gained content writes") do |workflow|
+      workflow.dig("jobs", "delete-candidates", "permissions")["contents"] = "write"
+    end
+    assert_cleanup_rejected("missing pre-delete reference recheck") do |workflow|
+      step = last_run_step(workflow, "delete-candidates")
+      step["run"] = step["run"].sub("--recheck-live", "")
+    end
+    assert_cleanup_rejected("missing anonymous absence proof") do |workflow|
+      step = last_run_step(workflow, "delete-candidates")
+      step["run"] = step["run"].sub("--anonymous-absence", "")
+    end
+    assert_cleanup_rejected("missing immutable tombstone") do |workflow|
+      step = last_run_step(workflow, "delete-candidates")
+      step["run"] = step["run"].sub("--immutable-tombstone", "")
+    end
+    assert_cleanup_rejected("missing exact workflow artifact identity") do |workflow|
+      step = last_run_step(workflow, "delete-candidates")
+      step.fetch("env").delete("GITHUB_RUN_ID")
+    end
+  end
+
+  def test_cleanup_rejects_broad_delete_glob_candidate_execution_and_sleep
+    assert_cleanup_rejected("broad package delete") do |workflow|
+      last_run_step(workflow, "delete-candidates")["run"] +=
+        "\ngh api --method DELETE /orgs/example/packages/container/all\n"
+    end
+    assert_cleanup_rejected("glob target") do |workflow|
+      event = workflow.key?("on") ? workflow["on"] : workflow[true]
+      event.dig("workflow_dispatch", "inputs", "target_reference")["default"] = "*"
+    end
+    assert_cleanup_rejected("candidate execution") do |workflow|
+      last_run_step(workflow, "delete-candidates")["run"] +=
+        "\nbash scripts/abi-staging-build-bottle.sh\n"
+    end
+    assert_cleanup_rejected("sleeping cleanup runner") do |workflow|
+      last_run_step(workflow, "delete-candidates")["run"] += "\nsleep 60\n"
+    end
+    assert_cleanup_rejected("personal token fallback") do |workflow|
+      last_run_step(workflow, "delete-candidates")["env"]["GH_TOKEN"] =
+        "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
+    end
   end
 
   def test_discovery_uses_exact_candidate_data_and_immutable_policy_code

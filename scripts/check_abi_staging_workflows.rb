@@ -1171,6 +1171,164 @@ module AbiStagingWorkflowCheck
     raise Violation, "maintenance workflow structure is incomplete: #{error.message}"
   end
 
+  def check_cleanup(workflow)
+    require_contract(workflow.fetch("permissions") == {},
+                     "cleanup workflow permissions must be empty")
+    event = triggers(workflow)
+    require_contract(event.keys.sort == %w[schedule workflow_dispatch] &&
+                     event.fetch("schedule") == [{"cron" => "17 4 * * *"}],
+                     "cleanup workflow triggers changed")
+    inputs = event.fetch("workflow_dispatch").fetch("inputs")
+    require_contract(inputs.keys == %w[mode target_reference reason_category justification],
+                     "cleanup workflow gained a free-form selector")
+    require_contract(inputs.fetch("mode").slice("required", "type", "default", "options") == {
+                       "required" => true,
+                       "type" => "choice",
+                       "default" => "ordinary",
+                       "options" => %w[ordinary immediate-purge]
+                     }, "cleanup mode is not a closed choice")
+    require_contract(inputs.fetch("target_reference").slice("required", "type", "default") == {
+                       "required" => false,
+                       "type" => "string",
+                       "default" => ""
+                     }, "cleanup target must remain one optional exact reference")
+    require_contract(inputs.fetch("reason_category").slice("required", "type", "default", "options") == {
+                       "required" => true,
+                       "type" => "choice",
+                       "default" => "retention-expired",
+                       "options" => %w[retention-expired malicious-object legal-removal pathological-size]
+                     }, "cleanup reason is not a closed choice")
+    require_contract(inputs.fetch("justification").slice("required", "type", "default") == {
+                       "required" => false,
+                       "type" => "string",
+                       "default" => ""
+                     }, "cleanup justification input changed")
+    require_contract(workflow.fetch("concurrency") == {
+                       "group" => "abi-staging-candidate-cleanup",
+                       "cancel-in-progress" => false
+                     }, "cleanup concurrency changed")
+
+    jobs = workflow.fetch("jobs")
+    require_contract(jobs.keys == %w[plan-cleanup delete-candidates],
+                     "cleanup workflow job split changed")
+    planner = jobs.fetch("plan-cleanup")
+    writer = jobs.fetch("delete-candidates")
+    require_contract(planner.fetch("permissions") == {
+                       "contents" => "read", "packages" => "read"
+                     }, "cleanup planner is not read-only")
+    require_contract(writer.fetch("permissions") == {
+                       "actions" => "read",
+                       "contents" => "read",
+                       "packages" => "write"
+                     }, "cleanup writer permissions changed")
+    require_contract(writer.fetch("needs") == "plan-cleanup" &&
+                     writer.fetch("if") == "needs.plan-cleanup.outputs.has-work == 'true'",
+                     "cleanup deletion is not gated by the exact protected plan")
+    [planner, writer].each do |job|
+      require_contract(job.fetch("runs-on") == "ubuntu-latest" &&
+                       job.fetch("timeout-minutes").between?(1, 30),
+                       "cleanup runner or timeout changed")
+      require_contract(!job.key?("environment") && !job.key?("secrets") &&
+                       job.fetch("steps").none? { |step| step["continue-on-error"] == true },
+                       "cleanup job gained credentials or swallowed failure")
+      check_actions(job)
+    end
+
+    planner_checkout = action_steps(planner, CHECKOUT)
+    writer_checkout = action_steps(writer, CHECKOUT)
+    require_contract(planner_checkout.length == 1 &&
+                     planner_checkout.fetch(0).fetch("with") == {
+                       "ref" => "refs/heads/main",
+                       "fetch-depth" => 1,
+                       "persist-credentials" => false,
+                       "path" => "tap-authority"
+                     }, "cleanup planner does not execute protected tap main")
+    require_contract(writer_checkout.length == 1 &&
+                     writer_checkout.fetch(0).fetch("with") == {
+                       "ref" => "${{ needs.plan-cleanup.outputs.tap-commit }}",
+                       "fetch-depth" => 1,
+                       "persist-credentials" => false,
+                       "path" => "tap-authority"
+                     }, "cleanup writer does not execute the exact planned code")
+    [planner, writer].each do |job|
+      setups = action_steps(job, SETUP_PYTHON)
+      require_contract(setups.length == 1 &&
+                       setups.fetch(0).dig("with", "python-version") == "3.13",
+                       "cleanup job lacks declared Python")
+    end
+    downloads = action_steps(writer, DOWNLOAD_ARTIFACT)
+    require_contract(downloads.length == 1 &&
+                     downloads.fetch(0).dig("with", "artifact-ids") ==
+                       "${{ needs.plan-cleanup.outputs.artifact-id }}",
+                     "cleanup writer does not consume the exact planner artifact")
+
+    planner_commands = run_steps(planner)
+    writer_commands = run_steps(writer)
+    require_contract(planner_commands.length == 1 && writer_commands.length == 1,
+                     "cleanup jobs must each use one protected coordinator")
+    planner_step = planner_commands.fetch(0)
+    writer_step = writer_commands.fetch(0)
+    planner_source = planner_step.fetch("run")
+    writer_source = writer_step.fetch("run")
+    require_contract(planner_step.fetch("working-directory") == "tap-authority" &&
+                     planner_source.include?("python3 -m scripts.abi_staging.cleanup plan-live") &&
+                     planner_source.include?("--enumerate-public-records") &&
+                     planner_source.include?("--recheck-lifecycle") &&
+                     planner_source.include?("--verify-actor-permission") &&
+                     planner_source.include?("--grace-days 30") &&
+                     planner_source.include?("--batch-size 16") &&
+                     planner_source.include?('--target-reference "$TARGET_REFERENCE"'),
+                     "cleanup planner lacks complete public pin and grace analysis")
+    required_writer_flags = [
+      "python3 -m scripts.abi_staging.cleanup execute-live",
+      '--plan "$RUNNER_TEMP/abi-staging-cleanup-plan/plan.json"',
+      '--plan-artifact-id "$PLAN_ARTIFACT_ID"',
+      '--plan-artifact-digest "$PLAN_ARTIFACT_DIGEST"',
+      "--recheck-live",
+      "--one-exact-version",
+      "--anonymous-absence",
+      "--immutable-tombstone",
+      "--batch-size 16"
+    ]
+    require_contract(writer_step.fetch("working-directory") == "tap-authority" &&
+                     required_writer_flags.all? { |flag| writer_source.include?(flag) },
+                     "cleanup writer lacks exact recheck, deletion, or tombstone guards")
+    require_contract(writer_step.fetch("env") == {
+                       "GITHUB_ACTOR" => "${{ github.actor }}",
+                       "GITHUB_REPOSITORY" => "${{ github.repository }}",
+                       "GITHUB_RUN_ATTEMPT" => "${{ github.run_attempt }}",
+                       "GITHUB_RUN_ID" => "${{ github.run_id }}",
+                       "GITHUB_SHA" => "${{ github.sha }}",
+                       "GITHUB_TOKEN" => "${{ github.token }}",
+                       "GITHUB_WORKFLOW_REF" => "${{ github.workflow_ref }}",
+                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
+                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
+                       "PLAN_ARTIFACT_DIGEST" => "${{ needs.plan-cleanup.outputs.artifact-digest }}",
+                       "PLAN_ARTIFACT_ID" => "${{ needs.plan-cleanup.outputs.artifact-id }}"
+                     }, "cleanup writer does not authenticate the exact planner upload")
+    require_no_candidate_execution(planner_source, "cleanup planner")
+    require_no_candidate_execution(writer_source, "cleanup writer")
+    require_contract(!writer_source.match?(/(?:^|\s)(?:gh|oras)\s+[^\n]*(?:delete|remove)/i) &&
+                     !writer_source.match?(/(?:^|\s)(?:rm|rmdir)\s/) &&
+                     !writer_source.match?(/[?*\[]/) &&
+                     !writer_source.match?(/(?:^|\s)(?:eval|source|curl|wget|sleep)(?:\s|$)/),
+                     "cleanup writer gained broad deletion, globbing, shell fetch, or sleep")
+    all_text = flatten(workflow).join("\n")
+    require_contract(!all_text.include?("${{ secrets."),
+                     "cleanup workflow may not use repository secrets")
+
+    planner_uploads = action_steps(planner, UPLOAD_ARTIFACT)
+    writer_uploads = action_steps(writer, UPLOAD_ARTIFACT)
+    require_contract(planner_uploads.length == 1 && writer_uploads.length == 1 &&
+                     [planner_uploads.fetch(0), writer_uploads.fetch(0)].all? do |step|
+                       step.dig("with", "if-no-files-found") == "error" &&
+                         step.dig("with", "compression-level") == 0
+                     end, "cleanup handoffs are not retained exactly")
+    true
+  rescue KeyError, NoMethodError => error
+    raise Violation, "cleanup workflow structure is incomplete: #{error.message}"
+  end
+
   def check_history(workflow)
     require_contract(workflow.fetch("permissions") == {},
                      "history workflow permissions must be empty")
@@ -1329,13 +1487,15 @@ if $PROGRAM_NAME == __FILE__
         [File.join(root, ".github/workflows/abi-staging-reuse.yml"), :check_reuse],
         [File.join(root, ".github/workflows/abi-staging-verification.yml"), :verification],
         [File.join(root, ".github/workflows/abi-staging-maintenance.yml"), :check_maintenance],
-        [File.join(root, ".github/workflows/abi-staging-abi-history.yml"), :check_history]
+        [File.join(root, ".github/workflows/abi-staging-abi-history.yml"), :check_history],
+        [File.join(root, ".github/workflows/abi-staging-candidate-cleanup.yml"), :check_cleanup]
       ]
     else
       ARGV.map do |path|
         method = case File.basename(path)
         when "abi-staging-maintenance.yml" then :check_maintenance
         when "abi-staging-abi-history.yml" then :check_history
+        when "abi-staging-candidate-cleanup.yml" then :check_cleanup
         when "abi-staging-candidate.yml" then :candidate
         when "abi-staging-reuse.yml" then :check_reuse
         when "abi-staging-verification.yml" then :verification
