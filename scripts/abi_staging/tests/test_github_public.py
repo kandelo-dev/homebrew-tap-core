@@ -17,6 +17,7 @@ from scripts.abi_staging.request import load_request_issuer_policy
 
 
 FIXTURES = TAP_ROOT / "Kandelo/staging/fixtures/request"
+ASSET_CREATED_AT = "2026-08-09T10:00:00Z"
 POLICY = load_request_issuer_policy(
     TAP_ROOT / "Kandelo/staging/request-issuers.toml",
     expected_tap="kandelo-dev/homebrew-tap-core",
@@ -91,17 +92,23 @@ class GitHubPublicClientTests(unittest.TestCase):
         assets = "https://api.github.com/repos/Automattic/kandelo/releases/9/assets"
         opener.add(
             f"{assets}?per_page=1&page=1",
-            json_response([{"id": 11, "name": asset_name, "browser_download_url": public_url}]),
+            json_response([{
+                "id": 11,
+                "name": asset_name,
+                "browser_download_url": public_url,
+                "created_at": ASSET_CREATED_AT,
+            }]),
         )
         opener.add(f"{assets}?per_page=1&page=2", json_response([]))
         add_asset_download(opener, public_url, body)
         add_asset_download(opener, public_url, body)
 
         scanned = client.scan()
-        manual = client.discover_url(public_url)
+        manual = client.discover_url(public_url, created_at=ASSET_CREATED_AT)
         self.assertEqual(scanned, (manual,))
         self.assertEqual(manual.request_digest, hashlib.sha256(body).hexdigest())
         self.assertEqual(manual.release_tag, "abi-staging-pr-19")
+        self.assertEqual(manual.created_at, ASSET_CREATED_AT)
 
     def test_duplicate_pagination_and_discovery_fail_closed(self) -> None:
         opener = FakeOpener()
@@ -131,11 +138,21 @@ class GitHubPublicClientTests(unittest.TestCase):
             assets = []
             for asset_id, index in enumerate(order, start=11):
                 body, name, url = fixtures[index]
-                assets.append({"id": asset_id, "name": name, "browser_download_url": url})
+                assets.append({
+                    "id": asset_id,
+                    "name": name,
+                    "browser_download_url": url,
+                    "created_at": ASSET_CREATED_AT,
+                })
                 add_asset_download(opener, url, body)
             if duplicate:
                 body, name, url = fixtures[order[0]]
-                assets.append({"id": 99, "name": name, "browser_download_url": url})
+                assets.append({
+                    "id": 99,
+                    "name": name,
+                    "browser_download_url": url,
+                    "created_at": ASSET_CREATED_AT,
+                })
                 add_asset_download(opener, url, body)
             endpoint = "https://api.github.com/repos/Automattic/kandelo/releases/9/assets"
             opener.add(f"{endpoint}?per_page=100&page=1", json_response(assets))

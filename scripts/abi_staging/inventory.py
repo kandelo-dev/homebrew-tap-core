@@ -55,6 +55,13 @@ class CandidateInventoryV1:
 
 
 @dataclass(frozen=True)
+class AttemptInventoryV1:
+    facts: tuple[AttemptFactV1, ...]
+    locators: Mapping[str, Mapping[str, str]]
+    records: Mapping[str, Mapping[str, Any]]
+
+
+@dataclass(frozen=True)
 class VerificationInventoryV1:
     facts: tuple[VerificationFactV1, ...]
     locators: Mapping[str, Mapping[str, str]]
@@ -73,6 +80,8 @@ class PublicSchedulingInventoryV1:
     records: SchedulingRecordsV1
     candidate_locators: Mapping[str, Mapping[str, str]]
     candidate_records: Mapping[str, Mapping[str, Any]]
+    attempt_locators: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
+    attempt_records: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     source_custody_records: Mapping[str, Mapping[str, Any]] = field(
         default_factory=dict
     )
@@ -304,10 +313,12 @@ def scan_verification_repository(
     ).facts
 
 
-def scan_attempt_repository(
+def inspect_attempt_repository(
     repository: str, *, transport: OciTransportV1
-) -> tuple[AttemptFactV1, ...]:
+) -> AttemptInventoryV1:
     facts: list[AttemptFactV1] = []
+    locators: dict[str, dict[str, str]] = {}
+    records: dict[str, dict[str, Any]] = {}
     try:
         for locator in list_public_record_locators(repository, transport=transport):
             fetched = fetch_public_record(
@@ -319,6 +330,9 @@ def scan_attempt_repository(
             record = load_canonical_mapping(fetched.config.body, "attempt outcome")
             validate_attempt_outcome_record(record)
             attempt = record["attempt"]
+            record_sha256 = fetched.digest.removeprefix("sha256:")
+            if record_sha256 in records:
+                raise InventoryError("attempt inventory repeats a record digest")
             facts.append(
                 AttemptFactV1(
                     request_sha256=attempt["request_sha256"],
@@ -328,15 +342,31 @@ def scan_attempt_repository(
                     outcome=attempt["outcome"],
                     guard_code=attempt["guard_code"],
                     completed_at=attempt["completed_at"],
-                    record_sha256=fetched.digest.removeprefix("sha256:"),
+                    record_sha256=record_sha256,
                 )
             )
+            records[record_sha256] = dict(record)
+            locators[record_sha256] = {
+                "repository": fetched.repository,
+                "digest": fetched.digest,
+                "immutable_reference": fetched.immutable_reference,
+            }
     except (OciPublicationError, ValueError) as error:
         if isinstance(error, InventoryError):
             raise
         raise InventoryError(f"attempt inventory is invalid: {error}") from error
     facts.sort(key=lambda item: item.record_sha256)
-    return tuple(facts)
+    return AttemptInventoryV1(
+        tuple(facts),
+        {key: locators[key] for key in sorted(locators)},
+        {key: records[key] for key in sorted(records)},
+    )
+
+
+def scan_attempt_repository(
+    repository: str, *, transport: OciTransportV1
+) -> tuple[AttemptFactV1, ...]:
+    return inspect_attempt_repository(repository, transport=transport).facts
 
 
 def scan_candidate_repository(
@@ -613,6 +643,8 @@ def scan_scheduling_inventory(
     if not names or len(names) > policy.max_formulae:
         raise InventoryError("tap plan Formula inventory exceeds protected policy")
     attempts: list[AttemptFactV1] = []
+    attempt_locators: dict[str, Mapping[str, str]] = {}
+    attempt_records: dict[str, Mapping[str, Any]] = {}
     candidates: list[CandidateFactV1] = []
     verifications: list[VerificationFactV1] = []
     locators: dict[str, Mapping[str, str]] = {}
@@ -627,12 +659,18 @@ def scan_scheduling_inventory(
         repository = candidate_repository(policy, target_abi, formula=name)
         inspected = inspect_candidate_repository(repository, transport=transport)
         candidates.extend(inspected.facts)
-        attempts.extend(
-            scan_attempt_repository(
-                attempt_repository(policy, target_abi, formula=name),
-                transport=transport,
-            )
+        attempt_inspected = inspect_attempt_repository(
+            attempt_repository(policy, target_abi, formula=name),
+            transport=transport,
         )
+        attempts.extend(attempt_inspected.facts)
+        for digest in attempt_inspected.locators:
+            if digest in attempt_locators or digest in attempt_records:
+                raise InventoryError(
+                    "attempt digest appears in multiple repositories"
+                )
+            attempt_locators[digest] = attempt_inspected.locators[digest]
+            attempt_records[digest] = attempt_inspected.records[digest]
         for fact in inspected.facts:
             if fact.record_sha256 in locators or fact.record_sha256 in candidate_records:
                 raise InventoryError("candidate digest appears in multiple repositories")
@@ -702,6 +740,12 @@ def scan_scheduling_inventory(
         candidate_locators={key: locators[key] for key in sorted(locators)},
         candidate_records={
             key: candidate_records[key] for key in sorted(candidate_records)
+        },
+        attempt_locators={
+            key: attempt_locators[key] for key in sorted(attempt_locators)
+        },
+        attempt_records={
+            key: attempt_records[key] for key in sorted(attempt_records)
         },
         source_custody_records=source_custody_records,
         verification_locators={
