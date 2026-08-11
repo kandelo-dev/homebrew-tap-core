@@ -24,6 +24,9 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     @maintenance = load_workflow("abi-staging-maintenance.yml")
     @history = load_workflow("abi-staging-abi-history.yml")
     @cleanup = load_workflow("abi-staging-candidate-cleanup.yml")
+    @public_discovery = File.read(
+      File.join(ROOT, "scripts/abi_staging/github_public.py")
+    )
   end
 
   def copy(value = @workflow)
@@ -100,12 +103,30 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
 
   def test_reviewed_workflows_pass
     AbiStagingWorkflowCheck.check(@workflow)
+    AbiStagingWorkflowCheck.check_public_discovery(@public_discovery)
     AbiStagingWorkflowCheck.check_reusable(@candidate, :candidate)
     AbiStagingWorkflowCheck.check_reuse(@reuse)
     AbiStagingWorkflowCheck.check_reusable(@verification, :verification)
     AbiStagingWorkflowCheck.check_maintenance(@maintenance)
     AbiStagingWorkflowCheck.check_history(@history)
     AbiStagingWorkflowCheck.check_cleanup(@cleanup)
+  end
+
+  def test_public_discovery_rejects_broad_release_listing
+    broad = @public_discovery.sub(
+      "tags = self._request_release_tags()",
+      <<~PYTHON.strip
+        repository = self.policy.issuer_repository
+        tags = self._pages(
+            f"https://api.github.com/repos/{repository}/releases"
+        )
+      PYTHON
+    )
+    refute_equal @public_discovery, broad
+    error = assert_raises(AbiStagingWorkflowCheck::Violation) do
+      AbiStagingWorkflowCheck.check_public_discovery(broad)
+    end
+    assert_match(/broad Release inventory/, error.message)
   end
 
   def test_cleanup_planning_remains_read_only

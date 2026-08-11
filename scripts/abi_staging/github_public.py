@@ -281,33 +281,70 @@ class GitHubPublicClient:
             digest, asset_name, url, tag, request, created_at
         )
 
-    def scan(self) -> tuple[DiscoveredRequestV1, ...]:
+    def _request_release_tags(self) -> tuple[str, ...]:
         repository = self.policy.issuer_repository
-        releases_endpoint = f"https://api.github.com/repos/{repository}/releases"
-        releases = self._pages(releases_endpoint)
+        prefix = self.policy.request_release_tag_prefix
+        endpoint = (
+            f"https://api.github.com/repos/{repository}/"
+            f"git/matching-refs/tags/{urllib.parse.quote(prefix, safe='')}"
+        )
+        refs = self._pages(endpoint)
+        if len(refs) > self.policy.max_release_assets:
+            raise PublicGitHubError("ABI staging request tag inventory is too large")
+        tags: set[str] = set()
+        for value in refs:
+            ref = _bounded_text(value.get("ref"), "Git reference", 512)
+            expected_prefix = f"refs/tags/{prefix}"
+            if not ref.startswith(expected_prefix):
+                raise PublicGitHubError("matching-ref response escaped its prefix")
+            tag = ref.removeprefix("refs/tags/")
+            if PR_TAG.fullmatch(tag) is None or tag in tags:
+                raise PublicGitHubError("ABI staging request tag inventory is invalid")
+            tags.add(tag)
+        return tuple(
+            sorted(
+                tags,
+                key=lambda tag: int(PR_TAG.fullmatch(tag).group(1), 10),
+            )
+        )
+
+    def _release_by_tag(self, tag: str) -> Mapping[str, Any]:
+        repository = self.policy.issuer_repository
+        endpoint = (
+            f"https://api.github.com/repos/{repository}/releases/tags/"
+            f"{urllib.parse.quote(tag, safe='')}"
+        )
+        value = self._api_json(endpoint)
+        if not isinstance(value, Mapping):
+            raise PublicGitHubError("GitHub Release response is not an object")
+        _positive_integer(value.get("id"), "Release id")
+        release_tag = _bounded_text(value.get("tag_name"), "Release tag", 256)
+        if release_tag != tag:
+            raise PublicGitHubError("GitHub Release response changed its tag")
+        if value.get("prerelease") is not True or value.get("draft") is not False:
+            raise PublicGitHubError("ABI staging Release is not a public prerelease")
+        assets = value.get("assets")
+        if not isinstance(assets, list):
+            raise PublicGitHubError("ABI staging Release assets are not an array")
+        if len(assets) > self.policy.max_release_assets:
+            raise PublicGitHubError("ABI staging Release has too many assets")
+        if any(not isinstance(asset, Mapping) for asset in assets):
+            raise PublicGitHubError("ABI staging Release contains a non-object asset")
+        return value
+
+    def scan(self) -> tuple[DiscoveredRequestV1, ...]:
+        tags = self._request_release_tags()
         seen_release_ids: set[int] = set()
-        seen_tags: set[str] = set()
         discovered: list[DiscoveredRequestV1] = []
         seen_assets: set[tuple[int, str, str]] = set()
-        for release in releases:
+        for tag in tags:
+            release = self._release_by_tag(tag)
             release_id = _positive_integer(release.get("id"), "Release id")
-            tag = _bounded_text(release.get("tag_name"), "Release tag", 256)
-            if release_id in seen_release_ids or tag in seen_tags:
+            if release_id in seen_release_ids:
                 raise PublicGitHubError("GitHub API returned a duplicate Release identity")
             seen_release_ids.add(release_id)
-            seen_tags.add(tag)
-            if not tag.startswith(self.policy.request_release_tag_prefix):
-                continue
-            if PR_TAG.fullmatch(tag) is None:
-                raise PublicGitHubError("ABI staging Release tag has invalid grammar")
-            if release.get("prerelease") is not True or release.get("draft") is not False:
-                raise PublicGitHubError("ABI staging Release is not a public prerelease")
-            assets_endpoint = (
-                f"https://api.github.com/repos/{repository}/releases/{release_id}/assets"
-            )
-            assets = self._pages(assets_endpoint)
-            if len(assets) > self.policy.max_release_assets:
-                raise PublicGitHubError("ABI staging Release has too many assets")
+            assets = release["assets"]
+            checked_assets: list[tuple[str, str, str]] = []
             for asset in assets:
                 asset_id = _positive_integer(asset.get("id"), "Release asset id")
                 name = _bounded_text(asset.get("name"), "Release asset name", 512)
@@ -322,6 +359,8 @@ class GitHubPublicClient:
                     raise PublicGitHubError("GitHub API returned a duplicate asset")
                 seen_assets.add(identity)
                 parse_request_asset_name(name)
+                checked_assets.append((name, url, created_at))
+            for name, url, created_at in checked_assets:
                 candidate = self.discover_url(url, created_at=created_at)
                 if candidate.release_tag != tag or candidate.asset_name != name:
                     raise PublicGitHubError("Release metadata and request URL disagree")
