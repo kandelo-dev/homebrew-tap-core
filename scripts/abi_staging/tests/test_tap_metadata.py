@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import replace
+from dataclasses import asdict, replace
 import gzip
 import hashlib
 import io
@@ -25,7 +25,7 @@ from scripts.abi_staging.abi_history import (
     protection_requirement_sha256,
     validate_protection_snapshot,
 )
-from scripts.abi_staging.canonical import canonical_bytes
+from scripts.abi_staging.canonical import canonical_bytes, canonical_sha256
 from scripts.abi_staging.oci import (
     FetchedOciBlobV1,
     FetchedOciRecordV1,
@@ -1423,6 +1423,89 @@ class TapMetadataTests(unittest.TestCase):
         sidecar_path.write_bytes(canonical_bytes(sidecar))
         with self.assertRaises(tap_metadata_module.TapMetadataError):
             validate(self.root, planned.update)
+
+    def test_admission_projection_observation_binds_the_exact_four_path_state(self) -> None:
+        history, snapshot, preactivation, current = self._activate_fixture()
+        prepared = self._prepared_admission(preactivation=preactivation)
+        planned = self._prepare_formula(
+            prepared=prepared,
+            history=history,
+            snapshot=snapshot,
+            current=current,
+        )
+        landed = self._materialize_patch(planned.patch, "promote bash wasm32")
+        update = asdict(planned.update)
+        record = promotion_module.finalize_admission_record(
+            prepared,
+            formula_metadata_base_source=current,
+            formula_metadata_source=landed,
+            formula_metadata_update=update,
+            post_write_readback={
+                "source": landed,
+                "formula_metadata_update": update,
+            },
+            run={
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "workflow_ref": (
+                    ".github/workflows/abi-staging-promote.yml@refs/heads/main"
+                ),
+                "run_id": 91,
+                "run_attempt": 1,
+                "job": "publish-admission",
+            },
+        )
+        observe = getattr(
+            tap_metadata_module, "build_admission_projection_observation", None
+        )
+        if observe is None:
+            self.fail("admission projection observation is absent")
+
+        projection = tap_metadata_module.validate_formula_admission_projection(
+            self.root, planned.update
+        )
+        observation = observe(self.root, record, tap_source=landed)
+
+        self.assertEqual(
+            observation,
+            {
+                "schema": 1,
+                "kind": "kandelo-pages-admission-projection",
+                "admission_record_sha256": canonical_sha256(record),
+                "formula": "bash",
+                "architecture": "wasm32",
+                "target_abi": SUCCESSOR_ABI,
+                "formula_metadata_update_sha256": canonical_sha256(update),
+                "projection_sha256": canonical_sha256(projection),
+                "tap_source": landed,
+            },
+        )
+
+        mutations = {
+            "Formula/bash.rb": lambda body: body.replace(
+                b"wasm32_kandelo", b"wasm64_kandelo", 1
+            ),
+            "Kandelo/formula/bash.json": lambda body: body.replace(
+                prepared.promoted_layer["sha256"].encode(), b"f" * 64, 1
+            ),
+            "Kandelo/metadata.json": lambda body: body.replace(
+                prepared.promoted_layer["sha256"].encode(), b"e" * 64, 1
+            ),
+            planned.update.link_manifest_path: lambda body: body.replace(
+                prepared.promoted_layer["sha256"].encode(), b"d" * 64, 1
+            ),
+        }
+        for path, mutate in mutations.items():
+            with self.subTest(path=path):
+                destination = self.root / path
+                original = destination.read_bytes()
+                changed = mutate(original)
+                self.assertNotEqual(changed, original)
+                destination.write_bytes(changed)
+                try:
+                    with self.assertRaises(tap_metadata_module.TapMetadataError):
+                        observe(self.root, record, tap_source=landed)
+                finally:
+                    destination.write_bytes(original)
 
     def test_landed_metadata_commit_has_the_exact_base_and_changed_paths(self) -> None:
         history, snapshot, preactivation, current = self._activate_fixture()

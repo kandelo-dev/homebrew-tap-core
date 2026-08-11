@@ -130,6 +130,7 @@ from .tap_metadata import (
     TapMetadataError,
     TapMetadataWriteError,
     apply_metadata_patch,
+    build_admission_projection_observation,
     check_tap_metadata,
     formula_generated_metadata_sha256,
     load_abi_state,
@@ -535,6 +536,10 @@ def _parser() -> argparse.ArgumentParser:
     publish_reuse.add_argument("--anonymous-readback", action="store_true")
     publish_reuse.add_argument("--immutable", action="store_true")
     publish_reuse.add_argument("--out", required=True)
+    validate_projection = subcommands.add_parser("validate-admission-projection")
+    validate_projection.add_argument("--tap-root", required=True)
+    validate_projection.add_argument("--record", required=True)
+    validate_projection.add_argument("--out", required=True)
     return parser
 
 
@@ -543,6 +548,144 @@ def _protected_tap_root(value: str) -> Path:
     if root != TAP_ROOT.resolve(strict=True):
         raise PolicyError("--tap-root must name this protected tap checkout")
     return root
+
+
+def _policy_owned_remote(root: Path, repository: str) -> None:
+    try:
+        remote = subprocess.run(
+            ["git", "-C", str(root), "remote", "get-url", "origin"],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as error:
+        raise TapMetadataError(f"cannot inspect tap origin repository: {error}") from error
+    if remote.startswith("git@github.com:"):
+        remote_repository = remote.removeprefix("git@github.com:")
+    else:
+        parsed = urlsplit(remote)
+        if parsed.scheme != "https" or parsed.hostname != "github.com":
+            raise TapMetadataError("tap origin is not a policy-owned GitHub repository")
+        remote_repository = parsed.path.removeprefix("/")
+    remote_repository = remote_repository.removesuffix(".git").removesuffix("/")
+    if remote_repository.lower() != repository.lower():
+        raise TapMetadataError("tap origin names another repository")
+
+
+def _require_clean_checkout(root: Path) -> None:
+    try:
+        status = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+            ],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise TapMetadataError(f"cannot inspect tap checkout changes: {error}") from error
+    if status.stdout:
+        raise TapMetadataError("protected tap checkout contains changes")
+
+
+def _write_atomic_canonical(destination: Path, value: Mapping[str, Any]) -> None:
+    parent = destination.parent.resolve(strict=True)
+    if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+        raise TapMetadataError("admission projection output is not a direct file")
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", dir=parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(canonical_bytes(value))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _validate_admission_projection(args: argparse.Namespace) -> None:
+    tap_root = _protected_tap_root(args.tap_root)
+    policy = load_promotion_policy(
+        tap_root / "Kandelo/staging/promotion-policy.toml"
+    )
+    _require_clean_checkout(tap_root)
+    _policy_owned_remote(tap_root, policy.tap_repository)
+    try:
+        record = load_canonical_mapping(
+            Path(args.record).resolve(strict=True).read_bytes(),
+            "promotion admission",
+        )
+    except OSError as error:
+        raise TapMetadataError(f"cannot load promotion admission: {error}") from error
+    validate_admission_record(record)
+    tap_source = snapshot_tap_source(tap_root, policy.tap_repository)
+    metadata_source = record["admission"]["formula_metadata_source"]
+    try:
+        source_tree = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(tap_root),
+                "rev-parse",
+                f"{metadata_source['commit']}^{{tree}}",
+            ],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        ).stdout.strip()
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(tap_root),
+                "merge-base",
+                "--is-ancestor",
+                str(metadata_source["commit"]),
+                "HEAD",
+            ],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise TapMetadataError(
+            "admission Formula metadata source is not an ancestor of current main"
+        ) from error
+    if source_tree != metadata_source["tree"]:
+        raise TapMetadataError("admission Formula metadata source tree changed")
+    observation = build_admission_projection_observation(
+        tap_root,
+        record,
+        tap_source=tap_source,
+    )
+    _require_clean_checkout(tap_root)
+    if snapshot_tap_source(tap_root, policy.tap_repository) != tap_source:
+        raise TapMetadataError(
+            "protected tap commit or tree changed during admission projection"
+        )
+    _write_atomic_canonical(Path(args.out), observation)
 
 
 def _output_directory(value: str) -> Path:
@@ -6290,6 +6433,9 @@ def main(arguments: list[str] | None = None) -> int:
             return 0
         if args.command == "publish-history-record":
             _publish_history_record(args)
+            return 0
+        if args.command == "validate-admission-projection":
+            _validate_admission_projection(args)
             return 0
         if args.command == "discover-workflow-request":
             _discover_workflow_request(args)
