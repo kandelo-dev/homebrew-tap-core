@@ -608,16 +608,6 @@ class SchedulingTests(unittest.TestCase):
 
         legacy_only, legacy_receipt = _complete(plan, libcxx)
         legacy_only = _descriptor_capable(legacy_only, False)
-        legacy_attempt = AttemptFactV1(
-            request_sha256=plan["request_digest"],
-            subject=libcxx,
-            contract_sha256=legacy_only.contract_sha256,
-            retry_ordinal=0,
-            outcome="success",
-            guard_code=None,
-            completed_at="2026-08-09T08:59:00.000Z",
-            record_sha256=_digest("legacy-libcxx-attempt"),
-        )
 
         current, _receipt = _complete(plan, openssl)
         current = _descriptor_capable(current, True)
@@ -631,7 +621,6 @@ class SchedulingTests(unittest.TestCase):
         decision = schedule_ready_batch(
             plan,
             _records(
-                legacy_attempt,
                 legacy_only,
                 legacy_receipt,
                 legacy_conflict,
@@ -650,6 +639,75 @@ class SchedulingTests(unittest.TestCase):
             current.record_sha256,
         )
         self.assertNotIn(libcxx, decision.complete)
+
+    def test_legacy_only_candidate_preserves_current_rebuild_retry_delay(self) -> None:
+        plan = _plan()
+        subject = plan["required_subjects"][0]
+        legacy, _receipt = _complete(plan, subject)
+        legacy = _descriptor_capable(legacy, False)
+        attempt = AttemptFactV1(
+            request_sha256=plan["request_digest"],
+            subject=subject,
+            contract_sha256=legacy.contract_sha256,
+            retry_ordinal=0,
+            outcome="failure",
+            guard_code="transient_infrastructure_failure",
+            completed_at="2026-08-09T10:00:00.000Z",
+            record_sha256=_digest("legacy-rebuild-transient"),
+        )
+
+        waiting = schedule_ready_batch(
+            plan,
+            _records(legacy, attempt),
+            _decision(plan),
+            now="2026-08-09T10:00:00.001Z",
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        blocker = next(item for item in waiting.blocked if item.subject == subject)
+        self.assertEqual(blocker.next_action, "wait")
+        self.assertNotIn(subject, [item.subject for item in waiting.ready])
+
+        eligible = schedule_ready_batch(
+            plan,
+            _records(legacy, attempt),
+            _decision(plan),
+            now="2026-08-09T10:15:00.000Z",
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        intent = next(item for item in eligible.ready if item.subject == subject)
+        self.assertEqual(intent.action, "build-candidate")
+        self.assertEqual(intent.attempt_ordinal, 1)
+
+    def test_legacy_only_candidate_preserves_exhausted_rebuild_attempt(self) -> None:
+        plan = _plan()
+        subject = plan["required_subjects"][0]
+        legacy, _receipt = _complete(plan, subject)
+        legacy = _descriptor_capable(legacy, False)
+        exhausted = AttemptFactV1(
+            request_sha256=plan["request_digest"],
+            subject=subject,
+            contract_sha256=legacy.contract_sha256,
+            retry_ordinal=3,
+            outcome="failure",
+            guard_code="transient_infrastructure_failure",
+            completed_at="2026-08-09T09:00:00.000Z",
+            record_sha256=_digest("legacy-rebuild-exhausted"),
+        )
+
+        decision = schedule_ready_batch(
+            plan,
+            _records(legacy, exhausted),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        self.assertNotIn(subject, [item.subject for item in decision.ready])
+        blocker = next(item for item in decision.blocked if item.subject == subject)
+        self.assertEqual(blocker.next_action, "maintainer-action")
+        self.assertTrue(blocker.exhausted)
 
     def test_at_least_once_candidate_publication_converges_by_exact_layer(self) -> None:
         plan = _plan()

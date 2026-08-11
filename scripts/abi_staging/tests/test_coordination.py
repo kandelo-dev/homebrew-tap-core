@@ -30,11 +30,7 @@ from scripts.abi_staging.reconcile import (
     PullRequestLifecycleV1,
     ReconciliationDecisionV1,
 )
-from scripts.abi_staging.scheduler import (
-    AttemptFactV1,
-    CandidateFactV1,
-    SchedulingRecordsV1,
-)
+from scripts.abi_staging.scheduler import CandidateFactV1, SchedulingRecordsV1
 from scripts.abi_staging.plan import exact_formula_subject
 from scripts.abi_staging.tests.test_verification_execution import (
     _candidate as candidate_record,
@@ -330,16 +326,6 @@ class ContractCoordinationTests(unittest.TestCase):
         legacy_only = add_candidate(
             "libcxx", "1", descriptor=False, bottle=b"legacy libcxx\n"
         )
-        legacy_attempt = AttemptFactV1(
-            request_sha256=PLAN["request_digest"],
-            subject=legacy_only.subject,
-            contract_sha256=legacy_only.contract_sha256,
-            retry_ordinal=0,
-            outcome="success",
-            guard_code=None,
-            completed_at="2026-08-09T08:59:00.000Z",
-            record_sha256="4" * 64,
-        )
         add_candidate(
             "openssl", "2", descriptor=False, bottle=b"legacy openssl\n"
         )
@@ -347,11 +333,7 @@ class ContractCoordinationTests(unittest.TestCase):
             "openssl", "3", descriptor=True, bottle=b"current openssl\n"
         )
         inventory = PublicSchedulingInventoryV1(
-            records=SchedulingRecordsV1(
-                (legacy_attempt,),
-                tuple(facts),
-                (),
-            ),
+            records=SchedulingRecordsV1((), tuple(facts), ()),
             candidate_locators=locators,
             candidate_records=records,
         )
