@@ -54,6 +54,20 @@ module AbiStagingWorkflowCheck
     job.fetch("steps").select { |step| step["uses"]&.start_with?(action) }
   end
 
+  def check_public_discovery(source)
+    broad_release = %r{https://api\.github\.com/repos/\{repository\}/releases(?:["']|\s|\?)}
+    require_contract(!source.match?(broad_release) &&
+                     !source.include?("releases/{release_id}/assets"),
+                     "public discovery restored the broad Release inventory")
+    require_contract(source.is_a?(String) &&
+                     source.include?("git/matching-refs/tags/") &&
+                     source.include?("releases/tags/") &&
+                     source.include?("tags = self._request_release_tags()") &&
+                     source.include?("release = self._release_by_tag(tag)"),
+                     "public discovery must use bounded request tags and exact Releases")
+    true
+  end
+
   def require_no_candidate_execution(source, field)
     require_contract(!source.match?(/(?:^|\s)(?:eval|source|curl|wget|sleep)(?:\s|$)/) &&
                      !source.match?(/abi-staging-(?:build|verify)-bottle/) &&
@@ -1353,6 +1367,9 @@ end
 if $PROGRAM_NAME == __FILE__
   root = File.expand_path("..", __dir__)
   begin
+    AbiStagingWorkflowCheck.check_public_discovery(
+      File.read(File.join(root, "scripts/abi_staging/github_public.py"))
+    )
     paths = if ARGV.empty?
       [
         [File.join(root, ".github/workflows/abi-staging-reconcile.yml"), :check],

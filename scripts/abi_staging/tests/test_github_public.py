@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 import hashlib
 import json
 import os
@@ -75,31 +76,41 @@ def add_asset_download(opener: FakeOpener, public_url: str, body: bytes) -> None
 
 
 class GitHubPublicClientTests(unittest.TestCase):
-    def test_scan_paginates_releases_and_assets_and_matches_manual_discovery(self) -> None:
+    def test_scan_paginates_request_tags_and_matches_manual_discovery(self) -> None:
         opener = FakeOpener()
         client = GitHubPublicClient(POLICY, opener=opener, page_size=1)
         body, asset_name, public_url = fixture_asset()
-        releases = "https://api.github.com/repos/Automattic/kandelo/releases"
-        opener.add(
-            f"{releases}?per_page=1&page=1",
-            json_response([{"id": 8, "tag_name": "unrelated", "prerelease": True, "draft": False}]),
+        refs = (
+            "https://api.github.com/repos/Automattic/kandelo/"
+            "git/matching-refs/tags/abi-staging-pr-"
         )
         opener.add(
-            f"{releases}?per_page=1&page=2",
-            json_response([{"id": 9, "tag_name": "abi-staging-pr-19", "prerelease": True, "draft": False}]),
-        )
-        opener.add(f"{releases}?per_page=1&page=3", json_response([]))
-        assets = "https://api.github.com/repos/Automattic/kandelo/releases/9/assets"
-        opener.add(
-            f"{assets}?per_page=1&page=1",
+            f"{refs}?per_page=1&page=1",
             json_response([{
-                "id": 11,
-                "name": asset_name,
-                "browser_download_url": public_url,
-                "created_at": ASSET_CREATED_AT,
+                "ref": "refs/tags/abi-staging-pr-19",
+                "object": {"type": "commit", "sha": "1" * 40},
             }]),
         )
-        opener.add(f"{assets}?per_page=1&page=2", json_response([]))
+        opener.add(f"{refs}?per_page=1&page=2", json_response([]))
+        release = (
+            "https://api.github.com/repos/Automattic/kandelo/"
+            "releases/tags/abi-staging-pr-19"
+        )
+        opener.add(
+            release,
+            json_response({
+                "id": 9,
+                "tag_name": "abi-staging-pr-19",
+                "prerelease": True,
+                "draft": False,
+                "assets": [{
+                    "id": 11,
+                    "name": asset_name,
+                    "browser_download_url": public_url,
+                    "created_at": ASSET_CREATED_AT,
+                }],
+            }),
+        )
         add_asset_download(opener, public_url, body)
         add_asset_download(opener, public_url, body)
 
@@ -109,14 +120,26 @@ class GitHubPublicClientTests(unittest.TestCase):
         self.assertEqual(manual.request_digest, hashlib.sha256(body).hexdigest())
         self.assertEqual(manual.release_tag, "abi-staging-pr-19")
         self.assertEqual(manual.created_at, ASSET_CREATED_AT)
+        broad = "https://api.github.com/repos/Automattic/kandelo/releases"
+        self.assertFalse(
+            any(url == broad or url.startswith(f"{broad}?") for url in opener.calls)
+        )
 
-    def test_duplicate_pagination_and_discovery_fail_closed(self) -> None:
+    def test_duplicate_request_tag_refs_fail_closed(self) -> None:
         opener = FakeOpener()
-        client = GitHubPublicClient(POLICY, opener=opener, page_size=1)
-        releases = "https://api.github.com/repos/Automattic/kandelo/releases"
-        duplicate = {"id": 9, "tag_name": "abi-staging-pr-19", "prerelease": True, "draft": False}
-        opener.add(f"{releases}?per_page=1&page=1", json_response([duplicate]))
-        opener.add(f"{releases}?per_page=1&page=2", json_response([duplicate]))
+        client = GitHubPublicClient(POLICY, opener=opener)
+        refs = (
+            "https://api.github.com/repos/Automattic/kandelo/"
+            "git/matching-refs/tags/abi-staging-pr-"
+        )
+        duplicate = {
+            "ref": "refs/tags/abi-staging-pr-19",
+            "object": {"type": "commit", "sha": "1" * 40},
+        }
+        opener.add(
+            f"{refs}?per_page=100&page=1",
+            json_response([duplicate, duplicate]),
+        )
         with self.assertRaises(PublicGitHubError):
             client.scan()
 
@@ -130,10 +153,16 @@ class GitHubPublicClientTests(unittest.TestCase):
         def scan(order: list[int], *, duplicate: bool = False):
             opener = FakeOpener()
             client = GitHubPublicClient(POLICY, opener=opener)
-            releases = "https://api.github.com/repos/Automattic/kandelo/releases"
+            refs = (
+                "https://api.github.com/repos/Automattic/kandelo/"
+                "git/matching-refs/tags/abi-staging-pr-"
+            )
             opener.add(
-                f"{releases}?per_page=100&page=1",
-                json_response([{"id": 9, "tag_name": "abi-staging-pr-19", "prerelease": True, "draft": False}]),
+                f"{refs}?per_page=100&page=1",
+                json_response([{
+                    "ref": "refs/tags/abi-staging-pr-19",
+                    "object": {"type": "commit", "sha": "1" * 40},
+                }]),
             )
             assets = []
             for asset_id, index in enumerate(order, start=11):
@@ -154,13 +183,102 @@ class GitHubPublicClientTests(unittest.TestCase):
                     "created_at": ASSET_CREATED_AT,
                 })
                 add_asset_download(opener, url, body)
-            endpoint = "https://api.github.com/repos/Automattic/kandelo/releases/9/assets"
-            opener.add(f"{endpoint}?per_page=100&page=1", json_response(assets))
+            endpoint = (
+                "https://api.github.com/repos/Automattic/kandelo/"
+                "releases/tags/abi-staging-pr-19"
+            )
+            opener.add(
+                endpoint,
+                json_response({
+                    "id": 9,
+                    "tag_name": "abi-staging-pr-19",
+                    "prerelease": True,
+                    "draft": False,
+                    "assets": assets,
+                }),
+            )
             return client.scan()
 
         self.assertEqual(scan([0, 1, 2]), scan([2, 0, 1]))
         with self.assertRaises(PublicGitHubError):
             scan([0, 1], duplicate=True)
+
+    def test_scan_rejects_hostile_tag_and_release_inventories(self) -> None:
+        refs = (
+            "https://api.github.com/repos/Automattic/kandelo/"
+            "git/matching-refs/tags/abi-staging-pr-"
+        )
+        release = (
+            "https://api.github.com/repos/Automattic/kandelo/"
+            "releases/tags/abi-staging-pr-19"
+        )
+        body, asset_name, public_url = fixture_asset()
+        asset = {
+            "id": 11,
+            "name": asset_name,
+            "browser_download_url": public_url,
+            "created_at": ASSET_CREATED_AT,
+        }
+
+        for invalid_ref in (
+            "refs/tags/unrelated",
+            "refs/tags/abi-staging-pr-latest",
+        ):
+            with self.subTest(invalid_ref=invalid_ref):
+                opener = FakeOpener()
+                opener.add(
+                    f"{refs}?per_page=100&page=1",
+                    json_response([{
+                        "ref": invalid_ref,
+                        "object": {"type": "commit", "sha": "1" * 40},
+                    }]),
+                )
+                with self.assertRaises(PublicGitHubError):
+                    GitHubPublicClient(POLICY, opener=opener).scan()
+
+        limited_policy = replace(POLICY, max_release_assets=1)
+        opener = FakeOpener()
+        opener.add(
+            f"{refs}?per_page=100&page=1",
+            json_response([
+                {"ref": "refs/tags/abi-staging-pr-19"},
+                {"ref": "refs/tags/abi-staging-pr-20"},
+            ]),
+        )
+        with self.assertRaises(PublicGitHubError):
+            GitHubPublicClient(limited_policy, opener=opener).scan()
+
+        release_mutations = (
+            {"tag_name": "abi-staging-pr-20"},
+            {"prerelease": False},
+            {"draft": True},
+            {"assets": [asset, asset]},
+        )
+        baseline = {
+            "id": 9,
+            "tag_name": "abi-staging-pr-19",
+            "prerelease": True,
+            "draft": False,
+            "assets": [asset],
+        }
+        for mutation in release_mutations:
+            with self.subTest(mutation=mutation):
+                opener = FakeOpener()
+                opener.add(
+                    f"{refs}?per_page=100&page=1",
+                    json_response([{"ref": "refs/tags/abi-staging-pr-19"}]),
+                )
+                opener.add(release, json_response({**baseline, **mutation}))
+                with self.assertRaises(PublicGitHubError):
+                    GitHubPublicClient(POLICY, opener=opener).scan()
+
+        opener = FakeOpener()
+        opener.add(
+            f"{refs}?per_page=100&page=1",
+            FakeResponse(200, b"x" * (POLICY.max_api_response_bytes + 1)),
+        )
+        with self.assertRaises(PublicGitHubError):
+            GitHubPublicClient(POLICY, opener=opener).scan()
 
     def test_url_authority_and_redirect_boundaries_are_exact(self) -> None:
         body, asset_name, public_url = fixture_asset()
