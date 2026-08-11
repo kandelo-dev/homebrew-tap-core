@@ -1861,6 +1861,72 @@ def validate_formula_admission_projection(
     return projection
 
 
+def build_admission_projection_observation(
+    tap_root: Path,
+    record: Mapping[str, Any],
+    *,
+    tap_source: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind one canonical admission to the exact current four-path projection."""
+
+    # Imported here because durable records depend on planning modules which also
+    # consume tap metadata; keeping the boundary local avoids a module cycle.
+    from .records import TapRecordError, validate_admission_record
+
+    try:
+        validate_admission_record(record)
+    except TapRecordError as error:
+        raise TapMetadataError(f"admission record is invalid: {error}") from error
+    source = _mapping(tap_source, "current tap source")
+    _exact_keys(
+        source,
+        frozenset({"repository", "commit", "tree"}),
+        "current tap source",
+    )
+    repository = _text(source["repository"], "current tap repository", 255)
+    if REPOSITORY.fullmatch(repository) is None:
+        raise TapMetadataError("current tap repository is not owner/name")
+    commit = _git_sha(source["commit"], "current tap commit")
+    tree = _git_sha(source["tree"], "current tap tree")
+    policy = load_promotion_policy(
+        tap_root.resolve(strict=True) / "Kandelo/staging/promotion-policy.toml"
+    )
+    if repository.lower() != policy.tap_repository.lower():
+        raise TapMetadataError("current tap source names another repository")
+
+    admission = _mapping(record["admission"], "admission payload")
+    update_value = _mapping(
+        admission["formula_metadata_update"], "Formula metadata update"
+    )
+    try:
+        update = FormulaMetadataUpdateV1(
+            **{
+                **update_value,
+                "allowed_paths": tuple(update_value["allowed_paths"]),
+            }
+        )
+    except (KeyError, TypeError) as error:
+        raise TapMetadataError(
+            f"Formula metadata update protocol is unsupported: {error}"
+        ) from error
+    projection = validate_formula_admission_projection(tap_root, update)
+    return {
+        "schema": 1,
+        "kind": "kandelo-pages-admission-projection",
+        "admission_record_sha256": canonical_sha256(record),
+        "formula": update.formula,
+        "architecture": update.architecture,
+        "target_abi": update.target_abi,
+        "formula_metadata_update_sha256": canonical_sha256(update_value),
+        "projection_sha256": canonical_sha256(projection),
+        "tap_source": {
+            "repository": repository,
+            "commit": commit,
+            "tree": tree,
+        },
+    }
+
+
 def validate_landed_formula_metadata_commit(
     tap_root: Path,
     *,
