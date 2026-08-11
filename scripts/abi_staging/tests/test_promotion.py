@@ -190,6 +190,74 @@ def _fetched_from_plan(plan: OciRecordPlanV1) -> FetchedOciRecordV1:
     )
 
 
+class CandidateSelectionTests(unittest.TestCase):
+    def _inventory(self, *, include_current: bool) -> SimpleNamespace:
+        subject = exact_formula_subject("bash", ARCHITECTURE)
+        legacy = SimpleNamespace(
+            request_sha256="a" * 64,
+            subject=subject,
+            contract_sha256="b" * 64,
+            record_sha256="1" * 64,
+            binding_record_sha256=None,
+            bottle_layer_sha256="2" * 64,
+        )
+        facts = [legacy]
+        records = {
+            legacy.record_sha256: {
+                "candidate": {
+                    "normalized_components": [
+                        {"id": "bottle-contract"},
+                        {"id": "bottle-metadata"},
+                        {"id": "source-custody"},
+                    ]
+                }
+            }
+        }
+        if include_current:
+            current = SimpleNamespace(
+                request_sha256=legacy.request_sha256,
+                subject=subject,
+                contract_sha256=legacy.contract_sha256,
+                record_sha256="f" * 64,
+                binding_record_sha256=None,
+                bottle_layer_sha256="e" * 64,
+            )
+            facts.append(current)
+            records[current.record_sha256] = {
+                "candidate": {
+                    "normalized_components": [
+                        {"id": "bottle-contract"},
+                        {"id": "bottle-metadata"},
+                        {"id": "source-custody"},
+                        {"id": "vfs-composition-descriptor"},
+                    ]
+                }
+            }
+        return SimpleNamespace(
+            records=SimpleNamespace(candidates=tuple(facts)),
+            candidate_records=records,
+        )
+
+    def test_descriptor_candidate_wins_over_compatible_legacy_record(self) -> None:
+        selected = cli_module._select_current_candidate_fact(
+            self._inventory(include_current=True),
+            request_sha256="a" * 64,
+            subject=exact_formula_subject("bash", ARCHITECTURE),
+            contract_sha256="b" * 64,
+        )
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.record_sha256, "f" * 64)
+
+    def test_legacy_only_formula_returns_to_normal_rebuild_lane(self) -> None:
+        selected = cli_module._select_current_candidate_fact(
+            self._inventory(include_current=False),
+            request_sha256="a" * 64,
+            subject=exact_formula_subject("bash", ARCHITECTURE),
+            contract_sha256="b" * 64,
+        )
+        self.assertIsNone(selected)
+
+
 class PromotionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -1392,6 +1460,11 @@ class PromotionTests(unittest.TestCase):
         with self.assertRaises(PromotionError):
             self._evaluate(history_protection_snapshot=moved)
 
+        moved_tree = copy.deepcopy(self.history_snapshot)
+        moved_tree["ref"]["tree"] = "f" * 40
+        with self.assertRaises(PromotionError):
+            self._evaluate(history_protection_snapshot=moved_tree)
+
         wrong_plan = copy.deepcopy(self.tap_plan)
         wrong_plan["target_abi"]["version"] = TARGET_ABI + 1
         with self.assertRaises(PromotionError):
@@ -1399,6 +1472,56 @@ class PromotionTests(unittest.TestCase):
                 tap_plan=wrong_plan,
                 tap_plan_digest=canonical_sha256(wrong_plan),
             )
+
+    def test_history_recheck_accepts_equivalent_fresh_protection_observation(
+        self,
+    ) -> None:
+        evolved = copy.deepcopy(self.history_snapshot)
+        evolved["direct"] = None
+        evolved["rulesets"] = [
+            {
+                "id": 73,
+                "name": "Renamed protected ABI history policy",
+                "target": "branch",
+                "enforcement": "active",
+                "include": ["refs/heads/abi/*"],
+                "exclude": [],
+                "rules": ["creation", "deletion", "non_fast_forward"],
+                "bypass_actors": [],
+            }
+        ]
+
+        decision = self._evaluate(history_protection_snapshot=evolved)
+
+        self.assertEqual(decision.eligibility, "eligible")
+
+    def test_history_recheck_rejects_changed_stable_protection_authority(
+        self,
+    ) -> None:
+        record = json.loads(self.history.config.body)
+        recorded = record["protection_evidence"]
+        plan = record["plan"]
+        fresh = validate_protection_snapshot(
+            plan,
+            self.history_snapshot,
+            phase="postcreate",
+            expected_repository="kandelo-dev/homebrew-tap-core",
+        )
+        mutations = {
+            "covered": False,
+            "ref_object": "f" * 40,
+            "ref_tree": "f" * 40,
+            "protection_requirement_sha256": "f" * 64,
+        }
+        for field, value in mutations.items():
+            with self.subTest(field=field):
+                changed = copy.deepcopy(fresh)
+                changed[field] = value
+                with self.assertRaises(PromotionError):
+                    promotion_module._require_same_history_protection_authority(
+                        recorded,
+                        changed,
+                    )
 
     def test_postactivation_plan_uses_immutable_preactivation_history_epoch(self) -> None:
         current_plan = copy.deepcopy(self.tap_plan)

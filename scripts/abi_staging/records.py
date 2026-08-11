@@ -793,11 +793,19 @@ def validate_candidate_record(record: Mapping[str, Any]) -> None:
     ].endswith(bottle["sha256"]):
         raise TapRecordError("candidate subject differs from its exact bottle layer")
     normalized_by_id = {item["id"]: item["artifact"] for item in normalized}
-    if frozenset(normalized_by_id) != {
-        "bottle-contract",
-        "bottle-metadata",
-        "source-custody",
+    legacy_components = frozenset(
+        {
+            "bottle-contract",
+            "bottle-metadata",
+            "source-custody",
+        }
+    )
+    descriptor_components = legacy_components | {
         "vfs-composition-descriptor",
+    }
+    if frozenset(normalized_by_id) not in {
+        legacy_components,
+        descriptor_components,
     }:
         raise TapRecordError("candidate normalized component inventory changed")
     if normalized_by_id.get("bottle-contract", {}).get("sha256") != formula[

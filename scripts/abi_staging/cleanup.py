@@ -1164,10 +1164,7 @@ def assess_retention_inventory(
             continue
         derived = []
         for candidate in candidates:
-            if (
-                candidate["source_custody_digest"] == digest
-                and not results[candidate["target_digest"]]["deletion_eligible"]
-            ):
+            if candidate["source_custody_digest"] == digest:
                 derived.append(
                     {
                         "kind": "shared-custody",
@@ -1748,7 +1745,9 @@ def build_live_retention_inventory(
         requests = sorted(source_requests.get(source_digest, set()))
         if not requests:
             # An interrupted source-only publication has no request identity from
-            # which a grace interval can be proven. Retain it conservatively.
+            # which complete candidate deletion coverage can be proven.  A
+            # required target from an older plan is not factual absence evidence.
+            targets.pop(source_digest, None)
             continue
         def request_retention_order(request_digest: str) -> tuple[int, datetime, str]:
             lifecycle = checked_lifecycles.get(request_digest)

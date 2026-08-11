@@ -1016,7 +1016,7 @@ module AbiStagingWorkflowCheck
                      "maintenance workflow gained a free-form selector")
     command = inputs.fetch("command")
     require_contract(command.fetch("required") == true && command.fetch("type") == "choice" &&
-                     command.fetch("options") == %w[authorize-capture accept-artifact-risk retry-exhausted historical-repair],
+                     command.fetch("options") == %w[authorize-capture accept-artifact-risk retry-exhausted],
                      "maintenance commands must remain a closed choice")
     %w[evidence_artifact_id evidence_sha256 justification].each do |name|
       input = inputs.fetch(name)
@@ -1025,11 +1025,11 @@ module AbiStagingWorkflowCheck
     end
 
     jobs = workflow.fetch("jobs")
-    require_contract(jobs.keys.sort == %w[authorize-historical-repair maintain],
-                     "maintenance workflow job split changed")
+    require_contract(jobs.keys == ["maintain"],
+                     "maintenance workflow job set changed")
     job = jobs.fetch("maintain")
-    require_contract(job.fetch("if") == "inputs.command != 'historical-repair'",
-                     "override maintenance may run for historical repair")
+    require_contract(!job.key?("if"),
+                     "maintenance command gained a conditional authority lane")
     require_contract(job.fetch("permissions") == {
                        "actions" => "read",
                        "contents" => "read",
@@ -1088,84 +1088,12 @@ module AbiStagingWorkflowCheck
     require_contract(!source.match?(/\b(?:eval|source|curl|wget|sleep)\b/) &&
                      !source.match?(/abi-staging-(?:build|verify)-bottle/) &&
                      !source.match?(/\b(?:brew|make|cmake|cargo|npm)\b/) &&
+                     !source.include?("historical-repair") &&
+                     !source.include?("historical_maintenance") &&
                      !source.include?("--replace"),
-                     "write-capable maintenance executes candidate code or mutable publication")
-
-    historical = jobs.fetch("authorize-historical-repair")
-    require_contract(historical.fetch("if") == "inputs.command == 'historical-repair'",
-                     "historical repair authorization condition changed")
-    require_contract(historical.fetch("permissions") == {
-                       "actions" => "read",
-                       "contents" => "read",
-                       "packages" => "write"
-                     }, "historical authorization permissions changed")
-    require_contract(historical.fetch("runs-on") == "ubuntu-latest" &&
-                     historical.fetch("timeout-minutes").between?(1, 30) &&
-                     !historical.key?("environment"),
-                     "historical authorization execution boundary changed")
-    require_contract(historical.fetch("steps").none? { |step| step["continue-on-error"] == true },
-                     "historical authorization may not swallow failure")
-    check_actions(historical)
-    historical_checkout = historical.fetch("steps").find do |step|
-      step["uses"]&.start_with?(CHECKOUT)
-    end
-    historical_python = historical.fetch("steps").find do |step|
-      step["uses"]&.start_with?(SETUP_PYTHON)
-    end
-    require_contract(historical_checkout&.fetch("with", {}) == {
-                       "ref" => "refs/heads/main",
-                       "fetch-depth" => 1,
-                       "persist-credentials" => false,
-                       "path" => "tap-authority"
-                     }, "historical authorizer must execute protected tap main")
-    require_contract(historical_python&.fetch("with", {})&.fetch("python-version") == "3.13",
-                     "historical authorizer Python version changed")
-    historical_commands = historical.fetch("steps").select { |step| step.key?("run") }
-    require_contract(historical_commands.length == 1,
-                     "historical authorization must use one reviewed coordinator")
-    historical_command = historical_commands.fetch(0)
-    require_contract(historical_command.fetch("working-directory") == "tap-authority",
-                     "historical authorization bypasses protected tap-main code")
-    require_contract(historical_command.fetch("env") == {
-                       "AUTHORIZATION_REFERENCE" => "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}",
-                       "EVIDENCE_ARTIFACT_ID" => "${{ inputs.evidence_artifact_id }}",
-                       "EVIDENCE_SHA256" => "${{ inputs.evidence_sha256 }}",
-                       "GITHUB_ACTOR" => "${{ github.actor }}",
-                       "GITHUB_REPOSITORY" => "${{ github.repository }}",
-                       "GITHUB_RUN_ATTEMPT" => "${{ github.run_attempt }}",
-                       "GITHUB_RUN_ID" => "${{ github.run_id }}",
-                       "GITHUB_TOKEN" => "${{ github.token }}",
-                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
-                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
-                       "JUSTIFICATION" => "${{ inputs.justification }}"
-                     }, "historical inputs are not isolated as inert evidence")
-    historical_source = historical_command.fetch("run")
-    historical_flags = [
-      "python3 -m scripts.abi_staging.historical_maintenance authorize",
-      '--evidence-artifact-id "$EVIDENCE_ARTIFACT_ID"',
-      '--evidence-sha256 "$EVIDENCE_SHA256"',
-      "--verify-actor-permission",
-      "--fresh-protection",
-      "--require-history-record",
-      "--preserve-prior-records",
-      "--immutable"
-    ]
-    require_contract(historical_flags.all? { |flag| historical_source.include?(flag) },
-                     "historical repair lacks exact authority or preservation guards")
-    require_contract(!historical_source.match?(/\b(?:eval|source|curl|wget|sleep)\b/) &&
-                     !historical_source.match?(/abi-staging-(?:build|verify)-bottle/) &&
-                     !historical_source.match?(/\b(?:brew|make|cmake|cargo|npm)\b/) &&
-                     !historical_source.match?(/git\s+push.*(?:--force|-f\b)/) &&
-                     !historical_source.match?(/(?:oras|gh)\s+.*(?:delete|remove)/) &&
-                     !historical_source.include?("--replace") &&
-                     !historical_source.include?("--allow-cross-abi") &&
-                     !historical_source.include?("scripts.abi_staging.override"),
-                     "historical write-capable job gained build, override, force, cross-ABI, or deletion authority")
-    historical_uploads = action_steps(historical, UPLOAD_ARTIFACT)
-    require_contract(historical_uploads.length == 1 &&
-                     historical_uploads.fetch(0).dig("with", "if-no-files-found") == "error" &&
-                     historical_uploads.fetch(0).dig("with", "compression-level") == 0,
-                     "historical authorization handoff is not retained exactly")
+                     "write-capable maintenance executes candidate, historical, or mutable publication code")
+    require_contract(!flatten(workflow).join("\n").include?("historical-repair"),
+                     "maintenance workflow exposes deferred historical repair authority")
     true
   rescue KeyError, NoMethodError => error
     raise Violation, "maintenance workflow structure is incomplete: #{error.message}"
@@ -1209,33 +1137,23 @@ module AbiStagingWorkflowCheck
                      }, "cleanup concurrency changed")
 
     jobs = workflow.fetch("jobs")
-    require_contract(jobs.keys == %w[plan-cleanup delete-candidates],
-                     "cleanup workflow job split changed")
+    require_contract(jobs.keys == ["plan-cleanup"],
+                     "cleanup observe-only job set changed")
     planner = jobs.fetch("plan-cleanup")
-    writer = jobs.fetch("delete-candidates")
     require_contract(planner.fetch("permissions") == {
                        "contents" => "read", "packages" => "read"
                      }, "cleanup planner is not read-only")
-    require_contract(writer.fetch("permissions") == {
-                       "actions" => "read",
-                       "contents" => "read",
-                       "packages" => "write"
-                     }, "cleanup writer permissions changed")
-    require_contract(writer.fetch("needs") == "plan-cleanup" &&
-                     writer.fetch("if") == "needs.plan-cleanup.outputs.has-work == 'true'",
-                     "cleanup deletion is not gated by the exact protected plan")
-    [planner, writer].each do |job|
-      require_contract(job.fetch("runs-on") == "ubuntu-latest" &&
-                       job.fetch("timeout-minutes").between?(1, 30),
-                       "cleanup runner or timeout changed")
-      require_contract(!job.key?("environment") && !job.key?("secrets") &&
-                       job.fetch("steps").none? { |step| step["continue-on-error"] == true },
-                       "cleanup job gained credentials or swallowed failure")
-      check_actions(job)
-    end
+    require_contract(!planner.key?("outputs"),
+                     "cleanup observe-only planner exports writer handoff authority")
+    require_contract(planner.fetch("runs-on") == "ubuntu-latest" &&
+                     planner.fetch("timeout-minutes").between?(1, 30),
+                     "cleanup runner or timeout changed")
+    require_contract(!planner.key?("environment") && !planner.key?("secrets") &&
+                     planner.fetch("steps").none? { |step| step["continue-on-error"] == true },
+                     "cleanup job gained credentials or swallowed failure")
+    check_actions(planner)
 
     planner_checkout = action_steps(planner, CHECKOUT)
-    writer_checkout = action_steps(writer, CHECKOUT)
     require_contract(planner_checkout.length == 1 &&
                      planner_checkout.fetch(0).fetch("with") == {
                        "ref" => "refs/heads/main",
@@ -1243,33 +1161,16 @@ module AbiStagingWorkflowCheck
                        "persist-credentials" => false,
                        "path" => "tap-authority"
                      }, "cleanup planner does not execute protected tap main")
-    require_contract(writer_checkout.length == 1 &&
-                     writer_checkout.fetch(0).fetch("with") == {
-                       "ref" => "${{ needs.plan-cleanup.outputs.tap-commit }}",
-                       "fetch-depth" => 1,
-                       "persist-credentials" => false,
-                       "path" => "tap-authority"
-                     }, "cleanup writer does not execute the exact planned code")
-    [planner, writer].each do |job|
-      setups = action_steps(job, SETUP_PYTHON)
-      require_contract(setups.length == 1 &&
-                       setups.fetch(0).dig("with", "python-version") == "3.13",
-                       "cleanup job lacks declared Python")
-    end
-    downloads = action_steps(writer, DOWNLOAD_ARTIFACT)
-    require_contract(downloads.length == 1 &&
-                     downloads.fetch(0).dig("with", "artifact-ids") ==
-                       "${{ needs.plan-cleanup.outputs.artifact-id }}",
-                     "cleanup writer does not consume the exact planner artifact")
+    setups = action_steps(planner, SETUP_PYTHON)
+    require_contract(setups.length == 1 &&
+                     setups.fetch(0).dig("with", "python-version") == "3.13",
+                     "cleanup job lacks declared Python")
 
     planner_commands = run_steps(planner)
-    writer_commands = run_steps(writer)
-    require_contract(planner_commands.length == 1 && writer_commands.length == 1,
-                     "cleanup jobs must each use one protected coordinator")
+    require_contract(planner_commands.length == 1,
+                     "cleanup planner must use one protected coordinator")
     planner_step = planner_commands.fetch(0)
-    writer_step = writer_commands.fetch(0)
     planner_source = planner_step.fetch("run")
-    writer_source = writer_step.fetch("run")
     require_contract(planner_step.fetch("working-directory") == "tap-authority" &&
                      planner_source.include?("python3 -m scripts.abi_staging.cleanup plan-live") &&
                      planner_source.include?("--enumerate-public-records") &&
@@ -1279,51 +1180,23 @@ module AbiStagingWorkflowCheck
                      planner_source.include?("--batch-size 16") &&
                      planner_source.include?('--target-reference "$TARGET_REFERENCE"'),
                      "cleanup planner lacks complete public pin and grace analysis")
-    required_writer_flags = [
-      "python3 -m scripts.abi_staging.cleanup execute-live",
-      '--plan "$RUNNER_TEMP/abi-staging-cleanup-plan/plan.json"',
-      '--plan-artifact-id "$PLAN_ARTIFACT_ID"',
-      '--plan-artifact-digest "$PLAN_ARTIFACT_DIGEST"',
-      "--recheck-live",
-      "--one-exact-version",
-      "--anonymous-absence",
-      "--immutable-tombstone",
-      "--batch-size 16"
-    ]
-    require_contract(writer_step.fetch("working-directory") == "tap-authority" &&
-                     required_writer_flags.all? { |flag| writer_source.include?(flag) },
-                     "cleanup writer lacks exact recheck, deletion, or tombstone guards")
-    require_contract(writer_step.fetch("env") == {
-                       "GITHUB_ACTOR" => "${{ github.actor }}",
-                       "GITHUB_REPOSITORY" => "${{ github.repository }}",
-                       "GITHUB_RUN_ATTEMPT" => "${{ github.run_attempt }}",
-                       "GITHUB_RUN_ID" => "${{ github.run_id }}",
-                       "GITHUB_SHA" => "${{ github.sha }}",
-                       "GITHUB_TOKEN" => "${{ github.token }}",
-                       "GITHUB_WORKFLOW_REF" => "${{ github.workflow_ref }}",
-                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
-                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
-                       "PLAN_ARTIFACT_DIGEST" => "${{ needs.plan-cleanup.outputs.artifact-digest }}",
-                       "PLAN_ARTIFACT_ID" => "${{ needs.plan-cleanup.outputs.artifact-id }}"
-                     }, "cleanup writer does not authenticate the exact planner upload")
     require_no_candidate_execution(planner_source, "cleanup planner")
-    require_no_candidate_execution(writer_source, "cleanup writer")
-    require_contract(!writer_source.match?(/(?:^|\s)(?:gh|oras)\s+[^\n]*(?:delete|remove)/i) &&
-                     !writer_source.match?(/(?:^|\s)(?:rm|rmdir)\s/) &&
-                     !writer_source.match?(/[?*\[]/) &&
-                     !writer_source.match?(/(?:^|\s)(?:eval|source|curl|wget|sleep)(?:\s|$)/),
-                     "cleanup writer gained broad deletion, globbing, shell fetch, or sleep")
     all_text = flatten(workflow).join("\n")
-    require_contract(!all_text.include?("${{ secrets."),
-                     "cleanup workflow may not use repository secrets")
+    require_contract(!all_text.include?("${{ secrets.") &&
+                     !all_text.include?("execute-live") &&
+                     !all_text.include?("immutable-tombstone") &&
+                     !planner_source.match?(/(?:^|\s)(?:gh|oras)\s+[^\n]*(?:delete|remove)/i) &&
+                     !planner_source.match?(/(?:^|\s)(?:rm|rmdir)\s/) &&
+                     !planner_source.match?(/[?*\[]/) &&
+                     !planner_source.match?(/(?:^|\s)(?:eval|source|curl|wget|sleep)(?:\s|$)/),
+                     "cleanup observe-only workflow gained deletion, tombstone, secret, glob, or execution authority")
 
     planner_uploads = action_steps(planner, UPLOAD_ARTIFACT)
-    writer_uploads = action_steps(writer, UPLOAD_ARTIFACT)
-    require_contract(planner_uploads.length == 1 && writer_uploads.length == 1 &&
-                     [planner_uploads.fetch(0), writer_uploads.fetch(0)].all? do |step|
-                       step.dig("with", "if-no-files-found") == "error" &&
-                         step.dig("with", "compression-level") == 0
-                     end, "cleanup handoffs are not retained exactly")
+    require_contract(planner_uploads.length == 1 &&
+                     planner_uploads.fetch(0).dig("with", "if-no-files-found") == "error" &&
+                     planner_uploads.fetch(0).dig("with", "compression-level") == 0 &&
+                     planner_uploads.fetch(0).dig("with", "retention-days") == 7,
+                     "cleanup observation plan is not retained exactly")
     true
   rescue KeyError, NoMethodError => error
     raise Violation, "cleanup workflow structure is incomplete: #{error.message}"

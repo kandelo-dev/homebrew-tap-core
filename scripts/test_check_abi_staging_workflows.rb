@@ -108,34 +108,46 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     AbiStagingWorkflowCheck.check_cleanup(@cleanup)
   end
 
-  def test_cleanup_separates_read_only_planning_from_exact_digest_deletion
+  def test_cleanup_planning_remains_read_only
     assert_cleanup_rejected("planner gained package writes") do |workflow|
       workflow.dig("jobs", "plan-cleanup", "permissions")["packages"] = "write"
     end
-    assert_cleanup_rejected("writer gained content writes") do |workflow|
-      workflow.dig("jobs", "delete-candidates", "permissions")["contents"] = "write"
+    assert_cleanup_rejected("writer reactivation") do |workflow|
+      workflow.fetch("jobs")["delete-candidates"] = {
+        "runs-on" => "ubuntu-latest",
+        "permissions" => {"packages" => "write"},
+        "steps" => []
+      }
     end
-    assert_cleanup_rejected("missing pre-delete reference recheck") do |workflow|
-      step = last_run_step(workflow, "delete-candidates")
-      step["run"] = step["run"].sub("--recheck-live", "")
+  end
+
+  def test_cleanup_checked_in_workflow_is_observe_only
+    assert_equal ["plan-cleanup"], @cleanup.fetch("jobs").keys
+    text = AbiStagingWorkflowCheck.flatten(@cleanup).join("\n")
+    refute_includes text, "execute-live"
+    refute_includes text, "packages: write"
+  end
+
+  def test_cleanup_checker_rejects_reactivation_of_writes_or_execution
+    observe_only = copy(@cleanup)
+    AbiStagingWorkflowCheck.check_cleanup(observe_only)
+
+    assert_cleanup_rejected("observe-only planner gained package writes") do |workflow|
+      workflow.dig("jobs", "plan-cleanup", "permissions")["packages"] = "write"
     end
-    assert_cleanup_rejected("missing anonymous absence proof") do |workflow|
-      step = last_run_step(workflow, "delete-candidates")
-      step["run"] = step["run"].sub("--anonymous-absence", "")
+    assert_cleanup_rejected("observe-only workflow gained execute-live") do |workflow|
+      last_run_step(workflow, "plan-cleanup")["run"] +=
+        "\npython3 -m scripts.abi_staging.cleanup execute-live\n"
     end
-    assert_cleanup_rejected("missing immutable tombstone") do |workflow|
-      step = last_run_step(workflow, "delete-candidates")
-      step["run"] = step["run"].sub("--immutable-tombstone", "")
-    end
-    assert_cleanup_rejected("missing exact workflow artifact identity") do |workflow|
-      step = last_run_step(workflow, "delete-candidates")
-      step.fetch("env").delete("GITHUB_RUN_ID")
+    assert_cleanup_rejected("observe-only workflow gained tombstone publication") do |workflow|
+      last_run_step(workflow, "plan-cleanup")["run"] +=
+        "\npython3 -m scripts.abi_staging.cleanup execute-live --immutable-tombstone\n"
     end
   end
 
   def test_cleanup_rejects_broad_delete_glob_candidate_execution_and_sleep
     assert_cleanup_rejected("broad package delete") do |workflow|
-      last_run_step(workflow, "delete-candidates")["run"] +=
+      last_run_step(workflow, "plan-cleanup")["run"] +=
         "\ngh api --method DELETE /orgs/example/packages/container/all\n"
     end
     assert_cleanup_rejected("glob target") do |workflow|
@@ -143,14 +155,14 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       event.dig("workflow_dispatch", "inputs", "target_reference")["default"] = "*"
     end
     assert_cleanup_rejected("candidate execution") do |workflow|
-      last_run_step(workflow, "delete-candidates")["run"] +=
+      last_run_step(workflow, "plan-cleanup")["run"] +=
         "\nbash scripts/abi-staging-build-bottle.sh\n"
     end
     assert_cleanup_rejected("sleeping cleanup runner") do |workflow|
-      last_run_step(workflow, "delete-candidates")["run"] += "\nsleep 60\n"
+      last_run_step(workflow, "plan-cleanup")["run"] += "\nsleep 60\n"
     end
     assert_cleanup_rejected("personal token fallback") do |workflow|
-      last_run_step(workflow, "delete-candidates")["env"]["GH_TOKEN"] =
+      last_run_step(workflow, "plan-cleanup")["env"]["GH_TOKEN"] =
         "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
     end
   end
@@ -573,44 +585,50 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     end
   end
 
-  def test_historical_maintenance_rejects_build_override_force_and_arbitrary_ref
-    assert_maintenance_rejected("historical build with write credentials") do |workflow|
-      last_run_step(workflow, "authorize-historical-repair")["run"] +=
-        "\nbash scripts/abi-staging-build-bottle.sh\n"
-    end
-    assert_maintenance_rejected("historical override receipt") do |workflow|
-      last_run_step(workflow, "authorize-historical-repair")["run"] +=
-        "\npython3 -m scripts.abi_staging.override accept-artifact-risk\n"
-    end
-    assert_maintenance_rejected("historical force push") do |workflow|
-      last_run_step(workflow, "authorize-historical-repair")["run"] +=
-        "\ngit push --force origin HEAD:refs/heads/abi/7\n"
-    end
-    assert_maintenance_rejected("historical arbitrary ref") do |workflow|
-      checkout = workflow.dig("jobs", "authorize-historical-repair", "steps").find do |step|
-        step["uses"]&.start_with?(AbiStagingWorkflowCheck::CHECKOUT)
-      end
-      checkout.fetch("with")["ref"] = "refs/heads/abi/7"
-    end
+  def test_maintenance_checked_in_workflow_does_not_authorize_historical_repair
+    event = @maintenance.key?("on") ? @maintenance["on"] : @maintenance[true]
+    refute_includes event.dig("workflow_dispatch", "inputs", "command", "options"),
+                    "historical-repair"
+    assert_equal ["maintain"], @maintenance.fetch("jobs").keys
   end
 
-  def test_historical_maintenance_requires_history_same_abi_and_record_preservation
-    assert_maintenance_rejected("historical missing history record") do |workflow|
-      step = last_run_step(workflow, "authorize-historical-repair")
-      step["run"] = step["run"].sub("--require-history-record", "")
+  def test_maintenance_checker_rejects_plan_only_historical_repair_authority
+    deferred = copy(@maintenance)
+    event = deferred.key?("on") ? deferred["on"] : deferred[true]
+    event.dig("workflow_dispatch", "inputs", "command", "options").delete(
+      "historical-repair"
+    )
+    deferred.fetch("jobs").delete("authorize-historical-repair")
+    deferred.dig("jobs", "maintain").delete("if")
+    AbiStagingWorkflowCheck.check_maintenance(deferred)
+
+    changed = copy(deferred)
+    changed_event = changed.key?("on") ? changed["on"] : changed[true]
+    changed_event.dig("workflow_dispatch", "inputs", "command", "options") <<
+      "historical-repair"
+    error = assert_raises(AbiStagingWorkflowCheck::Violation) do
+      AbiStagingWorkflowCheck.check_maintenance(changed)
     end
-    assert_maintenance_rejected("historical cross ABI dependency") do |workflow|
-      last_run_step(workflow, "authorize-historical-repair")["run"] +=
-        "\n--allow-cross-abi\n"
+    assert_match(/closed choice/, error.message)
+
+    changed = copy(deferred)
+    changed.fetch("jobs")["authorize-historical-repair"] = {
+      "runs-on" => "ubuntu-latest",
+      "permissions" => {"packages" => "write"},
+      "steps" => []
+    }
+    error = assert_raises(AbiStagingWorkflowCheck::Violation) do
+      AbiStagingWorkflowCheck.check_maintenance(changed)
     end
-    assert_maintenance_rejected("historical failed-record deletion") do |workflow|
-      last_run_step(workflow, "authorize-historical-repair")["run"] +=
-        "\noras manifest delete ghcr.io/example/failed@sha256:#{'a' * 64}\n"
+    assert_match(/job/, error.message)
+
+    changed = copy(deferred)
+    last_run_step(changed, "maintain")["run"] +=
+      "\npython3 -m scripts.abi_staging.historical_maintenance authorize\n"
+    error = assert_raises(AbiStagingWorkflowCheck::Violation) do
+      AbiStagingWorkflowCheck.check_maintenance(changed)
     end
-    assert_maintenance_rejected("historical mutable prior records") do |workflow|
-      step = last_run_step(workflow, "authorize-historical-repair")
-      step["run"] = step["run"].sub("--preserve-prior-records", "")
-    end
+    assert_match(/historical/, error.message)
   end
 
   def test_history_workflow_preserves_protection_and_ref_ordering

@@ -563,6 +563,48 @@ class CandidateRecordTests(unittest.TestCase):
             hashlib.sha256(build_oci_manifest(source)).hexdigest(),
         )
 
+    def test_schema_one_candidate_accepts_only_legacy_or_descriptor_inventory(self) -> None:
+        _, candidate = self._plans()
+        current = json.loads(candidate.config.body)
+        validate_candidate_record(current)
+
+        legacy = json.loads(canonical_bytes(current))
+        legacy["candidate"]["normalized_components"] = [
+            component
+            for component in legacy["candidate"]["normalized_components"]
+            if component["id"] != "vfs-composition-descriptor"
+        ]
+        validate_candidate_record(legacy)
+
+        missing = json.loads(canonical_bytes(legacy))
+        missing["candidate"]["normalized_components"] = [
+            component
+            for component in missing["candidate"]["normalized_components"]
+            if component["id"] != "bottle-metadata"
+        ]
+        with self.assertRaisesRegex(TapRecordError, "component inventory"):
+            validate_candidate_record(missing)
+
+        extra = json.loads(canonical_bytes(current))
+        extra["candidate"]["normalized_components"].append(
+            {
+                "id": "unexpected-component",
+                "artifact": {
+                    "sha256": "f" * 64,
+                    "bytes": 1,
+                    "immutable_reference": (
+                        "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/"
+                        "mini-tool@sha256:" + "f" * 64
+                    ),
+                },
+            }
+        )
+        extra["candidate"]["normalized_components"].sort(
+            key=lambda component: component["id"]
+        )
+        with self.assertRaisesRegex(TapRecordError, "component inventory"):
+            validate_candidate_record(extra)
+
     def test_record_digest_and_locator_are_outside_the_hashed_candidate_bytes(self) -> None:
         _, candidate = self._plans()
         first = build_oci_manifest(candidate)

@@ -1483,6 +1483,20 @@ def _select_current_candidate_fact(
         and fact.subject == subject
         and fact.contract_sha256 == contract_sha256
     ]
+    descriptor_matches = []
+    for fact in matches:
+        record = inventory.candidate_records.get(fact.record_sha256)
+        if record is None:
+            raise ReconciliationError(
+                "promotion candidate record is missing from the public inventory"
+            )
+        component_ids = {
+            component["id"]
+            for component in record["candidate"]["normalized_components"]
+        }
+        if "vfs-composition-descriptor" in component_ids:
+            descriptor_matches.append(fact)
+    matches = descriptor_matches
     if len({fact.bottle_layer_sha256 for fact in matches}) > 1:
         raise ReconciliationError(
             "promotion candidates conflict for one exact contract"
