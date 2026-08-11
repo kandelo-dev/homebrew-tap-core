@@ -1031,6 +1031,21 @@ def _verification_authority(
     return result
 
 
+def _require_same_history_protection_authority(
+    recorded: Mapping[str, Any],
+    fresh: Mapping[str, Any],
+) -> None:
+    stable_fields = (
+        "branch",
+        "covered",
+        "protection_requirement_sha256",
+        "ref_object",
+        "ref_tree",
+    )
+    if any(recorded.get(field) != fresh.get(field) for field in stable_fields):
+        raise PromotionError("ABI history protection authority moved after publication")
+
+
 def _history(
     history: FetchedOciRecordV1 | None,
     *,
@@ -1073,8 +1088,10 @@ def _history(
         )
     except AbiHistoryError as error:
         raise PromotionError(f"ABI history protection is invalid: {error}") from error
-    if evidence != record["protection_evidence"]:
-        raise PromotionError("ABI history protection moved after record publication")
+    _require_same_history_protection_authority(
+        record["protection_evidence"],
+        evidence,
+    )
 
 
 def validate_promotion_history_barrier(

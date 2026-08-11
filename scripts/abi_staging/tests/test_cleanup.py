@@ -476,7 +476,29 @@ class RetentionAssessmentTests(unittest.TestCase):
         self.assertEqual(assessment["pins"], [])
         self.assertEqual(assessment["reason"], "unreferenced-grace-complete")
 
-    def test_shared_source_stays_pinned_until_every_candidate_is_eligible(self) -> None:
+    def test_eligible_but_present_candidate_keeps_source_custody_pinned(self) -> None:
+        source = _target(
+            SOURCE,
+            artifact_class="source",
+            request_sha256=REQUEST_A,
+            source_custody_digest=None,
+        )
+        candidate_a = _target(TARGET_A, request_sha256=REQUEST_A)
+        assessed = assess_retention_inventory(
+            targets=(candidate_a, source),
+            lifecycles={REQUEST_A: _lifecycle()},
+            references=(),
+            now=NOW,
+            grace_days=30,
+        )
+        self.assertTrue(assessed[TARGET_A]["deletion_eligible"])
+        self.assertFalse(assessed[SOURCE]["deletion_eligible"])
+        self.assertEqual(
+            [pin["immutable_reference"] for pin in assessed[SOURCE]["pins"]],
+            [candidate_a["immutable_reference"]],
+        )
+
+    def test_each_present_shared_candidate_keeps_source_custody_pinned(self) -> None:
         source = _target(
             SOURCE,
             artifact_class="source",
@@ -490,22 +512,7 @@ class RetentionAssessmentTests(unittest.TestCase):
             source_custody_digest=SOURCE,
             name="dash",
         )
-        retained = assess_retention_inventory(
-            targets=(candidate_a, candidate_b, source),
-            lifecycles={
-                REQUEST_A: _lifecycle(),
-                REQUEST_B: _lifecycle(
-                    "open", closed_at=None, request_sha256=REQUEST_B
-                ),
-            },
-            references=(),
-            now=NOW,
-            grace_days=30,
-        )
-        self.assertFalse(retained[SOURCE]["deletion_eligible"])
-        self.assertEqual(retained[SOURCE]["pins"][0]["kind"], "shared-custody")
-
-        released = assess_retention_inventory(
+        assessed = assess_retention_inventory(
             targets=(candidate_a, candidate_b, source),
             lifecycles={
                 REQUEST_A: _lifecycle(),
@@ -515,7 +522,10 @@ class RetentionAssessmentTests(unittest.TestCase):
             now=NOW,
             grace_days=30,
         )
-        self.assertTrue(released[SOURCE]["deletion_eligible"])
+        self.assertTrue(assessed[TARGET_A]["deletion_eligible"])
+        self.assertTrue(assessed[TARGET_B]["deletion_eligible"])
+        self.assertFalse(assessed[SOURCE]["deletion_eligible"])
+        self.assertEqual(len(assessed[SOURCE]["pins"]), 2)
 
     def test_checked_fixture_is_the_generic_retention_contract(self) -> None:
         fixture = json.loads(
@@ -961,6 +971,40 @@ class CleanupBatchTests(unittest.TestCase):
                         maintainer=_maintainer(),
                     )
 
+    def test_direct_source_purge_fails_while_candidate_referent_is_present(self) -> None:
+        candidate = _target()
+        source = _target(
+            SOURCE,
+            artifact_class="source",
+            request_sha256=REQUEST_A,
+            source_custody_digest=None,
+        )
+        inventory = {
+            "schema": 1,
+            "kind": "kandelo-abi-staging-retention-inventory",
+            "targets": [candidate, source],
+            "lifecycles": {REQUEST_A: _lifecycle()},
+            "references": [],
+            "tombstones": [],
+        }
+        with self.assertRaisesRegex(CleanupError, "still pinned"):
+            build_cleanup_batch(
+                inventory=inventory,
+                tap_source={
+                    "repository": "kandelo-dev/homebrew-tap-core",
+                    "commit": "4" * 40,
+                    "tree": "5" * 40,
+                },
+                now=NOW,
+                grace_days=30,
+                batch_size=16,
+                mode="immediate-purge",
+                target_reference=str(source["immutable_reference"]),
+                reason_category="malicious-object",
+                justification="remove one exact malicious source capsule",
+                maintainer=_maintainer(),
+            )
+
     def test_classifies_only_explicit_active_and_durable_reference_kinds(self) -> None:
         locator = {
             "repository": "ghcr.io/kandelo-dev/homebrew-tap-core-abi-7/bash/admissions",
@@ -1128,6 +1172,33 @@ class CleanupBatchTests(unittest.TestCase):
                 grace_days=30,
             )[SOURCE]["deletion_eligible"]
         )
+
+    def test_missing_candidate_without_tombstone_cannot_release_source(self) -> None:
+        source = _target(
+            SOURCE,
+            artifact_class="source",
+            request_sha256=REQUEST_A,
+            source_custody_digest=None,
+        )
+        source_locator = {
+            "repository": _repository("source"),
+            "digest": "sha256:" + SOURCE,
+            "immutable_reference": _repository("source") + "@sha256:" + SOURCE,
+        }
+        inventory = build_live_retention_inventory(
+            records=(
+                {
+                    "locator": source_locator,
+                    "record": {
+                        "schema": 1,
+                        "kind": "kandelo-source-custody-manifest",
+                    },
+                },
+            ),
+            lifecycles={REQUEST_A: _lifecycle()},
+            required_targets=(source,),
+        )
+        self.assertEqual(inventory["targets"], [])
 
     def test_live_collection_rechecks_request_preserved_only_by_a_tombstone(self) -> None:
         candidate = _target()
