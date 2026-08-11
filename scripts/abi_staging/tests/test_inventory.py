@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
@@ -289,6 +291,7 @@ class PublicInventoryTests(unittest.TestCase):
             self.assertEqual(facts[0].record_sha256, published.digest.removeprefix("sha256:"))
             self.assertEqual(facts[0].request_sha256, "a" * 64)
             self.assertEqual(facts[0].subject, '{"architecture":"wasm32","identity":"mini-tool","kind":"formula"}')
+            self.assertTrue(facts[0].descriptor_capable)
             self.assertEqual(locators[facts[0].record_sha256]["digest"], published.digest)
             scan_calls = transport.calls[before_scan:]
             candidate_record = json.loads(candidate.config.body)
@@ -322,6 +325,42 @@ class PublicInventoryTests(unittest.TestCase):
             )
             self.assertTrue(
                 all(not authenticated for _, _, authenticated in transport.calls)
+            )
+
+            legacy_record = copy.deepcopy(candidate_record)
+            legacy_record["candidate"]["normalized_components"] = [
+                item
+                for item in legacy_record["candidate"]["normalized_components"]
+                if item["id"] != "vfs-composition-descriptor"
+            ]
+            legacy_plan = replace(
+                candidate,
+                config=replace(
+                    candidate.config,
+                    body=canonical_bytes(legacy_record),
+                ),
+                layers=tuple(
+                    layer
+                    for layer in candidate.layers
+                    if layer.role != "vfs-composition-descriptor"
+                ),
+            )
+            legacy = publish_record(
+                legacy_plan,
+                transport=transport,
+                expected_source_repository="kandelo-dev/homebrew-tap-core",
+            )
+            all_facts, _all_locators = scan_candidate_repository(
+                CANDIDATE_REPOSITORY, transport=transport
+            )
+            descriptor_capability = {
+                fact.record_sha256: fact.descriptor_capable for fact in all_facts
+            }
+            self.assertTrue(
+                descriptor_capability[published.digest.removeprefix("sha256:")]
+            )
+            self.assertFalse(
+                descriptor_capability[legacy.digest.removeprefix("sha256:")]
             )
 
             transport.manifests[(CANDIDATE_REPOSITORY, "latest")] = build_oci_manifest(candidate)
@@ -527,6 +566,7 @@ class PublicInventoryTests(unittest.TestCase):
             fact = reuse_inventory.facts[0]
             self.assertEqual(fact.request_sha256, "f" * 64)
             self.assertEqual(fact.record_sha256, candidate_digest)
+            self.assertTrue(fact.descriptor_capable)
             self.assertEqual(
                 fact.binding_record_sha256,
                 reuse_locator.digest.removeprefix("sha256:"),

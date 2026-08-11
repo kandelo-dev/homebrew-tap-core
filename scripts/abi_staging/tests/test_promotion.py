@@ -200,6 +200,7 @@ class CandidateSelectionTests(unittest.TestCase):
             record_sha256="1" * 64,
             binding_record_sha256=None,
             bottle_layer_sha256="2" * 64,
+            descriptor_capable=False,
         )
         facts = [legacy]
         records = {
@@ -221,6 +222,7 @@ class CandidateSelectionTests(unittest.TestCase):
                 record_sha256="f" * 64,
                 binding_record_sha256=None,
                 bottle_layer_sha256="e" * 64,
+                descriptor_capable=True,
             )
             facts.append(current)
             records[current.record_sha256] = {

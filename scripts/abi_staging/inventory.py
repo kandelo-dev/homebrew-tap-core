@@ -411,6 +411,10 @@ def inspect_candidate_repository(
                 contract_sha256=formula["bottle_contract_sha256"],
                 record_sha256=record_sha256,
                 bottle_layer_sha256=layer["sha256"],
+                descriptor_capable=any(
+                    component["id"] == "vfs-composition-descriptor"
+                    for component in payload["normalized_components"]
+                ),
             )
             if record_sha256 in locators:
                 raise InventoryError("candidate inventory repeats a record digest")
@@ -605,6 +609,10 @@ def inspect_candidate_reuse_repository(
                     contract_sha256=formula["bottle_contract_sha256"],
                     record_sha256=candidate_digest,
                     bottle_layer_sha256=reuse["bottle_layer"]["sha256"],
+                    descriptor_capable=any(
+                        component["id"] == "vfs-composition-descriptor"
+                        for component in payload["normalized_components"]
+                    ),
                     binding_record_sha256=record_sha256,
                 )
             )

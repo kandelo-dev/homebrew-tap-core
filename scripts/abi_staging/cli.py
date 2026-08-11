@@ -1494,7 +1494,12 @@ def _select_current_candidate_fact(
             component["id"]
             for component in record["candidate"]["normalized_components"]
         }
-        if "vfs-composition-descriptor" in component_ids:
+        descriptor_capable = "vfs-composition-descriptor" in component_ids
+        if fact.descriptor_capable != descriptor_capable:
+            raise ReconciliationError(
+                "promotion candidate descriptor capability changed across inventory"
+            )
+        if fact.descriptor_capable:
             descriptor_matches.append(fact)
     matches = descriptor_matches
     if len({fact.bottle_layer_sha256 for fact in matches}) > 1:

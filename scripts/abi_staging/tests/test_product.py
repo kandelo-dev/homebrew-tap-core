@@ -532,6 +532,7 @@ class ProductInputResolverTests(unittest.TestCase):
                     contract_sha256=contract_sha256,
                     record_sha256=record_sha256,
                     bottle_layer_sha256=layer_sha256,
+                    descriptor_capable=True,
                 )
             )
             receipt_sha256 = _digest(f"receipt-{subject}")

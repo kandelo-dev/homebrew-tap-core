@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -29,8 +30,17 @@ from scripts.abi_staging.reconcile import (
     PullRequestLifecycleV1,
     ReconciliationDecisionV1,
 )
-from scripts.abi_staging.scheduler import CandidateFactV1, SchedulingRecordsV1
+from scripts.abi_staging.scheduler import (
+    AttemptFactV1,
+    CandidateFactV1,
+    SchedulingRecordsV1,
+)
 from scripts.abi_staging.plan import exact_formula_subject
+from scripts.abi_staging.tests.test_verification_execution import (
+    _candidate as candidate_record,
+    _locator as candidate_locator,
+    _metadata as candidate_metadata,
+)
 
 
 PLAN = json.loads((TAP_ROOT / "Kandelo/staging/fixtures/tap-plan.json").read_bytes())
@@ -45,6 +55,12 @@ def formula(name: str, architecture: str = "wasm32") -> dict[str, object]:
             and item["identity"]["architecture"] == architecture
         )
     )
+
+
+def descriptor_capable(
+    candidate: CandidateFactV1, capable: bool
+) -> CandidateFactV1:
+    return replace(candidate, descriptor_capable=capable)
 
 
 class ContractCoordinationTests(unittest.TestCase):
@@ -152,12 +168,16 @@ class ContractCoordinationTests(unittest.TestCase):
             contract_sha256 = by_subject[subject]["contract_sha256"]
             layer_sha256 = str(index + 2) * 64
             facts.append(
-                CandidateFactV1(
-                    request_sha256=PLAN["request_digest"],
-                    subject=subject,
-                    contract_sha256=contract_sha256,
-                    record_sha256=record_sha256,
-                    bottle_layer_sha256=layer_sha256,
+                descriptor_capable(
+                    CandidateFactV1(
+                        request_sha256=PLAN["request_digest"],
+                        subject=subject,
+                        contract_sha256=contract_sha256,
+                        record_sha256=record_sha256,
+                        bottle_layer_sha256=layer_sha256,
+                        descriptor_capable=True,
+                    ),
+                    True,
                 )
             )
             records[record_sha256] = {
@@ -171,6 +191,34 @@ class ContractCoordinationTests(unittest.TestCase):
                     }
                 }
             }
+            if subject == openssl:
+                legacy_record_sha256 = "f" * 64
+                legacy_layer_sha256 = "8" * 64
+                facts.append(
+                    descriptor_capable(
+                        CandidateFactV1(
+                            request_sha256=PLAN["request_digest"],
+                            subject=subject,
+                            contract_sha256=contract_sha256,
+                            record_sha256=legacy_record_sha256,
+                            bottle_layer_sha256=legacy_layer_sha256,
+                            descriptor_capable=True,
+                        ),
+                        False,
+                    )
+                )
+                records[legacy_record_sha256] = {
+                    "candidate": {
+                        "bottle_layer": {
+                            "sha256": legacy_layer_sha256,
+                            "bytes": 99,
+                            "immutable_reference": (
+                                "ghcr.io/kandelo-dev/fixture@sha256:"
+                                + legacy_layer_sha256
+                            ),
+                        }
+                    }
+                }
         second, _contracts, _assessments = prepare_tap_plan_contracts(
             tap_root=TAP_ROOT,
             kandelo_root=KANDELO_ROOT,
@@ -185,6 +233,158 @@ class ContractCoordinationTests(unittest.TestCase):
             for item in second["formulae"]
         }
         self.assertIsNotNone(advanced[libcurl]["contract_sha256"])
+
+    def test_coordinator_keeps_legacy_rebuild_and_descriptor_verify_formula_local(self) -> None:
+        request = json.loads(
+            (TAP_ROOT / "Kandelo/staging/fixtures/request/current-request.json").read_bytes()
+        )
+        request["requirements"]["products"] = [
+            {key: product[key] for key in ("id", "path", "manifest_sha256")}
+            for product in PLAN["selected_products"]
+        ]
+        request["requirements"]["evidence"] = [
+            {
+                "product_id": "alpha-shell",
+                "applicability": "required",
+                "node": ["alpha-node"],
+                "browser": ["alpha-browser"],
+            },
+            {
+                "product_id": "beta-tools",
+                "applicability": "required",
+                "node": ["beta-node"],
+                "browser": [],
+            },
+        ]
+        request["requirements"]["digest"] = canonical_sha256(
+            {
+                key: request["requirements"][key]
+                for key in ("change_classes", "products", "registries", "evidence")
+            }
+        )
+        lifecycle = PullRequestLifecycleV1(
+            "open", request["build_source"]["commit"], None
+        )
+        reconciliation = ReconciliationDecisionV1(
+            request_digest=PLAN["request_digest"],
+            claim_key="sha256:" + PLAN["request_digest"],
+            lifecycle=lifecycle,
+            current_for_pull_request=True,
+            action="observe-open",
+            permitted_work=(),
+            blockers=(),
+        )
+        initial, _contracts, _assessments = prepare_tap_plan_contracts(
+            tap_root=TAP_ROOT,
+            kandelo_root=KANDELO_ROOT,
+            tap_plan=PLAN,
+            candidate_facts=(),
+            candidate_records={},
+        )
+        formulae = {
+            (
+                item["identity"]["name"],
+                item["identity"]["architecture"],
+            ): item
+            for item in initial["formulae"]
+        }
+        facts = []
+        records = {}
+        locators = {}
+
+        def add_candidate(
+            name: str,
+            character: str,
+            *,
+            descriptor: bool,
+            bottle: bytes,
+        ) -> CandidateFactV1:
+            contract = formulae[(name, "wasm32")]["contract_sha256"]
+            record = candidate_record(
+                name,
+                bottle=bottle,
+                metadata=candidate_metadata(name, bottle),
+                contract_sha256=contract,
+                dependencies=[],
+            )
+            if not descriptor:
+                record["candidate"]["normalized_components"] = [
+                    component
+                    for component in record["candidate"]["normalized_components"]
+                    if component["id"] != "vfs-composition-descriptor"
+                ]
+            digest = character * 64
+            fact = CandidateFactV1(
+                request_sha256=PLAN["request_digest"],
+                subject=exact_formula_subject(name, "wasm32"),
+                contract_sha256=contract,
+                record_sha256=digest,
+                bottle_layer_sha256=record["candidate"]["bottle_layer"]["sha256"],
+                descriptor_capable=descriptor,
+            )
+            facts.append(fact)
+            records[digest] = record
+            locators[digest] = candidate_locator(name, character)
+            return fact
+
+        legacy_only = add_candidate(
+            "libcxx", "1", descriptor=False, bottle=b"legacy libcxx\n"
+        )
+        legacy_attempt = AttemptFactV1(
+            request_sha256=PLAN["request_digest"],
+            subject=legacy_only.subject,
+            contract_sha256=legacy_only.contract_sha256,
+            retry_ordinal=0,
+            outcome="success",
+            guard_code=None,
+            completed_at="2026-08-09T08:59:00.000Z",
+            record_sha256="4" * 64,
+        )
+        add_candidate(
+            "openssl", "2", descriptor=False, bottle=b"legacy openssl\n"
+        )
+        current = add_candidate(
+            "openssl", "3", descriptor=True, bottle=b"current openssl\n"
+        )
+        inventory = PublicSchedulingInventoryV1(
+            records=SchedulingRecordsV1(
+                (legacy_attempt,),
+                tuple(facts),
+                (),
+            ),
+            candidate_locators=locators,
+            candidate_records=records,
+        )
+        bundle = coordinate_planned_request(
+            mode="observe",
+            tap_root=TAP_ROOT,
+            kandelo_root=KANDELO_ROOT,
+            request=request,
+            request_asset_url=PLAN["request_asset_url"],
+            tap_plan=PLAN,
+            reconciliation=reconciliation,
+            inventory=inventory,
+            now="2026-08-09T10:00:00.000Z",
+            policy=load_tap_staging_policy(
+                TAP_ROOT / "Kandelo/staging/tap-policy.toml"
+            ),
+            verification_tests=load_verification_tests(
+                TAP_ROOT / "Kandelo/staging/verification-tests.toml"
+            ),
+        )
+        builds = {
+            item["subject"]: item for item in bundle["workflow"]["build_work"]
+        }
+        verifies = {
+            item["subject"]: item for item in bundle["workflow"]["verify_work"]
+        }
+        self.assertIn(legacy_only.subject, builds)
+        self.assertNotIn(legacy_only.subject, bundle["workflow"]["complete"])
+        self.assertIn(current.subject, verifies, bundle["workflow"])
+        self.assertEqual(
+            verifies[current.subject]["candidate_record_sha256"],
+            current.record_sha256,
+        )
 
     def test_root_contract_is_derived_from_exact_declared_capture(self) -> None:
         contract, assessment = build_formula_contract(

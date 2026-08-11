@@ -20,6 +20,7 @@ from .canonical import canonical_bytes, canonical_sha256
 from .github_public import GitHubPublicClient
 from .oci import (
     HttpResponseV1,
+    OciPublicationError,
     OciTransportV1,
     UrllibOciTransportV1,
     isolated_oras_transport,
@@ -1627,6 +1628,7 @@ def build_live_retention_inventory(
     records: Sequence[Mapping[str, Any]],
     lifecycles: Mapping[str, Mapping[str, Any]],
     required_targets: Sequence[Mapping[str, Any]],
+    confirmed_absent_candidate_digests: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Derive candidate/source targets and explicit pins from public records."""
 
@@ -1653,6 +1655,7 @@ def build_live_retention_inventory(
     candidate_requests: dict[str, str] = {}
     source_records: dict[str, dict[str, Any]] = {}
     deleted_source_requests: dict[str, set[str]] = {}
+    candidate_tombstone_entries: dict[str, dict[str, Any]] = {}
     tombstones: list[dict[str, Any]] = []
 
     def remember_candidate_identity(
@@ -1705,6 +1708,9 @@ def build_live_retention_inventory(
             tombstones.append(tombstone)
             deleted = tombstone["target"]
             if deleted["artifact_class"] == "candidate":
+                candidate_tombstone_entries.setdefault(
+                    deleted["target_digest"], entry
+                )
                 remember_candidate_identity(
                     deleted["target_digest"],
                     deleted["source_custody_digest"],
@@ -1714,6 +1720,17 @@ def build_live_retention_inventory(
                 deleted_source_requests.setdefault(
                     deleted["target_digest"], set()
                 ).add(deleted["request_sha256"])
+    confirmed_absent = {
+        _digest(candidate, "confirmed absent candidate")
+        for candidate in _sequence(
+            confirmed_absent_candidate_digests,
+            "confirmed absent candidates",
+        )
+    }
+    if not confirmed_absent.issubset(candidate_tombstone_entries):
+        raise CleanupError(
+            "confirmed candidate absence lacks an exact deletion tombstone"
+        )
     for candidate in required_targets:
         target = _target(candidate)
         prior = targets.get(target["target_digest"])
@@ -1815,6 +1832,25 @@ def build_live_retention_inventory(
                     lifecycle_state=state,
                 )
             )
+    for candidate_digest, entry in sorted(candidate_tombstone_entries.items()):
+        source_digest = candidate_sources[candidate_digest]
+        if (
+            candidate_digest in targets
+            or candidate_digest in confirmed_absent
+            or source_digest not in targets
+        ):
+            continue
+        # WHY: a tombstone proves a completed deletion attempt, not continuing
+        # absence.  Preserve the referent pin until a fresh exact probe says 404.
+        locator = entry["locator"]
+        references.append(
+            {
+                "kind": "shared-custody",
+                "target_digest": source_digest,
+                "record_sha256": locator["digest"].removeprefix("sha256:"),
+                "immutable_reference": locator["immutable_reference"],
+            }
+        )
     inventory = {
         "schema": 1,
         "kind": "kandelo-abi-staging-retention-inventory",
@@ -2339,7 +2375,12 @@ def collect_live_retention_inventory(
         transport=transport,
     )
     records = client.scan_records()
+    deletion_client = GitHubPackageDeletionClientV1(
+        expected_source_repository=policy.tap_repository,
+        transport=transport,
+    )
     requests_needed: set[str] = set()
+    confirmed_absent_candidates: list[str] = []
     for entry in records:
         record = entry["record"]
         if record.get("kind") == "kandelo-abi-staging-candidate":
@@ -2350,6 +2391,21 @@ def collect_live_retention_inventory(
         elif record.get("kind") == "kandelo-abi-staging-deletion-record":
             deleted = validate_deletion_record(record)["target"]
             requests_needed.add(deleted["request_sha256"])
+            if deleted["artifact_class"] == "candidate":
+                # The deletion client binds anonymous reads to the tombstone's
+                # exact immutable URL, digest, response identity, and no redirect.
+                try:
+                    observation = deletion_client.probe_anonymous(deleted)
+                except (CleanupError, OciPublicationError):
+                    observation = None
+                if observation == {
+                    "status": 404,
+                    "url": deleted["immutable_reference"],
+                    "digest": None,
+                }:
+                    confirmed_absent_candidates.append(
+                        deleted["target_digest"]
+                    )
     checked_required = [_target(candidate) for candidate in required_targets]
     requests_needed.update(
         candidate["request_sha256"] for candidate in checked_required
@@ -2380,6 +2436,7 @@ def collect_live_retention_inventory(
         records=records,
         lifecycles=lifecycles,
         required_targets=checked_required,
+        confirmed_absent_candidate_digests=confirmed_absent_candidates,
     )
 
 
