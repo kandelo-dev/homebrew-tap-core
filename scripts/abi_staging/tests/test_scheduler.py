@@ -127,6 +127,7 @@ def _complete(
         contract_sha256=contract,
         record_sha256=candidate_digest,
         bottle_layer_sha256=layer or _digest("layer:" + subject),
+        descriptor_capable=True,
     )
     receipt = VerificationFactV1(
         request_sha256=plan["request_digest"],
@@ -151,6 +152,12 @@ def _records(*facts: object) -> SchedulingRecordsV1:
             item for item in facts if isinstance(item, VerificationFactV1)
         ),
     )
+
+
+def _descriptor_capable(
+    candidate: CandidateFactV1, capable: bool
+) -> CandidateFactV1:
+    return replace(candidate, descriptor_capable=capable)
 
 
 class RetryVectorTests(unittest.TestCase):
@@ -589,6 +596,60 @@ class SchedulingTests(unittest.TestCase):
                 policy=POLICY,
                 verification_tests=(DEFINITION,),
             )
+
+    def test_descriptor_candidate_wins_before_conflicts_and_legacy_only_rebuilds(self) -> None:
+        plan = _plan()
+        subjects = {
+            json.loads(subject)["identity"]: subject
+            for subject in plan["required_subjects"]
+        }
+        libcxx = subjects["libcxx"]
+        openssl = subjects["openssl"]
+
+        legacy_only, legacy_receipt = _complete(plan, libcxx)
+        legacy_only = _descriptor_capable(legacy_only, False)
+        legacy_attempt = AttemptFactV1(
+            request_sha256=plan["request_digest"],
+            subject=libcxx,
+            contract_sha256=legacy_only.contract_sha256,
+            retry_ordinal=0,
+            outcome="success",
+            guard_code=None,
+            completed_at="2026-08-09T08:59:00.000Z",
+            record_sha256=_digest("legacy-libcxx-attempt"),
+        )
+
+        current, _receipt = _complete(plan, openssl)
+        current = _descriptor_capable(current, True)
+        legacy_conflict = replace(
+            current,
+            record_sha256=_digest("legacy-openssl-candidate"),
+            bottle_layer_sha256=_digest("legacy-openssl-layer"),
+        )
+        legacy_conflict = _descriptor_capable(legacy_conflict, False)
+
+        decision = schedule_ready_batch(
+            plan,
+            _records(
+                legacy_attempt,
+                legacy_only,
+                legacy_receipt,
+                legacy_conflict,
+                current,
+            ),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        ready = {item.subject: item for item in decision.ready}
+        self.assertEqual(ready[libcxx].action, "build-candidate")
+        self.assertEqual(ready[openssl].action, "verify-candidate")
+        self.assertEqual(
+            ready[openssl].candidate_record_sha256,
+            current.record_sha256,
+        )
+        self.assertNotIn(libcxx, decision.complete)
 
     def test_at_least_once_candidate_publication_converges_by_exact_layer(self) -> None:
         plan = _plan()

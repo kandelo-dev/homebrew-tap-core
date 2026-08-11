@@ -143,6 +143,7 @@ class CandidateFactV1:
     contract_sha256: str
     record_sha256: str
     bottle_layer_sha256: str
+    descriptor_capable: bool
     binding_record_sha256: str | None = None
 
     def __post_init__(self) -> None:
@@ -151,6 +152,8 @@ class CandidateFactV1:
         _digest(self.contract_sha256, "candidate contract")
         _digest(self.record_sha256, "candidate record")
         _digest(self.bottle_layer_sha256, "candidate bottle layer")
+        if not isinstance(self.descriptor_capable, bool):
+            raise SchedulingError("candidate descriptor capability is not Boolean")
         if self.binding_record_sha256 is not None:
             _digest(self.binding_record_sha256, "candidate binding record")
 
@@ -595,12 +598,20 @@ def schedule_ready_batch(
             )
             continue
         _digest(contract, f"contract for {subject}")
-        candidates = [
+        matching_candidates = [
             item
             for item in checked_records.candidates
             if item.subject == subject
             and item.contract_sha256 == contract
         ]
+        candidates = [
+            item
+            for item in matching_candidates
+            # WHY: historical records lack the descriptor consumed by the
+            # product path, so they cannot participate in layer equivalence.
+            if item.descriptor_capable
+        ]
+        legacy_only = bool(matching_candidates) and not candidates
         if len({item.bottle_layer_sha256 for item in candidates}) > 1:
             raise SchedulingError(
                 "current contract has conflicting candidate bottle layers"
@@ -714,13 +725,19 @@ def schedule_ready_batch(
                     pending.append(subject)
             continue
 
-        attempts = [
-            item
-            for item in checked_records.attempts
-            if item.request_sha256 == request_sha256
-            and item.subject == subject
-            and item.contract_sha256 == contract
-        ]
+        # WHY: a successful legacy attempt produced the incomplete record that
+        # must be rebuilt; it is not a candidate-integrity terminal failure.
+        attempts = (
+            []
+            if legacy_only
+            else [
+                item
+                for item in checked_records.attempts
+                if item.request_sha256 == request_sha256
+                and item.subject == subject
+                and item.contract_sha256 == contract
+            ]
+        )
         if not attempts:
             state[subject] = "pending"
             if allowed:

@@ -876,6 +876,163 @@ class CleanupBatchTests(unittest.TestCase):
             "tombstones": [],
         }
 
+    def _collect_candidate_tombstone_probe(
+        self,
+        *,
+        probe_status: int,
+        include_candidate: bool = False,
+    ) -> tuple[dict[str, object], dict[str, object], list[tuple[str, str, bool]]]:
+        manifest = canonical_bytes({"schemaVersion": 2, "fixture": "candidate"})
+        candidate = _target(hashlib.sha256(manifest).hexdigest())
+        assessment = _assess(candidate)
+        plan = build_deletion_plan(
+            target=candidate,
+            assessment=assessment,
+            mode="ordinary",
+            reason_category="retention-expired",
+            authorization=None,
+            decision_time="2026-08-10T12:00:00Z",
+        )
+        tombstone = execute_exact_deletion(
+            plan,
+            recheck=lambda: assessment,
+            registry=FakeRegistry(candidate),
+            existing_tombstones=(),
+            publish_tombstone=lambda record: None,
+        )
+        tombstone_digest = canonical_sha256(tombstone)
+        records: list[dict[str, object]] = [
+            {
+                "locator": {
+                    "repository": _repository("source"),
+                    "digest": "sha256:" + SOURCE,
+                    "immutable_reference": (
+                        _repository("source") + "@sha256:" + SOURCE
+                    ),
+                },
+                "record": {
+                    "schema": 1,
+                    "kind": "kandelo-source-custody-manifest",
+                },
+            },
+            {
+                "locator": {
+                    "repository": str(candidate["repository"]) + "/deletions",
+                    "digest": "sha256:" + tombstone_digest,
+                    "immutable_reference": (
+                        str(candidate["repository"])
+                        + "/deletions@sha256:"
+                        + tombstone_digest
+                    ),
+                },
+                "record": tombstone,
+            },
+        ]
+        if include_candidate:
+            records.append(
+                {
+                    "locator": {
+                        "repository": candidate["repository"],
+                        "digest": "sha256:" + str(candidate["target_digest"]),
+                        "immutable_reference": candidate["immutable_reference"],
+                    },
+                    "record": {
+                        "schema": 1,
+                        "kind": "kandelo-abi-staging-candidate",
+                        "common": {"request_sha256": REQUEST_A},
+                        "candidate": {"source_custody_sha256": SOURCE},
+                    },
+                }
+            )
+
+        probe_calls: list[tuple[str, str, bool]] = []
+
+        class ProbeTransport:
+            def request(
+                self,
+                method: str,
+                url: str,
+                *,
+                headers: dict[str, str] | None = None,
+                body: bytes | None = None,
+                authenticated: bool,
+                maximum_bytes: int,
+            ) -> HttpResponseV1:
+                del headers, body, maximum_bytes
+                probe_calls.append((method, url, authenticated))
+                response_body = manifest if probe_status == 200 else b""
+                response_headers = (
+                    {
+                        "docker-content-digest": (
+                            "sha256:" + str(candidate["target_digest"])
+                        )
+                    }
+                    if probe_status == 200
+                    else {}
+                )
+                return HttpResponseV1(
+                    probe_status,
+                    response_headers,
+                    response_body,
+                    url,
+                )
+
+        class InventoryClient:
+            def __init__(self, **kwargs) -> None:
+                del kwargs
+
+            def scan_records(self):
+                return tuple(records)
+
+            def pull_request_lifecycle(
+                self, *, repository: str, number: int, request_reference: str
+            ):
+                del repository, number, request_reference
+                return _lifecycle()
+
+        request = SimpleNamespace(
+            request_digest=REQUEST_A,
+            request={
+                "pull_request": {
+                    "repository": "Automattic/kandelo",
+                    "number": 19,
+                }
+            },
+            asset_url=_lifecycle()["request_reference"],
+        )
+        public = mock.MagicMock()
+        public.scan.return_value = (request,)
+        policy = SimpleNamespace(
+            tap_repository="kandelo-dev/homebrew-tap-core",
+            candidate_repository_prefix="homebrew-tap-core-abi-",
+        )
+        with (
+            mock.patch(
+                "scripts.abi_staging.cleanup.UrllibOciTransportV1",
+                return_value=ProbeTransport(),
+            ),
+            mock.patch(
+                "scripts.abi_staging.cleanup.GitHubRetentionInventoryClientV1",
+                InventoryClient,
+            ),
+            mock.patch(
+                "scripts.abi_staging.cleanup.GitHubPublicClient",
+                return_value=public,
+            ),
+            mock.patch(
+                "scripts.abi_staging.cleanup.load_request_issuer_policy",
+                return_value=object(),
+            ),
+        ):
+            inventory = collect_live_retention_inventory(
+                tap_root=TAP_ROOT,
+                policy=policy,
+                repository="kandelo-dev/homebrew-tap-core",
+                username="maintainer",
+                token="test-token",
+            )
+        return inventory, candidate, probe_calls
+
     def test_builds_a_bounded_canonical_batch_bound_to_tap_and_inventory(self) -> None:
         inventory = self._inventory()
         tap_source = {
@@ -1158,6 +1315,9 @@ class CleanupBatchTests(unittest.TestCase):
             ),
             lifecycles={REQUEST_A: _lifecycle()},
             required_targets=(),
+            confirmed_absent_candidate_digests=(
+                str(candidate["target_digest"]),
+            ),
         )
 
         self.assertEqual(len(inventory["targets"]), 1)
@@ -1261,6 +1421,17 @@ class CleanupBatchTests(unittest.TestCase):
                 lifecycle_calls.append((repository, number, request_reference))
                 return _lifecycle()
 
+        class AbsenceClient:
+            def __init__(self, **kwargs) -> None:
+                del kwargs
+
+            def probe_anonymous(self, target):
+                return {
+                    "status": 404,
+                    "url": target["immutable_reference"],
+                    "digest": None,
+                }
+
         request = SimpleNamespace(
             request_digest=REQUEST_A,
             request={
@@ -1287,6 +1458,10 @@ class CleanupBatchTests(unittest.TestCase):
                 return_value=public,
             ),
             mock.patch(
+                "scripts.abi_staging.cleanup.GitHubPackageDeletionClientV1",
+                AbsenceClient,
+            ),
+            mock.patch(
                 "scripts.abi_staging.cleanup.load_request_issuer_policy",
                 return_value=object(),
             ),
@@ -1304,6 +1479,98 @@ class CleanupBatchTests(unittest.TestCase):
 
         self.assertEqual(len(lifecycle_calls), 1)
         self.assertEqual(inventory["targets"][0]["target_digest"], SOURCE)
+
+    def test_live_untagged_tombstoned_candidate_keeps_source_pinned(self) -> None:
+        inventory, candidate, probe_calls = self._collect_candidate_tombstone_probe(
+            probe_status=200
+        )
+        assessments = assess_retention_inventory(
+            targets=inventory["targets"],
+            lifecycles=inventory["lifecycles"],
+            references=inventory["references"],
+            now=NOW,
+            grace_days=30,
+        )
+        self.assertEqual(assessments[SOURCE]["reason"], "pinned")
+        self.assertEqual(
+            probe_calls,
+            [
+                (
+                    "GET",
+                    "https://ghcr.io/v2/"
+                    + str(candidate["repository"])[len("ghcr.io/") :]
+                    + "/manifests/sha256:"
+                    + str(candidate["target_digest"]),
+                    False,
+                )
+            ],
+        )
+
+    def test_confirmed_candidate_absence_releases_source_custody(self) -> None:
+        inventory, candidate, probe_calls = self._collect_candidate_tombstone_probe(
+            probe_status=404
+        )
+        assessment = assess_retention_inventory(
+            targets=inventory["targets"],
+            lifecycles=inventory["lifecycles"],
+            references=inventory["references"],
+            now=NOW,
+            grace_days=30,
+        )[SOURCE]
+        self.assertTrue(assessment["deletion_eligible"])
+        self.assertEqual(len(probe_calls), 1)
+        self.assertEqual(probe_calls[0][2], False)
+        self.assertIn(str(candidate["target_digest"]), probe_calls[0][1])
+
+    def test_candidate_absence_probe_failure_keeps_source_pinned(self) -> None:
+        inventory, _candidate, probe_calls = self._collect_candidate_tombstone_probe(
+            probe_status=500,
+        )
+        assessment = assess_retention_inventory(
+            targets=inventory["targets"],
+            lifecycles=inventory["lifecycles"],
+            references=inventory["references"],
+            now=NOW,
+            grace_days=30,
+        )[SOURCE]
+        self.assertEqual(assessment["reason"], "pinned")
+        self.assertEqual(len(probe_calls), 1)
+
+    def test_reappearing_candidate_is_probed_pins_source_and_blocks_cleanup(self) -> None:
+        inventory, candidate, probe_calls = self._collect_candidate_tombstone_probe(
+            probe_status=200,
+            include_candidate=True,
+        )
+        assessment = assess_retention_inventory(
+            targets=inventory["targets"],
+            lifecycles=inventory["lifecycles"],
+            references=inventory["references"],
+            now=NOW,
+            grace_days=30,
+        )[SOURCE]
+        self.assertEqual(assessment["reason"], "pinned")
+        self.assertEqual(len(probe_calls), 1)
+        self.assertIn(
+            str(candidate["target_digest"]),
+            [target["target_digest"] for target in inventory["targets"]],
+        )
+        with self.assertRaisesRegex(CleanupError, "tombstoned cleanup target"):
+            build_cleanup_batch(
+                inventory=inventory,
+                tap_source={
+                    "repository": "kandelo-dev/homebrew-tap-core",
+                    "commit": "4" * 40,
+                    "tree": "5" * 40,
+                },
+                now=NOW,
+                grace_days=30,
+                batch_size=16,
+                mode="ordinary",
+                target_reference="",
+                reason_category="retention-expired",
+                justification="",
+                maintainer=None,
+            )
 
     def test_reappearing_tombstoned_source_remains_a_visible_conflict(self) -> None:
         source = _target(SOURCE, artifact_class="source")
@@ -1459,6 +1726,10 @@ class CleanupBatchTests(unittest.TestCase):
                 ),
             },
             required_targets=(),
+            confirmed_absent_candidate_digests=(
+                str(candidate_a["target_digest"]),
+                str(candidate_b["target_digest"]),
+            ),
         )
 
         self.assertEqual(inventory["targets"][0]["request_sha256"], REQUEST_B)

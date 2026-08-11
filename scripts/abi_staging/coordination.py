@@ -415,6 +415,9 @@ def prepare_tap_plan_contracts(
                 fact
                 for fact in candidates.get(dependency_subject, [])
                 if fact.contract_sha256 == dependency_contract
+                # WHY: a legacy layer cannot satisfy a dependent Formula's
+                # descriptor-bearing composition contract.
+                and fact.descriptor_capable
             ]
             if not matching:
                 dependencies_ready = False
