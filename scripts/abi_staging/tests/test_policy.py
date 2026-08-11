@@ -68,6 +68,19 @@ class PolicyTests(unittest.TestCase):
         policy_text = (self.staging / "tap-policy.toml").read_text()
         self.assertIsNone(re.search(r"(?i)abi[-_ ]?4[23]", policy_text))
 
+    def test_candidate_owner_must_match_tap_owner(self) -> None:
+        source = self.staging / "tap-policy.toml"
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = Path(directory) / "tap-policy.toml"
+            candidate.write_text(
+                source.read_text().replace(
+                    'candidate_owner = "kandelo-dev"',
+                    'candidate_owner = "Automattic"',
+                )
+            )
+            with self.assertRaisesRegex(PolicyError, "tap owner"):
+                load_tap_staging_policy(candidate)
+
     def test_activation_is_strict_and_begins_observe_only(self) -> None:
         activation_path = self.staging / "candidate-publication-activation.toml"
         self.assertEqual(load_candidate_publication_activation(activation_path), "observe")

@@ -232,9 +232,10 @@ def load_tap_staging_policy(path: Path) -> TapStagingPolicyV1:
     version = _integer(value["version"], "tap policy version", 1, 2**32 - 1)
     tap_repository = _repository(value["tap_repository"], "tap repository")
     kandelo_repository = _repository(value["kandelo_repository"], "Kandelo repository")
-    candidate_owner = _stable_id(value["candidate_owner"], "candidate owner")
-    if tap_repository.split("/", 1)[0] != candidate_owner:
+    candidate_owner_value = _text(value["candidate_owner"], "candidate owner", 128)
+    if tap_repository.split("/", 1)[0] != candidate_owner_value:
         raise PolicyError("candidate owner differs from the tap owner")
+    candidate_owner = _stable_id(candidate_owner_value, "candidate owner")
     prefix = _text(value["candidate_repository_prefix"], "candidate repository prefix", 128)
     candidate_suffix = _text(value["candidate_suffix"], "candidate suffix", 64)
     custody_suffix = _text(value["source_custody_suffix"], "custody suffix", 64)

@@ -37,6 +37,12 @@ module AbiStagingWorkflowCheck
     result
   end
 
+  def require_no_automattic_ghcr(value)
+    text = flatten(value).join("\n")
+    require_contract(!text.match?(%r{ghcr\.io/automattic/}i),
+                     "workflow names an Automattic GHCR target")
+  end
+
   def check_actions(job)
     job.fetch("steps").each do |step|
       next unless step.key?("uses")
@@ -140,6 +146,7 @@ module AbiStagingWorkflowCheck
   end
 
   def check(workflow)
+    require_no_automattic_ghcr(workflow)
     require_contract(workflow.fetch("permissions") == {},
                      "workflow permissions must be empty")
     event = triggers(workflow)
@@ -811,6 +818,7 @@ module AbiStagingWorkflowCheck
   end
 
   def check_reuse(workflow)
+    require_no_automattic_ghcr(workflow)
     require_contract(workflow.fetch("permissions") == {},
                      "reuse workflow permissions must be empty")
     event = triggers(workflow)
@@ -880,6 +888,7 @@ module AbiStagingWorkflowCheck
   end
 
   def check_reusable(workflow, kind)
+    require_no_automattic_ghcr(workflow)
     require_contract(%i[candidate verification].include?(kind),
                      "reusable ABI workflow kind is unsupported")
     require_contract(workflow.fetch("permissions") == {},
@@ -1020,6 +1029,7 @@ module AbiStagingWorkflowCheck
   end
 
   def check_maintenance(workflow)
+    require_no_automattic_ghcr(workflow)
     require_contract(workflow.fetch("permissions") == {},
                      "maintenance workflow permissions must be empty")
     event = triggers(workflow)
@@ -1114,6 +1124,7 @@ module AbiStagingWorkflowCheck
   end
 
   def check_cleanup(workflow)
+    require_no_automattic_ghcr(workflow)
     require_contract(workflow.fetch("permissions") == {},
                      "cleanup workflow permissions must be empty")
     event = triggers(workflow)
@@ -1217,6 +1228,7 @@ module AbiStagingWorkflowCheck
   end
 
   def check_history(workflow)
+    require_no_automattic_ghcr(workflow)
     require_contract(workflow.fetch("permissions") == {},
                      "history workflow permissions must be empty")
     event = triggers(workflow)
