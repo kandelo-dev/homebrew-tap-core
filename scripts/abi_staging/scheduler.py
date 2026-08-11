@@ -598,20 +598,15 @@ def schedule_ready_batch(
             )
             continue
         _digest(contract, f"contract for {subject}")
-        matching_candidates = [
-            item
-            for item in checked_records.candidates
-            if item.subject == subject
-            and item.contract_sha256 == contract
-        ]
         candidates = [
             item
-            for item in matching_candidates
+            for item in checked_records.candidates
             # WHY: historical records lack the descriptor consumed by the
             # product path, so they cannot participate in layer equivalence.
-            if item.descriptor_capable
+            if item.subject == subject
+            and item.contract_sha256 == contract
+            and item.descriptor_capable
         ]
-        legacy_only = bool(matching_candidates) and not candidates
         if len({item.bottle_layer_sha256 for item in candidates}) > 1:
             raise SchedulingError(
                 "current contract has conflicting candidate bottle layers"
@@ -725,19 +720,13 @@ def schedule_ready_batch(
                     pending.append(subject)
             continue
 
-        # WHY: a successful legacy attempt produced the incomplete record that
-        # must be rebuilt; it is not a candidate-integrity terminal failure.
-        attempts = (
-            []
-            if legacy_only
-            else [
-                item
-                for item in checked_records.attempts
-                if item.request_sha256 == request_sha256
-                and item.subject == subject
-                and item.contract_sha256 == contract
-            ]
-        )
+        attempts = [
+            item
+            for item in checked_records.attempts
+            if item.request_sha256 == request_sha256
+            and item.subject == subject
+            and item.contract_sha256 == contract
+        ]
         if not attempts:
             state[subject] = "pending"
             if allowed:
