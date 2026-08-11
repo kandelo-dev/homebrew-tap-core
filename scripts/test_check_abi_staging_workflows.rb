@@ -304,6 +304,9 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
   end
 
   def test_promotion_workflow_mutations_are_rejected
+    assert_rejected("promotion enabled during candidate canary") do |workflow|
+      workflow.dig("jobs", "plan-promotion")["if"] = "success()"
+    end
     assert_rejected("open PR promotion") do |workflow|
       workflow.dig("jobs", "plan-promotion")["if"] =
         "always() && needs.discover-plan.outputs.selected == 'true'"
@@ -358,6 +361,31 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     end
     assert_rejected("background failure cancels sibling") do |workflow|
       workflow.dig("jobs", "publish-canonical", "strategy")["fail-fast"] = true
+    end
+  end
+
+  def test_workflow_rejects_automattic_ghcr_targets
+    text = AbiStagingWorkflowCheck.flatten(@workflow).join("\n")
+    refute_match %r{ghcr\.io/Automattic/}i, text
+    assert_rejected_matching("Automattic GHCR target", /Automattic GHCR/) do |workflow|
+      workflow["name"] += " ghcr.io/Automattic/kandelo"
+    end
+    %i[candidate verification].each do |kind|
+      assert_reusable_rejected(kind, "#{kind} Automattic GHCR target") do |workflow|
+        workflow["name"] += " ghcr.io/Automattic/kandelo"
+      end
+    end
+    assert_reuse_rejected("reuse Automattic GHCR target") do |workflow|
+      workflow["name"] += " ghcr.io/Automattic/kandelo"
+    end
+    assert_maintenance_rejected("maintenance Automattic GHCR target") do |workflow|
+      workflow["name"] += " ghcr.io/Automattic/kandelo"
+    end
+    assert_history_rejected("history Automattic GHCR target") do |workflow|
+      workflow["name"] += " ghcr.io/Automattic/kandelo"
+    end
+    assert_cleanup_rejected("cleanup Automattic GHCR target") do |workflow|
+      workflow["name"] += " ghcr.io/Automattic/kandelo"
     end
   end
 
