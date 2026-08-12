@@ -145,6 +145,10 @@ export surface; Binaryen is the fallback disassembler for opcodes WABT cannot
 yet decode. Use `fork: :required` for programs that must carry the complete
 continuation interface, `fork: :forbidden` for programs that must remain
 fork-free, and the default `:auto` only when the program's imported fork
-surface is authoritative. The validator rejects ABI mismatches, legacy
-Asyncify, incoherent fork imports and exports, and embedded staging or
-host-workspace paths.
+surface is authoritative. `fork: :disabled` is a narrow, audited boundary for
+an executable whose universal libc retains an unreachable `kernel_fork`
+import but whose documented engine limit prevents continuation rewriting. A
+Formula using it must freeze and test the executable's complete import table;
+the validator still rejects stale or partial instrumentation. The validator
+rejects ABI mismatches, legacy Asyncify, incoherent fork imports and exports,
+and embedded staging or host-workspace paths.

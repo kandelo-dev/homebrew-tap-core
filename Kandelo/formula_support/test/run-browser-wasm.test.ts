@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveGuestProgram } from "../run-browser-wasm.ts";
+import { parseConfig, resolveGuestProgram } from "../run-browser-wasm.ts";
+
+function config(overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    argv: [],
+    argv0: "js",
+    env: {},
+    timeoutMs: 1_000,
+    allowStderr: false,
+    mergeStderr: false,
+    expectedStatus: 0,
+    launchCount: 1,
+    ...overrides,
+  });
+}
 
 describe("formula browser guest executable path", () => {
   it("preserves the default staging path when no override is supplied", () => {
@@ -46,5 +60,31 @@ describe("formula browser guest executable path", () => {
       {},
       { "/opt/python/bin/python3": "/host/python3" },
     )).toThrow(/both the formula executable and a staged file/);
+  });
+});
+
+describe("formula browser repeated-launch contract", () => {
+  it("accepts the bounded launch and process-memory fields", () => {
+    expect(parseConfig(config({
+      launchCount: 7,
+      maxProcessMemoryBytes: 512 * 1024 * 1024,
+    }))).toMatchObject({
+      launchCount: 7,
+      maxProcessMemoryBytes: 512 * 1024 * 1024,
+    });
+  });
+
+  it.each([
+    ["zero launches", { launchCount: 0 }, /invalid formula browser launch count/],
+    ["too many launches", { launchCount: 17 }, /invalid formula browser launch count/],
+    ["fractional launches", { launchCount: 1.5 }, /invalid formula browser launch count/],
+    ["zero memory", { maxProcessMemoryBytes: 0 }, /invalid formula browser process memory limit/],
+    [
+      "oversized memory",
+      { maxProcessMemoryBytes: 1_073_741_825 },
+      /invalid formula browser process memory limit/,
+    ],
+  ])("rejects %s", (_label, overrides, pattern) => {
+    expect(() => parseConfig(config(overrides))).toThrow(pattern);
   });
 });

@@ -3350,6 +3350,20 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
+  def test_artifact_validation_allows_a_formula_audited_disabled_fork_boundary
+    Dir.mktmpdir("kandelo-formula-support") do |dir|
+      harness = artifact_validation_harness(dir)
+      wasm = harness.buildpath/"program.wasm"
+      wasm.binwrite("\0asm")
+
+      harness.kandelo_validate_wasm_artifact(wasm, fork: :disabled)
+      command = harness.system_args.fetch(2)
+      assert_includes command, "wasm_require_no_fork_instrumentation"
+      refute_includes command, "fork-free artifact imports kernel.kernel_fork"
+      refute_includes command, "wasm_has_complete_fork_instrumentation"
+    end
+  end
+
   def test_artifact_validation_rejects_staging_and_host_paths
     Dir.mktmpdir("kandelo-formula-support") do |dir|
       harness = artifact_validation_harness(dir)
@@ -4527,7 +4541,8 @@ class KandeloFormulaSupportTest < Minitest::Test
         command, ["-e", "console.log(42)"],
         argv0: "node", guest_program_path: "/opt/node/bin/node", env: { "HOME" => "/root" },
         exec_programs: { "/opt/formula/bin/helper" => guest_executable },
-        guest_files: { "/opt/formula/format.dat" => guest_file }, timeout_ms: 5_000
+        guest_files: { "/opt/formula/format.dat" => guest_file }, timeout_ms: 5_000,
+        launch_count: 7, max_process_memory_bytes: 536_870_912
       )
 
       assert_equal "runtime-ok\n", output
@@ -4538,6 +4553,8 @@ class KandeloFormulaSupportTest < Minitest::Test
       assert_includes harness.command, "allowStderr"
       assert_includes harness.command, "expectedStatus"
       assert_includes harness.command, "mergeStderr"
+      assert_includes harness.command, 'launchCount\":7'
+      assert_includes harness.command, 'maxProcessMemoryBytes\":536870912'
       assert_includes harness.command, "node"
       assert_includes harness.command, 'guestProgram\":\"/opt/node/bin/node'
       manifest = harness.test_path/"node.browser-guest-files.json"
@@ -4581,6 +4598,23 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
 
     assert_equal "expected browser status must be an integer from 0 through 255", error.message
+  end
+
+  def test_browser_execution_rejects_invalid_repeated_launch_contract
+    error = assert_raises(RuntimeError) do
+      Harness.new.kandelo_run_browser_wasm("program.wasm", [], launch_count: 0)
+    end
+    assert_equal "browser launch count must be an integer from 1 through 16", error.message
+
+    error = assert_raises(RuntimeError) do
+      Harness.new.kandelo_run_browser_wasm(
+        "program.wasm", [], max_process_memory_bytes: 1_073_741_825
+      )
+    end
+    assert_equal(
+      "browser process memory limit must be nil or an integer from 1 through 1073741824",
+      error.message,
+    )
   end
 
   def test_browser_execution_accepts_posix_multicall_bracket_name

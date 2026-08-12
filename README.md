@@ -116,7 +116,10 @@ Formula source currently present in this repository includes:
 - `tcl`, the threaded Tcl 9 interpreter, standard library, extension loader,
   and development files;
 - `redis`, the Redis 7.2.5 threaded in-memory service and command-line client,
-  built directly from the checksum-pinned upstream source; and
+  built directly from the checksum-pinned upstream source;
+- `spidermonkey`, Mozilla's Firefox ESR JavaScript shell built directly from
+  the pinned upstream source with its Kandelo platform patches, complete ICU
+  data, shell-worker support, and Node.js/Chromium host-runtime coverage; and
 - `modeset`, the DRM/KMS fluid simulation used by the browser demo.
 
 These seven exact-shell Formulae intentionally use the transitional
