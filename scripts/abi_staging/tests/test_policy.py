@@ -81,9 +81,9 @@ class PolicyTests(unittest.TestCase):
             with self.assertRaisesRegex(PolicyError, "tap owner"):
                 load_tap_staging_policy(candidate)
 
-    def test_activation_is_strict_and_begins_observe_only(self) -> None:
+    def test_checked_in_candidate_publication_is_active_after_reconciliation_canary(self) -> None:
         activation_path = self.staging / "candidate-publication-activation.toml"
-        self.assertEqual(load_candidate_publication_activation(activation_path), "observe")
+        self.assertEqual(load_candidate_publication_activation(activation_path), "active")
         with tempfile.TemporaryDirectory() as directory:
             candidate = Path(directory) / "activation.toml"
             candidate.write_text(
