@@ -1476,11 +1476,11 @@ class ReconciliationTests(unittest.TestCase):
         )
         self.assertIsNone(select_reconciliation_cycle(closed, cycle_index=0))
 
-    def test_activation_is_strict_observe_only(self) -> None:
+    def test_checked_in_activation_is_active_after_observe_canary(self) -> None:
         activation = load_reconciliation_activation(
             TAP_ROOT / "Kandelo/staging/reconciliation-activation.toml"
         )
-        self.assertEqual(activation, "observe")
+        self.assertEqual(activation, "active")
 
     def test_activation_accepts_only_explicit_observe_or_active_modes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
