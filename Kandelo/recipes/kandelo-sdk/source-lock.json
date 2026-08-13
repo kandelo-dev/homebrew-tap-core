@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "source": {
+    "repository": "https://github.com/Automattic/kandelo",
+    "commit": "6d34c6d5183920c97454994bcf4fec060ee2f8d7",
+    "tree": "eebe1c24075de2fffe78dbdbcf1942f1c0fd7d0c",
+    "archive_url": "https://github.com/Automattic/kandelo/archive/6d34c6d5183920c97454994bcf4fec060ee2f8d7.tar.gz",
+    "archive_sha256": "3d9f18dcefb73819b7b158fda1662bb8b17cad8865e4d281915d8a22e757c588"
+  },
+  "kandelo_abi": 42,
+  "paths": [
+    {
+      "path": "COPYING",
+      "git_object": "76d04dc899ce11ef44d423ac4bba583b02954913",
+      "ledger_sha256": "2ec5ff18587c2caef696034bec6603d468579f31bac7cf83faeb13f0a27cc553"
+    },
+    {
+      "path": "COPYING.runtime",
+      "git_object": "6bea4e49b707b87a8c49b39f665b5e1be5ce67ff",
+      "ledger_sha256": "492cb2ad78d2d1cbeb92b4c60b54d065644c4bcec5fbe05edcc389f3a80f2c81"
+    },
+    {
+      "path": "LICENSE",
+      "git_object": "b8315fe696ea5749c2d3e583e79b4a9737ce1dd0",
+      "ledger_sha256": "0fd5b3d85776ecd9422bd135979f833a84d90dcf0fe8160c6b4a26b99821a81f"
+    },
+    {
+      "path": "libc/glue",
+      "git_object": "0357b53351cfd678d8b3d4c9997cf6950bf6246b",
+      "ledger_sha256": "44ff4637fb8c4f825fbac4489f3a492237b9dac9d69212047418c2bceb354f46"
+    },
+    {
+      "path": "sdk/config.site",
+      "git_object": "d8ea6e3f359419b004274784676db573ee08416c",
+      "ledger_sha256": "2962986b7205b3d5f8de4e9d6a48ea558f92d1186cdb8e5bd323e8b464710609"
+    },
+    {
+      "path": "sdk/kandelo",
+      "git_object": "644c5e981521f9d91a3bec6b27c4f48005bfb49f",
+      "ledger_sha256": "ebdf3fc4730931bb237a0e704ea28be10526ca9f3bc5e88f1900728d73d6684a"
+    }
+  ]
+}
