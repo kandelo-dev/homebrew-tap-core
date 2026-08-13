@@ -9,24 +9,24 @@ The tap is still experimental. Do not publish user-facing `brew tap` or
 `brew install` instructions until a stock guest Homebrew install has been
 validated inside Kandelo.
 
-## Observe-only ABI request reconciliation
+## Active ABI request reconciliation
 
-The feature branch contains a protected, read-only reconciler for Kandelo ABI
-staging requests. `Kandelo/staging/request-issuers.toml` fixes the authorized
-Kandelo repository, workflow path, addressed tap, public GitHub hosts, and
-input bounds. `Kandelo/staging/reconciliation-activation.toml` remains in
-`observe` mode.
+The tap contains a protected reconciler for Kandelo ABI staging requests.
+`Kandelo/staging/request-issuers.toml` fixes the authorized Kandelo repository,
+workflow path, addressed tap, public GitHub hosts, and input bounds.
+`Kandelo/staging/reconciliation-activation.toml` is in `active` mode.
 
 The scheduled and manual workflow checks out only protected tap code, fetches
 public GitHub Release and pull-request data without credentials, validates the
-canonical request filename and bytes, and reports a deterministic lifecycle
-decision. It cannot dispatch a build or write packages, repository contents,
-branches, or GitHub Checks. Candidate-supplied code and coordinator paths are
-never executed.
+canonical request filename and bytes, and can schedule the uncredentialed
+candidate-build lane for an exact accepted request. Candidate publication,
+product-evidence publication, promotion, and cleanup remain independently
+disabled by their protected activation records. Candidate-supplied code never
+executes in the credentialed reconciliation job.
 
-This workflow is not operational until its revision reaches protected `main`
-and passes a hosted canary. Candidate builds, candidate publication,
-verification, promotion, and current-ABI changes are separate later stages.
+The first active request is a hosted cutover canary. It is not bottle
+admission, endorsement, promotion, or a current-ABI change; those remain
+separate later stages with independent protected gates.
 
 ## Formulae
 
