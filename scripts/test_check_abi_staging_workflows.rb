@@ -491,6 +491,51 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     refute_includes source, ".requirements.digest"
   end
 
+  def test_runtime_binds_one_fresh_isolated_package_cache
+    steps = @workflow.dig("jobs", "prepare-runtime", "steps")
+    isolate = steps.find do |step|
+      step["name"] == "Isolate exact runtime package resolution"
+    end
+    build = steps.find do |step|
+      step["name"] == "Build one exact uncredentialed runtime"
+    end
+
+    refute_nil isolate
+    refute_nil build
+    assert_operator steps.index(isolate), :<, steps.index(build)
+
+    isolate_source = isolate.fetch("run")
+    assert_includes isolate_source, "abi-staging-runtime-package-cache"
+    assert_includes isolate_source, "test ! -e"
+    assert_includes isolate_source, "mkdir -m 0700"
+    assert_includes isolate_source, "WASM_POSIX_BINARY_CACHE_ROOT="
+    assert_includes isolate_source, '>>"$GITHUB_ENV"'
+
+    build_source = build.fetch("run")
+    assert_includes build_source,
+                    'WASM_POSIX_BINARY_CACHE_ROOT=$WASM_POSIX_BINARY_CACHE_ROOT'
+    assert_includes build_source,
+                    '--binary-cache-root "$WASM_POSIX_BINARY_CACHE_ROOT"'
+
+    assert_rejected_matching(
+      "runtime omits isolated cache", /runtime package cache is not sealed/
+    ) do |workflow|
+      workflow.dig("jobs", "prepare-runtime", "steps").reject! do |step|
+        step["name"] == "Isolate exact runtime package resolution"
+      end
+    end
+    assert_rejected_matching(
+      "runtime omits exact cache handoff", /runtime package cache is not exact/
+    ) do |workflow|
+      step = workflow.dig("jobs", "prepare-runtime", "steps").find do |candidate|
+        candidate["name"] == "Build one exact uncredentialed runtime"
+      end
+      step["run"] = step.fetch("run").sub(
+        /\s+--binary-cache-root\s+"\$WASM_POSIX_BINARY_CACHE_ROOT"\s+\\/, ""
+      )
+    end
+  end
+
   def test_product_workflow_mutations_are_rejected
     assert_rejected("composition writer") do |workflow|
       workflow.dig("jobs", "compose-product", "permissions")["packages"] = "write"
@@ -544,12 +589,71 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       assert_equal "./kandelo-authority/.github/actions/setup-nix", setup["uses"]
       refute steps.any? { |step| step["uses"]&.start_with?("./kandelo-source/") }
       source = last_run_step(workflow, producer_id).fetch("run")
-      assert_includes source, "../kandelo-authority/scripts/dev-shell.sh"
+      assert_equal "kandelo-authority",
+                   last_run_step(workflow, producer_id)["working-directory"]
+      assert_includes source, "scripts/dev-shell.sh env"
+      assert_includes source,
+                      'PYTHONPATH=$GITHUB_WORKSPACE/tap-authority'
+      assert_includes source, "-u ACTIONS_RUNTIME_TOKEN"
       refute_includes source, "../kandelo-source/scripts/dev-shell.sh"
       assert_reusable_rejected(kind, "candidate local action") do |changed|
         changed.dig("jobs", producer_id, "steps").insert(
           0, {"uses" => "./kandelo-source/.github/actions/setup-nix"}
         )
+      end
+    end
+  end
+
+  def test_uncredentialed_executors_enter_the_immutable_kandelo_dev_shell
+    lanes = [
+      [:candidate, @candidate, "build", "execute-build-work"],
+      [:verification, @verification, "verify", "execute-verification-work"],
+      [:reconcile, @workflow, "compose-product", "execute-product-work"],
+      [:reconcile, @workflow, "node-product-evidence",
+       "execute-product-evidence-work"],
+      [:reconcile, @workflow, "browser-product-evidence",
+       "execute-product-evidence-work"]
+    ]
+
+    lanes.each do |kind, workflow, job_name, command|
+      step = workflow.dig("jobs", job_name, "steps").find do |candidate|
+        candidate.fetch("run", "").include?(command)
+      end
+      refute_nil step, "missing #{job_name} executor"
+      assert_equal "kandelo-authority", step["working-directory"]
+      source = step.fetch("run")
+      assert_includes source, "scripts/dev-shell.sh env"
+      assert_includes source,
+                      'PYTHONPATH=$GITHUB_WORKSPACE/tap-authority'
+      refute_includes source, "../kandelo-source/scripts/dev-shell.sh"
+
+      next unless %i[candidate verification].include?(kind)
+
+      assert_reusable_rejected(kind, "executor enters the tap as a flake") do |changed|
+        changed_step = changed.dig("jobs", job_name, "steps").find do |candidate|
+          candidate.fetch("run", "").include?(command)
+        end
+        changed_step["working-directory"] = "tap-authority"
+      end
+      assert_reusable_rejected(kind, "executor retains artifact credentials") do |changed|
+        changed_step = changed.dig("jobs", job_name, "steps").find do |candidate|
+          candidate.fetch("run", "").include?(command)
+        end
+        changed_step["run"] = changed_step.fetch("run").sub(
+          /\s+-u ACTIONS_RUNTIME_TOKEN\s+\\/, ""
+        )
+      end
+    end
+
+    %w[compose-product node-product-evidence browser-product-evidence].each do |job_name|
+      assert_rejected_matching(
+        "#{job_name} enters the tap as a flake",
+        /uncredentialed executor does not enter immutable Kandelo dev shell/
+      ) do |workflow|
+        step = workflow.dig("jobs", job_name, "steps").find do |candidate|
+          candidate.fetch("run", "").include?("execute-")
+        end
+        step["working-directory"] = "tap-authority"
       end
     end
   end
