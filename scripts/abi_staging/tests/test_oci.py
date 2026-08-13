@@ -47,6 +47,8 @@ class FakeRegistryTransport:
         self.next_status: int | None = None
         self.redirect_url: str | None = None
         self.hostile_upload_location = False
+        self.github_upload_location = False
+        self.upload_location_query = ""
         self.package_absent_until_first_manifest = False
         self.registry_next_status: int | None = None
 
@@ -166,11 +168,27 @@ class FakeRegistryTransport:
             location = (
                 "https://registry-attacker.example/v2/steal"
                 if self.hostile_upload_location
-                else f"https://ghcr.io/v2/{repository}/blobs/uploads/{session}"
+                else (
+                    f"https://ghcr.io/v2/{repository}/blobs/upload/{session}"
+                    if self.github_upload_location
+                    else f"https://ghcr.io/v2/{repository}/blobs/uploads/{session}"
+                )
             )
-            return self._response(202, url, headers={"location": location})
-        if "/blobs/uploads/" in remainder:
-            repository, session = remainder.split("/blobs/uploads/", 1)
+            return self._response(
+                202,
+                url,
+                headers={"location": location + self.upload_location_query},
+            )
+        upload_component = next(
+            (
+                component
+                for component in ("/blobs/uploads/", "/blobs/upload/")
+                if component in remainder
+            ),
+            None,
+        )
+        if upload_component is not None:
+            repository, session = remainder.split(upload_component, 1)
             if method != "PUT" or session not in self.uploads:
                 return self._response(404, url)
             digest = parse_qs(parsed.query).get("digest", [""])[0]
@@ -528,6 +546,43 @@ class OciPublicationTests(unittest.TestCase):
             )
         self.assertEqual(raised.exception.guard_code, "namespace_bootstrap_failed")
         self.assertIn("hostile", str(raised.exception))
+
+    def test_github_registry_upload_session_location_is_accepted(self) -> None:
+        transport = FakeRegistryTransport()
+        transport.github_upload_location = True
+        locator = publish_record(
+            _plan(),
+            transport=transport,
+            expected_source_repository=SOURCE_ASSOCIATION,
+        )
+        self.assertIsInstance(locator, PublishedRecordLocatorV1)
+        self.assertTrue(
+            any(
+                method == "PUT"
+                and "/blobs/upload/session-" in url
+                and authenticated
+                for method, url, authenticated in transport.calls
+            )
+        )
+
+    def test_upload_session_query_is_preserved_when_digest_is_appended(self) -> None:
+        transport = FakeRegistryTransport()
+        transport.github_upload_location = True
+        transport.upload_location_query = "?state=exact-session"
+        publish_record(
+            _plan(),
+            transport=transport,
+            expected_source_repository=SOURCE_ASSOCIATION,
+        )
+        completion = next(
+            url
+            for method, url, _authenticated in transport.calls
+            if method == "PUT" and "/blobs/upload/session-" in url
+        )
+        self.assertEqual(
+            parse_qs(urlsplit(completion).query),
+            {"digest": [_plan().config.digest], "state": ["exact-session"]},
+        )
 
     def test_oras_credentials_use_stdin_and_ephemeral_config(self) -> None:
         observed: dict[str, object] = {}

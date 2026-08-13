@@ -756,11 +756,22 @@ def _validate_blob_response(
 def _safe_upload_location(location: str, repository: str, field: str) -> str:
     resolved = urljoin(f"https://{REGISTRY_HOST}/", location)
     parsed = urlsplit(resolved)
-    expected_prefix = f"/v2/{repository}/blobs/uploads/"
+    expected_paths = (
+        f"/v2/{repository}/blobs/upload/",
+        f"/v2/{repository}/blobs/uploads/",
+    )
+    upload_session = next(
+        (
+            parsed.path[len(prefix) :]
+            for prefix in expected_paths
+            if parsed.path.startswith(prefix)
+        ),
+        "",
+    )
     if (
         parsed.scheme != "https"
         or parsed.netloc != REGISTRY_HOST
-        or not parsed.path.startswith(expected_prefix)
+        or re.fullmatch(r"[A-Za-z0-9._~-]{1,512}", upload_session) is None
         or parsed.fragment
     ):
         raise OciPublicationError(
