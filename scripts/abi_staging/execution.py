@@ -304,11 +304,21 @@ _DECLARED_TOOL_ENVIRONMENT = frozenset(
         "GEM_PATH",
         "GITHUB_ACTIONS",
         "GIT_SSL_CAINFO",
+        "HOMEBREW_BREW_COMMIT",
+        "HOMEBREW_BREW_FILE",
+        "HOMEBREW_CACHE",
+        "HOMEBREW_DEVELOPER",
+        "HOMEBREW_NO_ANALYTICS",
+        "HOMEBREW_NO_AUTO_UPDATE",
+        "HOMEBREW_NO_INSTALL_CLEANUP",
         "HOMEBREW_PREFIX",
         "HOMEBREW_REPOSITORY",
+        "HOMEBREW_TEMP",
         "HOST_PATH",
         "IN_NIX_SHELL",
         "KANDELO_DEV_SHELL_TOOL_PATH",
+        "KANDELO_HOMEBREW_RESOLVED_TAPS_FILE",
+        "KANDELO_HOMEBREW_TAP_SOURCE_COMMIT",
         "LD",
         "LD_DYLD_PATH",
         "LD_FOR_BUILD",
@@ -349,6 +359,7 @@ _DECLARED_TOOL_ENVIRONMENT = frozenset(
         "PATH",
         "PATH_LOCALE",
         "PERL5LIB",
+        "PLAYWRIGHT_BROWSERS_PATH",
         "PKG_CONFIG",
         "PKG_CONFIG_PATH",
         "PYTHONHASHSEED",
@@ -371,6 +382,7 @@ _DECLARED_TOOL_ENVIRONMENT = frozenset(
         "SYSTEM_CERTIFICATE_PATH",
         "TERM",
         "USER",
+        "WASM_POSIX_BINARY_CACHE_ROOT",
         "WASM_POSIX_LLVM_LIBCXX_SOURCE",
         "WASM_POSIX_LLVM_LIBUNWIND_SOURCE",
         "XDG_DATA_DIRS",
@@ -550,6 +562,20 @@ def _candidate_repository_name(
     ):
         raise ExecutionError("candidate namespace inputs are invalid")
     return f"ghcr.io/{tap_repository}-abi-{target_abi}-candidates/{formula}"
+
+
+def _bottle_metadata_formula_key(tap_repository: Any, formula: Any) -> str:
+    if (
+        not isinstance(tap_repository, str)
+        or tap_repository != tap_repository.lower()
+        or re.fullmatch(r"[a-z0-9._-]+/homebrew-[a-z0-9._-]+", tap_repository)
+        is None
+        or not isinstance(formula, str)
+        or re.fullmatch(r"[a-z0-9][a-z0-9._-]*", formula) is None
+    ):
+        raise ExecutionError("candidate bottle metadata identity is invalid")
+    owner, repository = tap_repository.split("/", 1)
+    return f"{owner}/{repository.removeprefix('homebrew-')}/{formula}"
 
 
 def _candidate_entry(
@@ -1041,8 +1067,16 @@ def compose_candidate_tap(
             metadata = parse_canonical_bytes(
                 Path(candidate["metadata"]).read_bytes(), maximum_bytes=4 * 1024 * 1024
             )
+            metadata_entries = _mapping(metadata, "candidate bottle metadata")
+            formula_key = _bottle_metadata_formula_key(
+                candidate["tap_repository"], candidate["formula"]
+            )
+            if list(metadata_entries) != [formula_key]:
+                raise ExecutionError(
+                    "candidate bottle metadata must contain exactly one fully qualified Formula"
+                )
             entry = _mapping(
-                _mapping(metadata, "candidate bottle metadata").get(candidate["formula"]),
+                metadata_entries.get(formula_key),
                 "candidate bottle metadata entry",
             )
             bottle = _mapping(entry.get("bottle"), "candidate bottle metadata bottle")

@@ -723,7 +723,8 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       assert_equal "./kandelo-authority/.github/actions/setup-nix", setup["uses"]
       refute steps.any? { |step| step["uses"]&.start_with?("./kandelo-source/") }
       source = last_run_step(workflow, producer_id).fetch("run")
-      assert_equal "kandelo-authority",
+      expected_directory = kind == :candidate ? "kandelo-source" : "kandelo-authority"
+      assert_equal expected_directory,
                    last_run_step(workflow, producer_id)["working-directory"]
       assert_includes source, "scripts/dev-shell.sh env"
       assert_includes source,
@@ -735,6 +736,91 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
           0, {"uses" => "./kandelo-source/.github/actions/setup-nix"}
         )
       end
+    end
+  end
+
+  def test_candidate_build_provisions_one_pinned_uncredentialed_homebrew_realm
+    steps = @candidate.dig("jobs", "build", "steps")
+    homebrew = steps.find do |step|
+      step.dig("with", "path") == "homebrew-prefix/Homebrew"
+    end
+    export = steps.find do |step|
+      step["name"] == "Export exact candidate build identity"
+    end
+    realm = steps.find do |step|
+      step["name"] == "Prepare exact uncredentialed Homebrew realm"
+    end
+    execute = steps.find do |step|
+      step.fetch("run", "").include?("execute-build-work")
+    end
+
+    refute_nil homebrew
+    assert_equal "Homebrew/brew", homebrew.dig("with", "repository")
+    assert_match(/\A[0-9a-f]{40}\z/, homebrew.dig("with", "ref"))
+    assert_equal false, homebrew.dig("with", "persist-credentials")
+    refute_nil export
+    refute_nil realm
+    refute_nil execute
+    assert_equal "kandelo-source", execute["working-directory"]
+    assert_operator steps.index(homebrew), :<, steps.index(realm)
+    assert_operator steps.index(export), :<, steps.index(realm)
+    assert_operator steps.index(realm), :<, steps.index(execute)
+
+    export_source = export.fetch("run")
+    assert_includes export_source, "export-build-realm"
+    assert_includes export_source, '--work-id "$WORK_ID"'
+    assert_includes export_source, '--github-env "$GITHUB_ENV"'
+    assert_includes export_source, '"PYTHONDONTWRITEBYTECODE=1"'
+
+    realm_source = realm.fetch("run")
+    assert_includes realm_source, "homebrew-prepare-host-prefix.sh"
+    assert_includes realm_source, "scripts/build-musl.sh"
+    assert_includes realm_source, "packages/registry/kernel/build-kernel.sh"
+    assert_includes realm_source, "scripts/build-fork-instrument-tool.sh"
+    assert_includes realm_source, "MemoryFileSystem.create"
+    assert_includes realm_source, "host/wasm/rootfs.vfs"
+    refute_includes realm_source, "formula_test_packages"
+    refute_includes realm_source, "--fetch-only resolve"
+    assert_includes realm_source, "PLAYWRIGHT_BROWSERS_PATH"
+    assert_includes realm_source, "WASM_POSIX_BINARY_CACHE_ROOT"
+    assert_includes realm_source, "env -u GITHUB_TOKEN"
+    assert_includes realm_source, "-u ACTIONS_RUNTIME_TOKEN"
+    assert_includes realm_source, "-u GITHUB_ENV"
+    realm_cd = realm_source.index('cd "$GITHUB_WORKSPACE/kandelo-source"')
+    realm_shell = realm_source.index("env -u GITHUB_TOKEN")
+    refute_nil realm_cd
+    refute_nil realm_shell
+    assert_operator realm_cd, :<, realm_shell
+
+    execute_source = execute.fetch("run")
+    %w[
+      HOMEBREW_BREW_FILE HOMEBREW_BREW_COMMIT HOMEBREW_CACHE HOMEBREW_TEMP
+      KANDELO_HOMEBREW_RESOLVED_TAPS_FILE PLAYWRIGHT_BROWSERS_PATH
+      WASM_POSIX_BINARY_CACHE_ROOT
+    ].each do |name|
+      assert_includes execute_source, "#{name}=$#{name}"
+    end
+    assert_includes execute_source, '"PYTHONDONTWRITEBYTECODE=1"'
+    assert_includes execute_source, '"PYTHONSAFEPATH=1"'
+    assert_includes execute_source,
+                    "python3 -P -m scripts.abi_staging.cli execute-build-work"
+    assert_reusable_rejected(:candidate, "candidate Homebrew ref drift") do |workflow|
+      checkout = workflow.dig("jobs", "build", "steps").find do |step|
+        step.dig("with", "path") == "homebrew-prefix/Homebrew"
+      end
+      checkout.fetch("with")["ref"] = "0" * 40
+    end
+    assert_reusable_rejected(:candidate, "candidate realm retains token") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub("-u ACTIONS_RUNTIME_TOKEN", "")
+    end
+    assert_reusable_rejected(:candidate, "candidate shadows protected Python") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate.fetch("run", "").include?("execute-build-work")
+      end
+      step["run"] = step.fetch("run").sub("python3 -P -m", "python3 -m")
     end
   end
 
@@ -754,7 +840,8 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         candidate.fetch("run", "").include?(command)
       end
       refute_nil step, "missing #{job_name} executor"
-      assert_equal "kandelo-authority", step["working-directory"]
+      expected_directory = kind == :candidate ? "kandelo-source" : "kandelo-authority"
+      assert_equal expected_directory, step["working-directory"]
       source = step.fetch("run")
       assert_includes source, "scripts/dev-shell.sh env"
       assert_includes source,

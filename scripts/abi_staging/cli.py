@@ -409,6 +409,11 @@ def _parser() -> argparse.ArgumentParser:
     export_runtime_realm.add_argument("--coordination", required=True)
     export_runtime_realm.add_argument("--tap-root", required=True)
     export_runtime_realm.add_argument("--github-env", required=True)
+    export_build_realm = subcommands.add_parser("export-build-realm")
+    export_build_realm.add_argument("--coordination", required=True)
+    export_build_realm.add_argument("--work-id", required=True)
+    export_build_realm.add_argument("--tap-root", required=True)
+    export_build_realm.add_argument("--github-env", required=True)
     execute_verification = subcommands.add_parser("execute-verification-work")
     execute_verification.add_argument("--coordination", required=True)
     execute_verification.add_argument("--work-id", required=True)
@@ -2628,6 +2633,40 @@ def _export_runtime_realm(args: argparse.Namespace) -> None:
             ],
             "KANDELO_ABI_STAGING_SOURCE_TREE": request["build_source"]["tree"],
             "KANDELO_ABI_STAGING_TARGET_ABI": str(request["target_abi"]["version"]),
+        },
+    )
+
+
+def _export_build_realm(args: argparse.Namespace) -> None:
+    """Export one protected Formula build identity without shell parsing."""
+
+    tap_root = _protected_tap_root(args.tap_root)
+    policy = load_tap_staging_policy(
+        tap_root / "Kandelo/staging/tap-policy.toml"
+    )
+    coordination = Path(args.coordination)
+    if coordination.is_dir():
+        coordination = coordination / "coordination.json"
+    bundle = load_coordination_bundle(coordination, policy=policy)
+    work = select_build_work(bundle, args.work_id)
+    formula, architecture = parse_formula_subject(
+        work["subject"], "build work subject"
+    )
+    tap_source = bundle["tap_plan"]["tap_source"]
+    repository = tap_source["repository"]
+    owner, repository_name = repository.split("/", 1)
+    if not repository_name.startswith("homebrew-"):
+        raise ExecutionError("build tap repository is not conventional Homebrew")
+    _write_github_outputs(
+        Path(args.github_env),
+        {
+            "KANDELO_ABI_STAGING_ARCHITECTURE": architecture,
+            "KANDELO_ABI_STAGING_FORMULA": formula,
+            "KANDELO_ABI_STAGING_TAP_COMMIT": tap_source["commit"],
+            "KANDELO_ABI_STAGING_TAP_NAME": (
+                f"{owner}/{repository_name.removeprefix('homebrew-')}"
+            ),
+            "KANDELO_ABI_STAGING_TAP_REPOSITORY": repository,
         },
     )
 
@@ -6493,6 +6532,9 @@ def main(arguments: list[str] | None = None) -> int:
             return _execute_build(args)
         if args.command == "export-runtime-realm":
             _export_runtime_realm(args)
+            return 0
+        if args.command == "export-build-realm":
+            _export_build_realm(args)
             return 0
         if args.command == "execute-verification-work":
             return _execute_verification(args)

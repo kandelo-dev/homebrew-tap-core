@@ -63,7 +63,7 @@ def _metadata(name: str, bottle: bytes) -> bytes:
     )
     return canonical_bytes(
         {
-            name: {
+            f"kandelo-dev/tap-core/{name}": {
                 "bottle": {
                     "cellar": "any",
                     "rebuild": 0,
@@ -443,7 +443,7 @@ class VerificationExecutionTests(unittest.TestCase):
         )
         metadata = canonical_bytes(
             {
-                "asa": {
+                "kandelo-dev/tap-core/asa": {
                     "bottle": {
                         "cellar": "any_skip_relocation",
                         "rebuild": 1,
@@ -483,6 +483,59 @@ class VerificationExecutionTests(unittest.TestCase):
             formula = (composed / "Formula/asa.rb").read_text(encoding="utf-8")
         self.assertIn(f'root_url "{root_url}"', formula)
         self.assertIn(f'wasm32_kandelo: "{digest}"', formula)
+
+    def test_candidate_tap_composition_rejects_ambiguous_formula_identity(self) -> None:
+        from scripts.abi_staging import execution
+
+        digest = "a" * 64
+        entry = {
+            "bottle": {
+                "cellar": "any_skip_relocation",
+                "rebuild": 1,
+                "root_url": (
+                    "https://ghcr.io/v2/kandelo-dev/"
+                    "homebrew-tap-core-abi-8-candidates/asa"
+                ),
+                "tags": {"wasm32_kandelo": {"sha256": digest}},
+            },
+            "formula": {
+                "name": "asa",
+                "path": (
+                    "Library/Taps/kandelo-dev/homebrew-tap-core/Formula/asa.rb"
+                ),
+                "pkg_version": "15.0.0",
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            metadata_path = root / "bottle.json"
+            metadata_path.write_bytes(
+                canonical_bytes(
+                    {
+                        "asa": entry,
+                        "kandelo-dev/tap-core/asa": entry,
+                    }
+                )
+            )
+            with self.assertRaisesRegex(
+                execution.ExecutionError,
+                "exactly one fully qualified Formula",
+            ):
+                execution.compose_candidate_tap(
+                    tap_root=TAP_ROOT,
+                    kandelo_root=KANDELO_ROOT,
+                    destination=root / "tap",
+                    candidates=[
+                        {
+                            "architecture": "wasm32",
+                            "bottle_layer": {"sha256": digest},
+                            "formula": "asa",
+                            "metadata": metadata_path,
+                            "tap_repository": TAP_SOURCE["repository"],
+                            "target_abi": TARGET_ABI,
+                        }
+                    ],
+                )
 
     def test_verification_materializes_the_full_exact_candidate_closure(self) -> None:
         from scripts.abi_staging import execution

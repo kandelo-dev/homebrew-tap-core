@@ -110,10 +110,11 @@ module AbiStagingWorkflowCheck
                      "#{field} matrix is not protected discovery output")
   end
 
-  def require_candidate_checkouts(job, field)
+  def require_candidate_checkouts(job, field, include_homebrew: false)
     checkouts = action_steps(job, CHECKOUT)
-    require_contract(checkouts.length == 3,
-                     "#{field} must check out tap, candidate, and policy sources")
+    expected_count = include_homebrew ? 4 : 3
+    require_contract(checkouts.length == expected_count,
+                     "#{field} must check out its exact protected sources")
     tap = checkouts.find { |step| step.dig("with", "path") == "tap-authority" }
     kandelo = checkouts.find { |step| step.dig("with", "path") == "kandelo-source" }
     policy = checkouts.find { |step| step.dig("with", "path") == "kandelo-authority" }
@@ -140,6 +141,18 @@ module AbiStagingWorkflowCheck
                        "persist-credentials" => false,
                        "path" => "kandelo-authority"
                      }, "#{field} Kandelo policy checkout is not immutable")
+    if include_homebrew
+      homebrew = checkouts.find do |step|
+        step.dig("with", "path") == "homebrew-prefix/Homebrew"
+      end
+      require_contract(!homebrew.nil? && homebrew.fetch("with") == {
+                         "repository" => "Homebrew/brew",
+                         "ref" => "a92554a538e81fad0c5074443885dbcc4c36221d",
+                         "fetch-depth" => 1,
+                         "persist-credentials" => false,
+                         "path" => "homebrew-prefix/Homebrew"
+                       }, "#{field} Homebrew checkout is not the reviewed revision")
+    end
     setup = job.fetch("steps").select do |step|
       step["uses"]&.end_with?("/.github/actions/setup-nix")
     end
@@ -1051,7 +1064,9 @@ module AbiStagingWorkflowCheck
                        "artifact-id" => "${{ steps.upload.outputs.artifact-id }}",
                        "artifact-digest" => "${{ steps.upload.outputs.artifact-digest }}"
                      }, "candidate producer authority or outputs changed")
-    require_candidate_checkouts(producer, producer_name)
+    require_candidate_checkouts(
+      producer, producer_name, include_homebrew: kind == :candidate
+    )
     downloads = action_steps(producer, DOWNLOAD_ARTIFACT)
     require_contract(downloads.length == 1 &&
                      downloads.fetch(0).fetch("with") == {
@@ -1060,20 +1075,58 @@ module AbiStagingWorkflowCheck
                        "merge-multiple" => true
                      }, "candidate producer lacks exact coordination artifact")
     commands = run_steps(producer)
-    require_contract(commands.length == 1 &&
-                     commands.fetch(0).fetch("working-directory") == "kandelo-authority" &&
-                     commands.fetch(0).fetch("env") == {
+    if kind == :candidate
+      export = commands.find do |step|
+        step["name"] == "Export exact candidate build identity"
+      end
+      realm = commands.find do |step|
+        step["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      require_contract(commands.length == 3 && !export.nil? && !realm.nil? &&
+                       export.fetch("working-directory") == "kandelo-authority" &&
+                       export.fetch("env") == {"WORK_ID" => "${{ inputs.work-id }}"} &&
+                       export.fetch("run").include?("export-build-realm") &&
+                       export.fetch("run").include?('"PYTHONDONTWRITEBYTECODE=1"') &&
+                       export.fetch("run").include?('--github-env "$GITHUB_ENV"') &&
+                       realm.fetch("working-directory") == "kandelo-authority" &&
+                       realm.fetch("env") == {
+                         "HOMEBREW_BREW_COMMIT" =>
+                           "a92554a538e81fad0c5074443885dbcc4c36221d",
+                         "WORK_ID" => "${{ inputs.work-id }}"
+                       } &&
+                       realm.fetch("run").include?("homebrew-prepare-host-prefix.sh") &&
+                       realm.fetch("run").scan("env -u GITHUB_TOKEN").length == 2 &&
+                       realm.fetch("run").scan("-u ACTIONS_RUNTIME_TOKEN").length == 2,
+                       "candidate producer build realm changed")
+    else
+      require_contract(commands.length == 1,
+                       "candidate producer command inputs changed")
+    end
+    command_step = commands.find do |step|
+      step.fetch("run", "").include?(producer_cli)
+    end
+    require_contract(!command_step.nil? &&
+                     command_step.fetch("working-directory") ==
+                       (kind == :candidate ? "kandelo-source" : "kandelo-authority") &&
+                     command_step.fetch("env") == {
                        "WORK_ID" => "${{ inputs.work-id }}"
                      }, "candidate producer command inputs changed")
-    source = commands.fetch(0).fetch("run")
+    source = command_step.fetch("run")
     require_contract(source.include?("env -u GITHUB_TOKEN") &&
                      source.include?("-u ACTIONS_RUNTIME_TOKEN") &&
                      source.include?("scripts/dev-shell.sh env") &&
+                     (kind != :candidate ||
+                       (source.include?('"PYTHONDONTWRITEBYTECODE=1"') &&
+                        source.include?('"PYTHONSAFEPATH=1"') &&
+                        source.include?(
+                          "python3 -P -m scripts.abi_staging.cli #{producer_cli}"
+                        ))) &&
                      source.include?(
                        'PYTHONPATH=$GITHUB_WORKSPACE/tap-authority'
                      ) &&
                      !source.include?("../kandelo-source/scripts/dev-shell.sh") &&
-                     source.include?("python3 -m scripts.abi_staging.cli #{producer_cli}") &&
+                     (kind == :candidate ||
+                       source.include?("python3 -m scripts.abi_staging.cli #{producer_cli}")) &&
                      source.include?('--run-id "$GITHUB_RUN_ID"') &&
                      source.include?('--run-attempt "$GITHUB_RUN_ATTEMPT"') &&
                      source.include?('--workflow-ref "$GITHUB_WORKFLOW_REF"'),
