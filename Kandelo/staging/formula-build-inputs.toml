@@ -193,6 +193,20 @@ kandelo_paths = []
 tap_paths = []
 
 [[formulae]]
+name = "kandelo-sdk"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = [
+  "COPYING",
+  "COPYING.runtime",
+  "LICENSE",
+  "libc/glue",
+  "sdk/config.site",
+  "sdk/kandelo",
+]
+tap_paths = ["Kandelo/recipes/kandelo-sdk"]
+
+[[formulae]]
 name = "less"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]

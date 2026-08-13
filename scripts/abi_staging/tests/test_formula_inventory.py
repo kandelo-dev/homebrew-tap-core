@@ -84,6 +84,26 @@ class FormulaInventoryTests(unittest.TestCase):
             TAP_ROOT, cls.capture_policy
         )
 
+    def test_toolchain_formulae_have_closed_build_inputs(self) -> None:
+        inventory = load_formula_build_inputs(
+            TAP_ROOT / "Kandelo/staging/formula-build-inputs.toml",
+            tap_root=TAP_ROOT,
+        )
+        by_name = {item.name: item for item in inventory.formulae}
+        self.assertIn("wasm32", by_name["libcxx"].architectures)
+        self.assertEqual(("wasm32",), by_name["clang"].architectures)
+        self.assertIn("Kandelo/recipes/clang", by_name["clang"].tap_paths)
+        self.assertEqual(("wasm32",), by_name["kandelo-sdk"].architectures)
+        self.assertIn(
+            "Kandelo/recipes/kandelo-sdk",
+            by_name["kandelo-sdk"].tap_paths,
+        )
+        for path in (
+            "COPYING", "COPYING.runtime", "LICENSE", "libc/glue",
+            "sdk/config.site", "sdk/kandelo",
+        ):
+            self.assertIn(path, by_name["kandelo-sdk"].kandelo_paths)
+
     def test_generated_bottle_metadata_is_the_only_normalized_exclusion(self) -> None:
         first = _formula_source(
             bottle=_bottle(
@@ -166,7 +186,7 @@ class FormulaInventoryTests(unittest.TestCase):
             self.capture_policy,
             self.capture_catalog,
         )
-        self.assertEqual(len(inventory["formulae"]), 72)
+        self.assertEqual(len(inventory["formulae"]), 73)
         self.assertRegex(inventory["formula_tree"], r"^[0-9a-f]{40,64}$")
         self.assertRegex(inventory["sidecar_tree"], r"^[0-9a-f]{40,64}$")
         self.assertRegex(inventory["graph_sha256"], r"^[0-9a-f]{64}$")
@@ -180,6 +200,14 @@ class FormulaInventoryTests(unittest.TestCase):
         self.assertEqual(
             by_name["clang"]["target_dependencies"],
             [{"name": "libcxx", "scopes": ["runtime"]}],
+        )
+        self.assertEqual(by_name["kandelo-sdk"]["architectures"], ["wasm32"])
+        self.assertEqual(
+            by_name["kandelo-sdk"]["target_dependencies"],
+            [
+                {"name": "clang", "scopes": ["runtime"]},
+                {"name": "libcxx", "scopes": ["runtime"]},
+            ],
         )
         self.assertEqual(by_name["sqlite"]["architectures"], ["wasm32", "wasm64"])
         self.assertIn(
