@@ -28,6 +28,14 @@ The first active request is a hosted cutover canary. It is not bottle
 admission, endorsement, promotion, or a current-ABI change; those remain
 separate later stages with independent protected gates.
 
+GHCR returns the same anonymous denial for a never-created staging repository
+and a private repository. Public planning can therefore treat that response
+only as an empty public inventory. Before any first write, the protected
+publisher independently queries authenticated package metadata: an existing
+namespace must already be public and associated with this tap, while an exact
+404 permits the bounded first publication. Every successful publication is
+then read back anonymously by immutable digest.
+
 ## Formulae
 
 Formulae under `Formula/` use normal Homebrew metadata and build their staged

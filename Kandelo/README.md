@@ -35,6 +35,12 @@ not bottle admission, verification, endorsement, promotion, or a current-ABI
 update; those steps remain disabled until their own protected activations and
 canaries land.
 
+GHCR does not let anonymous discovery distinguish a never-created staging
+repository from a private one. The coordinator treats that response only as
+an empty public inventory. The credentialed publisher must independently find
+the package absent, or already public and associated with this tap, before its
+first write; afterward exact digest readback must succeed anonymously.
+
 ## Legacy sidecar metadata
 
 Trusted publish workflows generate this directory in the

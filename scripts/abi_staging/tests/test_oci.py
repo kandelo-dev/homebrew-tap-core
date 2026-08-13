@@ -47,6 +47,8 @@ class FakeRegistryTransport:
         self.next_status: int | None = None
         self.redirect_url: str | None = None
         self.hostile_upload_location = False
+        self.package_absent_until_first_manifest = False
+        self.registry_next_status: int | None = None
 
     def _response(
         self,
@@ -80,6 +82,11 @@ class FakeRegistryTransport:
             return self._response(status, url)
         parsed = urlsplit(url)
         if parsed.netloc == "api.github.com":
+            if self.package_absent_until_first_manifest and not any(
+                candidate_repository == REPOSITORY
+                for candidate_repository, _reference in self.manifests
+            ):
+                return self._response(404, url)
             payload = canonical_bytes(
                 {
                     "repository": {"full_name": self.association},
@@ -90,6 +97,10 @@ class FakeRegistryTransport:
         prefix = "/v2/"
         if parsed.netloc != "ghcr.io" or not parsed.path.startswith(prefix):
             return self._response(404, url)
+        if self.registry_next_status is not None:
+            status = self.registry_next_status
+            self.registry_next_status = None
+            return self._response(status, url)
         remainder = parsed.path[len(prefix) :]
         if remainder.endswith("/tags/list"):
             repository = remainder[: -len("/tags/list")]
@@ -304,6 +315,41 @@ class OciPublicationTests(unittest.TestCase):
         with self.assertRaises(OciPublicationError):
             list_public_record_locators(REPOSITORY, transport=transport)
 
+    def test_hidden_anonymous_namespace_is_empty_only_for_public_inventory(self) -> None:
+        transport = UrllibOciTransportV1(username="", token="")
+        inventory_url = f"https://ghcr.io/v2/{REPOSITORY}/tags/list?n=100"
+        token_url = (
+            "https://ghcr.io/token?service=ghcr.io&scope="
+            f"repository%3A{REPOSITORY.replace('/', '%2F')}%3Apull"
+        )
+        challenge = (
+            'Bearer realm="https://ghcr.io/token",service="ghcr.io",'
+            f'scope="repository:{REPOSITORY}:pull"'
+        )
+        responses = iter(
+            (
+                HttpResponseV1(
+                    401,
+                    {"www-authenticate": challenge},
+                    b'{"errors":[{"code":"UNAUTHORIZED"}]}',
+                    inventory_url,
+                ),
+                HttpResponseV1(
+                    403,
+                    {},
+                    (
+                        b'{"errors":[{"code":"DENIED","message":'
+                        b'"requested access to the resource is denied"}]}'
+                    ),
+                    token_url,
+                ),
+            )
+        )
+        with patch.object(transport, "_perform", side_effect=responses):
+            self.assertEqual(
+                list_public_record_locators(REPOSITORY, transport=transport), ()
+            )
+
     def test_manifest_is_canonical_and_preserves_exact_descriptor_order(self) -> None:
         plan = _plan()
         manifest = build_oci_manifest(plan)
@@ -322,6 +368,7 @@ class OciPublicationTests(unittest.TestCase):
 
     def test_new_namespace_mount_upload_and_anonymous_readback(self) -> None:
         transport = FakeRegistryTransport()
+        transport.package_absent_until_first_manifest = True
         plan = _plan()
         mounted = plan.layers[0]
         transport.blobs[(mounted.mount_from, mounted.digest)] = mounted.body
@@ -346,6 +393,26 @@ class OciPublicationTests(unittest.TestCase):
                 for method, url, authenticated in transport.calls
             )
         )
+
+    def test_existing_private_or_foreign_namespace_fails_before_any_write(self) -> None:
+        for case in ("private", "foreign"):
+            transport = FakeRegistryTransport()
+            if case == "private":
+                transport.visibility = "private"
+            else:
+                transport.association = "kandelo-dev/other"
+            with self.subTest(case=case), self.assertRaises(OciPublicationError):
+                publish_record(
+                    _plan(),
+                    transport=transport,
+                    expected_source_repository=SOURCE_ASSOCIATION,
+                )
+            self.assertFalse(
+                any(
+                    method in {"POST", "PUT"}
+                    for method, _url, _authenticated in transport.calls
+                )
+            )
 
     def test_existing_identical_manifest_is_idempotent(self) -> None:
         transport = FakeRegistryTransport()
@@ -420,7 +487,7 @@ class OciPublicationTests(unittest.TestCase):
     def test_retryable_server_error_and_hostile_redirect_are_distinct(self) -> None:
         plan = _plan()
         retrying = FakeRegistryTransport()
-        retrying.next_status = 503
+        retrying.registry_next_status = 503
         with self.assertRaises(OciPublicationError) as raised:
             publish_record(
                 plan,
