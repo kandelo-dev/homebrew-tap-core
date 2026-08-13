@@ -13,7 +13,11 @@ TAP_ROOT = Path(os.environ["KANDELO_TAP_ROOT"])
 KANDELO_ROOT = Path(os.environ["KANDELO_ROOT"])
 sys.path.insert(0, str(TAP_ROOT))
 
-from scripts.abi_staging.canonical import canonical_sha256
+from scripts.abi_staging.canonical import (
+    canonical_bytes,
+    canonical_sha256,
+    parse_canonical_bytes,
+)
 from scripts.abi_staging.coordination import (
     CoordinationError,
     coordinate_planned_request,
@@ -60,7 +64,7 @@ def descriptor_capable(
 
 
 class ContractCoordinationTests(unittest.TestCase):
-    def test_coordination_bundle_is_deterministic_and_observe_mode_starts_no_jobs(self) -> None:
+    def test_coordination_bundle_accepts_frozen_canonical_request(self) -> None:
         request = json.loads(
             (TAP_ROOT / "Kandelo/staging/fixtures/request/current-request.json").read_bytes()
         )
@@ -92,6 +96,9 @@ class ContractCoordinationTests(unittest.TestCase):
             }
         )
         self.assertEqual(canonical_sha256(request), PLAN["request_digest"])
+        frozen_request = parse_canonical_bytes(
+            canonical_bytes(request), maximum_bytes=4 * 1024 * 1024
+        )
         lifecycle = PullRequestLifecycleV1(
             "open", request["build_source"]["commit"], None
         )
@@ -113,7 +120,7 @@ class ContractCoordinationTests(unittest.TestCase):
             "mode": "observe",
             "tap_root": TAP_ROOT,
             "kandelo_root": KANDELO_ROOT,
-            "request": request,
+            "request": frozen_request,
             "request_asset_url": PLAN["request_asset_url"],
             "tap_plan": PLAN,
             "reconciliation": reconciliation,
