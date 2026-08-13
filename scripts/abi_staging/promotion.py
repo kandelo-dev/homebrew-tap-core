@@ -77,6 +77,7 @@ from .tap_metadata import (
     load_abi_state,
     plan_formula_metadata_patch,
     plan_successor_activation_patch,
+    validate_runtime_claim,
 )
 from .verification import (
     VERIFICATION_RECEIPT_MEDIA_TYPE,
@@ -113,6 +114,154 @@ class PromotionDecisionV1:
     override_receipts: tuple[str, ...]
     tap_source_state: Literal["exact", "drift", "rebuild-required"]
     eligibility: Literal["eligible", "ineligible", "rebuild-required"]
+    runtime_claim: Mapping[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class ProductEvidenceAuthorityV1:
+    request_digest: str
+    source: Mapping[str, object]
+    target_abi: int
+    product_id: str
+    record_sha256: str
+    outcome: str
+    promotion_state: str
+    resolved_formula_layers: tuple[Mapping[str, object], ...]
+    requirements: tuple[Mapping[str, object], ...]
+
+    def __post_init__(self) -> None:
+        _digest(self.request_digest, "product evidence authority request")
+        _source(self.source, "product evidence authority source")
+        _positive(self.target_abi, "product evidence authority ABI")
+        _stable_id(self.product_id, "product evidence authority product")
+        _digest(self.record_sha256, "product evidence authority record")
+        if self.outcome not in {"success", "failure", "timeout"}:
+            raise PromotionError("product evidence authority outcome is unsupported")
+        if self.promotion_state not in {
+            "eligible",
+            "ineligible",
+            "accepted-with-override",
+        }:
+            raise PromotionError("product evidence authority state is unsupported")
+        previous = ""
+        for index, candidate in enumerate(self.resolved_formula_layers):
+            item = _exact(
+                candidate,
+                frozenset({"id", "artifact"}),
+                f"product evidence authority Formula layer {index}",
+            )
+            identity = _stable_id(
+                item["id"], f"product evidence authority Formula layer {index} ID"
+            )
+            if identity <= previous:
+                raise PromotionError(
+                    "product evidence authority Formula layers are not sorted and unique"
+                )
+            previous = identity
+            _artifact(item["artifact"], f"product evidence authority Formula {identity}")
+        previous_requirement: tuple[int, str] | None = None
+        host_order = {"node": 0, "browser": 1}
+        for index, candidate in enumerate(self.requirements):
+            item = _exact(
+                candidate,
+                frozenset({"host", "id", "definition_sha256"}),
+                f"product evidence authority requirement {index}",
+            )
+            host = item["host"]
+            if host not in host_order:
+                raise PromotionError("product evidence authority host is unsupported")
+            definition_id = _stable_id(
+                item["id"], f"product evidence authority requirement {index} ID"
+            )
+            _digest(
+                item["definition_sha256"],
+                f"product evidence authority requirement {index} digest",
+            )
+            key = (host_order[host], definition_id)
+            if previous_requirement is not None and key <= previous_requirement:
+                raise PromotionError(
+                    "product evidence authority requirements are not canonical"
+                )
+            previous_requirement = key
+
+
+def _runtime_claim_from_product_evidence(
+    *,
+    policy: PromotionPolicyV1,
+    formula: str,
+    architecture: str,
+    request_digest: str,
+    request_source: Mapping[str, Any],
+    target_abi: int,
+    candidate_layer: Mapping[str, Any],
+    authorities: Sequence[ProductEvidenceAuthorityV1],
+) -> tuple[dict[str, Any] | None, bool]:
+    rules = [
+        rule
+        for rule in policy.runtime_claims
+        if rule.architecture == architecture and formula in rule.formulae
+    ]
+    if len(rules) > 1:
+        raise PromotionError("runtime claim policy repeats a Formula architecture")
+    if not rules:
+        if authorities:
+            raise PromotionError("product evidence is unused by runtime claim policy")
+        return None, True
+    if not authorities:
+        return None, False
+    if len(authorities) != 1:
+        raise PromotionError("runtime claim product evidence is duplicated or unused")
+    rule = rules[0]
+    authority = authorities[0]
+    if not isinstance(authority, ProductEvidenceAuthorityV1):
+        raise PromotionError("runtime claim product evidence authority is invalid")
+    if authority.product_id != rule.product_id:
+        raise PromotionError("runtime claim product evidence names another product")
+    if (
+        authority.request_digest != request_digest
+        or canonical_bytes(authority.source) != canonical_bytes(request_source)
+        or authority.target_abi != target_abi
+        or authority.outcome != "success"
+        or authority.promotion_state != "eligible"
+    ):
+        return None, False
+    expected_layer_id = f"homebrew-{formula}"
+    layers = [
+        item["artifact"]
+        for item in authority.resolved_formula_layers
+        if item["id"] == expected_layer_id
+    ]
+    if len(layers) != 1 or _artifact(
+        layers[0], "runtime claim resolved Formula layer"
+    ) != _artifact(candidate_layer, "runtime claim candidate layer"):
+        return None, False
+    requirements = {
+        (item["host"], item["id"]): item
+        for item in authority.requirements
+    }
+    evidence = []
+    for requirement in rule.requirements:
+        item = requirements.get((requirement.host, requirement.definition_id))
+        if item is None:
+            return None, False
+        evidence.append(
+            {
+                "host": requirement.host,
+                "product_id": rule.product_id,
+                "definition_id": requirement.definition_id,
+                "definition_sha256": item["definition_sha256"],
+                "product_evidence_sha256": authority.record_sha256,
+            }
+        )
+    claim = {
+        "runtime_support": ["node", "browser"],
+        "browser_compatible": True,
+        "evidence": evidence,
+    }
+    try:
+        return validate_runtime_claim(claim), True
+    except TapMetadataError as error:
+        raise PromotionError(f"runtime claim is invalid: {error}") from error
 
 
 @dataclass(frozen=True)
@@ -1268,6 +1417,7 @@ def evaluate_promotion(
     expected_request_policy: Mapping[str, Any],
     verification_tests: Sequence[VerificationTestDefinitionV1],
     history_tap_source: Mapping[str, Any] | None = None,
+    product_evidence: Sequence[ProductEvidenceAuthorityV1] = (),
 ) -> PromotionDecisionV1:
     """Re-evaluate one Formula against exact merge, record, and tap authority."""
 
@@ -1402,6 +1552,17 @@ def evaluate_promotion(
             )
     verification_complete = set(expected_verification) == seen_verification
     verification_accepted = failed_guards.issubset(accepted_guards)
+    candidate_formula = candidate_record["candidate"]["formula"]
+    runtime_claim, runtime_evidence_complete = _runtime_claim_from_product_evidence(
+        policy=policy,
+        formula=candidate_formula["formula"],
+        architecture=candidate_formula["architecture"],
+        request_digest=request_digest,
+        request_source=request_source,
+        target_abi=target_abi,
+        candidate_layer=bottle,
+        authorities=product_evidence,
+    )
 
     _history(
         history,
@@ -1424,7 +1585,9 @@ def evaluate_promotion(
         tap_source_state = "exact" if current_source == planned_tap_source else "drift"
         eligibility = (
             "eligible"
-            if verification_complete and verification_accepted
+            if verification_complete
+            and verification_accepted
+            and runtime_evidence_complete
             else "ineligible"
         )
 
@@ -1445,17 +1608,19 @@ def evaluate_promotion(
         override_receipts=tuple(override_digests),
         tap_source_state=tap_source_state,
         eligibility=eligibility,
+        runtime_claim=runtime_claim,
     )
     validate_promotion_decision(asdict(decision))
     return decision
 
 
 def validate_promotion_decision(value: Mapping[str, Any]) -> None:
-    decision = _exact(
-        value,
-        frozenset(PromotionDecisionV1.__dataclass_fields__),
-        "promotion decision",
-    )
+    fields = frozenset(PromotionDecisionV1.__dataclass_fields__)
+    historical_fields = fields - {"runtime_claim"}
+    if frozenset(value) == historical_fields:
+        decision = {**value, "runtime_claim": None}
+    else:
+        decision = _exact(value, fields, "promotion decision")
     _digest(decision["request_digest"], "promotion request")
     merged = _exact(
         decision["merged_pull_request"],
@@ -1490,6 +1655,11 @@ def validate_promotion_decision(value: Mapping[str, Any]) -> None:
         raise PromotionError("promotion tap source state is unsupported")
     if decision["eligibility"] not in {"eligible", "ineligible", "rebuild-required"}:
         raise PromotionError("promotion eligibility is unsupported")
+    if decision["runtime_claim"] is not None:
+        try:
+            validate_runtime_claim(decision["runtime_claim"])
+        except TapMetadataError as error:
+            raise PromotionError(f"promotion runtime claim is invalid: {error}") from error
     if (
         decision["eligibility"] == "eligible"
         and not decision["qualifying_receipts"]
@@ -1690,14 +1860,30 @@ def _canonical_vfs_composition_descriptor(
                 "tap",
                 "formula",
                 "required_by",
+                "dependencies",
                 "tree",
             }
         ),
         "candidate VFS composition descriptor",
     )
     roots = value["required_by"]
+    dependencies = value["dependencies"]
+    tap_owner, tap_repository = str(formula["tap"]).split("/", 1)
+    tap_name = f"{tap_owner}/{tap_repository.removeprefix('homebrew-')}"
+    dependency_prefix = tap_name + "/"
+    expected_dependency_layer_ids = [
+        dependency.removeprefix(dependency_prefix)
+        + "-"
+        + str(formula["architecture"])
+        for dependency in dependencies
+    ] if isinstance(dependencies, list) else []
+    actual_dependency_layer_ids = [
+        item.get("id")
+        for item in payload["direct_dependency_layers"]
+        if isinstance(item, Mapping)
+    ]
     if (
-        value["schema"] != 1
+        value["schema"] != 2
         or value["kind"] != "kandelo-homebrew-original-bottle-tree"
         or value["architecture"] != formula["architecture"]
         or value["tap"] != formula["tap"]
@@ -1707,6 +1893,15 @@ def _canonical_vfs_composition_descriptor(
         or len(roots) > 256
         or any(not isinstance(root, str) or STABLE_ID.fullmatch(root) is None for root in roots)
         or roots != sorted(set(roots))
+        or not isinstance(dependencies, list)
+        or dependencies != sorted(set(dependencies))
+        or any(
+            not isinstance(dependency, str)
+            or not dependency.startswith(dependency_prefix)
+            or STABLE_ID.fullmatch(dependency.removeprefix(dependency_prefix)) is None
+            for dependency in dependencies
+        )
+        or expected_dependency_layer_ids != actual_dependency_layer_ids
     ):
         raise PromotionError("candidate VFS composition descriptor identity is invalid")
     tree = _exact(
@@ -2061,26 +2256,17 @@ def build_admission_oci_plan(
         ),
         "admission payload",
     )
-    update = _exact(
-        admission["formula_metadata_update"],
-        frozenset(
-            {
-                "formula",
-                "architecture",
-                "expected_main_commit",
-                "expected_normalized_formula_sha256",
-                "expected_generated_metadata_sha256",
-                "allowed_paths",
-                "link_manifest_path",
-                "link_manifest_sha256",
-                "canonical_manifest_digest",
-                "bottle_layer_sha256",
-                "bottle_layer_bytes",
-                "target_abi",
-            }
-        ),
-        "admission Formula metadata update",
-    )
+    raw_update = admission["formula_metadata_update"]
+    update_fields = frozenset(FormulaMetadataUpdateV1.__dataclass_fields__)
+    historical_update_fields = update_fields - {"runtime_claim"}
+    if frozenset(raw_update) == historical_update_fields:
+        update = {**raw_update, "runtime_claim": None}
+    else:
+        update = _exact(
+            raw_update,
+            update_fields,
+            "admission Formula metadata update",
+        )
     formula = _stable_id(update["formula"], "admission Formula")
     target_abi = _nonnegative(update["target_abi"], "admission target ABI")
     body = canonical_bytes(_plain(record))
@@ -2264,11 +2450,16 @@ def load_metadata_patch_document(
     if raw_update is None:
         update = None
     else:
-        update_value = _exact(
-            raw_update,
-            frozenset(FormulaMetadataUpdateV1.__dataclass_fields__),
-            "metadata Formula update",
-        )
+        update_fields = frozenset(FormulaMetadataUpdateV1.__dataclass_fields__)
+        historical_update_fields = update_fields - {"runtime_claim"}
+        if frozenset(raw_update) == historical_update_fields:
+            update_value = {**raw_update, "runtime_claim": None}
+        else:
+            update_value = _exact(
+                raw_update,
+                update_fields,
+                "metadata Formula update",
+            )
         update = FormulaMetadataUpdateV1(
             formula=update_value["formula"],
             architecture=update_value["architecture"],
@@ -2286,6 +2477,7 @@ def load_metadata_patch_document(
             bottle_layer_sha256=update_value["bottle_layer_sha256"],
             bottle_layer_bytes=update_value["bottle_layer_bytes"],
             target_abi=update_value["target_abi"],
+            runtime_claim=update_value["runtime_claim"],
         )
     if (patch.operation == "formula-metadata") != (update is not None):
         raise PromotionError("metadata patch Formula update is contradictory")
@@ -2769,6 +2961,7 @@ def prepare_formula_metadata_patch(
         bottle_layer_sha256=layer["sha256"],
         bottle_layer_bytes=layer["bytes"],
         target_abi=target_abi,
+        runtime_claim=prepared.decision.runtime_claim,
     )
     promoted = PromotedBottleMetadataV1(
         formula=name,
@@ -2842,6 +3035,13 @@ def finalize_admission_record(
         != canonical_bytes(formula_metadata_update)
     ):
         raise PromotionError("Formula metadata post-write readback differs from committed facts")
+    metadata_runtime_claim = formula_metadata_update.get("runtime_claim")
+    if canonical_bytes(metadata_runtime_claim) != canonical_bytes(
+        prepared.decision.runtime_claim
+    ):
+        raise PromotionError(
+            "Formula metadata runtime claim differs from the promotion decision"
+        )
     try:
         return build_admission_record(
             request_sha256=prepared.decision.request_digest,

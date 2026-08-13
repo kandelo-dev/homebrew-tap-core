@@ -742,7 +742,7 @@ module AbiStagingWorkflowCheck
     promotion_planner = jobs.fetch("plan-promotion")
     require_contract(
       promotion_planner.fetch("needs") == %w[
-        discover-plan candidate verification reuse
+        discover-plan candidate verification reuse publish-product-evidence
       ] && promotion_planner.fetch("if") ==
         "always() && needs.discover-plan.outputs.selected == 'true' && needs.discover-plan.outputs.promotion-eligible == 'true'" &&
         promotion_planner.fetch("runs-on") == "ubuntu-latest" &&
@@ -792,6 +792,7 @@ module AbiStagingWorkflowCheck
         planner_commands.fetch(0).fetch("working-directory") == "tap-authority" &&
         planner_source.include?("plan-workflow-promotion") &&
         planner_source.include?('--coordination-root "$RUNNER_TEMP/promotion-inputs/coordination"') &&
+        planner_source.include?('--product-evidence-root "$RUNNER_TEMP/promotion-inputs/product-evidence"') &&
         planner_source.include?('--kandelo-root "$GITHUB_WORKSPACE/kandelo-source"') &&
         planner_source.include?("--require-merged") &&
         planner_source.include?("--require-history-record") &&
@@ -801,11 +802,16 @@ module AbiStagingWorkflowCheck
     require_no_candidate_execution(planner_source, "promotion planner")
     planner_downloads = action_steps(promotion_planner, DOWNLOAD_ARTIFACT)
     require_contract(
-      planner_downloads.length == 1 &&
+      planner_downloads.length == 2 &&
         planner_downloads.fetch(0).dig("with", "artifact-ids") ==
           "${{ needs.discover-plan.outputs.coordination-artifact-id }}" &&
-        planner_downloads.fetch(0).dig("with", "merge-multiple") == true,
-      "promotion planner does not consume exact protected coordination"
+        planner_downloads.fetch(0).dig("with", "merge-multiple") == true &&
+        planner_downloads.fetch(1).dig("with", "pattern") ==
+          "abi-staging-product-evidence-*-${{ github.run_id }}-${{ github.run_attempt }}" &&
+        planner_downloads.fetch(1).dig("with", "path") ==
+          "${{ runner.temp }}/promotion-inputs/product-evidence" &&
+        !planner_downloads.fetch(1).dig("with").key?("merge-multiple"),
+      "promotion planner does not consume exact coordination and product evidence"
     )
     planner_uploads = action_steps(promotion_planner, UPLOAD_ARTIFACT)
     require_contract(

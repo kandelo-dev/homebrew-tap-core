@@ -50,6 +50,7 @@ from scripts.abi_staging.policy import (
 from scripts.abi_staging.promotion import (
     ADMISSION_RECORD_MEDIA_TYPE,
     CANONICAL_BOTTLE_MANIFEST_MEDIA_TYPE,
+    ProductEvidenceAuthorityV1,
     PromotionError,
     build_admission_oci_plan,
     build_canonical_bottle_plan,
@@ -606,7 +607,8 @@ class PromotionTests(unittest.TestCase):
                 "formula": FORMULA,
                 "kind": "kandelo-homebrew-original-bottle-tree",
                 "required_by": [FORMULA],
-                "schema": 1,
+                "dependencies": ["kandelo-dev/tap-core/ncurses"],
+                "schema": 2,
                 "tap": "kandelo-dev/homebrew-tap-core",
                 "tree": {
                     "activation": {
@@ -1603,6 +1605,110 @@ class PromotionTests(unittest.TestCase):
             with self.subTest(subject=subject), self.assertRaises(PromotionError):
                 validate_promotion_decision(changed)
 
+    def test_promotion_decision_carries_one_canonical_runtime_claim(self) -> None:
+        decision = asdict(self._evaluate())
+        claim = {
+            "runtime_support": ["node", "browser"],
+            "browser_compatible": True,
+            "evidence": [
+                {
+                    "host": "node",
+                    "product_id": "browser-main-shell",
+                    "definition_id": "main-shell-toolchain-node",
+                    "definition_sha256": "a" * 64,
+                    "product_evidence_sha256": "c" * 64,
+                },
+                {
+                    "host": "browser",
+                    "product_id": "browser-main-shell",
+                    "definition_id": "main-shell-toolchain-browser",
+                    "definition_sha256": "b" * 64,
+                    "product_evidence_sha256": "c" * 64,
+                },
+            ],
+        }
+        decision["runtime_claim"] = claim
+        validate_promotion_decision(decision)
+        for mutation in (
+            {**claim, "runtime_support": ["browser", "node"]},
+            {**claim, "browser_compatible": False},
+            {**claim, "evidence": list(reversed(claim["evidence"]))},
+        ):
+            changed = copy.deepcopy(decision)
+            changed["runtime_claim"] = mutation
+            with self.subTest(mutation=mutation), self.assertRaises(PromotionError):
+                validate_promotion_decision(changed)
+
+    def test_policy_covered_formula_requires_exact_product_evidence(self) -> None:
+        rule = replace(
+            self.promotion_policy.runtime_claims[0],
+            formulae=(FORMULA,),
+        )
+        policy = replace(self.promotion_policy, runtime_claims=(rule,))
+        authority = ProductEvidenceAuthorityV1(
+            request_digest=self.request_digest,
+            source=copy.deepcopy(self.request["build_source"]),
+            target_abi=TARGET_ABI,
+            product_id=rule.product_id,
+            record_sha256="c" * 64,
+            outcome="success",
+            promotion_state="eligible",
+            resolved_formula_layers=(
+                {
+                    "id": f"homebrew-{FORMULA}",
+                    "artifact": copy.deepcopy(
+                        self.candidate_record["candidate"]["bottle_layer"]
+                    ),
+                },
+            ),
+            requirements=tuple(
+                {
+                    "host": requirement.host,
+                    "id": requirement.definition_id,
+                    "definition_sha256": character * 64,
+                }
+                for requirement, character in zip(
+                    rule.requirements, ("a", "b"), strict=True
+                )
+            ),
+        )
+
+        decision = self._evaluate(
+            policy=policy,
+            product_evidence=(authority,),
+        )
+        self.assertEqual(decision.eligibility, "eligible")
+        self.assertEqual(decision.runtime_claim["runtime_support"], ["node", "browser"])
+        self.assertEqual(
+            [item["definition_id"] for item in decision.runtime_claim["evidence"]],
+            [item.definition_id for item in rule.requirements],
+        )
+
+        missing = self._evaluate(policy=policy, product_evidence=())
+        self.assertEqual(missing.eligibility, "ineligible")
+        self.assertIsNone(missing.runtime_claim)
+        wrong_layer = replace(
+            authority,
+            resolved_formula_layers=(
+                {
+                    "id": f"homebrew-{FORMULA}",
+                    "artifact": {
+                        **authority.resolved_formula_layers[0]["artifact"],
+                        "sha256": "d" * 64,
+                        "immutable_reference": (
+                            "ghcr.io/kandelo-dev/mismatched@sha256:" + "d" * 64
+                        ),
+                    },
+                },
+            ),
+        )
+        mismatched = self._evaluate(
+            policy=policy,
+            product_evidence=(wrong_layer,),
+        )
+        self.assertEqual(mismatched.eligibility, "ineligible")
+        self.assertIsNone(mismatched.runtime_claim)
+
     def test_canonical_manifest_wraps_the_unchanged_candidate_layer(self) -> None:
         decision = self._evaluate()
         plan = build_canonical_bottle_plan(
@@ -1646,6 +1752,10 @@ class PromotionTests(unittest.TestCase):
             canonical_descriptor_value["tree"]["transports"]
         )
         self.assertEqual(canonical_descriptor_value, candidate_descriptor_value)
+        self.assertEqual(
+            canonical_descriptor_value["dependencies"],
+            ["kandelo-dev/tap-core/ncurses"],
+        )
         self.assertIn(
             "/homebrew-tap-core-abi-8/bash/blobs/sha256:",
             canonical_descriptor_value["tree"]["transports"][0]["url"],

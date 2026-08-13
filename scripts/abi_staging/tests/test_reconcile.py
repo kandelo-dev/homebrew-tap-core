@@ -815,6 +815,8 @@ class ReconciliationTests(unittest.TestCase):
                         "plan-workflow-promotion",
                         "--coordination-root",
                         str(coordination),
+                        "--product-evidence-root",
+                        str(root / "product-evidence"),
                         "--tap-root",
                         str(TAP_ROOT),
                         "--require-merged",
@@ -840,6 +842,62 @@ class ReconciliationTests(unittest.TestCase):
                 },
             )
             self.assertIn("canonical_matrix={\"include\":[]}", github_output.read_text())
+
+    def test_promotion_locator_root_selects_only_policy_product(self) -> None:
+        request_digest = "a" * 64
+
+        def publication(product_id: str, marker: str) -> dict[str, object]:
+            record_sha256 = marker * 64
+            repository = (
+                "ghcr.io/kandelo-dev/homebrew-tap-core-abi-42-candidates/"
+                f"products/{product_id}/evidence"
+            )
+            return {
+                "schema": 1,
+                "kind": "kandelo-vfs-product-evidence-publication",
+                "request_sha256": request_digest,
+                "product_id": product_id,
+                "product_work_id": "b" * 64,
+                "work_id": "c" * 64,
+                "record_sha256": record_sha256,
+                "record_locator": {
+                    "repository": repository,
+                    "digest": "sha256:" + record_sha256,
+                    "immutable_reference": repository + "@sha256:" + record_sha256,
+                    "anonymous_readback_sha256": "d" * 64,
+                },
+                "receipt_locators": [],
+            }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for product_id, marker in (("browser-main-shell", "e"), ("lamp", "f")):
+                destination = root / product_id
+                destination.mkdir()
+                (destination / "product-evidence.json").write_bytes(
+                    canonical_bytes(publication(product_id, marker))
+                )
+            selected = cli_module._promotion_product_evidence_locators(
+                str(root),
+                request_digest=request_digest,
+                expected_product_ids=frozenset({"browser-main-shell"}),
+                selected_product_ids=frozenset({"browser-main-shell", "lamp"}),
+            )
+            self.assertEqual(set(selected), {"browser-main-shell"})
+            self.assertEqual(selected["browser-main-shell"]["digest"], "sha256:" + "e" * 64)
+
+            duplicate = root / "duplicate"
+            duplicate.mkdir()
+            (duplicate / "product-evidence.json").write_bytes(
+                canonical_bytes(publication("browser-main-shell", "e"))
+            )
+            with self.assertRaisesRegex(ReconciliationError, "duplicated"):
+                cli_module._promotion_product_evidence_locators(
+                    str(root),
+                    request_digest=request_digest,
+                    expected_product_ids=frozenset({"browser-main-shell"}),
+                    selected_product_ids=frozenset({"browser-main-shell", "lamp"}),
+                )
 
     def test_observe_workflow_planner_keeps_work_non_authoritative(self) -> None:
         selected = discovered()
@@ -921,6 +979,8 @@ class ReconciliationTests(unittest.TestCase):
                         "plan-workflow-promotion",
                         "--coordination-root",
                         str(coordination),
+                        "--product-evidence-root",
+                        str(root / "product-evidence"),
                         "--tap-root",
                         str(TAP_ROOT),
                         "--require-merged",

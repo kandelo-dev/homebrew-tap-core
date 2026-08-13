@@ -52,6 +52,7 @@ SUCCESSOR_SNAPSHOT = "e" * 64
 REQUEST_DIGEST = "d" * 64
 MERGED_HEAD = "3" * 40
 MERGE_COMMIT = "4" * 40
+TAP_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _guest_layout_bytes() -> bytes:
@@ -325,6 +326,23 @@ class TapMetadataTests(unittest.TestCase):
         self.assertEqual(projection["current_abi"], SOURCE_ABI)
         self.assertEqual(projection["active_formulae"], ["bash"])
         self.assertEqual(projection["promotion_mode"], "disabled")
+
+    def test_current_policy_has_one_closed_toolchain_runtime_claim(self) -> None:
+        policy = load_promotion_policy(
+            TAP_ROOT / "Kandelo/staging/promotion-policy.toml"
+        )
+        self.assertEqual(len(policy.runtime_claims), 1)
+        claim = policy.runtime_claims[0]
+        self.assertEqual(claim.architecture, "wasm32")
+        self.assertEqual(claim.formulae, ("clang", "kandelo-sdk", "libcxx"))
+        self.assertEqual(claim.product_id, "browser-main-shell")
+        self.assertEqual(
+            [(item.host, item.definition_id) for item in claim.requirements],
+            [
+                ("node", "main-shell-toolchain-node"),
+                ("browser", "main-shell-toolchain-browser"),
+            ],
+        )
 
     def test_rejects_weakened_or_ambiguous_policy(self) -> None:
         path = self.root / "Kandelo/staging/promotion-policy.toml"
@@ -1001,6 +1019,7 @@ class TapMetadataTests(unittest.TestCase):
                 "Kandelo/link/bash-1.0-rebuild1-wasm32.json",
             ),
         )
+
         self.assertEqual(update.canonical_manifest_digest, "5" * 64)
         self.assertEqual(update.bottle_layer_sha256, layer_sha256)
         self.assertEqual(
@@ -1059,6 +1078,66 @@ class TapMetadataTests(unittest.TestCase):
         if validate is None:
             self.fail("per-Formula metadata patch validation is absent")
         validate(self.root, patch, update)
+
+    def test_runtime_claim_projects_to_sidecar_and_top_index(self) -> None:
+        policy_path = self.root / "Kandelo/staging/promotion-policy.toml"
+        policy_path.write_text(
+            _policy()
+            + """
+[[runtime_claims]]
+architecture = "wasm32"
+formulae = ["bash"]
+product_id = "browser-main-shell"
+
+[[runtime_claims.requirements]]
+host = "node"
+definition_id = "main-shell-toolchain-node"
+
+[[runtime_claims.requirements]]
+host = "browser"
+definition_id = "main-shell-toolchain-browser"
+"""
+        )
+        history, snapshot, preactivation, current = self._activate_fixture()
+        prepared = self._prepared_admission(preactivation=preactivation)
+        claim = {
+            "runtime_support": ["node", "browser"],
+            "browser_compatible": True,
+            "evidence": [
+                {
+                    "host": "node",
+                    "product_id": "browser-main-shell",
+                    "definition_id": "main-shell-toolchain-node",
+                    "definition_sha256": "a" * 64,
+                    "product_evidence_sha256": "c" * 64,
+                },
+                {
+                    "host": "browser",
+                    "product_id": "browser-main-shell",
+                    "definition_id": "main-shell-toolchain-browser",
+                    "definition_sha256": "b" * 64,
+                    "product_evidence_sha256": "c" * 64,
+                },
+            ],
+        }
+        prepared = replace(
+            prepared,
+            decision=replace(prepared.decision, runtime_claim=claim),
+        )
+        result = self._prepare_formula(
+            prepared=prepared,
+            history=history,
+            snapshot=snapshot,
+            current=current,
+        )
+        sidecar = json.loads(result.patch.files["Kandelo/formula/bash.json"])
+        bottle = sidecar["bottles"][0]
+        self.assertEqual(bottle["runtime_support"], ["node", "browser"])
+        self.assertTrue(bottle["browser_compatible"])
+        metadata = json.loads(result.patch.files["Kandelo/metadata.json"])
+        projected = metadata["packages"][0]["bottles"][0]
+        self.assertEqual(projected["runtime_support"], ["node", "browser"])
+        self.assertTrue(projected["browser_compatible"])
 
     def test_formula_update_rejects_canonical_or_candidate_layer_drift(self) -> None:
         history, snapshot, preactivation, current = self._activate_fixture()
@@ -1781,8 +1860,11 @@ class TapMetadataTests(unittest.TestCase):
             snapshot=snapshot,
             current=current,
         )
-        remote = self.root.parent / "metadata-remote.git"
-        other = self.root.parent / "metadata-racer"
+        remote_temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(remote_temporary.cleanup)
+        remote_parent = Path(remote_temporary.name)
+        remote = remote_parent / "metadata-remote.git"
+        other = remote_parent / "metadata-racer"
         _git(remote.parent, "init", "--bare", str(remote))
         _git(self.root, "remote", "add", "origin", str(remote))
         _git(self.root, "push", "-u", "origin", "main")

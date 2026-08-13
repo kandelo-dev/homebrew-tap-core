@@ -97,6 +97,20 @@ class TapMetadataWriteError(TapMetadataError):
 
 
 @dataclass(frozen=True)
+class RuntimeClaimRequirementV1:
+    host: Literal["node", "browser"]
+    definition_id: str
+
+
+@dataclass(frozen=True)
+class RuntimeClaimPolicyV1:
+    architecture: Literal["wasm32", "wasm64"]
+    formulae: tuple[str, ...]
+    product_id: str
+    requirements: tuple[RuntimeClaimRequirementV1, ...]
+
+
+@dataclass(frozen=True)
 class PromotionPolicyV1:
     schema: int
     kind: Literal["kandelo-abi-staging-promotion-policy"]
@@ -109,6 +123,7 @@ class PromotionPolicyV1:
     require_anonymous_readback: bool
     allow_independent_formula_promotion: bool
     allow_global_completion_gate: bool
+    runtime_claims: tuple[RuntimeClaimPolicyV1, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -161,6 +176,7 @@ class FormulaMetadataUpdateV1:
     bottle_layer_sha256: str
     bottle_layer_bytes: int
     target_abi: int
+    runtime_claim: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -433,8 +449,9 @@ def _pending_bottle(
 
 def load_promotion_policy(path: Path) -> PromotionPolicyV1:
     value = _load_toml(path, "promotion policy")
-    fields = frozenset(PromotionPolicyV1.__dataclass_fields__)
-    _exact_keys(value, fields, "promotion policy")
+    base_fields = frozenset(PromotionPolicyV1.__dataclass_fields__) - {"runtime_claims"}
+    if frozenset(value) not in {base_fields, base_fields | {"runtime_claims"}}:
+        _exact_keys(value, base_fields | {"runtime_claims"}, "promotion policy")
     if value["schema"] != 1 or value["kind"] != "kandelo-abi-staging-promotion-policy":
         raise TapMetadataError("promotion policy protocol is unsupported")
     if value["version"] != 1:
@@ -457,6 +474,74 @@ def load_promotion_policy(path: Path) -> PromotionPolicyV1:
     for field, expected in required.items():
         if value[field] is not expected:
             raise TapMetadataError(f"promotion policy weakens required {field}")
+    runtime_claims = []
+    claimed_formulae: set[tuple[str, str]] = set()
+    previous_claim: tuple[str, tuple[str, ...], str] | None = None
+    for index, candidate in enumerate(value.get("runtime_claims", [])):
+        claim = _mapping(candidate, f"runtime claim {index}")
+        _exact_keys(
+            claim,
+            frozenset({"architecture", "formulae", "product_id", "requirements"}),
+            f"runtime claim {index}",
+        )
+        architecture = claim["architecture"]
+        if architecture not in {"wasm32", "wasm64"}:
+            raise TapMetadataError("runtime claim architecture is unsupported")
+        formulae = tuple(
+            _stable_id(item, f"runtime claim {index} Formula")
+            for item in _sequence(claim["formulae"], f"runtime claim {index} Formulae")
+        )
+        if not formulae or list(formulae) != sorted(set(formulae)):
+            raise TapMetadataError("runtime claim Formulae are not sorted and unique")
+        product_id = _stable_id(
+            claim["product_id"], f"runtime claim {index} product"
+        )
+        requirements = []
+        for requirement_index, requirement_candidate in enumerate(
+            _sequence(claim["requirements"], f"runtime claim {index} requirements")
+        ):
+            requirement = _mapping(
+                requirement_candidate,
+                f"runtime claim {index} requirement {requirement_index}",
+            )
+            _exact_keys(
+                requirement,
+                frozenset({"host", "definition_id"}),
+                f"runtime claim {index} requirement {requirement_index}",
+            )
+            host = requirement["host"]
+            if host not in {"node", "browser"}:
+                raise TapMetadataError("runtime claim host is unsupported")
+            requirements.append(
+                RuntimeClaimRequirementV1(
+                    host=host,
+                    definition_id=_stable_id(
+                        requirement["definition_id"],
+                        f"runtime claim {index} definition",
+                    ),
+                )
+            )
+        if [item.host for item in requirements] != ["node", "browser"]:
+            raise TapMetadataError(
+                "runtime claim requires canonical Node and browser evidence"
+            )
+        claim_key = (architecture, formulae, product_id)
+        if previous_claim is not None and claim_key <= previous_claim:
+            raise TapMetadataError("runtime claims are not sorted and unique")
+        previous_claim = claim_key
+        for formula in formulae:
+            identity = (formula, architecture)
+            if identity in claimed_formulae:
+                raise TapMetadataError("runtime claims repeat a Formula architecture")
+            claimed_formulae.add(identity)
+        runtime_claims.append(
+            RuntimeClaimPolicyV1(
+                architecture=architecture,
+                formulae=formulae,
+                product_id=product_id,
+                requirements=tuple(requirements),
+            )
+        )
     return PromotionPolicyV1(
         schema=1,
         kind="kandelo-abi-staging-promotion-policy",
@@ -469,6 +554,7 @@ def load_promotion_policy(path: Path) -> PromotionPolicyV1:
         require_anonymous_readback=True,
         allow_independent_formula_promotion=True,
         allow_global_completion_gate=False,
+        runtime_claims=tuple(runtime_claims),
     )
 
 
@@ -1315,7 +1401,124 @@ def _checked_formula_update(
     _digest(update.bottle_layer_sha256, "metadata bottle layer")
     _positive_integer(update.bottle_layer_bytes, "metadata bottle bytes")
     _positive_integer(update.target_abi, "metadata target ABI")
+    if update.runtime_claim is not None:
+        validate_runtime_claim(update.runtime_claim)
     return update
+
+
+def validate_runtime_claim(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate one evidence-backed runtime projection in canonical host order."""
+
+    claim = _mapping(value, "runtime claim")
+    _exact_keys(
+        claim,
+        frozenset({"runtime_support", "browser_compatible", "evidence"}),
+        "runtime claim",
+    )
+    supported_order = ["node", "browser"]
+    support = list(_sequence(claim["runtime_support"], "runtime claim support"))
+    if (
+        not support
+        or support != [host for host in supported_order if host in support]
+        or len(support) != len(set(support))
+    ):
+        raise TapMetadataError("runtime claim support is not canonical")
+    browser_compatible = claim["browser_compatible"]
+    if (
+        not isinstance(browser_compatible, bool)
+        or browser_compatible != ("browser" in support)
+    ):
+        raise TapMetadataError("runtime claim browser compatibility is contradictory")
+    evidence = []
+    for index, candidate in enumerate(
+        _sequence(claim["evidence"], "runtime claim evidence")
+    ):
+        item = _mapping(candidate, f"runtime claim evidence {index}")
+        _exact_keys(
+            item,
+            frozenset(
+                {
+                    "host",
+                    "product_id",
+                    "definition_id",
+                    "definition_sha256",
+                    "product_evidence_sha256",
+                }
+            ),
+            f"runtime claim evidence {index}",
+        )
+        host = item["host"]
+        if host not in {"node", "browser"}:
+            raise TapMetadataError("runtime claim evidence host is unsupported")
+        evidence.append(
+            {
+                "host": host,
+                "product_id": _stable_id(
+                    item["product_id"], f"runtime claim evidence {index} product"
+                ),
+                "definition_id": _stable_id(
+                    item["definition_id"],
+                    f"runtime claim evidence {index} definition",
+                ),
+                "definition_sha256": _digest(
+                    item["definition_sha256"],
+                    f"runtime claim evidence {index} definition digest",
+                ),
+                "product_evidence_sha256": _digest(
+                    item["product_evidence_sha256"],
+                    f"runtime claim evidence {index} product evidence",
+                ),
+            }
+        )
+    if [item["host"] for item in evidence] != support:
+        raise TapMetadataError("runtime claim evidence differs from runtime support")
+    if len({item["product_id"] for item in evidence}) != 1 or len(
+        {item["product_evidence_sha256"] for item in evidence}
+    ) != 1:
+        raise TapMetadataError("runtime claim evidence does not bind one exact product")
+    return {
+        "runtime_support": support,
+        "browser_compatible": browser_compatible,
+        "evidence": evidence,
+    }
+
+
+def _runtime_policy_for(
+    policy: PromotionPolicyV1, formula: str, architecture: str
+) -> RuntimeClaimPolicyV1 | None:
+    matches = [
+        claim
+        for claim in policy.runtime_claims
+        if claim.architecture == architecture and formula in claim.formulae
+    ]
+    if len(matches) > 1:
+        raise TapMetadataError("runtime claim policy repeats a Formula architecture")
+    return matches[0] if matches else None
+
+
+def _checked_runtime_claim_for_policy(
+    policy: PromotionPolicyV1,
+    update: FormulaMetadataUpdateV1,
+) -> dict[str, Any] | None:
+    rule = _runtime_policy_for(policy, update.formula, update.architecture)
+    if rule is None:
+        if update.runtime_claim is not None:
+            raise TapMetadataError("Formula has a runtime claim outside protected policy")
+        return None
+    if update.runtime_claim is None:
+        raise TapMetadataError("policy-covered Formula lacks a runtime claim")
+    claim = validate_runtime_claim(update.runtime_claim)
+    expected = [
+        (requirement.host, rule.product_id, requirement.definition_id)
+        for requirement in rule.requirements
+    ]
+    observed = [
+        (item["host"], item["product_id"], item["definition_id"])
+        for item in claim["evidence"]
+    ]
+    if claim["runtime_support"] != ["node", "browser"] or observed != expected:
+        raise TapMetadataError("runtime claim differs from protected policy")
+    return claim
 
 
 def _checked_promoted_bottle(
@@ -1461,6 +1664,7 @@ def plan_formula_metadata_patch(
     checked_update = _checked_formula_update(update)
     checked_promoted = _checked_promoted_bottle(promoted, checked_update)
     policy = load_promotion_policy(root / "Kandelo/staging/promotion-policy.toml")
+    runtime_claim = _checked_runtime_claim_for_policy(policy, checked_update)
     source = _checked_source(root, current_tap_source)
     if source["repository"].lower() != policy.tap_repository.lower():
         raise TapMetadataError("Formula metadata source names another tap")
@@ -1558,6 +1762,13 @@ def plan_formula_metadata_patch(
             ),
         }
     )
+    if runtime_claim is not None:
+        existing.update(
+            {
+                "runtime_support": list(runtime_claim["runtime_support"]),
+                "browser_compatible": runtime_claim["browser_compatible"],
+            }
+        )
     bottles[index] = existing
     bottles.sort(key=lambda item: str(item["arch"]))
     sidecar["bottles"] = bottles
@@ -1689,6 +1900,18 @@ def validate_formula_metadata_patch(
         ):
             raise TapMetadataError("Formula metadata patch does not select the exact layer")
         selected = matches[0]
+        policy_claim = _checked_runtime_claim_for_policy(
+            load_promotion_policy(
+                simulated / "Kandelo/staging/promotion-policy.toml"
+            ),
+            checked,
+        )
+        if policy_claim is not None and (
+            selected.get("runtime_support") != policy_claim["runtime_support"]
+            or selected.get("browser_compatible")
+            is not policy_claim["browser_compatible"]
+        ):
+            raise TapMetadataError("Formula metadata patch changed its runtime claim")
         if selected.get("link_manifest") != checked.link_manifest_path:
             raise TapMetadataError("Formula metadata patch selects another link manifest")
         link_body = _read_regular(
@@ -1787,6 +2010,15 @@ def validate_formula_admission_projection(
     if len(matches) != 1 or matches[0].get("status") != "success":
         raise TapMetadataError("admitted Formula selection is absent or duplicated")
     selected = matches[0]
+    policy_claim = _checked_runtime_claim_for_policy(
+        load_promotion_policy(root / "Kandelo/staging/promotion-policy.toml"),
+        checked,
+    )
+    if policy_claim is not None and (
+        selected.get("runtime_support") != policy_claim["runtime_support"]
+        or selected.get("browser_compatible") is not policy_claim["browser_compatible"]
+    ):
+        raise TapMetadataError("admitted Formula runtime claim changed")
     if (
         selected.get("sha256") != checked.bottle_layer_sha256
         or selected.get("bytes") != checked.bottle_layer_bytes

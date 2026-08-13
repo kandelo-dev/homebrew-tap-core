@@ -47,7 +47,7 @@ BOTTLE_METADATA_MEDIA_TYPE = (
     "application/vnd.kandelo.homebrew.bottle.metadata.v1+json"
 )
 VFS_COMPOSITION_DESCRIPTOR_MEDIA_TYPE = (
-    "application/vnd.kandelo.homebrew.vfs-composition-descriptor.v1+json"
+    "application/vnd.kandelo.homebrew.vfs-composition-descriptor.v2+json"
 )
 BOTTLE_CONTRACT_MEDIA_TYPE = (
     "application/vnd.kandelo.homebrew.bottle.contract.v1+json"
@@ -1392,26 +1392,25 @@ def _formula_metadata_update(
     layer: Mapping[str, Any],
 ) -> dict[str, Any]:
     update = _mapping(value, "Formula metadata update")
-    _exact_keys(
-        update,
-        frozenset(
-            {
-                "formula",
-                "architecture",
-                "expected_main_commit",
-                "expected_normalized_formula_sha256",
-                "expected_generated_metadata_sha256",
-                "allowed_paths",
-                "link_manifest_path",
-                "link_manifest_sha256",
-                "canonical_manifest_digest",
-                "bottle_layer_sha256",
-                "bottle_layer_bytes",
-                "target_abi",
-            }
-        ),
-        "Formula metadata update",
+    historical_fields = frozenset(
+        {
+            "formula",
+            "architecture",
+            "expected_main_commit",
+            "expected_normalized_formula_sha256",
+            "expected_generated_metadata_sha256",
+            "allowed_paths",
+            "link_manifest_path",
+            "link_manifest_sha256",
+            "canonical_manifest_digest",
+            "bottle_layer_sha256",
+            "bottle_layer_bytes",
+            "target_abi",
+        }
     )
+    current_fields = historical_fields | {"runtime_claim"}
+    if frozenset(update) not in {historical_fields, current_fields}:
+        _exact_keys(update, current_fields, "Formula metadata update")
     formula = _stable_id(update["formula"], "metadata Formula")
     architecture = _architecture(update["architecture"], "metadata architecture")
     if _git_sha(update["expected_main_commit"], "metadata expected main") != tap_source[
@@ -1456,6 +1455,16 @@ def _formula_metadata_update(
     ):
         raise TapRecordError("Formula metadata update differs from promoted layer/readback")
     _nonnegative_integer(update["target_abi"], "metadata target ABI")
+    runtime_claim = update.get("runtime_claim")
+    if runtime_claim is not None:
+        # Local import avoids making the durable-record module part of the
+        # tap-metadata module's import cycle.
+        from .tap_metadata import TapMetadataError, validate_runtime_claim
+
+        try:
+            validate_runtime_claim(_mapping(runtime_claim, "metadata runtime claim"))
+        except TapMetadataError as error:
+            raise TapRecordError(f"Formula metadata runtime claim is invalid: {error}") from error
     return {"formula": formula, "architecture": architecture}
 
 
