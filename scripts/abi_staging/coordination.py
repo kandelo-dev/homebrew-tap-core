@@ -534,7 +534,7 @@ def coordinate_planned_request(
         "mode": mode,
         "request_sha256": planned["request_digest"],
         "request_asset_url": request_asset_url,
-        "request": copy.deepcopy(dict(request)),
+        "request": json.loads(canonical_bytes(request)),
         "lifecycle": lifecycle,
         "tap_plan": planned,
         "contracts": contracts,
