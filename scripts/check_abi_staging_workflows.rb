@@ -6,6 +6,7 @@ require "yaml"
 module AbiStagingWorkflowCheck
   CHECKOUT = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
   SETUP_PYTHON = "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
+  SETUP_ORAS = "oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d"
   UPLOAD_ARTIFACT = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
   DOWNLOAD_ARTIFACT = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
   FULL_ACTION = %r{\A(?:\./[^@\n]+|[^@]+@[0-9a-f]{40})\z}
@@ -57,7 +58,20 @@ module AbiStagingWorkflowCheck
   end
 
   def action_steps(job, action)
-    job.fetch("steps").select { |step| step["uses"]&.start_with?(action) }
+    identity = action.include?("@") ? "#{action.split("@", 2).fetch(0)}@" : action
+    job.fetch("steps").select { |step| step["uses"]&.start_with?(identity) }
+  end
+
+  def require_pinned_oras(job, field)
+    steps = job.fetch("steps")
+    setups = action_steps(job, SETUP_ORAS)
+    commands = run_steps(job)
+    require_contract(
+      setups.length == 1 && setups.fetch(0).fetch("uses") == SETUP_ORAS &&
+        setups.fetch(0).fetch("with", {}) == {"version" => "1.3.3"} &&
+        !commands.empty? && steps.index(setups.fetch(0)) < steps.index(commands.fetch(0)),
+      "#{field} lacks one pinned ORAS setup before publication"
+    )
   end
 
   def check_public_discovery(source)
@@ -493,13 +507,52 @@ module AbiStagingWorkflowCheck
                      prepare.fetch("if") ==
                        "needs.discover-plan.outputs.selected == 'true'",
                      "runtime preparation is not exact-request scoped")
+    prepare_job_steps = prepare.fetch("steps")
+    prepare_checkouts = action_steps(prepare, CHECKOUT)
+    prepare_taps = prepare_checkouts.select do |step|
+      step.dig("with", "path") == "tap-authority"
+    end
+    prepare_tap = prepare_taps.fetch(0, nil)
+    require_contract(
+      prepare_checkouts.length == 3 && prepare_taps.length == 1 &&
+        !prepare_tap.nil? && prepare_tap.fetch("uses") == CHECKOUT &&
+        prepare_tap.fetch("with") == {
+          "ref" => "${{ needs.discover-plan.outputs.tap-commit }}",
+          "fetch-depth" => 1,
+          "persist-credentials" => false,
+          "path" => "tap-authority"
+        },
+      "runtime lacks its exact protected tap checkout"
+    )
     prepare_steps = run_steps(prepare)
+    export_index = prepare_steps.index do |step|
+      step["name"] == "Export exact protected runtime identity"
+    end
     isolate_index = prepare_steps.index do |step|
       step["name"] == "Isolate exact runtime package resolution"
     end
     build_index = prepare_steps.index do |step|
       step["name"] == "Build one exact uncredentialed runtime"
     end
+    require_contract(
+      export_index && build_index && export_index < build_index,
+      "runtime identity is not exported before the exact build"
+    )
+    export_step = prepare_steps.fetch(export_index)
+    require_contract(
+      prepare_job_steps.index(prepare_tap) < prepare_job_steps.index(export_step),
+      "runtime protected tap checkout occurs after identity export"
+    )
+    export_source = export_step.fetch("run")
+    require_contract(
+      export_step.fetch("working-directory") == "kandelo-authority" &&
+        export_source.include?("scripts/dev-shell.sh env") &&
+        export_source.include?("export-runtime-realm") &&
+        export_source.include?('--coordination "$RUNNER_TEMP/coordination"') &&
+        export_source.include?('--tap-root "$GITHUB_WORKSPACE/tap-authority"') &&
+        export_source.include?('--github-env "$GITHUB_ENV"'),
+      "runtime identity export bypasses protected coordination"
+    )
     require_contract(
       isolate_index && build_index && isolate_index < build_index,
       "runtime package cache is not sealed before the exact build"
@@ -525,7 +578,11 @@ module AbiStagingWorkflowCheck
     prepare_source = prepare_steps.map { |step| step.fetch("run") }.join("\n")
     require_contract(prepare_source.include?("abi-staging-prepare-runtime.sh") &&
                      prepare_source.include?('--source-commit "${{ needs.discover-plan.outputs.kandelo-head }}"') &&
-                     prepare_source.include?(".issuance.policy_sha256") &&
+                     build_source.include?('"$KANDELO_ABI_STAGING_BUILD_POLICY_SHA256"') &&
+                     build_source.include?('"$KANDELO_ABI_STAGING_SNAPSHOT_SHA256"') &&
+                     build_source.include?('"$KANDELO_ABI_STAGING_SOURCE_TREE"') &&
+                     build_source.include?('"$KANDELO_ABI_STAGING_TARGET_ABI"') &&
+                     !build_source.include?('$(scripts/dev-shell.sh jq') &&
                      !prepare_source.include?(".requirements.digest") &&
                      prepare_source.include?("env -u GITHUB_TOKEN") &&
                      prepare_source.include?("-u ACTIONS_RUNTIME_TOKEN"),
@@ -564,6 +621,7 @@ module AbiStagingWorkflowCheck
                      "product composition omits its exact private authority artifact")
 
     candidate_publisher = jobs.fetch("publish-product-candidate")
+    require_pinned_oras(candidate_publisher, "candidate product publisher")
     require_contract(candidate_publisher.fetch("needs") ==
                        %w[discover-plan plan-products compose-product] &&
                      candidate_publisher.fetch("if") ==
@@ -626,6 +684,7 @@ module AbiStagingWorkflowCheck
     end
 
     evidence_publisher = jobs.fetch("publish-product-evidence")
+    require_pinned_oras(evidence_publisher, "product evidence publisher")
     require_contract(evidence_publisher.fetch("needs") ==
                        %w[discover-plan plan-products node-product-evidence browser-product-evidence] &&
                      evidence_publisher.fetch("if") ==
@@ -770,6 +829,7 @@ module AbiStagingWorkflowCheck
     )
 
     canonical_publisher = jobs.fetch("publish-canonical")
+    require_pinned_oras(canonical_publisher, "canonical publisher")
     require_contract(
       canonical_publisher.fetch("needs") == %w[discover-plan plan-promotion] &&
         canonical_publisher.fetch("if") ==
@@ -821,6 +881,7 @@ module AbiStagingWorkflowCheck
     require_no_candidate_execution(metadata_source, "metadata writer")
 
     admission_publisher = jobs.fetch("publish-admission")
+    require_pinned_oras(admission_publisher, "admission publisher")
     require_contract(
       admission_publisher.fetch("needs") == %w[
         discover-plan plan-promotion publish-canonical update-tap-metadata
@@ -905,6 +966,7 @@ module AbiStagingWorkflowCheck
     require_contract(setup.length == 1 &&
                      setup.fetch(0).dig("with", "python-version") == "3.13",
                      "reuse publisher lacks declared Python")
+    require_pinned_oras(publisher, "reuse publisher")
     commands = run_steps(publisher)
     require_contract(commands.length == 1 &&
                      commands.fetch(0).fetch("working-directory") == "tap-authority" &&
@@ -1037,6 +1099,7 @@ module AbiStagingWorkflowCheck
     require_contract(setup.length == 1 &&
                      setup.fetch(0).dig("with", "python-version") == "3.13",
                      "reusable publisher lacks declared Python")
+    require_pinned_oras(publisher, "reusable publisher")
     commands = run_steps(publisher)
     require_contract(commands.length == 1 &&
                      commands.fetch(0).fetch("working-directory") == "tap-authority",
@@ -1140,6 +1203,7 @@ module AbiStagingWorkflowCheck
                      }, "maintenance must execute protected tap main without Git credentials")
     require_contract(setup_python.fetch("with", {}).fetch("python-version") == "3.13",
                      "maintenance Python version changed")
+    require_pinned_oras(job, "maintenance publisher")
 
     commands = job.fetch("steps").select { |step| step.key?("run") }
     require_contract(commands.length == 1,
@@ -1404,6 +1468,7 @@ module AbiStagingWorkflowCheck
                        "${{ needs.plan-and-verify-policy.outputs.artifact-id }}",
                        "${{ needs.create-history-ref.outputs.artifact-id }}"
                      ], "history publisher handoffs are not exact artifacts")
+    require_pinned_oras(verify, "history publisher")
     verify_commands = verify.fetch("steps").select { |step| step.key?("run") }
     require_contract(verify_commands.length == 1,
                      "history verification/publication must use one coordinator")

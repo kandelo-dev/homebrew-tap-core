@@ -486,9 +486,143 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
   end
 
   def test_runtime_binds_the_protected_request_policy_identity
-    source = last_run_step(@workflow, "prepare-runtime").fetch("run")
-    assert_includes source, ".issuance.policy_sha256"
+    steps = @workflow.dig("jobs", "prepare-runtime", "steps")
+    tap = steps.find do |step|
+      step.dig("with", "path") == "tap-authority"
+    end
+    export = steps.find do |step|
+      step["name"] == "Export exact protected runtime identity"
+    end
+    build = steps.find do |step|
+      step["name"] == "Build one exact uncredentialed runtime"
+    end
+
+    refute_nil tap
+    assert_equal "${{ needs.discover-plan.outputs.tap-commit }}",
+                 tap.dig("with", "ref")
+    assert_equal false, tap.dig("with", "persist-credentials")
+    refute_nil export
+    refute_nil build
+    assert_operator steps.index(export), :<, steps.index(build)
+    assert_equal "kandelo-authority", export["working-directory"]
+    assert_includes export.fetch("run"), "export-runtime-realm"
+    assert_includes export.fetch("run"), '--github-env "$GITHUB_ENV"'
+    source = build.fetch("run")
+    assert_includes source, '"$KANDELO_ABI_STAGING_BUILD_POLICY_SHA256"'
+    assert_includes source, '"$KANDELO_ABI_STAGING_SNAPSHOT_SHA256"'
+    assert_includes source, '"$KANDELO_ABI_STAGING_SOURCE_TREE"'
+    assert_includes source, '"$KANDELO_ABI_STAGING_TARGET_ABI"'
+    refute_includes source, "source_tree=\"$("
+    refute_includes source, "target_abi=\"$("
+    refute_includes source, "snapshot=\"$("
+    refute_includes source, "build_policy=\"$("
     refute_includes source, ".requirements.digest"
+
+    assert_rejected_matching(
+      "runtime omits protected tap checkout",
+      /runtime lacks its exact protected tap checkout/
+    ) do |workflow|
+      workflow.dig("jobs", "prepare-runtime", "steps").reject! do |step|
+        step.dig("with", "path") == "tap-authority"
+      end
+    end
+    assert_rejected_matching(
+      "runtime delays protected tap checkout",
+      /runtime protected tap checkout occurs after identity export/
+    ) do |workflow|
+      runtime_steps = workflow.dig("jobs", "prepare-runtime", "steps")
+      protected_tap = runtime_steps.delete_at(runtime_steps.index do |step|
+        step.dig("with", "path") == "tap-authority"
+      end)
+      build_index = runtime_steps.index do |step|
+        step["name"] == "Build one exact uncredentialed runtime"
+      end
+      runtime_steps.insert(build_index + 1, protected_tap)
+    end
+    assert_rejected_matching(
+      "runtime overwrites protected tap checkout",
+      /runtime lacks its exact protected tap checkout/
+    ) do |workflow|
+      runtime_steps = workflow.dig("jobs", "prepare-runtime", "steps")
+      export_index = runtime_steps.index do |step|
+        step["name"] == "Export exact protected runtime identity"
+      end
+      runtime_steps.insert(export_index, {
+        "name" => "Overwrite tap authority with candidate code",
+        "uses" => "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+        "with" => {
+          "repository" => "${{ needs.discover-plan.outputs.kandelo-repository }}",
+          "ref" => "${{ needs.discover-plan.outputs.kandelo-head }}",
+          "fetch-depth" => 1,
+          "persist-credentials" => false,
+          "path" => "tap-authority"
+        }
+      })
+    end
+    assert_rejected_matching(
+      "runtime omits protected identity export",
+      /runtime identity is not exported before the exact build/
+    ) do |workflow|
+      workflow.dig("jobs", "prepare-runtime", "steps").reject! do |step|
+        step["name"] == "Export exact protected runtime identity"
+      end
+    end
+  end
+
+  def test_package_publishers_install_one_pinned_oras_before_writing
+    expected = "oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d"
+    publishers = [
+      [:candidate, @candidate, "publish"],
+      [:verification, @verification, "publish"],
+      [:reuse, @reuse, "publish"],
+      [:reconcile, @workflow, "publish-product-candidate"],
+      [:reconcile, @workflow, "publish-product-evidence"],
+      [:reconcile, @workflow, "publish-canonical"],
+      [:reconcile, @workflow, "publish-admission"],
+      [:maintenance, @maintenance, "maintain"],
+      [:history, @history, "verify-and-publish-history"]
+    ]
+
+    publishers.each do |kind, workflow, job_name|
+      steps = workflow.dig("jobs", job_name, "steps")
+      setup = steps.find { |step| step["uses"] == expected }
+      command = last_run_step(workflow, job_name)
+      refute_nil setup, "missing pinned ORAS in #{kind}:#{job_name}"
+      assert_equal({"version" => "1.3.3"}, setup["with"])
+      assert_operator steps.index(setup), :<, steps.index(command)
+    end
+
+    assert_reusable_rejected(:candidate, "publisher omits ORAS") do |workflow|
+      workflow.dig("jobs", "publish", "steps").reject! do |step|
+        step["uses"] == expected
+      end
+    end
+    assert_reusable_rejected(:candidate, "publisher overlays ORAS") do |workflow|
+      steps = workflow.dig("jobs", "publish", "steps")
+      command_index = steps.index { |step| step.key?("run") }
+      steps.insert(command_index, {
+        "name" => "Set up alternate ORAS",
+        "uses" => "oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3",
+        "with" => {"version" => "1.3.1"}
+      })
+    end
+    assert_rejected_matching(
+      "product publisher omits ORAS", /publisher lacks one pinned ORAS/
+    ) do |workflow|
+      workflow.dig("jobs", "publish-product-candidate", "steps").reject! do |step|
+        step["uses"] == expected
+      end
+    end
+    assert_maintenance_rejected("maintenance publisher omits ORAS") do |workflow|
+      workflow.dig("jobs", "maintain", "steps").reject! do |step|
+        step["uses"] == expected
+      end
+    end
+    assert_history_rejected("history publisher omits ORAS") do |workflow|
+      workflow.dig("jobs", "verify-and-publish-history", "steps").reject! do |step|
+        step["uses"] == expected
+      end
+    end
   end
 
   def test_runtime_binds_one_fresh_isolated_package_cache

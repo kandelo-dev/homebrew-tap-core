@@ -138,6 +138,44 @@ class WorkflowExecutionTests(unittest.TestCase):
             },
         )
 
+    def test_cli_exports_exact_runtime_identity_without_parsing_shell_output(self) -> None:
+        from scripts.abi_staging import cli
+
+        bundle = _active_bundle()
+        request = bundle["request"]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            coordination = root / "coordination.json"
+            output = root / "github-env"
+            coordination.write_bytes(canonical_bytes(bundle))
+            output.write_text("", encoding="utf-8")
+            status = cli.main(
+                [
+                    "export-runtime-realm",
+                    "--coordination",
+                    str(coordination),
+                    "--tap-root",
+                    str(TAP_ROOT),
+                    "--github-env",
+                    str(output),
+                ]
+            )
+            observed = output.read_text(encoding="utf-8")
+        self.assertEqual(status, 0)
+        self.assertEqual(
+            observed,
+            (
+                f"KANDELO_ABI_STAGING_BUILD_POLICY_SHA256="
+                f"{request['issuance']['policy_sha256']}\n"
+                f"KANDELO_ABI_STAGING_SNAPSHOT_SHA256="
+                f"{request['target_abi']['snapshot_sha256']}\n"
+                f"KANDELO_ABI_STAGING_SOURCE_TREE="
+                f"{request['build_source']['tree']}\n"
+                f"KANDELO_ABI_STAGING_TARGET_ABI="
+                f"{request['target_abi']['version']}\n"
+            ),
+        )
+
     def test_build_work_materializes_only_exact_declared_inputs(self) -> None:
         try:
             execution = importlib.import_module("scripts.abi_staging.execution")

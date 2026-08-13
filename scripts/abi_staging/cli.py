@@ -405,6 +405,10 @@ def _parser() -> argparse.ArgumentParser:
     execute_build.add_argument("--run-attempt", required=True, type=int)
     execute_build.add_argument("--workflow-ref", required=True)
     execute_build.add_argument("--out", required=True)
+    export_runtime_realm = subcommands.add_parser("export-runtime-realm")
+    export_runtime_realm.add_argument("--coordination", required=True)
+    export_runtime_realm.add_argument("--tap-root", required=True)
+    export_runtime_realm.add_argument("--github-env", required=True)
     execute_verification = subcommands.add_parser("execute-verification-work")
     execute_verification.add_argument("--coordination", required=True)
     execute_verification.add_argument("--work-id", required=True)
@@ -2598,6 +2602,33 @@ def _execute_build(args: argparse.Namespace) -> int:
         tap_root=tap_root,
         run=run,
         handoff=Path(args.out),
+    )
+
+
+def _export_runtime_realm(args: argparse.Namespace) -> None:
+    """Export the protected exact-source/runtime identity without shell parsing."""
+
+    tap_root = _protected_tap_root(args.tap_root)
+    policy = load_tap_staging_policy(
+        tap_root / "Kandelo/staging/tap-policy.toml"
+    )
+    coordination = Path(args.coordination)
+    if coordination.is_dir():
+        coordination = coordination / "coordination.json"
+    bundle = load_coordination_bundle(coordination, policy=policy)
+    request = bundle["request"]
+    _write_github_outputs(
+        Path(args.github_env),
+        {
+            "KANDELO_ABI_STAGING_BUILD_POLICY_SHA256": request["issuance"][
+                "policy_sha256"
+            ],
+            "KANDELO_ABI_STAGING_SNAPSHOT_SHA256": request["target_abi"][
+                "snapshot_sha256"
+            ],
+            "KANDELO_ABI_STAGING_SOURCE_TREE": request["build_source"]["tree"],
+            "KANDELO_ABI_STAGING_TARGET_ABI": str(request["target_abi"]["version"]),
+        },
     )
 
 
@@ -6460,6 +6491,9 @@ def main(arguments: list[str] | None = None) -> int:
             return 0
         if args.command == "execute-build-work":
             return _execute_build(args)
+        if args.command == "export-runtime-realm":
+            _export_runtime_realm(args)
+            return 0
         if args.command == "execute-verification-work":
             return _execute_verification(args)
         if args.command == "execute-product-work":
