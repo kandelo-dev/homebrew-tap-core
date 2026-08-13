@@ -1,2 +1,3 @@
 # Unified-diff context markers are patch syntax, not source whitespace errors.
 Kandelo/patches/**/*.patch -whitespace
+Kandelo/recipes/**/*.patch -whitespace

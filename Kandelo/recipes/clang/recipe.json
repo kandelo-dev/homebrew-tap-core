@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "dependencies": [
+    "kandelo-dev/tap-core/libcxx"
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 7566,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "93bf9ef1199dc9d408606a6e9fbd40f6b42b13787d91500e5b6b10d1ab1385dc"
+    },
+    {
+      "bytes": 2443,
+      "mode": "0644",
+      "path": "patches/0001-kandelo-deterministic-runtime.patch",
+      "sha256": "f2bf7cccb6f1fb5946fb4b26837ca6d8fa58e8623f198f7b9be49bb8ddbd90fe"
+    },
+    {
+      "bytes": 3815,
+      "mode": "0644",
+      "path": "patches/0002-kandelo-vfs-output.patch",
+      "sha256": "8fd774b44ea87b80cd6018aafd1b84c9817401c53018633baa775ce7dfe9f0f3"
+    },
+    {
+      "bytes": 2721,
+      "mode": "0644",
+      "path": "patches/0003-kandelo-wasm-only-lld.patch",
+      "sha256": "17bc3ca911f2ba30f10f26177e13a208235a09d1e8fd3132ce33702f4ad7304a"
+    }
+  ]
+}

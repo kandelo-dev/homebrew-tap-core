@@ -4843,6 +4843,36 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes error.message, "guest argv0 must be a nonempty normalized absolute path"
   end
 
+  def test_clang_formula_uses_a_sealed_tap_recipe
+    formula_path = Pathname(__dir__).join("../../..", "Formula/clang.rb").cleanpath
+    assert formula_path.file?, "Clang Formula is missing"
+    formula = formula_path.binread
+
+    assert_includes formula, "class Clang < Formula"
+    assert_includes formula, "KANDELO_TAP_RECIPE = true"
+    assert_includes formula, 'version "21.1.7"'
+    assert_includes formula, 'depends_on "kandelo-dev/tap-core/libcxx"'
+    assert_includes formula, "kandelo_validate_wasm_artifact"
+    refute_includes formula, "KANDELO_REGISTRY_BRIDGE"
+  end
+
+  def test_clang_recipe_has_only_reviewed_runtime_outputs
+    recipe_root = Pathname(__dir__).join("../..", "recipes/clang").cleanpath
+    manifest_path = recipe_root/"recipe.json"
+    assert manifest_path.file?, "Clang recipe manifest is missing"
+    recipe = JSON.parse(manifest_path.binread)
+
+    assert_equal 1, recipe.fetch("schema")
+    assert_equal "build.sh", recipe.fetch("entrypoint")
+    assert_equal ["kandelo-dev/tap-core/libcxx"], recipe.fetch("dependencies")
+    assert_equal [
+      "build.sh",
+      "patches/0001-kandelo-deterministic-runtime.patch",
+      "patches/0002-kandelo-vfs-output.patch",
+      "patches/0003-kandelo-wasm-only-lld.patch",
+    ], recipe.fetch("files").map { |entry| entry.fetch("path") }
+  end
+
   private
 
   def artifact_validation_harness(dir, harness_class = Harness)

@@ -166,7 +166,7 @@ class FormulaInventoryTests(unittest.TestCase):
             self.capture_policy,
             self.capture_catalog,
         )
-        self.assertEqual(len(inventory["formulae"]), 71)
+        self.assertEqual(len(inventory["formulae"]), 72)
         self.assertRegex(inventory["formula_tree"], r"^[0-9a-f]{40,64}$")
         self.assertRegex(inventory["sidecar_tree"], r"^[0-9a-f]{40,64}$")
         self.assertRegex(inventory["graph_sha256"], r"^[0-9a-f]{64}$")
@@ -176,6 +176,11 @@ class FormulaInventoryTests(unittest.TestCase):
             ["libcurl", "openssl", "zlib"],
         )
         self.assertEqual(by_name["curl"]["architectures"], ["wasm32", "wasm64"])
+        self.assertEqual(by_name["clang"]["architectures"], ["wasm32"])
+        self.assertEqual(
+            by_name["clang"]["target_dependencies"],
+            [{"name": "libcxx", "scopes": ["runtime"]}],
+        )
         self.assertEqual(by_name["sqlite"]["architectures"], ["wasm32", "wasm64"])
         self.assertIn(
             {"name": "dash", "scopes": ["build", "test"]},

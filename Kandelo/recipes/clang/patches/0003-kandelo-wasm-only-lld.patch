@@ -1,0 +1,88 @@
+diff --git a/lld/CMakeLists.txt b/lld/CMakeLists.txt
+index 80e25204a8f0..3aac67899446 100644
+--- a/lld/CMakeLists.txt
++++ b/lld/CMakeLists.txt
+@@ -188,23 +188,9 @@ include_directories(BEFORE
+   )
+ 
+ add_subdirectory(Common)
+-add_subdirectory(tools/lld)
+-
+-if (LLVM_INCLUDE_TESTS)
+-  add_custom_target(LLDUnitTests)
+-  set_target_properties(LLDUnitTests PROPERTIES FOLDER "LLD/Tests")
+-  if (TARGET llvm_gtest)
+-    add_subdirectory(unittests)
+-  endif()
+-  add_subdirectory(test)
+-endif()
+-
+-add_subdirectory(docs)
+-add_subdirectory(COFF)
+-add_subdirectory(ELF)
+-add_subdirectory(MachO)
+-add_subdirectory(MinGW)
+ add_subdirectory(wasm)
++add_subdirectory(tools/lld)
++# Kandelo wasm-only lld: skip COFF/ELF/MachO/MinGW/docs/tests.
+ 
+ add_custom_target(lld-headers)
+ set_target_properties(lld-headers PROPERTIES FOLDER "Misc")
+diff --git a/lld/tools/lld/CMakeLists.txt b/lld/tools/lld/CMakeLists.txt
+index 8498a91593fe..57c12bebbcb5 100644
+--- a/lld/tools/lld/CMakeLists.txt
++++ b/lld/tools/lld/CMakeLists.txt
+@@ -27,16 +27,12 @@ endfunction()
+ lld_target_link_libraries(lld
+   PRIVATE
+   lldCommon
+-  lldCOFF
+-  lldELF
+-  lldMachO
+-  lldMinGW
+   lldWasm
+   )
+ 
+ if(NOT LLD_SYMLINKS_TO_CREATE)
+   set(LLD_SYMLINKS_TO_CREATE
+-      lld-link ld.lld ld64.lld wasm-ld)
++      wasm-ld)
+ endif()
+ 
+ foreach(link ${LLD_SYMLINKS_TO_CREATE})
+diff --git a/lld/tools/lld/lld.cpp b/lld/tools/lld/lld.cpp
+index d6800fa1eeb0..8846c796b0d0 100644
+--- a/lld/tools/lld/lld.cpp
++++ b/lld/tools/lld/lld.cpp
+@@ -66,11 +66,9 @@ static unsigned inTestVerbosity() {
+   return v;
+ }
+ 
+-LLD_HAS_DRIVER(coff)
+-LLD_HAS_DRIVER(elf)
+-LLD_HAS_DRIVER(mingw)
+-LLD_HAS_DRIVER(macho)
+ LLD_HAS_DRIVER(wasm)
++#define KANDELO_WASM_LLD_DRIVERS                                               \
++  { { lld::Wasm, &lld::wasm::link } }
+ 
+ int lld_main(int argc, char **argv, const llvm::ToolContext &) {
+   sys::Process::UseANSIEscapeCodes(true);
+@@ -87,7 +85,7 @@ int lld_main(int argc, char **argv, const llvm::ToolContext &) {
+   // exception handling and no memory cleanup on exit.
+   if (!inTestVerbosity()) {
+     int r =
+-        lld::unsafeLldMain(args, llvm::outs(), llvm::errs(), LLD_ALL_DRIVERS,
++        lld::unsafeLldMain(args, llvm::outs(), llvm::errs(), KANDELO_WASM_LLD_DRIVERS,
+                            /*exitEarly=*/true);
+     return r;
+   }
+@@ -100,7 +98,7 @@ int lld_main(int argc, char **argv, const llvm::ToolContext &) {
+     inTestOutputDisabled = (i != 1);
+ 
+     // Execute one iteration.
+-    auto r = lldMain(args, llvm::outs(), llvm::errs(), LLD_ALL_DRIVERS);
++    auto r = lldMain(args, llvm::outs(), llvm::errs(), KANDELO_WASM_LLD_DRIVERS);
+     if (!r.canRunAgain)
+       exitLld(r.retCode); // Exit now, can't re-execute again.
+ 
