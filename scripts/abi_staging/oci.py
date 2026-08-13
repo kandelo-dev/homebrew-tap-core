@@ -127,6 +127,10 @@ class OciPublicationError(ValueError):
         )
 
 
+class _AnonymousNamespaceHiddenError(OciPublicationError):
+    """Internal GHCR signal that is not itself proof of namespace absence."""
+
+
 def _descriptor(blob: OciBlobV1) -> dict[str, object]:
     return {
         "mediaType": blob.media_type,
@@ -260,15 +264,29 @@ def list_public_record_locators(
                 guard_code="candidate_integrity_mismatch",
             )
         seen_urls.add(current)
-        response = _request(
-            transport,
-            "GET",
-            current,
-            authenticated=False,
-            guard_code="candidate_public_readback_failed",
-            headers={"accept": "application/json"},
-            maximum_bytes=4 * 1024 * 1024,
-        )
+        try:
+            response = _request(
+                transport,
+                "GET",
+                current,
+                authenticated=False,
+                guard_code="candidate_public_readback_failed",
+                headers={"accept": "application/json"},
+                maximum_bytes=4 * 1024 * 1024,
+            )
+        except OciPublicationError as error:
+            # GHCR hides both a never-created repository and a private one
+            # behind the same anonymous token DENIED response. Public
+            # inventory may therefore be empty, but this is deliberately not
+            # proof that the package namespace is absent. The credentialed
+            # publisher independently checks package metadata before its
+            # first write.
+            if (
+                len(seen_urls) == 1
+                and isinstance(error, _AnonymousNamespaceHiddenError)
+            ):
+                return ()
+            raise
         if response.status == 404:
             if len(seen_urls) != 1:
                 raise OciPublicationError(
@@ -909,7 +927,9 @@ def _verify_package_association(
     repository: str,
     expected_source_repository: str,
     transport: OciTransportV1,
-) -> None:
+    *,
+    allow_absent: bool = False,
+) -> bool:
     owner, package = repository.split("/", 1)
     url = (
         f"https://{GITHUB_API_HOST}/orgs/{quote(owner, safe='')}/packages/container/"
@@ -924,6 +944,8 @@ def _verify_package_association(
         headers={"accept": "application/vnd.github+json"},
         maximum_bytes=4 * 1024 * 1024,
     )
+    if response.status == 404 and allow_absent:
+        return False
     if response.status != 200:
         raise OciPublicationError(
             f"GitHub package metadata returned HTTP {response.status}",
@@ -943,6 +965,7 @@ def _verify_package_association(
             "OCI package is not public and associated with the protected tap",
             guard_code="namespace_bootstrap_failed",
         )
+    return True
 
 
 def publish_immutable_oci_plan(
@@ -959,6 +982,18 @@ def publish_immutable_oci_plan(
             "immutable OCI tag prefix is unsupported",
             guard_code="namespace_bootstrap_failed",
         )
+
+    # An anonymous authentication challenge cannot distinguish a missing
+    # namespace from a private package. Resolve that ambiguity with protected
+    # package metadata before the first registry mutation. A 404 permits the
+    # bounded first publication; an existing package must already be public
+    # and associated with this protected tap.
+    _verify_package_association(
+        plan.repository,
+        expected_source_repository,
+        transport,
+        allow_absent=True,
+    )
 
     manifest = build_oci_manifest(plan)
     digest_hex = hashlib.sha256(manifest).hexdigest()
@@ -1002,9 +1037,7 @@ def publish_immutable_oci_plan(
             "new OCI manifest cannot be resolved by digest",
             guard_code="namespace_bootstrap_failed",
         )
-    _verify_package_association(
-        plan.repository, expected_source_repository, transport
-    )
+    _verify_package_association(plan.repository, expected_source_repository, transport)
 
     anonymous_manifest = _request(
         transport,
@@ -1194,6 +1227,17 @@ class UrllibOciTransportV1:
             "GET", token_url, headers=headers, body=None, maximum_bytes=1024 * 1024
         )
         if response.url != token_url or response.status != 200:
+            if (
+                not authenticated
+                and response.url == token_url
+                and response.status == 403
+                and self._anonymous_namespace_is_hidden(response.body)
+            ):
+                raise _AnonymousNamespaceHiddenError(
+                    "anonymous registry namespace is not publicly visible",
+                    guard_code="candidate_public_readback_failed",
+                    kind="registry-contract",
+                )
             raise OciPublicationError(
                 "registry bearer-token exchange failed",
                 guard_code="namespace_bootstrap_failed",
@@ -1216,6 +1260,24 @@ class UrllibOciTransportV1:
             )
         self._bearer_tokens[key] = bearer
         return bearer
+
+    @staticmethod
+    def _anonymous_namespace_is_hidden(body: bytes) -> bool:
+        try:
+            payload = json.loads(body.decode("utf-8", errors="strict"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return False
+        if not isinstance(payload, Mapping) or set(payload) != {"errors"}:
+            return False
+        errors = payload["errors"]
+        return (
+            isinstance(errors, list)
+            and len(errors) == 1
+            and isinstance(errors[0], Mapping)
+            and errors[0].get("code") == "DENIED"
+            and isinstance(errors[0].get("message"), str)
+            and 1 <= len(errors[0]["message"]) <= 1024
+        )
 
     def request(
         self,
