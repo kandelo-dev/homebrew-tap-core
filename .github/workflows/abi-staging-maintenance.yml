@@ -52,6 +52,11 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Set up pinned ORAS
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+        with:
+          version: "1.3.3"
+
       - name: Validate authority and record exact maintenance
         working-directory: tap-authority
         env:
