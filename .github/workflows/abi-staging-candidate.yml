@@ -78,13 +78,15 @@ jobs:
         uses: ./kandelo-authority/.github/actions/setup-nix
 
       - name: Build one exact uncredentialed candidate handoff
-        working-directory: tap-authority
+        working-directory: kandelo-authority
         env:
           WORK_ID: ${{ inputs.work-id }}
         run: |
           set -euo pipefail
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-            ../kandelo-authority/scripts/dev-shell.sh \
+            -u ACTIONS_RUNTIME_TOKEN \
+            scripts/dev-shell.sh env \
+              "PYTHONPATH=$GITHUB_WORKSPACE/tap-authority" \
             python3 -m scripts.abi_staging.cli execute-build-work \
               --coordination "$RUNNER_TEMP/coordination" \
               --work-id "$WORK_ID" \

@@ -493,7 +493,36 @@ module AbiStagingWorkflowCheck
                      prepare.fetch("if") ==
                        "needs.discover-plan.outputs.selected == 'true'",
                      "runtime preparation is not exact-request scoped")
-    prepare_source = run_steps(prepare).map { |step| step.fetch("run") }.join("\n")
+    prepare_steps = run_steps(prepare)
+    isolate_index = prepare_steps.index do |step|
+      step["name"] == "Isolate exact runtime package resolution"
+    end
+    build_index = prepare_steps.index do |step|
+      step["name"] == "Build one exact uncredentialed runtime"
+    end
+    require_contract(
+      isolate_index && build_index && isolate_index < build_index,
+      "runtime package cache is not sealed before the exact build"
+    )
+    isolate_source = prepare_steps.fetch(isolate_index).fetch("run")
+    build_source = prepare_steps.fetch(build_index).fetch("run")
+    require_contract(
+      isolate_source.include?("abi-staging-runtime-package-cache") &&
+        isolate_source.include?("test ! -e") &&
+        isolate_source.include?("mkdir -m 0700") &&
+        isolate_source.include?("WASM_POSIX_BINARY_CACHE_ROOT=") &&
+        isolate_source.include?('>>"$GITHUB_ENV"'),
+      "runtime package cache is not one fresh isolated directory"
+    )
+    require_contract(
+      build_source.include?(
+        'WASM_POSIX_BINARY_CACHE_ROOT=$WASM_POSIX_BINARY_CACHE_ROOT'
+      ) && build_source.include?(
+        '--binary-cache-root "$WASM_POSIX_BINARY_CACHE_ROOT"'
+      ),
+      "runtime package cache is not exact across the protected build"
+    )
+    prepare_source = prepare_steps.map { |step| step.fetch("run") }.join("\n")
     require_contract(prepare_source.include?("abi-staging-prepare-runtime.sh") &&
                      prepare_source.include?('--source-commit "${{ needs.discover-plan.outputs.kandelo-head }}"') &&
                      prepare_source.include?(".issuance.policy_sha256") &&
@@ -509,12 +538,20 @@ module AbiStagingWorkflowCheck
                        "always() && needs.plan-products.result == 'success' && needs.discover-plan.outputs.selected == 'true'",
                      "product composition gates on a global Formula outcome")
     compose_source = run_steps(compose).map { |step| step.fetch("run") }.join("\n")
-    require_contract(compose_source.include?("execute-product-work") &&
+    compose_executor = run_steps(compose).find do |step|
+      step.fetch("run").include?("execute-product-work")
+    end
+    require_contract(compose_executor&.fetch("working-directory") ==
+                       "kandelo-authority" &&
+                     compose_source.include?("scripts/dev-shell.sh env") &&
+                     compose_source.include?(
+                       'PYTHONPATH=$GITHUB_WORKSPACE/tap-authority'
+                     ) && compose_source.include?("execute-product-work") &&
                      compose_source.include?("--validate-builder-report") &&
                      compose_source.include?('--private-out "$RUNNER_TEMP/product-private"') &&
                      compose_source.include?("env -u GITHUB_TOKEN") &&
                      compose_source.include?("-u ACTIONS_RUNTIME_TOKEN"),
-                     "product composition lacks the protected report boundary")
+                     "product composition uncredentialed executor does not enter immutable Kandelo dev shell or lacks the protected report boundary")
     compose_uploads = action_steps(compose, UPLOAD_ARTIFACT)
     require_contract(compose_uploads.length == 2 &&
                      compose_uploads.any? do |step|
@@ -573,11 +610,19 @@ module AbiStagingWorkflowCheck
                          "always() && needs.plan-products.result == 'success' && needs.discover-plan.outputs.selected == 'true'",
                        "#{name} must gate on the protected product wave")
       source_text = run_steps(job).map { |step| step.fetch("run") }.join("\n")
-      require_contract(source_text.include?("execute-product-evidence-work") &&
+      executor = run_steps(job).find do |step|
+        step.fetch("run").include?("execute-product-evidence-work")
+      end
+      require_contract(executor&.fetch("working-directory") ==
+                         "kandelo-authority" &&
+                       source_text.include?("scripts/dev-shell.sh env") &&
+                       source_text.include?(
+                         'PYTHONPATH=$GITHUB_WORKSPACE/tap-authority'
+                       ) && source_text.include?("execute-product-evidence-work") &&
                        source_text.include?("--host #{host}") &&
                        source_text.include?("env -u GITHUB_TOKEN") &&
                        source_text.include?("-u ACTIONS_RUNTIME_TOKEN"),
-                       "#{name} is not an uncredentialed exact product runner")
+                       "#{name} uncredentialed executor does not enter immutable Kandelo dev shell")
     end
 
     evidence_publisher = jobs.fetch("publish-product-evidence")
@@ -954,13 +999,17 @@ module AbiStagingWorkflowCheck
                      }, "candidate producer lacks exact coordination artifact")
     commands = run_steps(producer)
     require_contract(commands.length == 1 &&
-                     commands.fetch(0).fetch("working-directory") == "tap-authority" &&
+                     commands.fetch(0).fetch("working-directory") == "kandelo-authority" &&
                      commands.fetch(0).fetch("env") == {
                        "WORK_ID" => "${{ inputs.work-id }}"
                      }, "candidate producer command inputs changed")
     source = commands.fetch(0).fetch("run")
     require_contract(source.include?("env -u GITHUB_TOKEN") &&
-                     source.include?("../kandelo-authority/scripts/dev-shell.sh") &&
+                     source.include?("-u ACTIONS_RUNTIME_TOKEN") &&
+                     source.include?("scripts/dev-shell.sh env") &&
+                     source.include?(
+                       'PYTHONPATH=$GITHUB_WORKSPACE/tap-authority'
+                     ) &&
                      !source.include?("../kandelo-source/scripts/dev-shell.sh") &&
                      source.include?("python3 -m scripts.abi_staging.cli #{producer_cli}") &&
                      source.include?('--run-id "$GITHUB_RUN_ID"') &&

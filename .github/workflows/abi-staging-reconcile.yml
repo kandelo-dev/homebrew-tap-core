@@ -254,6 +254,14 @@ jobs:
       - name: Set up immutable Kandelo policy tools
         uses: ./kandelo-authority/.github/actions/setup-nix
 
+      - name: Isolate exact runtime package resolution
+        run: |
+          set -euo pipefail
+          package_cache="$RUNNER_TEMP/abi-staging-runtime-package-cache"
+          test ! -e "$package_cache"
+          mkdir -m 0700 "$package_cache"
+          echo "WASM_POSIX_BINARY_CACHE_ROOT=$package_cache" >>"$GITHUB_ENV"
+
       - name: Build one exact uncredentialed runtime
         working-directory: kandelo-authority
         run: |
@@ -265,7 +273,9 @@ jobs:
           build_policy="$(scripts/dev-shell.sh jq -r '.issuance.policy_sha256' "$request")"
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_RUNTIME_TOKEN \
-            scripts/dev-shell.sh scripts/abi-staging-prepare-runtime.sh \
+            scripts/dev-shell.sh env \
+              "WASM_POSIX_BINARY_CACHE_ROOT=$WASM_POSIX_BINARY_CACHE_ROOT" \
+              scripts/abi-staging-prepare-runtime.sh \
               --source-root "$GITHUB_WORKSPACE/kandelo-source" \
               --source-repository "${{ needs.discover-plan.outputs.kandelo-repository }}" \
               --source-commit "${{ needs.discover-plan.outputs.kandelo-head }}" \
@@ -273,6 +283,7 @@ jobs:
               --target-abi "$target_abi" \
               --snapshot-sha256 "$snapshot" \
               --build-policy-sha256 "$build_policy" \
+              --binary-cache-root "$WASM_POSIX_BINARY_CACHE_ROOT" \
               --out "$RUNNER_TEMP/exact-runtime"
 
       - name: Upload exact inert runtime
@@ -414,7 +425,7 @@ jobs:
         uses: ./kandelo-authority/.github/actions/setup-nix
 
       - name: Compose one exact uncredentialed product handoff
-        working-directory: tap-authority
+        working-directory: kandelo-authority
         env:
           PRODUCT_ID: ${{ matrix.product_id }}
           WORK_ID: ${{ matrix.work_id }}
@@ -422,7 +433,8 @@ jobs:
           set -euo pipefail
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_RUNTIME_TOKEN \
-            ../kandelo-authority/scripts/dev-shell.sh \
+            scripts/dev-shell.sh env \
+              "PYTHONPATH=$GITHUB_WORKSPACE/tap-authority" \
             python3 -m scripts.abi_staging.cli execute-product-work \
               --coordination-root "$RUNNER_TEMP/product-inputs" \
               --runtime-artifact-id "${{ needs.prepare-runtime.outputs.artifact-id }}" \
@@ -613,7 +625,7 @@ jobs:
         uses: ./kandelo-authority/.github/actions/setup-nix
 
       - name: Run exact uncredentialed Node product evidence
-        working-directory: tap-authority
+        working-directory: kandelo-authority
         env:
           DEFINITION_ID: ${{ matrix.definition_id }}
           PRODUCT_ID: ${{ matrix.product_id }}
@@ -623,7 +635,8 @@ jobs:
           set -euo pipefail
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_RUNTIME_TOKEN \
-            ../kandelo-authority/scripts/dev-shell.sh \
+            scripts/dev-shell.sh env \
+              "PYTHONPATH=$GITHUB_WORKSPACE/tap-authority" \
             python3 -m scripts.abi_staging.cli execute-product-evidence-work \
               --host node \
               --definition-id "$DEFINITION_ID" \
@@ -720,7 +733,7 @@ jobs:
         uses: ./kandelo-authority/.github/actions/setup-nix
 
       - name: Run exact uncredentialed browser product evidence
-        working-directory: tap-authority
+        working-directory: kandelo-authority
         env:
           DEFINITION_ID: ${{ matrix.definition_id }}
           PRODUCT_ID: ${{ matrix.product_id }}
@@ -730,7 +743,8 @@ jobs:
           set -euo pipefail
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_RUNTIME_TOKEN \
-            ../kandelo-authority/scripts/dev-shell.sh \
+            scripts/dev-shell.sh env \
+              "PYTHONPATH=$GITHUB_WORKSPACE/tap-authority" \
             python3 -m scripts.abi_staging.cli execute-product-evidence-work \
               --host browser \
               --definition-id "$DEFINITION_ID" \
