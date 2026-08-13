@@ -181,26 +181,33 @@ jobs:
           import { join } from "node:path";
           import { pathToFileURL } from "node:url";
 
-          const root = process.argv[2];
-          if (!root) throw new Error("Kandelo root is required");
-          const memory = await import(
-            pathToFileURL(join(root, "host/src/vfs/memory-fs.ts")).href
-          );
-          const abi = await import(
-            pathToFileURL(join(root, "host/src/generated/abi.ts")).href
-          );
-          const fs = memory.MemoryFileSystem.create(
-            new SharedArrayBuffer(2 * 1024 * 1024),
-          );
-          const image = await fs.saveImage({
-            metadata: {
-              version: 1,
-              kernelAbi: abi.ABI_VERSION,
-              createdBy: "abi-staging-candidate-formula-test",
-            },
-            normalizeTimestampsMs: 0,
+          async function main(): Promise<void> {
+            const root = process.argv[2];
+            if (!root) throw new Error("Kandelo root is required");
+            const memory = await import(
+              pathToFileURL(join(root, "host/src/vfs/memory-fs.ts")).href
+            );
+            const abi = await import(
+              pathToFileURL(join(root, "host/src/generated/abi.ts")).href
+            );
+            const fs = memory.MemoryFileSystem.create(
+              new SharedArrayBuffer(2 * 1024 * 1024),
+            );
+            const image = await fs.saveImage({
+              metadata: {
+                version: 1,
+                kernelAbi: abi.ABI_VERSION,
+                createdBy: "abi-staging-candidate-formula-test",
+              },
+              normalizeTimestampsMs: 0,
+            });
+            writeFileSync(join(root, "host/wasm/rootfs.vfs"), image);
+          }
+
+          main().catch((error) => {
+            console.error(error);
+            process.exitCode = 1;
           });
-          writeFileSync(join(root, "host/wasm/rootfs.vfs"), image);
           EMPTY_ROOTFS
           node --experimental-wasm-exnref --import tsx/esm \
             "$RUNNER_TEMP/abi-staging-empty-rootfs.ts" "$PWD"

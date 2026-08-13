@@ -779,6 +779,9 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes realm_source, "scripts/build-fork-instrument-tool.sh"
     assert_includes realm_source, "MemoryFileSystem.create"
     assert_includes realm_source, "host/wasm/rootfs.vfs"
+    assert_includes realm_source, "async function main(): Promise<void>"
+    refute_match(/^const memory = await import\(/, realm_source)
+    refute_match(/^const image = await fs\.saveImage\(/, realm_source)
     refute_includes realm_source, "formula_test_packages"
     refute_includes realm_source, "--fetch-only resolve"
     assert_includes realm_source, "PLAYWRIGHT_BROWSERS_PATH"
