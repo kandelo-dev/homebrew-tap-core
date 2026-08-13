@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "dependencies": [],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 1935,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "e102ec8e4815864bc9d7864b4e220cb922597eed1a787e9990dd8992f613de1a"
+    }
+  ]
+}

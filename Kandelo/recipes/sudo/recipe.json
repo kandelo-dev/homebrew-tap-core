@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "dependencies": [],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 4755,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "c1f0d63b069bcc1a804c682599171dc1c5f1eaadff31da3075fb2cedea9d87e1"
+    },
+    {
+      "bytes": 568,
+      "mode": "0644",
+      "path": "patches/wasm-main-envp.patch",
+      "sha256": "2a8cbe2c44bd0b9b5592f076dfe2c7192f56a555a273f0a811d9b019aa80ba18"
+    }
+  ]
+}

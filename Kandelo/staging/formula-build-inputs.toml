@@ -249,6 +249,13 @@ kandelo_paths = []
 tap_paths = []
 
 [[formulae]]
+name = "login"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/login"]
+
+[[formulae]]
 name = "lsof"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
@@ -415,6 +422,20 @@ architectures = ["wasm32", "wasm64"]
 profiles = ["kandelo-common"]
 kandelo_paths = []
 tap_paths = []
+
+[[formulae]]
+name = "sudo"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/sudo"]
+
+[[formulae]]
+name = "sudo-lite"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/sudo-lite"]
 
 [[formulae]]
 name = "tar"
