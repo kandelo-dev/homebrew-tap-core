@@ -91,8 +91,7 @@ module KandeloFormulaSupport
     support_sha256 tap tap_recipe tier2_bridge
   ].freeze
   KANDELO_TIER2_BRIDGE_KEYS = %w[
-    build_toml_sha256 package package_toml_sha256 script script_env_keys
-    script_sha256 source_mode source_sha256 source_url version
+    package script script_env_keys script_sha256 source_sha256 source_url version
   ].freeze
   KANDELO_TAP_RECIPE_KEYS = %w[
     dependencies entrypoint file_count manifest_sha256 pkg_version resources
@@ -507,7 +506,7 @@ module KandeloFormulaSupport
       raise "Tier-2 attestation must be one JSON object"
     end
     expected_top_keys = case document["schema"]
-    when 2
+    when 4
       KANDELO_TIER2_TOP_KEYS
     when 3
       KANDELO_TAP_RECIPE_TOP_KEYS
@@ -561,10 +560,9 @@ module KandeloFormulaSupport
                      bridge["source_url"].is_a?(String) &&
                      bridge["source_url"].bytesize.between?(9, 2048) &&
                      bridge["source_url"].start_with?("https://") &&
-                     ["exact", "in-repository-source"].include?(bridge["source_mode"]) &&
-                     %w[
-                       build_toml_sha256 package_toml_sha256 script_sha256 source_sha256
-                     ].all? { |key| valid_sha256.call(bridge[key]) } &&
+                     %w[script_sha256 source_sha256].all? do |key|
+                       valid_sha256.call(bridge[key])
+                     end &&
                      script_env_keys.is_a?(Array) &&
                      script_env_keys.all? do |key|
                        key.is_a?(String) && key.match?(/\A[A-Z][A-Z0-9_]{0,254}\z/)
@@ -2803,15 +2801,7 @@ module KandeloFormulaSupport
     package_root = kandelo_tier2_exact_directory(
       registry_root/package, registry_root, "Tier-2 registry package"
     )
-    package_toml = package_root/"package.toml"
-    build_toml = package_root/"build.toml"
     script = package_root/bridge.fetch("script")
-    kandelo_tier2_read_attested_file(
-      package_toml, bridge.fetch("package_toml_sha256"), 65_536, "registry package.toml"
-    )
-    kandelo_tier2_read_attested_file(
-      build_toml, bridge.fetch("build_toml_sha256"), 65_536, "registry build.toml"
-    )
     kandelo_tier2_read_attested_file(
       script, bridge.fetch("script_sha256"), KANDELO_TIER2_SOURCE_MAX_BYTES,
       "registry build script"
