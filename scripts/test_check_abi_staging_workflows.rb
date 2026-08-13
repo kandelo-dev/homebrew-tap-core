@@ -40,6 +40,18 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     workflow.dig("jobs", job_name, "steps").reverse.find { |step| step.key?("run") }
   end
 
+  def package_publication_environments(value, result = [])
+    case value
+    when Hash
+      result << value if value.key?("HOMEBREW_GITHUB_PACKAGES_TOKEN") &&
+                         value.key?("HOMEBREW_GITHUB_PACKAGES_USER")
+      value.each_value { |child| package_publication_environments(child, result) }
+    when Array
+      value.each { |child| package_publication_environments(child, result) }
+    end
+    result
+  end
+
   def assert_rejected(label)
     changed = copy
     yield changed
@@ -288,7 +300,53 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
                    job.dig("with", "coordination-artifact-id")
       assert_equal "${{ needs.discover-plan.outputs.coordination-artifact-digest }}",
                    job.dig("with", "coordination-artifact-digest")
-      refute job.key?("secrets")
+      assert_equal({
+        "HOMEBREW_GITHUB_PACKAGES_TOKEN" =>
+          "${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}"
+      }, job["secrets"])
+    end
+  end
+
+  def test_only_protected_publishers_receive_the_dedicated_package_token
+    event = @candidate.key?("on") ? @candidate.fetch("on") : @candidate.fetch(true)
+    assert_equal({"required" => true},
+                 event.dig("workflow_call", "secrets",
+                           "HOMEBREW_GITHUB_PACKAGES_TOKEN"))
+
+    build_text = AbiStagingWorkflowCheck.flatten(
+      @candidate.dig("jobs", "build")
+    ).join("\n")
+    refute_includes build_text, "secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN"
+
+    publisher = last_run_step(@candidate, "publish")
+    assert_equal "${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}",
+                 publisher.dig("env", "HOMEBREW_GITHUB_PACKAGES_TOKEN")
+    assert_equal "${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}",
+                 publisher.dig("env", "HOMEBREW_GITHUB_PACKAGES_USER")
+
+    assert_reusable_rejected(:candidate, "publisher restored the Actions token") do |workflow|
+      last_run_step(workflow, "publish").fetch("env")[
+        "HOMEBREW_GITHUB_PACKAGES_TOKEN"
+      ] = "${{ github.token }}"
+    end
+    assert_reusable_rejected(:candidate, "producer received the package token") do |workflow|
+      last_run_step(workflow, "build").fetch("env")[
+        "HOMEBREW_GITHUB_PACKAGES_TOKEN"
+      ] = "${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}"
+    end
+  end
+
+  def test_all_protected_publication_lanes_use_the_dedicated_package_credential
+    workflows = [@workflow, @candidate, @reuse, @verification, @maintenance, @history]
+    environments = workflows.flat_map do |workflow|
+      package_publication_environments(workflow)
+    end
+    refute_empty environments
+    environments.each do |environment|
+      assert_equal "${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}",
+                   environment.fetch("HOMEBREW_GITHUB_PACKAGES_TOKEN")
+      assert_equal "${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}",
+                   environment.fetch("HOMEBREW_GITHUB_PACKAGES_USER")
     end
   end
 
