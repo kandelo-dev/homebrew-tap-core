@@ -15,6 +15,9 @@ on:
       work-id:
         required: true
         type: string
+    secrets:
+      HOMEBREW_GITHUB_PACKAGES_TOKEN:
+        required: true
 
 permissions: {}
 
@@ -52,8 +55,8 @@ jobs:
           COORDINATION_ARTIFACT_DIGEST: ${{ inputs.coordination-artifact-digest }}
           COORDINATION_ARTIFACT_ID: ${{ inputs.coordination-artifact-id }}
           GITHUB_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}
           TAP_COMMIT: ${{ inputs.tap-commit }}
           WORK_ID: ${{ inputs.work-id }}
         run: |

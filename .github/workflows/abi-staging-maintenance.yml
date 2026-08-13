@@ -68,8 +68,8 @@ jobs:
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}
           JUSTIFICATION: ${{ inputs.justification }}
           MAINTENANCE_COMMAND: ${{ inputs.command }}
         run: |

@@ -44,6 +44,16 @@ module AbiStagingWorkflowCheck
                      "workflow names an Automattic GHCR target")
   end
 
+  def require_only_package_secret_references(value, field)
+    references = flatten(value).join("\n").scan(/\$\{\{\s*secrets\.[^}]+\}\}/).uniq
+    require_contract(
+      references.all? do |reference|
+        reference == "${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}"
+      end,
+      "#{field} references an undeclared repository secret"
+    )
+  end
+
   def check_actions(job)
     job.fetch("steps").each do |step|
       next unless step.key?("uses")
@@ -348,6 +358,10 @@ module AbiStagingWorkflowCheck
       "tap-commit" => "${{ needs.discover-plan.outputs.tap-commit }}",
       "work-id" => "${{ matrix.work_id }}"
     }
+    package_secret = {
+      "HOMEBREW_GITHUB_PACKAGES_TOKEN" =>
+        "${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}"
+    }
     [[candidate, "./.github/workflows/abi-staging-candidate.yml"],
      [verification, "./.github/workflows/abi-staging-verification.yml"]].each do |job, reusable|
       require_contract(job.fetch("needs") == "discover-plan" &&
@@ -355,7 +369,7 @@ module AbiStagingWorkflowCheck
                        job.fetch("permissions") == writer_permissions &&
                        job.fetch("uses") == reusable &&
                        job.fetch("with") == common_inputs &&
-                       !job.key?("secrets") &&
+                       job.fetch("secrets") == package_secret &&
                        !job.key?("runs-on") &&
                        !job.key?("steps"),
                        "reusable workflow caller changed authority or exact inputs")
@@ -371,7 +385,7 @@ module AbiStagingWorkflowCheck
                      reuse.fetch("permissions") == writer_permissions &&
                      reuse.fetch("uses") == "./.github/workflows/abi-staging-reuse.yml" &&
                      reuse.fetch("with") == reuse_inputs &&
-                     !reuse.key?("secrets") && !reuse.key?("runs-on") &&
+                     reuse.fetch("secrets") == package_secret && !reuse.key?("runs-on") &&
                      !reuse.key?("steps"),
                      "reuse caller changed authority or exact inputs")
 
@@ -935,8 +949,7 @@ module AbiStagingWorkflowCheck
     end
 
     all_text = flatten(workflow).join("\n")
-    require_contract(!all_text.match?(/\bsecrets\b/i),
-                     "workflow may not use repository secrets")
+    require_only_package_secret_references(workflow, "workflow")
     require_contract(!all_text.match?(/(?:^|\s)sleep(?:\s|$)/),
                      "workflow retries may not sleep on runners")
     require_contract(!all_text.match?(/:[[:space:]]*(?:latest|candidate|current)(?:\s|$)/),
@@ -956,10 +969,13 @@ module AbiStagingWorkflowCheck
     expected_inputs = %w[
       coordination-artifact-id coordination-artifact-digest tap-commit work-id
     ]
-    inputs = event.fetch("workflow_call").fetch("inputs")
+    call = event.fetch("workflow_call")
+    inputs = call.fetch("inputs")
     require_contract(inputs.keys == expected_inputs && inputs.values.all? do |input|
                        input == {"required" => true, "type" => "string"}
-                     end, "reuse workflow inputs changed")
+                     end && call.fetch("secrets") == {
+                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => {"required" => true}
+                     }, "reuse workflow inputs changed")
     jobs = workflow.fetch("jobs")
     require_contract(jobs.keys == ["publish"],
                      "reuse workflow must have one protected writer")
@@ -987,8 +1003,8 @@ module AbiStagingWorkflowCheck
                        "COORDINATION_ARTIFACT_DIGEST" => "${{ inputs.coordination-artifact-digest }}",
                        "COORDINATION_ARTIFACT_ID" => "${{ inputs.coordination-artifact-id }}",
                        "GITHUB_TOKEN" => "${{ github.token }}",
-                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
-                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
+                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}",
+                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}",
                        "TAP_COMMIT" => "${{ inputs.tap-commit }}",
                        "WORK_ID" => "${{ inputs.work-id }}"
                      }, "reuse publisher inputs changed")
@@ -1009,9 +1025,9 @@ module AbiStagingWorkflowCheck
                      uploads.fetch(0).dig("with", "compression-level") == 0,
                      "reuse result locator is not retained exactly")
     all_text = flatten(workflow).join("\n")
-    require_contract(!all_text.match?(/\bsecrets\b/i) &&
-                     !all_text.match?(/(?:^|\s)sleep(?:\s|$)/),
-                     "reuse workflow gains secrets or sleeps")
+    require_only_package_secret_references(workflow, "reuse workflow")
+    require_contract(!all_text.match?(/(?:^|\s)sleep(?:\s|$)/),
+                     "reuse workflow gains sleeps")
     true
   rescue KeyError, NoMethodError => error
     raise Violation, "reuse workflow structure is incomplete: #{error.message}"
@@ -1030,10 +1046,13 @@ module AbiStagingWorkflowCheck
       coordination-artifact-id coordination-artifact-digest kandelo-head
       kandelo-policy-commit kandelo-repository tap-commit work-id
     ]
-    inputs = event.fetch("workflow_call").fetch("inputs")
+    call = event.fetch("workflow_call")
+    inputs = call.fetch("inputs")
     require_contract(inputs.keys == expected_inputs && inputs.values.all? do |input|
                        input == {"required" => true, "type" => "string"}
-                     end, "reusable ABI workflow inputs changed")
+                     end && call.fetch("secrets") == {
+                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => {"required" => true}
+                     }, "reusable ABI workflow inputs changed")
 
     producer_id = kind == :candidate ? "build" : "verify"
     producer_cli = kind == :candidate ? "execute-build-work" : "execute-verification-work"
@@ -1164,8 +1183,8 @@ module AbiStagingWorkflowCheck
       "GITHUB_TOKEN" => "${{ github.token }}",
       "HANDOFF_ARTIFACT_DIGEST" => "${{ needs.#{producer_id}.outputs.artifact-digest }}",
       "HANDOFF_ARTIFACT_ID" => "${{ needs.#{producer_id}.outputs.artifact-id }}",
-      "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
-      "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
+      "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}",
+      "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}",
       "PRODUCER_CONCLUSION" => "${{ needs.#{producer_id}.result }}",
       "TAP_COMMIT" => "${{ inputs.tap-commit }}",
       "WORK_ID" => "${{ inputs.work-id }}"
@@ -1195,9 +1214,9 @@ module AbiStagingWorkflowCheck
                      "publisher result locator is not retained exactly")
 
     all_text = flatten(workflow).join("\n")
-    require_contract(!all_text.match?(/\bsecrets\b/i) &&
-                     !all_text.match?(/(?:^|\s)sleep(?:\s|$)/),
-                     "reusable ABI workflow gains secrets or sleeps")
+    require_only_package_secret_references(workflow, "reusable ABI workflow")
+    require_contract(!all_text.match?(/(?:^|\s)sleep(?:\s|$)/),
+                     "reusable ABI workflow gains sleeps")
     true
   rescue KeyError, NoMethodError => error
     raise Violation, "reusable ABI workflow structure is incomplete: #{error.message}"
@@ -1273,8 +1292,8 @@ module AbiStagingWorkflowCheck
                        "GITHUB_RUN_ATTEMPT" => "${{ github.run_attempt }}",
                        "GITHUB_RUN_ID" => "${{ github.run_id }}",
                        "GITHUB_TOKEN" => "${{ github.token }}",
-                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
-                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
+                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}",
+                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}",
                        "JUSTIFICATION" => "${{ inputs.justification }}",
                        "MAINTENANCE_COMMAND" => "${{ inputs.command }}"
                      }, "maintenance inputs are not isolated as data")
@@ -1530,8 +1549,8 @@ module AbiStagingWorkflowCheck
     require_contract(verify_step.fetch("working-directory") == "tap-authority" &&
                      verify_step.fetch("env") == {
                        "GITHUB_TOKEN" => "${{ github.token }}",
-                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
-                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}"
+                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}",
+                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}"
                      }, "history publication authority changed")
     require_contract(verify_source.include?("python3 -m scripts.abi_staging.cli verify-history") &&
                      verify_source.include?("python3 -m scripts.abi_staging.cli publish-history-record") &&
@@ -1545,8 +1564,7 @@ module AbiStagingWorkflowCheck
                      "history publisher promotes, executes candidate code, sleeps, or bypasses transport")
 
     all_text = flatten(workflow).join("\n")
-    require_contract(!all_text.include?("${{ secrets."),
-                     "history workflow may not use repository secrets")
+    require_only_package_secret_references(workflow, "history workflow")
     true
   rescue KeyError, NoMethodError => error
     raise Violation, "history workflow structure is incomplete: #{error.message}"
