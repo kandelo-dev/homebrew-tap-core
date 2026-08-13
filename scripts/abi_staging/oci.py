@@ -869,7 +869,11 @@ def _upload_blob(
                 completion_url,
                 authenticated=True,
                 guard_code="namespace_bootstrap_failed",
-                headers={"content-type": blob.media_type},
+                # OCI distribution uploads are raw blob transfers. GHCR
+                # rejects descriptor media types on this endpoint with
+                # BLOB_UPLOAD_INVALID; the media type belongs only in the
+                # manifest descriptor published after the bytes exist.
+                headers={"content-type": "application/octet-stream"},
                 body=blob.body,
                 maximum_bytes=0,
             )
