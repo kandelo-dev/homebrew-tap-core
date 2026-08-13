@@ -38,6 +38,7 @@ class FakeRegistryTransport:
         self.manifests: dict[tuple[str, str], bytes] = {}
         self.calls: list[tuple[str, str, bool]] = []
         self.uploads: dict[str, str] = {}
+        self.blob_upload_content_types: list[str | None] = []
         self.association = SOURCE_ASSOCIATION
         self.visibility = "public"
         self.private_anonymous = False
@@ -72,7 +73,8 @@ class FakeRegistryTransport:
         authenticated: bool,
         maximum_bytes: int,
     ) -> HttpResponseV1:
-        del headers, maximum_bytes
+        request_headers = {key.lower(): value for key, value in (headers or {}).items()}
+        del maximum_bytes
         self.calls.append((method, url, authenticated))
         if self.redirect_url is not None:
             redirected = self.redirect_url
@@ -191,6 +193,7 @@ class FakeRegistryTransport:
             repository, session = remainder.split(upload_component, 1)
             if method != "PUT" or session not in self.uploads:
                 return self._response(404, url)
+            self.blob_upload_content_types.append(request_headers.get("content-type"))
             digest = parse_qs(parsed.query).get("digest", [""])[0]
             assert body is not None
             self.blobs[(repository, digest)] = body
@@ -582,6 +585,19 @@ class OciPublicationTests(unittest.TestCase):
         self.assertEqual(
             parse_qs(urlsplit(completion).query),
             {"digest": [_plan().config.digest], "state": ["exact-session"]},
+        )
+
+    def test_blob_upload_completion_uses_octet_stream_media_type(self) -> None:
+        transport = FakeRegistryTransport()
+        transport.github_upload_location = True
+        publish_record(
+            _plan(),
+            transport=transport,
+            expected_source_repository=SOURCE_ASSOCIATION,
+        )
+        self.assertTrue(transport.blob_upload_content_types)
+        self.assertEqual(
+            set(transport.blob_upload_content_types), {"application/octet-stream"}
         )
 
     def test_oras_credentials_use_stdin_and_ephemeral_config(self) -> None:
