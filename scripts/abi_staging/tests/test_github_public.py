@@ -76,6 +76,46 @@ def add_asset_download(opener: FakeOpener, public_url: str, body: bytes) -> None
 
 
 class GitHubPublicClientTests(unittest.TestCase):
+    def test_scan_skips_only_an_unpublished_content_addressed_release(self) -> None:
+        body = (FIXTURES / "current-request.json").read_bytes()
+        digest = hashlib.sha256(body).hexdigest()
+        content_tag = f"abi-staging-pr-19-sha256-{digest}"
+        refs = (
+            "https://api.github.com/repos/Automattic/kandelo/"
+            "git/matching-refs/tags/abi-staging-pr-"
+        )
+        release = (
+            "https://api.github.com/repos/Automattic/kandelo/releases/tags/"
+            f"{content_tag}"
+        )
+
+        opener = FakeOpener()
+        opener.add(
+            f"{refs}?per_page=100&page=1",
+            json_response([{"ref": f"refs/tags/{content_tag}"}]),
+        )
+        opener.add(release, FakeResponse(404, b'{"message":"Not Found"}'))
+        self.assertEqual(GitHubPublicClient(POLICY, opener=opener).scan(), ())
+
+        for tag, status in (
+            ("abi-staging-pr-19", 404),
+            (content_tag, 403),
+            (content_tag, 500),
+        ):
+            with self.subTest(tag=tag, status=status):
+                hostile = FakeOpener()
+                hostile.add(
+                    f"{refs}?per_page=100&page=1",
+                    json_response([{"ref": f"refs/tags/{tag}"}]),
+                )
+                hostile.add(
+                    "https://api.github.com/repos/Automattic/kandelo/"
+                    f"releases/tags/{tag}",
+                    FakeResponse(status, b'{"message":"failure"}'),
+                )
+                with self.assertRaises(PublicGitHubError):
+                    GitHubPublicClient(POLICY, opener=hostile).scan()
+
     def test_content_addressed_immutable_request_release_is_required(self) -> None:
         body = (FIXTURES / "current-request.json").read_bytes()
         request = json.loads(body)

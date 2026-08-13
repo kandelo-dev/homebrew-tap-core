@@ -32,6 +32,10 @@ class PublicGitHubError(ValueError):
     """Raised when public GitHub metadata crosses a protected boundary."""
 
 
+class _PublicGitHubNotFound(PublicGitHubError):
+    """Raised only for an exact public GitHub HTTP 404 response."""
+
+
 class Response(Protocol):
     status: int
     headers: Any
@@ -212,6 +216,10 @@ class GitHubPublicClient:
                     self._validate_transport_url(location)
                     current = location
                     continue
+                if status == 404:
+                    raise _PublicGitHubNotFound(
+                        "public GitHub request returned HTTP 404"
+                    )
                 if status != 200:
                     raise PublicGitHubError(f"public GitHub request returned HTTP {status}")
                 return self._read_response(response, maximum, "public GitHub response")
@@ -443,7 +451,19 @@ class GitHubPublicClient:
         discovered: list[DiscoveredRequestV1] = []
         seen_assets: set[tuple[int, str, str]] = set()
         for tag in tags:
-            release = self._release_by_tag(tag)
+            match = PR_TAG.fullmatch(tag)
+            assert match is not None
+            try:
+                release = self._release_by_tag(tag)
+            except _PublicGitHubNotFound:
+                # WHY: the protected publisher reserves the direct digest tag
+                # before its draft Release becomes public. Anonymous scans must
+                # ignore only that in-flight state; legacy or other failures
+                # remain fatal, and a public content-addressed Release is still
+                # fully validated below.
+                if match.group(2) is not None:
+                    continue
+                raise
             release_id = _positive_integer(release.get("id"), "Release id")
             if release_id in seen_release_ids:
                 raise PublicGitHubError("GitHub API returned a duplicate Release identity")
@@ -469,8 +489,6 @@ class GitHubPublicClient:
                 candidate = self._discover_request_url(url, created_at=created_at)
                 if candidate.release_tag != tag or candidate.asset_name != name:
                     raise PublicGitHubError("Release metadata and request URL disagree")
-                match = PR_TAG.fullmatch(tag)
-                assert match is not None
                 if match.group(2) is not None:
                     self._validate_content_addressed_tag_authority(
                         tag, release, candidate.request
