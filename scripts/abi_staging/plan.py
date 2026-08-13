@@ -465,6 +465,29 @@ def _validate_request_binding(
         raise PlanError(f"request asset URL is invalid: {error}") from error
     if asset.head != head or asset.digest != request_digest:
         raise PlanError("request asset URL does not bind the exact head and request digest")
+    request_identity = _mapping(request.get("pull_request"), "request pull request")
+    pull_request = _integer(
+        request_identity.get("number"), "request pull-request number"
+    )
+    repository = _text(
+        request_identity.get("repository"), "request pull-request repository", 256
+    )
+    content_addressed_path = (
+        f"/{repository}/releases/download/"
+        f"abi-staging-pr-{pull_request}-sha256-{request_digest}/"
+        f"candidate-request-{head}-sha256-{request_digest}.json"
+    )
+    legacy_path = (
+        f"/{repository}/releases/download/abi-staging-pr-{pull_request}/"
+        f"candidate-request-{head}-sha256-{request_digest}.json"
+    )
+    if (
+        parsed_url.hostname != "github.com"
+        or parsed_url.path not in {content_addressed_path, legacy_path}
+    ):
+        raise PlanError(
+            "request asset URL is outside its exact request Release"
+        )
 
 
 def _validate_tap_source(source: Mapping[str, Any]) -> dict[str, str]:
