@@ -176,6 +176,75 @@ class WorkflowExecutionTests(unittest.TestCase):
             ),
         )
 
+    def test_cli_exports_one_exact_candidate_build_realm(self) -> None:
+        from scripts.abi_staging import cli
+
+        bundle = _active_bundle()
+        work = bundle["workflow"]["build_work"][0]
+        formula = next(
+            candidate
+            for candidate in bundle["tap_plan"]["formulae"]
+            if candidate["identity"]["name"] == "libcxx"
+            and candidate["identity"]["architecture"] == "wasm32"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            coordination = root / "coordination.json"
+            output = root / "github-env"
+            coordination.write_bytes(canonical_bytes(bundle))
+            output.write_text("", encoding="utf-8")
+            status = cli.main(
+                [
+                    "export-build-realm",
+                    "--coordination",
+                    str(coordination),
+                    "--work-id",
+                    work["work_id"],
+                    "--tap-root",
+                    str(TAP_ROOT),
+                    "--github-env",
+                    str(output),
+                ]
+            )
+            observed = output.read_text(encoding="utf-8")
+        self.assertEqual(status, 0)
+        self.assertEqual(
+            observed,
+            (
+                "KANDELO_ABI_STAGING_ARCHITECTURE="
+                f"{formula['identity']['architecture']}\n"
+                "KANDELO_ABI_STAGING_FORMULA="
+                f"{formula['identity']['name']}\n"
+                "KANDELO_ABI_STAGING_TAP_COMMIT="
+                f"{bundle['tap_plan']['tap_source']['commit']}\n"
+                "KANDELO_ABI_STAGING_TAP_NAME=kandelo-dev/tap-core\n"
+                "KANDELO_ABI_STAGING_TAP_REPOSITORY="
+                f"{bundle['tap_plan']['tap_source']['repository']}\n"
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            coordination = root / "coordination.json"
+            output = root / "github-env"
+            coordination.write_bytes(canonical_bytes(bundle))
+            output.write_text("", encoding="utf-8")
+            status = cli.main(
+                [
+                    "export-build-realm",
+                    "--coordination",
+                    str(coordination),
+                    "--work-id",
+                    "0" * 64,
+                    "--tap-root",
+                    str(TAP_ROOT),
+                    "--github-env",
+                    str(output),
+                ]
+            )
+            self.assertEqual(output.read_text(encoding="utf-8"), "")
+        self.assertEqual(status, 1)
+
     def test_build_work_materializes_only_exact_declared_inputs(self) -> None:
         try:
             execution = importlib.import_module("scripts.abi_staging.execution")
@@ -281,6 +350,27 @@ class WorkflowExecutionTests(unittest.TestCase):
             self.assertNotIn("NIX_CONFIG", kwargs["env"])
             self.assertEqual(kwargs["env"]["CC"], "/declared/cc")
             self.assertEqual(kwargs["env"]["GITHUB_ACTIONS"], "true")
+            self.assertEqual(
+                kwargs["env"]["HOMEBREW_BREW_FILE"], "/reviewed/brew/bin/brew"
+            )
+            self.assertEqual(kwargs["env"]["HOMEBREW_BREW_COMMIT"], "a" * 40)
+            self.assertEqual(kwargs["env"]["HOMEBREW_CACHE"], "/private/brew-cache")
+            self.assertEqual(kwargs["env"]["HOMEBREW_TEMP"], "/private/brew-temp")
+            self.assertEqual(
+                kwargs["env"]["KANDELO_HOMEBREW_RESOLVED_TAPS_FILE"],
+                "/protected/resolved-taps.json",
+            )
+            self.assertEqual(
+                kwargs["env"]["KANDELO_HOMEBREW_TAP_SOURCE_COMMIT"], "b" * 40
+            )
+            self.assertEqual(
+                kwargs["env"]["PLAYWRIGHT_BROWSERS_PATH"],
+                "/private/playwright",
+            )
+            self.assertEqual(
+                kwargs["env"]["WASM_POSIX_BINARY_CACHE_ROOT"],
+                "/private/package-cache",
+            )
             self.assertNotEqual(kwargs["env"]["HOME"], "/credentialed/home")
             self.assertEqual(
                 kwargs["env"]["XDG_CONFIG_HOME"],
@@ -318,6 +408,20 @@ class WorkflowExecutionTests(unittest.TestCase):
                     "PATH": os.environ["PATH"],
                     "CC": "/declared/cc",
                     "GITHUB_ACTIONS": "true",
+                    "HOMEBREW_BREW_FILE": "/reviewed/brew/bin/brew",
+                    "HOMEBREW_BREW_COMMIT": "a" * 40,
+                    "HOMEBREW_CACHE": "/private/brew-cache",
+                    "HOMEBREW_TEMP": "/private/brew-temp",
+                    "HOMEBREW_NO_AUTO_UPDATE": "1",
+                    "HOMEBREW_NO_INSTALL_CLEANUP": "1",
+                    "HOMEBREW_NO_ANALYTICS": "1",
+                    "HOMEBREW_DEVELOPER": "1",
+                    "KANDELO_HOMEBREW_RESOLVED_TAPS_FILE": (
+                        "/protected/resolved-taps.json"
+                    ),
+                    "KANDELO_HOMEBREW_TAP_SOURCE_COMMIT": "b" * 40,
+                    "PLAYWRIGHT_BROWSERS_PATH": "/private/playwright",
+                    "WASM_POSIX_BINARY_CACHE_ROOT": "/private/package-cache",
                     "GITHUB_TOKEN": "must-not-survive",
                     "HOMEBREW_GITHUB_PACKAGES_TOKEN": "must-not-survive",
                     "ACTIONS_RUNTIME_TOKEN": "must-not-survive",
