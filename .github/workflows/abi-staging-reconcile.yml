@@ -104,8 +104,12 @@ jobs:
           out="$RUNNER_TEMP/abi-staging-coordination"
           classes="$RUNNER_TEMP/abi-staging-change-classes.json"
           products="$RUNNER_TEMP/abi-staging-selected-products.json"
-          scripts/dev-shell.sh jq -cS '.requirements.change_classes' \
-            "$out/request.json" >"$classes"
+          # The positional parameters expand in the nested declared shell.
+          # shellcheck disable=SC2016
+          scripts/dev-shell.sh bash -c '
+            set -euo pipefail
+            jq -cS ".requirements.change_classes" "$1" >"$2"
+          ' -- "$out/request.json" "$classes"
           host_target="$(scripts/dev-shell.sh rustc -vV | awk '/^host/ {print $2}')"
           scripts/dev-shell.sh cargo run --quiet -p xtask \
             --target "$host_target" -- abi-staging requirements \

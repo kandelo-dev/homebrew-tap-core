@@ -255,6 +255,16 @@ module AbiStagingWorkflowCheck
                        "steps.discover.outputs.selected == 'true'" &&
                        requirements.fetch("working-directory") == "kandelo-authority" &&
                        requirements_source.include?("scripts/dev-shell.sh") &&
+                       requirements_source.include?("scripts/dev-shell.sh bash -c '") &&
+                       requirements_source.include?(
+                         'jq -cS ".requirements.change_classes" "$1" >"$2"'
+                       ) &&
+                       requirements_source.include?(
+                         %q(' -- "$out/request.json" "$classes")
+                       ) &&
+                       !requirements_source.include?(
+                         %q(scripts/dev-shell.sh jq -cS '.requirements.change_classes')
+                       ) &&
                        requirements_source.include?("abi-staging requirements") &&
                        requirements_source.include?('--change-classes "$classes"') &&
                        requirements_source.include?('$GITHUB_WORKSPACE/kandelo-source/images/vfs/products/generated/catalog.json') &&
