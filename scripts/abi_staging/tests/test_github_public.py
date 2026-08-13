@@ -76,6 +76,117 @@ def add_asset_download(opener: FakeOpener, public_url: str, body: bytes) -> None
 
 
 class GitHubPublicClientTests(unittest.TestCase):
+    def test_content_addressed_immutable_request_release_is_required(self) -> None:
+        body = (FIXTURES / "current-request.json").read_bytes()
+        request = json.loads(body)
+        digest = hashlib.sha256(body).hexdigest()
+        head = request["build_source"]["commit"]
+        name = f"candidate-request-{head}-sha256-{digest}.json"
+        tag = f"abi-staging-pr-19-sha256-{digest}"
+        url = (
+            "https://github.com/Automattic/kandelo/releases/download/"
+            f"{tag}/{name}"
+        )
+        release = (
+            "https://api.github.com/repos/Automattic/kandelo/releases/tags/"
+            f"{tag}"
+        )
+        asset = {
+            "id": 11,
+            "name": name,
+            "browser_download_url": url,
+            "created_at": ASSET_CREATED_AT,
+        }
+        tag_ref = (
+            "https://api.github.com/repos/Automattic/kandelo/git/ref/tags/"
+            f"{tag}"
+        )
+        protected_commit = request["issuance"]["issuer_workflow_ref"].rsplit("@", 1)[1]
+        opener = FakeOpener()
+        opener.add(
+            release,
+            json_response({
+                "id": 9,
+                "tag_name": tag,
+                "target_commitish": protected_commit,
+                "prerelease": True,
+                "draft": False,
+                "immutable": True,
+                "assets": [asset],
+            }),
+        )
+        add_asset_download(opener, url, body)
+        opener.add(
+            tag_ref,
+            json_response({
+                "ref": f"refs/tags/{tag}",
+                "object": {"type": "commit", "sha": protected_commit},
+            }),
+        )
+        discovered = GitHubPublicClient(POLICY, opener=opener).discover_url(url)
+        self.assertEqual(discovered.release_tag, tag)
+        self.assertEqual(discovered.request_digest, digest)
+        self.assertEqual(discovered.created_at, ASSET_CREATED_AT)
+
+        for mutation in (
+            {"immutable": False},
+            {"target_commitish": "f" * 40},
+            {"assets": []},
+            {"assets": [asset, asset]},
+            {"assets": [{**asset, "browser_download_url": url + "-other"}]},
+        ):
+            with self.subTest(mutation=mutation):
+                hostile_opener = FakeOpener()
+                hostile_opener.add(
+                    release,
+                    json_response({
+                        "id": 9,
+                        "tag_name": tag,
+                        "target_commitish": protected_commit,
+                        "prerelease": True,
+                        "draft": False,
+                        "immutable": True,
+                        "assets": [asset],
+                        **mutation,
+                    }),
+                )
+                add_asset_download(hostile_opener, url, body)
+                with self.assertRaises(PublicGitHubError):
+                    GitHubPublicClient(
+                        POLICY, opener=hostile_opener
+                    ).discover_url(url)
+
+        for target_type, target_sha in (
+            ("commit", "f" * 40),
+            ("tag", protected_commit),
+        ):
+            with self.subTest(target_type=target_type, target_sha=target_sha):
+                hostile_opener = FakeOpener()
+                hostile_opener.add(
+                    release,
+                    json_response({
+                        "id": 9,
+                        "tag_name": tag,
+                        "target_commitish": protected_commit,
+                        "prerelease": True,
+                        "draft": False,
+                        "immutable": True,
+                        "assets": [asset],
+                    }),
+                )
+                add_asset_download(hostile_opener, url, body)
+                hostile_opener.add(
+                    tag_ref,
+                    json_response({
+                        "ref": f"refs/tags/{tag}",
+                        "object": {"type": target_type, "sha": target_sha},
+                    }),
+                )
+                with self.assertRaises(PublicGitHubError):
+                    GitHubPublicClient(
+                        POLICY, opener=hostile_opener
+                    ).discover_url(url)
+
     def test_scan_paginates_request_tags_and_matches_manual_discovery(self) -> None:
         opener = FakeOpener()
         client = GitHubPublicClient(POLICY, opener=opener, page_size=1)

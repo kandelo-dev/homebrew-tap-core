@@ -155,6 +155,7 @@ def _plan(
     request: dict[str, object] | None = None,
     requirements: list[dict[str, object]] | None = None,
     inventory: dict[str, object] | None = None,
+    request_asset_url: str | None = None,
 ) -> dict[str, object]:
     selected_request = request or _request()
     digest = canonical_sha256(selected_request)
@@ -163,7 +164,8 @@ def _plan(
     return plan_request(
         selected_request,
         request_digest=digest,
-        request_asset_url=(
+        request_asset_url=request_asset_url
+        or (
             "https://github.com/Automattic/kandelo/releases/download/"
             f"abi-staging-pr-19/{asset}"
         ),
@@ -183,6 +185,28 @@ def _formula_by_name(plan: dict[str, object], name: str) -> dict[str, object]:
 
 
 class TapPlanTests(unittest.TestCase):
+    def test_request_url_names_the_exact_repository_pr_and_release(self) -> None:
+        request = _request()
+        digest = canonical_sha256(request)
+        head = request["build_source"]["commit"]
+        asset = f"candidate-request-{head}-sha256-{digest}.json"
+        content_addressed = (
+            "https://github.com/Automattic/kandelo/releases/download/"
+            f"abi-staging-pr-19-sha256-{digest}/{asset}"
+        )
+        self.assertEqual(_plan(request_asset_url=content_addressed)["schema"], 1)
+
+        hostile_urls = (
+            content_addressed.replace("Automattic/kandelo", "other/project"),
+            content_addressed.replace("abi-staging-pr-19-", "abi-staging-pr-20-"),
+            content_addressed.replace(
+                f"sha256-{digest}/", f"sha256-{'f' * 64}/"
+            ),
+        )
+        for url in hostile_urls:
+            with self.subTest(url=url), self.assertRaises(PlanError):
+                _plan(request_asset_url=url)
+
     def test_required_closure_reasons_background_and_order_come_from_products(self) -> None:
         plan = _plan()
         required = {

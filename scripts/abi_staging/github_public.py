@@ -23,7 +23,9 @@ from .request import (
 
 
 REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
-PR_TAG = re.compile(r"^abi-staging-pr-([1-9][0-9]*)$")
+PR_TAG = re.compile(
+    r"^abi-staging-pr-([1-9][0-9]*)(?:-sha256-([0-9a-f]{64}))?$"
+)
 
 
 class PublicGitHubError(ValueError):
@@ -245,7 +247,9 @@ class GitHubPublicClient:
                 return tuple(result)
         raise PublicGitHubError("GitHub API pagination exceeded its page bound")
 
-    def _parse_public_request_url(self, url: str) -> tuple[str, str, int]:
+    def _parse_public_request_url(
+        self, url: str
+    ) -> tuple[str, str, int, str | None]:
         parsed = self._validate_transport_url(url)
         if parsed.hostname != "github.com" or parsed.query:
             raise PublicGitHubError("request asset URL is not an exact public GitHub Release URL")
@@ -261,13 +265,13 @@ class GitHubPublicClient:
         if tag_match is None or not tag.startswith(self.policy.request_release_tag_prefix):
             raise PublicGitHubError("request asset URL has an invalid release tag")
         parse_request_asset_name(asset_name)
-        return tag, asset_name, int(tag_match.group(1), 10)
+        return tag, asset_name, int(tag_match.group(1), 10), tag_match.group(2)
 
-    def discover_url(
+    def _discover_request_url(
         self, url: str, *, created_at: str | None = None
     ) -> DiscoveredRequestV1:
         try:
-            tag, asset_name, pull_request_number = self._parse_public_request_url(url)
+            tag, asset_name, pull_request_number, tag_digest = self._parse_public_request_url(url)
             body = self._get(url, self.policy.max_request_bytes, "application/octet-stream")
             request = validate_request(body, asset_name, self.policy)
         except RequestValidationError as error:
@@ -275,11 +279,54 @@ class GitHubPublicClient:
         if request["pull_request"]["number"] != pull_request_number:
             raise PublicGitHubError("request body and Release tag name different pull requests")
         digest = hashlib.sha256(body).hexdigest()
+        if tag_digest is not None and digest != tag_digest:
+            raise PublicGitHubError("request body and Release tag name different digests")
         if created_at is not None:
             created_at = _asset_created_at(created_at)
         return DiscoveredRequestV1(
             digest, asset_name, url, tag, request, created_at
         )
+
+    def discover_url(
+        self, url: str, *, created_at: str | None = None
+    ) -> DiscoveredRequestV1:
+        try:
+            tag, asset_name, _, tag_digest = self._parse_public_request_url(url)
+        except RequestValidationError as error:
+            raise PublicGitHubError(f"public request is invalid: {error}") from error
+        if tag_digest is not None:
+            release = self._release_by_tag(tag)
+            matching_assets = []
+            for asset in release["assets"]:
+                name = _bounded_text(asset.get("name"), "Release asset name", 512)
+                asset_url = _bounded_text(
+                    asset.get("browser_download_url"),
+                    "Release asset URL",
+                    self.policy.max_string_bytes,
+                )
+                asset_created_at = _asset_created_at(asset.get("created_at"))
+                _positive_integer(asset.get("id"), "Release asset id")
+                if name == asset_name and asset_url == url:
+                    matching_assets.append(asset_created_at)
+            if len(matching_assets) != 1:
+                raise PublicGitHubError(
+                    "content-addressed Release metadata and request URL disagree"
+                )
+            authoritative_created_at = matching_assets[0]
+            if (
+                created_at is not None
+                and _asset_created_at(created_at) != authoritative_created_at
+            ):
+                raise PublicGitHubError(
+                    "Release asset creation time differs from public metadata"
+                )
+            created_at = authoritative_created_at
+        discovered = self._discover_request_url(url, created_at=created_at)
+        if tag_digest is not None:
+            self._validate_content_addressed_tag_authority(
+                tag, release, discovered.request
+            )
+        return discovered
 
     def _request_release_tags(self) -> tuple[str, ...]:
         repository = self.policy.issuer_repository
@@ -304,7 +351,10 @@ class GitHubPublicClient:
         return tuple(
             sorted(
                 tags,
-                key=lambda tag: int(PR_TAG.fullmatch(tag).group(1), 10),
+                key=lambda tag: (
+                    int(PR_TAG.fullmatch(tag).group(1), 10),
+                    PR_TAG.fullmatch(tag).group(2) or "",
+                ),
             )
         )
 
@@ -321,16 +371,71 @@ class GitHubPublicClient:
         release_tag = _bounded_text(value.get("tag_name"), "Release tag", 256)
         if release_tag != tag:
             raise PublicGitHubError("GitHub Release response changed its tag")
+        match = PR_TAG.fullmatch(tag)
+        assert match is not None
+        content_addressed = match.group(2) is not None
         if value.get("prerelease") is not True or value.get("draft") is not False:
             raise PublicGitHubError("ABI staging Release is not a public prerelease")
+        if content_addressed:
+            target_commitish = _bounded_text(
+                value.get("target_commitish"), "Release target commit", 40
+            )
+            if (
+                value.get("immutable") is not True
+                or re.fullmatch(r"[0-9a-f]{40}", target_commitish) is None
+            ):
+                raise PublicGitHubError(
+                    "content-addressed ABI staging Release is not immutable and commit-bound"
+                )
         assets = value.get("assets")
         if not isinstance(assets, list):
             raise PublicGitHubError("ABI staging Release assets are not an array")
+        if content_addressed and len(assets) != 1:
+            raise PublicGitHubError(
+                "content-addressed ABI staging Release must contain one asset"
+            )
         if len(assets) > self.policy.max_release_assets:
             raise PublicGitHubError("ABI staging Release has too many assets")
         if any(not isinstance(asset, Mapping) for asset in assets):
             raise PublicGitHubError("ABI staging Release contains a non-object asset")
         return value
+
+    def _direct_tag_target(self, tag: str) -> str:
+        repository = self.policy.issuer_repository
+        endpoint = (
+            f"https://api.github.com/repos/{repository}/git/ref/tags/"
+            f"{urllib.parse.quote(tag, safe='')}"
+        )
+        value = self._api_json(endpoint)
+        if not isinstance(value, Mapping):
+            raise PublicGitHubError("Git tag response is not an object")
+        ref = _bounded_text(value.get("ref"), "Git tag ref", 512)
+        target = value.get("object")
+        if ref != f"refs/tags/{tag}" or not isinstance(target, Mapping):
+            raise PublicGitHubError("request tag response changed its identity")
+        target_type = _bounded_text(target.get("type"), "Git tag target type", 32)
+        target_sha = _bounded_text(target.get("sha"), "Git tag target SHA", 40)
+        if target_type != "commit" or re.fullmatch(r"[0-9a-f]{40}", target_sha) is None:
+            raise PublicGitHubError("request tag is not a direct commit reference")
+        return target_sha
+
+    def _validate_content_addressed_tag_authority(
+        self, tag: str, release: Mapping[str, Any], request: Mapping[str, Any]
+    ) -> None:
+        workflow_ref = request["issuance"]["issuer_workflow_ref"]
+        expected_prefix = (
+            f"{self.policy.issuer_repository}/{self.policy.issuer_workflow_path}@"
+        )
+        if not workflow_ref.startswith(expected_prefix):
+            raise PublicGitHubError("request issuer workflow is outside protected authority")
+        protected_commit = workflow_ref.removeprefix(expected_prefix)
+        if (
+            release.get("target_commitish") != protected_commit
+            or self._direct_tag_target(tag) != protected_commit
+        ):
+            raise PublicGitHubError(
+                "content-addressed request Release differs from its protected issuer commit"
+            )
 
     def scan(self) -> tuple[DiscoveredRequestV1, ...]:
         tags = self._request_release_tags()
@@ -361,9 +466,15 @@ class GitHubPublicClient:
                 parse_request_asset_name(name)
                 checked_assets.append((name, url, created_at))
             for name, url, created_at in checked_assets:
-                candidate = self.discover_url(url, created_at=created_at)
+                candidate = self._discover_request_url(url, created_at=created_at)
                 if candidate.release_tag != tag or candidate.asset_name != name:
                     raise PublicGitHubError("Release metadata and request URL disagree")
+                match = PR_TAG.fullmatch(tag)
+                assert match is not None
+                if match.group(2) is not None:
+                    self._validate_content_addressed_tag_authority(
+                        tag, release, candidate.request
+                    )
                 discovered.append(candidate)
         ordered = sorted(
             discovered,
