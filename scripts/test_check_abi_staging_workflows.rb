@@ -2,6 +2,9 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
+require "fileutils"
+require "open3"
+require "tmpdir"
 require "yaml"
 require_relative "check_abi_staging_workflows"
 
@@ -203,6 +206,63 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
                     "$GITHUB_WORKSPACE/kandelo-source/images/vfs/products/generated/catalog.json"
     assert_operator steps.index(candidate), :<, steps.index(authority)
     assert_operator steps.index(authority), :<, steps.index(requirements)
+  end
+
+  def test_requirements_change_classes_exclude_dev_shell_startup_output
+    requirements = @workflow.dig("jobs", "discover-plan", "steps").find do |step|
+      step["id"] == "requirements"
+    end
+    refute_nil requirements
+
+    Dir.mktmpdir("abi-staging-requirements-") do |root|
+      authority = File.join(root, "authority")
+      runner = File.join(root, "runner")
+      FileUtils.mkdir_p(File.join(authority, "scripts"))
+      FileUtils.mkdir_p(File.join(runner, "abi-staging-coordination"))
+      File.write(
+        File.join(runner, "abi-staging-coordination", "request.json"),
+        %({"requirements":{"change_classes":["abi","kernel","host"]}}\n)
+      )
+      dev_shell = File.join(authority, "scripts", "dev-shell.sh")
+      File.write(dev_shell, <<~'SH')
+        #!/usr/bin/env bash
+        set -euo pipefail
+        printf 'kandelo dev shell startup output\n'
+        case "$1" in
+          bash|jq)
+            exec "$@"
+            ;;
+          rustc)
+            printf 'host: test-target\n'
+            ;;
+          cargo)
+            classes=
+            while (($#)); do
+              if [[ $1 == --change-classes ]]; then
+                classes=$2
+                break
+              fi
+              shift
+            done
+            [[ -n $classes ]]
+            jq -e '. == ["abi", "kernel", "host"]' "$classes" >/dev/null
+            ;;
+          *)
+            exit 2
+            ;;
+        esac
+      SH
+      File.chmod(0o755, dev_shell)
+
+      stdout, stderr, status = Open3.capture3(
+        {"GITHUB_WORKSPACE" => root, "RUNNER_TEMP" => runner},
+        "bash", "-euo", "pipefail", "-c", requirements.fetch("run"),
+        chdir: authority
+      )
+      assert status.success?, "#{stdout}\n#{stderr}"
+      classes = File.join(runner, "abi-staging-change-classes.json")
+      assert_equal %( ["abi","kernel","host"]\n).delete_prefix(" "), File.read(classes)
+    end
   end
 
   def test_top_level_calls_only_same_commit_bounded_reusable_workflows
