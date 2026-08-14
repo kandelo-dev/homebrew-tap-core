@@ -852,9 +852,14 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
                     'package_cache="$GITHUB_WORKSPACE/kandelo-source/.ci-test-binary-cache"'
     assert_includes realm_source,
                     'mkdir -m 0700 "$package_cache" "$package_cache/programs"'
-    assert_includes realm_source, "formula_cache_paths=("
-    assert_includes realm_source, '"$package_cache"'
-    assert_includes realm_source, '"$package_cache/programs"'
+    assert_includes realm_source,
+                    [
+                      "formula_cache_paths=(",
+                      '  "$package_cache"',
+                      '  "$package_cache/programs"',
+                      '  "$GITHUB_WORKSPACE/kandelo-source/binaries"',
+                      ")"
+                    ].join("\n")
     assert_includes realm_source,
                     '/usr/bin/sudo -n /usr/bin/chown root:root -- "${formula_cache_paths[@]}"'
     assert_includes realm_source,
@@ -957,6 +962,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       step["run"] = step.fetch("run").sub(
         '/usr/bin/sudo -n /usr/bin/chmod 0555 -- "${formula_cache_paths[@]}"',
         ':'
+      )
+    end
+    assert_reusable_rejected(:candidate, "candidate resolver mirror remains runner-private") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub(
+        "  \"\$GITHUB_WORKSPACE/kandelo-source/binaries\"\n",
+        ''
       )
     end
     assert_reusable_rejected(:candidate, "candidate Formula checker retains Cargo hard link") do |workflow|

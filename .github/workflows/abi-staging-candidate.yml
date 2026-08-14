@@ -337,12 +337,14 @@ jobs:
             test "$(/usr/bin/stat -c '%u:%g:%a' "$directory")" = "0:0:755"
           done
 
-          # The setup shell owns this empty portable cache while it builds
-          # the realm. Homebrew subsequently reads it as the isolated build
-          # user, so seal both fixed directories as shared, immutable input.
+          # The setup shell owns this empty portable cache and resolver mirror
+          # while it builds the realm. Homebrew subsequently reads them as the
+          # isolated build user, so seal every fixed directory as shared,
+          # immutable input before the protected projection snapshots it.
           formula_cache_paths=(
             "$package_cache"
             "$package_cache/programs"
+            "$GITHUB_WORKSPACE/kandelo-source/binaries"
           )
           /usr/bin/sudo -n /usr/bin/chown root:root -- "${formula_cache_paths[@]}"
           /usr/bin/sudo -n /usr/bin/chmod 0555 -- "${formula_cache_paths[@]}"
