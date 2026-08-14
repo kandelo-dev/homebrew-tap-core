@@ -59,6 +59,11 @@ Formula source currently present in this repository includes:
 - `libpng` and `libxml2`, zlib-backed dependency-root libraries;
 - `libzip`, the zlib-backed ZIP library and upstream archive comparison, merge, and inspection tools;
 - `libcxx`, the LLVM C++ standard library, ABI runtime, and bundled unwinder;
+- `clang`, the LLVM 21 C/C++ compiler, Wasm linker, archive tools, and
+  matching resource headers for wasm32 Kandelo guests;
+- `kandelo-sdk`, the in-guest wasm32 SDK wrappers, sysroot, syscall glue,
+  examples, and notices, with `clang` and `libcxx` as its sealed runtime
+  dependency closure;
 - `icu`, the ICU 74.2 Unicode and globalization libraries with the complete
   common data archive;
 - `musl-fts`, the BSD hierarchy traversal library for portable archive and filesystem tools;
@@ -167,9 +172,10 @@ bottle stands alone. Pending later quarantine, legacy `Kandelo/metadata.json`
 and Formula, link, and provenance sidecars are non-authoritative for that lane;
 do not regenerate those 40 legacy sidecars.
 
-The SDK is not yet a Homebrew dependency. Trusted builds supply an
-`HOMEBREW_KANDELO_ROOT` checkout containing the SDK, sysroot, kernel, and Node
-host used by Formula `test do` blocks. Registry-bridged source builds also
+The Kandelo build SDK is not supplied as a Homebrew build dependency. Trusted
+builds supply an `HOMEBREW_KANDELO_ROOT` checkout containing the SDK, sysroot,
+kernel, and Node host used by Formula `test do` blocks. Registry-bridged source
+builds also
 require the trusted publisher's fixed, read-only Tier-2 attestation before
 Homebrew evaluates the Formula. The attestation binds the exact Formula,
 support module, package metadata, build script, source identity, architecture,
