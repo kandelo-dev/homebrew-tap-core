@@ -16,7 +16,7 @@ class KandeloSdk < Formula
     "MIT",
   ]
 
-  depends_on KandeloFormulaSupport::WabtRequirement => :test
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/clang"
   depends_on "kandelo-dev/tap-core/libcxx"
 
