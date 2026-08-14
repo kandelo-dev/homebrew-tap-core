@@ -1113,6 +1113,9 @@ module AbiStagingWorkflowCheck
                            "a92554a538e81fad0c5074443885dbcc4c36221d",
                          "WORK_ID" => "${{ inputs.work-id }}"
                        } &&
+                       realm.fetch("run").include?(
+                         'realm_root="$(mktemp -d /tmp/k.XXXXXX)"'
+                       ) &&
                        realm.fetch("run").include?("homebrew-prepare-host-prefix.sh") &&
                        realm.fetch("run").scan("env -u GITHUB_TOKEN").length == 2 &&
                        realm.fetch("run").scan("-u ACTIONS_RUNTIME_TOKEN").length == 2,

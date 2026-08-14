@@ -111,9 +111,10 @@ jobs:
           WORK_ID: ${{ inputs.work-id }}
         run: |
           set -euo pipefail
-          realm_root="$RUNNER_TEMP/abi-staging-build-realm-$WORK_ID"
-          test ! -e "$realm_root"
-          mkdir -m 0700 "$realm_root"
+          realm_root="$(mktemp -d /tmp/k.XXXXXX)"
+          test -d "$realm_root"
+          test ! -L "$realm_root"
+          chmod 0700 "$realm_root"
           mkdir -m 0700 \
             "$realm_root/home" \
             "$realm_root/homebrew-cache" \
