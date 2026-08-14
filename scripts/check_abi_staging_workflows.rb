@@ -1124,10 +1124,10 @@ module AbiStagingWorkflowCheck
                          'candidate_xtask="$GITHUB_WORKSPACE/kandelo-source/target/$host_target/release/xtask"'
                        ) &&
                        realm.fetch("run").include?(
-                         '/usr/bin/sudo -n /usr/bin/chown root:root -- "$candidate_xtask"'
+                         '/usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 --'
                        ) &&
                        realm.fetch("run").include?(
-                         '/usr/bin/sudo -n /usr/bin/chmod 0555 -- "$candidate_xtask"'
+                         '/usr/bin/sudo -n /usr/bin/mv -f -- "$candidate_xtask_staged" "$candidate_xtask"'
                        ) &&
                        realm.fetch("run").include?("0:0:555:1") &&
                        realm.fetch("run").include?("candidate_xtask_sha256") &&
