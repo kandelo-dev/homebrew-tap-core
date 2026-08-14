@@ -1163,6 +1163,9 @@ module AbiStagingWorkflowCheck
                        realm.fetch("run").include?(
                          '/usr/bin/sudo -n /usr/bin/mv -f -- "$candidate_xtask_staged" "$candidate_xtask"'
                        ) &&
+                       realm.fetch("run").include?(
+                         'echo "WASM_POSIX_XTASK_BIN=$candidate_xtask"'
+                       ) &&
                        realm.fetch("run").include?("0:0:555:1") &&
                        realm.fetch("run").include?("candidate_xtask_sha256") &&
                        realm.fetch("run").include?("candidate_platform_tools=(") &&
@@ -1220,6 +1223,7 @@ module AbiStagingWorkflowCheck
                        KANDELO_HOMEBREW_GETENT_BIN
                        KANDELO_HOMEBREW_PGREP_BIN
                        KANDELO_HOMEBREW_PKILL_BIN
+                       WASM_POSIX_XTASK_BIN
                      ].all? { |name| source.include?("#{name}=$#{name}") }) &&
                      !source.include?("../kandelo-source/scripts/dev-shell.sh") &&
                      (kind == :candidate ||

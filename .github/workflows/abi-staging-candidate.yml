@@ -362,6 +362,7 @@ jobs:
             echo "KANDELO_HOMEBREW_PKILL_BIN=/usr/bin/pkill"
             echo "PLAYWRIGHT_BROWSERS_PATH=$playwright_browsers"
             echo "WASM_POSIX_BINARY_CACHE_ROOT=$package_cache"
+            echo "WASM_POSIX_XTASK_BIN=$candidate_xtask"
           } >>"$GITHUB_ENV"
 
       - name: Build one exact uncredentialed candidate handoff
@@ -394,6 +395,7 @@ jobs:
               "KANDELO_HOMEBREW_PKILL_BIN=$KANDELO_HOMEBREW_PKILL_BIN" \
               "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" \
               "WASM_POSIX_BINARY_CACHE_ROOT=$WASM_POSIX_BINARY_CACHE_ROOT" \
+              "WASM_POSIX_XTASK_BIN=$WASM_POSIX_XTASK_BIN" \
               "PYTHONDONTWRITEBYTECODE=1" \
               "PYTHONSAFEPATH=1" \
               "PYTHONPATH=$GITHUB_WORKSPACE/tap-authority" \

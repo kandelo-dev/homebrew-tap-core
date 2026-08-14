@@ -868,6 +868,8 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
                     '/usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 --'
     assert_includes realm_source,
                     '/usr/bin/sudo -n /usr/bin/mv -f -- "$candidate_xtask_staged" "$candidate_xtask"'
+    assert_includes realm_source,
+                    'echo "WASM_POSIX_XTASK_BIN=$candidate_xtask"'
     assert_includes realm_source, "candidate_platform_tools=("
     assert_includes realm_source, '"tools/bin/wasm-fork-instrument"'
     assert_includes realm_source, '"tools/bin/wasm-local-root-spill"'
@@ -887,7 +889,7 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     %w[
       HOMEBREW_BREW_FILE HOMEBREW_BREW_COMMIT HOMEBREW_CACHE HOMEBREW_TEMP
       KANDELO_HOMEBREW_RESOLVED_TAPS_FILE PLAYWRIGHT_BROWSERS_PATH
-      WASM_POSIX_BINARY_CACHE_ROOT
+      WASM_POSIX_BINARY_CACHE_ROOT WASM_POSIX_XTASK_BIN
       KANDELO_HOMEBREW_BUILD_USER KANDELO_HOMEBREW_RECIPE_USER
       KANDELO_HOMEBREW_SHARED_TEMP KANDELO_HOMEBREW_SUDO_BIN
       KANDELO_HOMEBREW_SYSTEMD_RUN_BIN KANDELO_HOMEBREW_SYSTEMCTL_BIN
