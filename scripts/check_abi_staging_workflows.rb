@@ -1116,6 +1116,13 @@ module AbiStagingWorkflowCheck
                        realm.fetch("run").include?(
                          'realm_root="$(mktemp -d /tmp/k.XXXXXX)"'
                        ) &&
+                       realm.fetch("run").include?(
+                         'package_cache="$GITHUB_WORKSPACE/kandelo-source/.ci-test-binary-cache"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'mkdir -m 0700 "$package_cache" "$package_cache/programs"'
+                       ) &&
+                       !realm.fetch("run").include?('"$realm_root/package-cache"') &&
                        realm.fetch("run").include?("homebrew-prepare-host-prefix.sh") &&
                        realm.fetch("run").include?(
                          'printf \'%s\\n\' "$host" >"$RUNNER_TEMP/abi-staging-host-target"'

@@ -846,6 +846,11 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes realm_source, "PLAYWRIGHT_BROWSERS_PATH"
     assert_includes realm_source, "WASM_POSIX_BINARY_CACHE_ROOT"
     assert_includes realm_source,
+                    'package_cache="$GITHUB_WORKSPACE/kandelo-source/.ci-test-binary-cache"'
+    assert_includes realm_source,
+                    'mkdir -m 0700 "$package_cache" "$package_cache/programs"'
+    refute_includes realm_source, '"$realm_root/package-cache"'
+    assert_includes realm_source,
                     '/usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 --'
     assert_includes realm_source,
                     '/usr/bin/sudo -n /usr/bin/mv -f -- "$candidate_xtask_staged" "$candidate_xtask"'
@@ -889,6 +894,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       step["run"] = step.fetch("run").sub(
         'realm_root="$(mktemp -d /tmp/k.XXXXXX)"',
         'realm_root="$RUNNER_TEMP/abi-staging-build-realm-$WORK_ID"'
+      )
+    end
+    assert_reusable_rejected(:candidate, "candidate Formula cache leaves the portable runtime") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub(
+        'package_cache="$GITHUB_WORKSPACE/kandelo-source/.ci-test-binary-cache"',
+        'package_cache="$realm_root/package-cache"'
       )
     end
     assert_reusable_rejected(:candidate, "candidate Formula checker retains Cargo hard link") do |workflow|
