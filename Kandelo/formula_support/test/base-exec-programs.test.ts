@@ -1,7 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { addDefaultBaseExecPrograms } from "../base-exec-programs.ts";
+import {
+  addDefaultBaseExecPrograms,
+  resolveBaseExecPrograms,
+} from "../base-exec-programs.ts";
+
+test("explicit Formula programs do not consult Kandelo's legacy package set", () => {
+  const execPrograms = { "/usr/bin/helper": "/formula/helper.wasm" };
+
+  const result = resolveBaseExecPrograms(execPrograms, () => {
+    throw new Error("legacy package resolver must not run");
+  }, "explicit");
+
+  assert.equal(result, execPrograms);
+  assert.deepEqual(execPrograms, {
+    "/usr/bin/helper": "/formula/helper.wasm",
+  });
+});
+
+test("rejects unknown Formula built-in program modes", () => {
+  assert.throws(
+    () => resolveBaseExecPrograms({}, () => "/unused", "legacy-ish"),
+    /KANDELO_RUNNER_BUILTINS/,
+  );
+});
 
 test("adds resolver-managed Dash as the default guest shell", () => {
   const execPrograms: Record<string, string> = {};
