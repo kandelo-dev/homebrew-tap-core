@@ -927,7 +927,7 @@ def _git(tap_root: Path, *arguments: str) -> str:
     environment.update({"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"})
     try:
         completed = subprocess.run(
-            ["git", *arguments],
+            ["git", "-c", f"safe.directory={tap_root}", *arguments],
             cwd=tap_root,
             env=environment,
             check=True,

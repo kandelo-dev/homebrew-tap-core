@@ -185,6 +185,19 @@ def _formula_by_name(plan: dict[str, object], name: str) -> dict[str, object]:
 
 
 class TapPlanTests(unittest.TestCase):
+    def test_snapshots_an_exact_checkout_with_protected_ownership(self) -> None:
+        expected = snapshot_tap_source(
+            TAP_ROOT, "kandelo-dev/homebrew-tap-core"
+        )
+        with mock.patch.dict(
+            os.environ, {"GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
+        ):
+            source = snapshot_tap_source(
+                TAP_ROOT, "kandelo-dev/homebrew-tap-core"
+            )
+
+        self.assertEqual(source, expected)
+
     def test_request_url_names_the_exact_repository_pr_and_release(self) -> None:
         request = _request()
         digest = canonical_sha256(request)
