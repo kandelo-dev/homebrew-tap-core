@@ -305,6 +305,76 @@ class BuildHandoffTests(unittest.TestCase):
             f"{root_url}/blobs/sha256:{bottle_sha256}",
         )
         self.assertEqual(prepared["link_manifest"]["version"], "1.0.0_1")
+
+        rich_metadata = copy.deepcopy(metadata)
+        rich_entry = rich_metadata["kandelo-dev/tap-core/mini-tool"]
+        rich_entry["formula"] = {
+            "desc": "Miniature exact bottle fixture",
+            "homepage": "https://example.test/mini-tool",
+            "license": "MIT",
+            **rich_entry["formula"],
+            "tap_git_path": "Formula/mini-tool.rb",
+            "tap_git_remote": (
+                "file:///home/runner/work/homebrew-tap-core/"
+                "homebrew-tap-core/tap-authority"
+            ),
+            "tap_git_revision": context["tap_source"]["commit"],
+        }
+        rich_entry["bottle"] = {
+            **rich_entry["bottle"],
+            "date": "2026-08-14T12:00:00Z",
+        }
+        rich_entry["bottle"]["tags"]["wasm32_kandelo"] = {
+            "all_files": [
+                ".brew/mini-tool.rb",
+                "INSTALL_RECEIPT.json",
+                "bin/mini-tool",
+            ],
+            "filename": (
+                "mini-tool-1.0.0_1.wasm32_kandelo.bottle.2.tar.gz"
+            ),
+            "installed_size": len(bottle),
+            "local_filename": (
+                "mini-tool--1.0.0_1.wasm32_kandelo.bottle.2.tar.gz"
+            ),
+            "path_exec_files": ["bin/mini-tool"],
+            "sbom": {},
+            "sha256": bottle_sha256,
+            "tab": {},
+        }
+        rich_prepared = prepare_composition_input(
+            context=context,
+            bottle_body=bottle,
+            metadata_body=json.dumps(rich_metadata).encode(),
+            guest_layout_body=canonical_bytes(guest_layout),
+        )
+        self.assertEqual(rich_prepared, prepared)
+
+        rich_mutations = []
+        foreign_revision = copy.deepcopy(rich_metadata)
+        foreign_revision["kandelo-dev/tap-core/mini-tool"]["formula"][
+            "tap_git_revision"
+        ] = "f" * 40
+        rich_mutations.append(foreign_revision)
+        foreign_inventory = copy.deepcopy(rich_metadata)
+        foreign_inventory["kandelo-dev/tap-core/mini-tool"]["bottle"]["tags"][
+            "wasm32_kandelo"
+        ]["all_files"].append("share/foreign")
+        rich_mutations.append(foreign_inventory)
+        extra_field = copy.deepcopy(rich_metadata)
+        extra_field["kandelo-dev/tap-core/mini-tool"]["bottle"]["tags"][
+            "wasm32_kandelo"
+        ]["trusted"] = True
+        rich_mutations.append(extra_field)
+        for mutation in rich_mutations:
+            with self.subTest(rich_mutation=mutation), self.assertRaises(HandoffError):
+                prepare_composition_input(
+                    context=context,
+                    bottle_body=bottle,
+                    metadata_body=json.dumps(mutation).encode(),
+                    guest_layout_body=canonical_bytes(guest_layout),
+                )
+
         hostile = copy.deepcopy(metadata)
         hostile["kandelo-dev/tap-core/mini-tool"]["bottle"]["root_url"] = (
             "https://ghcr.io/v2/attacker/foreign"

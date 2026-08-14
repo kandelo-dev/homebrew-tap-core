@@ -16,6 +16,7 @@ import stat
 import subprocess
 import tarfile
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 from .canonical import CanonicalJsonError, canonical_bytes, parse_canonical_bytes
 from .bottle_link import (
@@ -47,6 +48,36 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 REPOSITORY = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+HTTPS_URL = re.compile(r"^https?://[^\s]+$")
+RFC3339_UTC = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+)
+RAW_FORMULA_KEYS = frozenset(
+    {
+        "desc",
+        "homepage",
+        "license",
+        "name",
+        "path",
+        "pkg_version",
+        "tap_git_path",
+        "tap_git_remote",
+        "tap_git_revision",
+    }
+)
+RAW_BOTTLE_KEYS = frozenset({"cellar", "date", "rebuild", "root_url", "tags"})
+RAW_TAG_KEYS = frozenset(
+    {
+        "all_files",
+        "filename",
+        "installed_size",
+        "local_filename",
+        "path_exec_files",
+        "sbom",
+        "sha256",
+        "tab",
+    }
+)
 INVENTORY_KEYS = frozenset({"schema", "kind", "subject", "outcome", "files"})
 FILE_KEYS = frozenset({"path", "role", "sha256", "bytes"})
 RESULT_KEYS = frozenset(
@@ -237,6 +268,40 @@ def _tap_name(repository: str) -> str:
     return f"{owner}/{name.removeprefix('homebrew-')}"
 
 
+def _validate_raw_formula_remote(
+    remote_value: Any, *, tap_source: Mapping[str, str]
+) -> None:
+    remote = _text(remote_value, "composition Formula tap Git remote")
+    repository = tap_source["repository"].lower()
+    if remote in {
+        f"https://github.com/{repository}",
+        f"https://github.com/{repository}.git",
+    }:
+        return
+    parsed = urlsplit(remote)
+    if parsed.scheme != "file" or parsed.netloc or parsed.query or parsed.fragment:
+        raise HandoffError(
+            "composition Formula tap Git remote does not match the exact tap"
+        )
+    # Homebrew records the build job's exact local tap checkout. Composition
+    # runs in a later protected job, so that runner-local path no longer
+    # exists. The separately validated source-custody bundle authenticates the
+    # tap bytes; this field binds their recorded source identity without
+    # pretending the former runner filesystem is durable authority.
+    decoded_path = unquote(parsed.path)
+    path = Path(decoded_path)
+    if (
+        not path.is_absolute()
+        or decoded_path in {"", "/"}
+        or "\\" in decoded_path
+        or "//" in decoded_path
+        or any(part in {"", ".", ".."} for part in path.parts[1:])
+    ):
+        raise HandoffError(
+            "composition Formula tap Git remote is not one normalized absolute path"
+        )
+
+
 def _package_version(version: Any, revision: Any, field: str) -> str:
     base = _text(version, f"{field} version", 256)
     if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+,-]{0,255}", base) is None:
@@ -325,23 +390,53 @@ def prepare_composition_input(
     entry = _mapping(metadata[full_name], "composition bottle metadata entry")
     _exact_keys(entry, frozenset({"formula", "bottle"}), "composition bottle metadata entry")
     formula_metadata = _mapping(entry["formula"], "composition bottle Formula metadata")
+    raw_builder_json = frozenset(formula_metadata) == RAW_FORMULA_KEYS
     _exact_keys(
         formula_metadata,
-        frozenset({"name", "path", "pkg_version"}),
+        RAW_FORMULA_KEYS
+        if raw_builder_json
+        else frozenset({"name", "path", "pkg_version"}),
         "composition bottle Formula metadata",
     )
     owner, tap = tap_name.split("/", 1)
     expected_formula_path = f"Library/Taps/{owner}/homebrew-{tap}/Formula/{formula}.rb"
-    if formula_metadata != {
-        "name": formula,
-        "path": expected_formula_path,
-        "pkg_version": pkg_version,
-    }:
+    if any(
+        formula_metadata.get(field) != expected
+        for field, expected in {
+            "name": formula,
+            "path": expected_formula_path,
+            "pkg_version": pkg_version,
+        }.items()
+    ):
         raise HandoffError("composition bottle Formula metadata differs from the plan")
+    if raw_builder_json:
+        if (
+            formula_metadata["tap_git_path"] != f"Formula/{formula}.rb"
+            or formula_metadata["tap_git_revision"] != tap_source["commit"]
+        ):
+            raise HandoffError(
+                "composition bottle Formula source differs from the exact tap"
+            )
+        for field in ("desc", "license"):
+            _text(
+                formula_metadata[field],
+                f"composition bottle Formula {field}",
+            )
+        homepage = _text(
+            formula_metadata["homepage"],
+            "composition bottle Formula homepage",
+        )
+        if HTTPS_URL.fullmatch(homepage) is None:
+            raise HandoffError("composition bottle Formula homepage is invalid")
+        _validate_raw_formula_remote(
+            formula_metadata["tap_git_remote"], tap_source=tap_source
+        )
     bottle = _mapping(entry["bottle"], "composition bottle metadata payload")
     _exact_keys(
         bottle,
-        frozenset({"root_url", "cellar", "rebuild", "tags"}),
+        RAW_BOTTLE_KEYS
+        if raw_builder_json
+        else frozenset({"root_url", "cellar", "rebuild", "tags"}),
         "composition bottle metadata payload",
     )
     root_url = _text(value.get("bottle_root_url"), "composition bottle root", 8192)
@@ -357,10 +452,15 @@ def prepare_composition_input(
     if frozenset(tags) != {tag_name}:
         raise HandoffError("composition bottle metadata has another architecture tag")
     tag = _mapping(tags[tag_name], "composition bottle tag")
-    if frozenset(tag) not in {
-        frozenset({"local_filename", "sha256"}),
-        frozenset({"cellar", "local_filename", "sha256"}),
-    }:
+    accepted_tag_keys = (
+        {RAW_TAG_KEYS}
+        if raw_builder_json
+        else {
+            frozenset({"local_filename", "sha256"}),
+            frozenset({"cellar", "local_filename", "sha256"}),
+        }
+    )
+    if frozenset(tag) not in accepted_tag_keys:
         raise HandoffError("composition bottle tag fields changed")
     suffix = "" if rebuild == 0 else f".{rebuild}"
     expected_filename = (
@@ -372,6 +472,43 @@ def prepare_composition_input(
         or ("cellar" in tag and tag["cellar"] != bottle["cellar"])
     ):
         raise HandoffError("composition bottle tag differs from the exact bottle")
+    raw_all_files: list[str] | None = None
+    raw_path_exec_files: list[str] | None = None
+    if raw_builder_json:
+        date = _text(bottle["date"], "composition bottle date", 64)
+        if RFC3339_UTC.fullmatch(date) is None:
+            raise HandoffError("composition bottle date is invalid")
+        _text(bottle["cellar"], "composition bottle cellar")
+        if tag["filename"] != (
+            f"{formula}-{pkg_version}.{tag_name}.bottle{suffix}.tar.gz"
+        ):
+            raise HandoffError("composition bottle URL filename differs from the plan")
+        _integer(
+            tag["installed_size"],
+            "composition bottle installed size",
+            positive=True,
+        )
+        raw_all_files = [
+            _relative_path(item, f"composition bottle file {index}")
+            for index, item in enumerate(
+                _sequence(tag["all_files"], "composition bottle files")
+            )
+        ]
+        raw_path_exec_files = [
+            _relative_path(item, f"composition bottle executable {index}")
+            for index, item in enumerate(
+                _sequence(tag["path_exec_files"], "composition bottle executables")
+            )
+        ]
+        if (
+            len(raw_all_files) > 200_000
+            or raw_all_files != sorted(set(raw_all_files))
+            or raw_path_exec_files != sorted(set(raw_path_exec_files))
+            or not set(raw_path_exec_files).issubset(raw_all_files)
+        ):
+            raise HandoffError("composition bottle file metadata is noncanonical")
+        _mapping(tag["tab"], "composition bottle tab")
+        _mapping(tag["sbom"], "composition bottle SBOM")
     transport_url = f"{root_url}/blobs/sha256:{bottle_sha256}"
     immutable_reference = (
         "ghcr.io/" + root_url.removeprefix("https://ghcr.io/v2/")
@@ -381,6 +518,13 @@ def prepare_composition_input(
         inventory = inspect_bottle_link_inventory(
             bottle_body, formula=formula, version=pkg_version
         )
+        if raw_all_files is not None and (
+            raw_all_files != inventory["all_files"]
+            or raw_path_exec_files != inventory["path_exec_files"]
+        ):
+            raise HandoffError(
+                "composition bottle file metadata differs from the exact bottle"
+            )
         guest_layout = load_guest_layout(guest_layout_body)
         link_manifest = build_link_manifest(
             inventory=inventory,
