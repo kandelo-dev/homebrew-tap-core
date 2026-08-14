@@ -28,6 +28,11 @@ RETRYABLE_GUARDS = frozenset(
         "verification_timeout",
     }
 )
+# A Formula nonzero exit is not evidence that infrastructure failed, but the
+# reconciler still gives it the same bounded attempt budget. This lets a fixed
+# protected execution realm make progress without rewriting immutable failure
+# history or manufacturing a new Formula identity.
+RECONCILIATION_RETRY_GUARDS = RETRYABLE_GUARDS | {"build_failed"}
 KNOWN_GUARDS = frozenset(
     {
         "request_invalid",
@@ -407,7 +412,7 @@ def retry_decision(
     current_time = _timestamp(now, "retry clock")
     if guard_code not in KNOWN_GUARDS:
         raise SchedulingError("retry guard is not registered")
-    if guard_code not in RETRYABLE_GUARDS:
+    if guard_code not in RECONCILIATION_RETRY_GUARDS:
         return RetryDecisionV1(
             "not-retryable", current_ordinal, None, None, None, False
         )
