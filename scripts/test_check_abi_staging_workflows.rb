@@ -845,6 +845,10 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     refute_includes realm_source, "--fetch-only resolve"
     assert_includes realm_source, "PLAYWRIGHT_BROWSERS_PATH"
     assert_includes realm_source, "WASM_POSIX_BINARY_CACHE_ROOT"
+    assert_includes realm_source,
+                    '/usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 --'
+    assert_includes realm_source,
+                    '/usr/bin/sudo -n /usr/bin/mv -f -- "$candidate_xtask_staged" "$candidate_xtask"'
     assert_includes realm_source, "env -u GITHUB_TOKEN"
     assert_includes realm_source, "-u ACTIONS_RUNTIME_TOKEN"
     assert_includes realm_source, "-u GITHUB_ENV"
@@ -887,13 +891,13 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         'realm_root="$RUNNER_TEMP/abi-staging-build-realm-$WORK_ID"'
       )
     end
-    assert_reusable_rejected(:candidate, "candidate Formula checker remains runner-owned") do |workflow|
+    assert_reusable_rejected(:candidate, "candidate Formula checker retains Cargo hard link") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub(
-        '/usr/bin/sudo -n /usr/bin/chown root:root -- "$candidate_xtask"',
-        'true # removed protected checker staging'
+        '/usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 --',
+        '/usr/bin/sudo -n /usr/bin/chown root:root --'
       )
     end
     assert_reusable_rejected(:candidate, "candidate shadows protected Python") do |workflow|

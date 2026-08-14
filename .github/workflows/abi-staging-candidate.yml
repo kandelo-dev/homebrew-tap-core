@@ -241,12 +241,20 @@ jobs:
           candidate_xtask_sha256="$(/usr/bin/sha256sum "$candidate_xtask")"
           candidate_xtask_sha256="${candidate_xtask_sha256%% *}"
           [[ "$candidate_xtask_sha256" =~ ^[0-9a-f]{64}$ ]]
-          # WHY: Homebrew preserves the checker path into Formula tests, whose
-          # support loader accepts only the same root-owned immutable shape as
-          # the production publisher. Freeze the exact candidate-built xtask
-          # after all realm setup and before any Formula code executes.
-          /usr/bin/sudo -n /usr/bin/chown root:root -- "$candidate_xtask"
-          /usr/bin/sudo -n /usr/bin/chmod 0555 -- "$candidate_xtask"
+          # WHY: Cargo may hard-link this release executable to its hashed
+          # artifact on Linux. Homebrew preserves the checker path into Formula
+          # tests, whose support loader accepts only a single-link, root-owned
+          # immutable file. Copy-and-replace it after all realm setup and
+          # before any Formula code executes.
+          candidate_xtask_staged="$candidate_xtask.abi-staging-staged"
+          test ! -e "$candidate_xtask_staged" && test ! -L "$candidate_xtask_staged"
+          /usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 -- \
+            "$candidate_xtask" "$candidate_xtask_staged"
+          test "$(/usr/bin/stat -c '%u:%g:%a:%h' "$candidate_xtask_staged")" = \
+            "0:0:555:1"
+          test "$(/usr/bin/sha256sum "$candidate_xtask_staged" | /usr/bin/awk '{print $1}')" = \
+            "$candidate_xtask_sha256"
+          /usr/bin/sudo -n /usr/bin/mv -f -- "$candidate_xtask_staged" "$candidate_xtask"
           test "$(/usr/bin/stat -c '%u:%g:%a:%h' "$candidate_xtask")" = \
             "0:0:555:1"
           test "$(/usr/bin/sha256sum "$candidate_xtask" | /usr/bin/awk '{print $1}')" = \
