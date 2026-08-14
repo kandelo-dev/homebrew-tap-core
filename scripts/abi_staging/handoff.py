@@ -440,10 +440,13 @@ def prepare_composition_input(
         "composition bottle metadata payload",
     )
     root_url = _text(value.get("bottle_root_url"), "composition bottle root", 8192)
+    formula_suffix = f"/{formula}"
+    metadata_root_url = root_url.removesuffix(formula_suffix)
     if (
         not root_url.startswith("https://ghcr.io/v2/")
         or root_url.endswith("/")
-        or bottle["root_url"] != root_url
+        or metadata_root_url == root_url
+        or bottle["root_url"] != metadata_root_url
         or bottle["rebuild"] != rebuild
     ):
         raise HandoffError("composition bottle metadata uses another publication identity")

@@ -219,10 +219,11 @@ class BuildHandoffTests(unittest.TestCase):
     def test_composition_input_is_derived_from_exact_plan_bottle_and_guest_layout(self) -> None:
         bottle = _composition_bottle_bytes()
         bottle_sha256 = hashlib.sha256(bottle).hexdigest()
-        root_url = (
+        candidate_root_url = (
             "https://ghcr.io/v2/kandelo-dev/"
             "homebrew-tap-core-abi-9-candidates/mini-tool"
         )
+        metadata_root_url = candidate_root_url.rsplit("/", 1)[0]
         metadata = {
             "kandelo-dev/tap-core/mini-tool": {
                 "formula": {
@@ -234,7 +235,7 @@ class BuildHandoffTests(unittest.TestCase):
                     "pkg_version": "1.0.0_1",
                 },
                 "bottle": {
-                    "root_url": root_url,
+                    "root_url": metadata_root_url,
                     "cellar": "any_skip_relocation",
                     "rebuild": 2,
                     "tags": {
@@ -264,7 +265,7 @@ class BuildHandoffTests(unittest.TestCase):
             "formula": "mini-tool",
             "architecture": "wasm32",
             "target_abi": 9,
-            "bottle_root_url": root_url,
+            "bottle_root_url": candidate_root_url,
             "formula_identity": {
                 "name": "mini-tool",
                 "version": "1.0.0",
@@ -302,7 +303,7 @@ class BuildHandoffTests(unittest.TestCase):
         )
         self.assertEqual(
             prepared["bottle"]["transport_url"],
-            f"{root_url}/blobs/sha256:{bottle_sha256}",
+            f"{candidate_root_url}/blobs/sha256:{bottle_sha256}",
         )
         self.assertEqual(prepared["link_manifest"]["version"], "1.0.0_1")
 
