@@ -74,7 +74,10 @@ class Dash < Formula
       [ "$child_status" -eq 7 ]
     SH
     assert_equal "child=a b\nparent=7\n",
-      kandelo_run_wasm(bin/"dash", ["-c", exec_script])
+      kandelo_run_wasm(
+        bin/"dash", ["-c", exec_script], argv0: "/bin/dash",
+        exec_programs: { "/bin/dash" => bin/"dash" }
+      )
 
     assert_equal "USR1\n", kandelo_run_wasm(bin/"dash", ["-c", "kill -l 10"])
     signal_script = <<~'SH'
