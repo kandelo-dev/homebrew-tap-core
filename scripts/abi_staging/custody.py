@@ -17,6 +17,7 @@ import tempfile
 from typing import Any
 
 from .canonical import CanonicalJsonError, canonical_bytes, canonical_sha256, parse_canonical_bytes
+from .git_policy import protected_git_arguments
 from .plan import exact_formula_subject
 
 
@@ -319,20 +320,7 @@ def _git_environment() -> dict[str, str]:
 
 
 def _git_arguments(root: Path, *arguments: str) -> list[str]:
-    return [
-        "git",
-        "-c",
-        "core.hooksPath=/dev/null",
-        "-c",
-        "credential.helper=",
-        "-c",
-        "core.attributesFile=/dev/null",
-        "-c",
-        "protocol.file.allow=always",
-        "-C",
-        str(root),
-        *arguments,
-    ]
+    return protected_git_arguments(root, *arguments, file_protocol="always")
 
 
 def _git_bytes(root: Path, *arguments: str, field: str) -> bytes:

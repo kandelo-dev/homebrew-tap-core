@@ -15,6 +15,7 @@ from urllib.parse import unquote, urlsplit
 
 from .canonical import CanonicalJsonError, canonical_bytes, canonical_sha256
 from .formula_inventory import generate_formula_inventory, load_formula_inventory
+from .git_policy import protected_git_arguments
 from .request import RequestValidationError, parse_request_asset_name
 
 
@@ -927,8 +928,7 @@ def _git(tap_root: Path, *arguments: str) -> str:
     environment.update({"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"})
     try:
         completed = subprocess.run(
-            ["git", "-c", f"safe.directory={tap_root}", *arguments],
-            cwd=tap_root,
+            protected_git_arguments(tap_root, *arguments, file_protocol="never"),
             env=environment,
             check=True,
             stdout=subprocess.PIPE,
