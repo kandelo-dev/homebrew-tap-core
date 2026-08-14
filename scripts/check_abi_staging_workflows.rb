@@ -1117,6 +1117,20 @@ module AbiStagingWorkflowCheck
                          'realm_root="$(mktemp -d /tmp/k.XXXXXX)"'
                        ) &&
                        realm.fetch("run").include?("homebrew-prepare-host-prefix.sh") &&
+                       realm.fetch("run").include?(
+                         'printf \'%s\\n\' "$host" >"$RUNNER_TEMP/abi-staging-host-target"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'candidate_xtask="$GITHUB_WORKSPACE/kandelo-source/target/$host_target/release/xtask"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         '/usr/bin/sudo -n /usr/bin/chown root:root -- "$candidate_xtask"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         '/usr/bin/sudo -n /usr/bin/chmod 0555 -- "$candidate_xtask"'
+                       ) &&
+                       realm.fetch("run").include?("0:0:555:1") &&
+                       realm.fetch("run").include?("candidate_xtask_sha256") &&
                        realm.fetch("run").scan("env -u GITHUB_TOKEN").length == 2 &&
                        realm.fetch("run").scan("-u ACTIONS_RUNTIME_TOKEN").length == 2,
                        "candidate producer build realm changed")
