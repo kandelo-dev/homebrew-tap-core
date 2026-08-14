@@ -238,7 +238,8 @@ class RetryVectorTests(unittest.TestCase):
             now="2026-08-09T10:15:00.000Z",
             policy=POLICY,
         )
-        self.assertEqual(application.action, "not-retryable")
+        self.assertEqual(application.action, "retry")
+        self.assertEqual(application.next_ordinal, 1)
 
 
 class FailureClassifierTests(unittest.TestCase):
@@ -351,9 +352,9 @@ class SchedulingTests(unittest.TestCase):
             policy=POLICY,
             verification_tests=(DEFINITION,),
         )
-        blocker = next(item for item in decision.blocked if item.subject == subject)
-        self.assertEqual(blocker.guard_code, "build_failed")
-        self.assertEqual(blocker.next_action, "not-retryable")
+        retry = next(item for item in decision.ready if item.subject == subject)
+        self.assertEqual(retry.action, "build-candidate")
+        self.assertEqual(retry.attempt_ordinal, 1)
 
     def test_duplicate_verifiers_preserve_success_and_application_failure_dominance(self) -> None:
         plan = _plan()
@@ -475,12 +476,12 @@ class SchedulingTests(unittest.TestCase):
             verification_tests=(DEFINITION,),
         )
         ready_names = [json.loads(item.subject)["identity"] for item in decision.ready]
-        self.assertEqual(ready_names[0], "libcurl")
+        self.assertEqual(ready_names[:2], ["libcxx", "libcurl"])
         blockers = {
             json.loads(item.subject)["identity"]: item.guard_code
             for item in decision.blocked
         }
-        self.assertEqual(blockers["libcxx"], "build_failed")
+        self.assertNotIn("libcxx", blockers)
         self.assertEqual(blockers["ncurses"], "dependency_unavailable")
         self.assertEqual(blockers["bash"], "dependency_unavailable")
 
