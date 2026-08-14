@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { addDefaultBaseExecPrograms } from "./base-exec-programs.ts";
+import { resolveBaseExecPrograms } from "./base-exec-programs.ts";
 import {
   createForkDescendantTracker,
   parseExpectedForkDescendants,
@@ -93,12 +93,17 @@ async function main(): Promise<void> {
   const execPrograms = JSON.parse(
     process.env.KANDELO_FORMULA_EXEC_PROGRAMS_JSON ?? "{}",
   ) as Record<string, string>;
-  if (!Object.hasOwn(execPrograms, "/bin/sh")) {
+  const builtinMode = process.env.KANDELO_RUNNER_BUILTINS ?? "default";
+  if (builtinMode !== "explicit" && !Object.hasOwn(execPrograms, "/bin/sh")) {
     const binaryResolverUrl = pathToFileURL(
       join(root, "host/src/binary-resolver.ts"),
     ).href;
     const { resolveBinary } = await import(binaryResolverUrl);
-    addDefaultBaseExecPrograms(execPrograms, resolveBinary);
+    resolveBaseExecPrograms(execPrograms, resolveBinary, builtinMode);
+  } else {
+    resolveBaseExecPrograms(execPrograms, () => {
+      throw new Error("explicit Formula programs must not use the package resolver");
+    }, builtinMode);
   }
   const guestFiles = readGuestFilesManifest(
     process.env.KANDELO_FORMULA_GUEST_FILES_MANIFEST,

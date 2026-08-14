@@ -1176,6 +1176,36 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
+  def test_native_automake_modules_come_from_the_declared_versioned_keg
+    original = ENV.to_hash
+    Dir.mktmpdir("kandelo-native-automake-modules") do |dir|
+      prefix = Pathname(dir)/"Cellar/automake/1.18.1_1"
+      modules = prefix/"share/automake-1.18"
+      modules.mkpath
+      formula_class = Struct.new(:full_name, :prefix, :version, keyword_init: true)
+      dependency_class = Struct.new(:formula, :build_tag, keyword_init: true) do
+        def build? = build_tag
+        def test? = false
+        def to_formula = formula
+      end
+      dependency = dependency_class.new(
+        formula: formula_class.new(
+          full_name: "automake", prefix:, version: "1.18.1_1"
+        ),
+        build_tag: true,
+      )
+      harness = Harness.new
+      harness.define_singleton_method(:deps) { [dependency] }
+      ENV["PERL5LIB"] = "/ambient/perl"
+
+      harness.kandelo_export_native_automake_modules!
+
+      assert_equal [modules.to_s, "/ambient/perl"].join(File::PATH_SEPARATOR), ENV.fetch("PERL5LIB")
+    end
+  ensure
+    ENV.replace(original) if original
+  end
+
   def test_verified_formula_source_is_isolated_from_bridge_work_and_output_roots
     Dir.mktmpdir("kandelo-formula-source") do |dir|
       build_path = Pathname(dir)/"build"
@@ -4008,15 +4038,18 @@ class KandeloFormulaSupportTest < Minitest::Test
     ENV.replace(original) if original
   end
 
-  def test_formula_runners_keep_ordinary_nonpublisher_execution_when_checker_bridge_is_absent
-    harness = Harness.new
+  def test_formula_runners_use_only_explicit_bottle_programs_when_checker_bridge_is_absent
+    [false, true].each do |network|
+      harness = Harness.new
 
-    assert_equal "", harness.kandelo_node_runner_environment
-    harness.kandelo_run_wasm("program.wasm", [])
+      assert_equal "KANDELO_RUNNER_BUILTINS=explicit ", harness.kandelo_node_runner_environment
+      harness.kandelo_run_wasm("program.wasm", [], network:)
 
-    refute_includes harness.command, "WASM_POSIX_BINARY_CACHE_ROOT="
-    refute_includes harness.command, "WASM_POSIX_BINARY_RESOLVER_REPO_ROOT="
-    refute_includes harness.command, "WASM_POSIX_XTASK_BIN="
+      assert_includes harness.command, "KANDELO_RUNNER_BUILTINS=explicit"
+      refute_includes harness.command, "WASM_POSIX_BINARY_CACHE_ROOT="
+      refute_includes harness.command, "WASM_POSIX_BINARY_RESOLVER_REPO_ROOT="
+      refute_includes harness.command, "WASM_POSIX_XTASK_BIN="
+    end
   end
 
   def test_node_process_receives_the_frozen_resolver_authority_instead_of_mutable_caller_environment

@@ -1169,6 +1169,7 @@ module KandeloFormulaSupport
     saved = ENV.to_hash
     root = kandelo_activate_sdk!
     kandelo_activate_sysroot!(root)
+    kandelo_export_native_automake_modules!
 
     # CMake treats its ambient search paths as program roots, so Homebrew's
     # injected prefix can bypass PATH isolation and select a linked target tool.
@@ -1196,6 +1197,35 @@ module KandeloFormulaSupport
     yield root
   ensure
     ENV.replace(saved) if saved
+  end
+
+  # Homebrew relocates aclocal's compiled module path to its temporary global
+  # prefix, then the publisher unlinks that prefix before target Formula Ruby
+  # runs. Keep the executable and its Perl modules together by selecting the
+  # versioned, declared native Automake keg directly.
+  def kandelo_export_native_automake_modules!
+    return unless respond_to?(:deps)
+
+    module_roots = deps.filter_map do |dependency|
+      next unless dependency.build? || dependency.test?
+
+      formula = dependency.to_formula
+      next unless formula.full_name == "automake"
+
+      version_match = formula.version.to_s.match(/\A([0-9]+[.][0-9]+)/)
+      version = version_match&.[](1)
+      odie "native Automake dependency has an unsupported version" if version.nil?
+      modules = Pathname(formula.prefix)/"share/automake-#{version}"
+      unless modules.directory? && !modules.symlink?
+        odie "native Automake module root is unavailable: #{modules}"
+      end
+      modules.to_s
+    end.uniq
+    odie "multiple native Automake module roots are unsupported" if module_roots.length > 1
+    return if module_roots.empty?
+
+    existing = ENV.fetch("PERL5LIB", "").split(File::PATH_SEPARATOR).reject(&:empty?)
+    ENV["PERL5LIB"] = [module_roots.fetch(0), *existing].uniq.join(File::PATH_SEPARATOR)
   end
 
   # The SDK configure wrapper supplies the target host and a default prefix.
@@ -2880,8 +2910,11 @@ module KandeloFormulaSupport
   end
 
   def kandelo_node_runner_environment
+    # Formula tests run only the staged candidate bottle and explicitly listed
+    # bottle executables. Do not preload Kandelo's legacy package generations.
+    assignments = ["KANDELO_RUNNER_BUILTINS=explicit"]
     checker = kandelo_formula_checker_path
-    return "" if checker.nil?
+    return assignments.join(" ") << " " if checker.nil?
 
     binary_cache_root = kandelo_formula_binary_cache_root
     resolver_repo_root = kandelo_formula_resolver_repo_root
@@ -2894,11 +2927,11 @@ module KandeloFormulaSupport
     # validates and freezes one source root, checker, and transported package
     # cache before Formula code runs. Restoring that exact set keeps binaries/
     # links bound to their complete content-addressed package generations.
-    [
+    assignments.concat([
       "WASM_POSIX_BINARY_CACHE_ROOT=#{Shellwords.escape(binary_cache_root)}",
       "WASM_POSIX_BINARY_RESOLVER_REPO_ROOT=#{Shellwords.escape(resolver_repo_root)}",
       "WASM_POSIX_XTASK_BIN=#{Shellwords.escape(checker)}",
-    ].join(" ") << " "
+    ]).join(" ") << " "
   end
 
   # Run a built `.wasm` under the Node kernel host and return its stdout. The
