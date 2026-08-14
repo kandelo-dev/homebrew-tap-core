@@ -159,11 +159,38 @@ def parse_canonical_bytes(
 ) -> MappingProxyType[str, Any]:
     """Parse bounded canonical bytes and recursively freeze the result."""
 
+    parsed = parse_json_bytes(
+        body,
+        maximum_bytes=maximum_bytes,
+        maximum_depth=maximum_depth,
+        maximum_items=maximum_items,
+        maximum_string_bytes=maximum_string_bytes,
+    )
+    if canonical_bytes(
+        parsed,
+        maximum_depth=maximum_depth,
+        maximum_items=maximum_items,
+        maximum_string_bytes=maximum_string_bytes,
+    ) != body:
+        raise CanonicalJsonError("JSON bytes are not canonical")
+    return parsed
+
+
+def parse_json_bytes(
+    body: bytes,
+    *,
+    maximum_bytes: int,
+    maximum_depth: int = 64,
+    maximum_items: int = 100_000,
+    maximum_string_bytes: int = 4 * 1024 * 1024,
+) -> MappingProxyType[str, Any]:
+    """Parse bounded unambiguous JSON and recursively freeze the result."""
+
     if not isinstance(body, bytes):
-        raise CanonicalJsonError("canonical JSON input must be bytes")
+        raise CanonicalJsonError("JSON input must be bytes")
     if not body or len(body) > maximum_bytes:
         raise CanonicalJsonError(
-            f"canonical JSON must contain 1 through {maximum_bytes} bytes"
+            f"JSON must contain 1 through {maximum_bytes} bytes"
         )
     try:
         text = body.decode("utf-8", errors="strict")
@@ -186,11 +213,4 @@ def parse_canonical_bytes(
     )
     if not isinstance(plain, dict):
         raise CanonicalJsonError("canonical document root must be an object")
-    if canonical_bytes(
-        plain,
-        maximum_depth=maximum_depth,
-        maximum_items=maximum_items,
-        maximum_string_bytes=maximum_string_bytes,
-    ) != body:
-        raise CanonicalJsonError("JSON bytes are not canonical")
     return _freeze(plain)
