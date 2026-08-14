@@ -42,6 +42,7 @@ class FakeOpener:
     def __init__(self):
         self.routes: dict[str, list[FakeResponse]] = defaultdict(list)
         self.calls: list[str] = []
+        self.requests: list[Any] = []
 
     def add(self, url: str, response: FakeResponse) -> None:
         self.routes[url].append(response)
@@ -49,6 +50,7 @@ class FakeOpener:
     def __call__(self, request: Any) -> FakeResponse:
         url = request.full_url
         self.calls.append(url)
+        self.requests.append(request)
         if not self.routes[url]:
             raise AssertionError(f"unexpected public request: {url}")
         return self.routes[url].pop(0)
@@ -275,6 +277,46 @@ class GitHubPublicClientTests(unittest.TestCase):
         self.assertFalse(
             any(url == broad or url.startswith(f"{broad}?") for url in opener.calls)
         )
+
+    def test_api_token_is_sent_only_to_api_github_com(self) -> None:
+        opener = FakeOpener()
+        body, asset_name, public_url = fixture_asset()
+        refs = (
+            "https://api.github.com/repos/Automattic/kandelo/"
+            "git/matching-refs/tags/abi-staging-pr-"
+        )
+        opener.add(
+            f"{refs}?per_page=100&page=1",
+            json_response([{"ref": "refs/tags/abi-staging-pr-19"}]),
+        )
+        opener.add(
+            "https://api.github.com/repos/Automattic/kandelo/"
+            "releases/tags/abi-staging-pr-19",
+            json_response({
+                "id": 9,
+                "tag_name": "abi-staging-pr-19",
+                "prerelease": True,
+                "draft": False,
+                "assets": [{
+                    "id": 11,
+                    "name": asset_name,
+                    "browser_download_url": public_url,
+                    "created_at": ASSET_CREATED_AT,
+                }],
+            }),
+        )
+        add_asset_download(opener, public_url, body)
+
+        discovered = GitHubPublicClient(
+            POLICY, opener=opener, api_token="read-only-fixture-token"
+        ).scan()
+        self.assertEqual(len(discovered), 1)
+        for request in opener.requests:
+            authorization = request.get_header("Authorization")
+            if request.full_url.startswith("https://api.github.com/"):
+                self.assertEqual(authorization, "Bearer read-only-fixture-token")
+            else:
+                self.assertIsNone(authorization)
 
     def test_duplicate_request_tag_refs_fail_closed(self) -> None:
         opener = FakeOpener()

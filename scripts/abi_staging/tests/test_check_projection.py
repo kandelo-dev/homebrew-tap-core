@@ -165,6 +165,29 @@ class CheckProjectionCollectionTests(unittest.TestCase):
         )
 
         self.assertFalse(result["applicable"])
+
+    def test_applicable_collection_scopes_a_token_to_public_api_discovery(self) -> None:
+        expected, _, _ = request_fixture()
+
+        with patch(
+            "scripts.abi_staging.check_projection.GitHubPublicClient"
+        ) as client_type:
+            client_type.return_value.scan.return_value = ()
+            result = collect_check_projection_input(
+                tap_root=TAP_ROOT,
+                exact_head_root=TAP_ROOT,
+                context=context(expected),
+                applicable=True,
+                expected_requirements=expected["requirements"],
+                formula_requirements=(),
+                now="2026-08-09T10:30:00Z",
+                github_api_token="read-only-fixture-token",
+            )
+
+        self.assertTrue(result["applicable"])
+        self.assertEqual(result["expected_request_digest"], "0" * 64)
+        _, keyword = client_type.call_args
+        self.assertEqual(keyword, {"api_token": "read-only-fixture-token"})
         self.assertEqual(result["public_records"], [])
 
     def test_discovery_delay_is_only_a_fifteen_minute_unclaimed_audit_diagnostic(self) -> None:
