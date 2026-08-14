@@ -1122,6 +1122,16 @@ module AbiStagingWorkflowCheck
                        realm.fetch("run").include?(
                          'mkdir -m 0700 "$package_cache" "$package_cache/programs"'
                        ) &&
+                       realm.fetch("run").include?("formula_cache_paths=(") &&
+                       realm.fetch("run").include?(
+                         '/usr/bin/sudo -n /usr/bin/chown root:root -- "${formula_cache_paths[@]}"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         '/usr/bin/sudo -n /usr/bin/chmod 0555 -- "${formula_cache_paths[@]}"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$directory")" = "0:0:555"'
+                       ) &&
                        realm.fetch("run").include?(
                          'mkdir -m 0700 "$GITHUB_WORKSPACE/kandelo-source/binaries"'
                        ) &&
