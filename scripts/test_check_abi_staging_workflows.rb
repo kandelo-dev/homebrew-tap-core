@@ -831,6 +831,7 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes export_source, '"PYTHONDONTWRITEBYTECODE=1"'
 
     realm_source = realm.fetch("run")
+    assert_includes realm_source, 'realm_root="$(mktemp -d /tmp/k.XXXXXX)"'
     assert_includes realm_source, "homebrew-prepare-host-prefix.sh"
     assert_includes realm_source, "scripts/build-musl.sh"
     assert_includes realm_source, "packages/registry/kernel/build-kernel.sh"
@@ -876,6 +877,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub("-u ACTIONS_RUNTIME_TOKEN", "")
+    end
+    assert_reusable_rejected(:candidate, "candidate Homebrew realm root is not socket-safe") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub(
+        'realm_root="$(mktemp -d /tmp/k.XXXXXX)"',
+        'realm_root="$RUNNER_TEMP/abi-staging-build-realm-$WORK_ID"'
+      )
     end
     assert_reusable_rejected(:candidate, "candidate shadows protected Python") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
