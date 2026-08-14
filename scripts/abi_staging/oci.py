@@ -894,17 +894,11 @@ def _upload_blob(
             _validate_digest_header(
                 completed, blob, guard_code="namespace_bootstrap_failed"
             )
-    authenticated_read = _request(
-        transport,
-        "GET",
-        blob_url,
-        authenticated=True,
-        guard_code="candidate_public_readback_failed",
-        maximum_bytes=blob.size,
-    )
-    _validate_blob_response(
-        authenticated_read, blob, guard_code="candidate_public_readback_failed"
-    )
+    # GHCR does not expose blobs in a new nested package until its first
+    # manifest creates that package namespace. Publication performs the exact
+    # anonymous byte/digest/size readback for every blob after that manifest is
+    # uploaded, so a pre-manifest GET is both redundant and impossible during
+    # namespace bootstrap.
 
 
 def _probe_manifest(

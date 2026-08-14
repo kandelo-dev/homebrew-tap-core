@@ -51,6 +51,7 @@ class FakeRegistryTransport:
         self.github_upload_location = False
         self.upload_location_query = ""
         self.package_absent_until_first_manifest = False
+        self.blobs_hidden_until_first_manifest = False
         self.registry_next_status: int | None = None
         self.empty_write_response = False
 
@@ -223,6 +224,14 @@ class FakeRegistryTransport:
             repository, digest = remainder.split("/blobs/", 1)
             key = (repository, unquote(digest))
             if method in {"GET", "HEAD"}:
+                if (
+                    self.blobs_hidden_until_first_manifest
+                    and not any(
+                        candidate_repository == repository
+                        for candidate_repository, _reference in self.manifests
+                    )
+                ):
+                    return self._response(404, url)
                 if not authenticated and self.private_anonymous:
                     return self._response(401, url)
                 if key not in self.blobs:
@@ -409,6 +418,7 @@ class OciPublicationTests(unittest.TestCase):
     def test_new_namespace_mount_upload_and_anonymous_readback(self) -> None:
         transport = FakeRegistryTransport()
         transport.package_absent_until_first_manifest = True
+        transport.blobs_hidden_until_first_manifest = True
         plan = _plan()
         mounted = plan.layers[0]
         transport.blobs[(mounted.mount_from, mounted.digest)] = mounted.body
