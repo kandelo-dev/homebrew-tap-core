@@ -6,6 +6,7 @@ import argparse
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -618,8 +619,9 @@ def collect_check_projection_input(
     now: str,
     client: GitHubPublicClient | None = None,
     transport: OciTransportV1 | None = None,
+    github_api_token: str | None = None,
 ) -> dict[str, Any]:
-    """Collect anonymous public records without executing exact-head code."""
+    """Collect public records without executing exact-head code."""
 
     root = tap_root.resolve(strict=True)
     policy = load_tap_staging_policy(root / "Kandelo/staging/tap-policy.toml")
@@ -639,7 +641,9 @@ def collect_check_projection_input(
             request_claimed=False,
             now=now,
         )
-    discovered = (client or GitHubPublicClient(issuer_policy)).scan()
+    discovered = (
+        client or GitHubPublicClient(issuer_policy, api_token=github_api_token)
+    ).scan()
     if expected_requirements is None or formula_requirements is None:
         raise CheckProjectionCollectionError(
             "applicable collection lacks protected request requirements"
@@ -809,6 +813,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             expected_requirements=expected_requirements,
             formula_requirements=requirements,
             now=args.now,
+            github_api_token=os.environ.get("ABI_STAGING_GITHUB_API_TOKEN"),
         )
         destination = Path(args.out).resolve(strict=False)
         destination.parent.mkdir(parents=True, exist_ok=True)

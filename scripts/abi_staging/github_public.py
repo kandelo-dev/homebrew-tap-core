@@ -150,12 +150,24 @@ class GitHubPublicClient:
         *,
         opener: Callable[[urllib.request.Request], Response] | None = None,
         page_size: int = 100,
+        api_token: str | None = None,
     ) -> None:
         if page_size < 1 or page_size > 100:
             raise PublicGitHubError("GitHub page size must be between 1 and 100")
+        if api_token is not None and (
+            not isinstance(api_token, str)
+            or len(api_token.encode("utf-8", errors="strict")) > 4096
+            or not api_token
+            or any(
+                ord(character) <= 0x20 or ord(character) == 0x7F
+                for character in api_token
+            )
+        ):
+            raise PublicGitHubError("GitHub API token is invalid")
         self.policy = policy
         self._opener = opener or _default_opener()
         self.page_size = page_size
+        self._api_token = api_token
 
     def _validate_transport_url(self, url: str) -> urllib.parse.SplitResult:
         if not isinstance(url, str) or any(ord(character) <= 0x20 or ord(character) == 0x7F for character in url):
@@ -195,10 +207,13 @@ class GitHubPublicClient:
     def _get(self, url: str, maximum: int, accept: str) -> bytes:
         current = url
         for redirect_count in range(self.policy.max_redirects + 1):
-            self._validate_transport_url(current)
+            parsed = self._validate_transport_url(current)
+            headers = {"Accept": accept, "User-Agent": "kandelo-abi-staging/1"}
+            if parsed.hostname == "api.github.com" and self._api_token is not None:
+                headers["Authorization"] = "Bearer " + self._api_token
             request = urllib.request.Request(
                 current,
-                headers={"Accept": accept, "User-Agent": "kandelo-abi-staging/1"},
+                headers=headers,
                 method="GET",
             )
             try:
