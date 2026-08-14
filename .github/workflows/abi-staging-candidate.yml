@@ -118,8 +118,15 @@ jobs:
           mkdir -m 0700 \
             "$realm_root/home" \
             "$realm_root/homebrew-cache" \
-            "$realm_root/homebrew-temp" \
-            "$realm_root/package-cache"
+            "$realm_root/homebrew-temp"
+
+          # Formula tests receive a sealed runtime projection from this
+          # portable path. Keep its first-wave contents empty except for the
+          # required real programs directory; candidate bottle bytes are
+          # injected independently by the Formula test adapter.
+          package_cache="$GITHUB_WORKSPACE/kandelo-source/.ci-test-binary-cache"
+          test ! -e "$package_cache" && test ! -L "$package_cache"
+          mkdir -m 0700 "$package_cache" "$package_cache/programs"
 
           resolved_taps="$realm_root/resolved-taps.json"
           python3 scripts/homebrew-dependency-taps.py resolve \
@@ -154,7 +161,7 @@ jobs:
             -u GITHUB_STEP_SUMMARY \
             HOME="$realm_root/home" \
             scripts/dev-shell.sh env \
-              "WASM_POSIX_BINARY_CACHE_ROOT=$realm_root/package-cache" \
+              "WASM_POSIX_BINARY_CACHE_ROOT=$package_cache" \
               "PLAYWRIGHT_BROWSERS_PATH=$playwright_browsers" \
               "KANDELO_ABI_STAGING_ARCHITECTURE=$KANDELO_ABI_STAGING_ARCHITECTURE" \
               bash -euo pipefail -s <<'BUILD_REALM'
@@ -275,7 +282,7 @@ jobs:
             echo "KANDELO_HOMEBREW_RESOLVED_TAPS_FILE=$resolved_taps"
             echo "KANDELO_HOMEBREW_TAP_SOURCE_COMMIT=$KANDELO_ABI_STAGING_TAP_COMMIT"
             echo "PLAYWRIGHT_BROWSERS_PATH=$playwright_browsers"
-            echo "WASM_POSIX_BINARY_CACHE_ROOT=$realm_root/package-cache"
+            echo "WASM_POSIX_BINARY_CACHE_ROOT=$package_cache"
           } >>"$GITHUB_ENV"
 
       - name: Build one exact uncredentialed candidate handoff
