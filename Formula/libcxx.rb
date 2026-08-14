@@ -341,10 +341,11 @@ class Libcxx < Formula
       ].map { |symbol| "-Wl,--undefined=#{symbol}" }
       system kandelo_cc(root), loader_source, "-O2", "-ldl", "-Wl,--export-all", *side_imports, "-o", loader
     end
-
     side_info = Utils.safe_popen_read("wasm-objdump", "-x", side_module)
     assert_match(/dylink\.0/, side_info)
     assert_match(/memory.*<- env\.memory/, side_info)
+    kandelo_fork_instrument(loader)
+    kandelo_validate_wasm_artifact(loader, fork: :required)
     assert_equal "libcxx-pic-ok\n", kandelo_run_wasm(loader, [side_module])
     guest_side = "/usr/lib/libcxx-pic-side.so"
     side_file = { guest_side => side_module }

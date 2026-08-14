@@ -3458,7 +3458,7 @@ class KandeloFormulaSupportTest < Minitest::Test
     end
   end
 
-  def test_artifact_validation_rejects_failed_wasm_objdump_inspection
+  def test_artifact_validation_uses_structural_guards_when_wasm_objdump_rejects_abi43_types
     Dir.mktmpdir("kandelo-formula-support") do |dir|
       harness = artifact_validation_harness(dir, ExecutingHarness)
       tool_dir = Pathname(dir)/"tools"
@@ -3469,12 +3469,18 @@ class KandeloFormulaSupportTest < Minitest::Test
         tool.chmod 0755
       end
       harness.system_path = "#{tool_dir}:/bin:/usr/bin"
+      artifact_guards = Pathname(harness.root_path)/"scripts/wasm-artifact-guards.sh"
+      artifact_guards.binwrite <<~SH
+        wasm_current_abi_version() { printf '43\\n'; }
+        wasm_extract_abi_version() { printf '43\\n'; }
+        wasm_require_no_legacy_asyncify() { :; }
+        wasm_imports_kernel_fork() { return 0; }
+        wasm_has_complete_fork_instrumentation() { return 0; }
+      SH
       wasm = harness.buildpath/"program.wasm"
       wasm.binwrite("\0asm")
 
-      assert_raises(RuntimeError) do
-        harness.kandelo_validate_wasm_artifact(wasm)
-      end
+      assert_equal wasm, harness.kandelo_validate_wasm_artifact(wasm, fork: :required)
     end
   end
 

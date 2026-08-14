@@ -1222,9 +1222,9 @@ module KandeloFormulaSupport
   end
 
   # Reject a final linked artifact unless its ABI and continuation surface
-  # match the Kandelo checkout that is building it. Callers must declare WABT
-  # and Binaryen as build dependencies because the authoritative guards inspect
-  # Wasm sections with wasm-objdump and use Binaryen for fallback extraction.
+  # match the Kandelo checkout that is building it. The exact Kandelo
+  # structural decoder owns ABI/fork validation; callers still declare WABT
+  # and Binaryen because source-only guard fallbacks use those tools.
   def kandelo_validate_wasm_artifact(wasm_path, fork: :auto, forbidden_paths: [])
     unless [:auto, :required, :forbidden].include?(fork)
       odie "invalid Kandelo fork policy #{fork.inspect}; expected :auto, :required, or :forbidden"
@@ -1278,10 +1278,6 @@ module KandeloFormulaSupport
       done
       . #{artifact_guards.to_s.shellescape}
       artifact=#{wasm.to_s.shellescape}
-      if ! wasm-objdump -x "$artifact" >/dev/null 2>&1; then
-        echo "ERROR: wasm-objdump could not inspect artifact imports and exports: $artifact" >&2
-        exit 1
-      fi
       expected_abi=$(wasm_current_abi_version #{root.to_s.shellescape} || true)
       artifact_abi=$(wasm_extract_abi_version "$artifact" || true)
       if [ -z "$expected_abi" ] || [ -z "$artifact_abi" ] || [ "$artifact_abi" != "$expected_abi" ]; then

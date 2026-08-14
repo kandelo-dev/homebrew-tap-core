@@ -856,6 +856,12 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
                     '/usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 --'
     assert_includes realm_source,
                     '/usr/bin/sudo -n /usr/bin/mv -f -- "$candidate_xtask_staged" "$candidate_xtask"'
+    assert_includes realm_source, "candidate_platform_tools=("
+    assert_includes realm_source, '"tools/bin/wasm-fork-instrument"'
+    assert_includes realm_source, '"tools/bin/wasm-local-root-spill"'
+    assert_includes realm_source,
+                    '/usr/bin/sudo -n /usr/bin/chown root:root --'
+    assert_includes realm_source, '"$GITHUB_WORKSPACE/kandelo-source"'
     assert_includes realm_source, "env -u GITHUB_TOKEN"
     assert_includes realm_source, "-u ACTIONS_RUNTIME_TOKEN"
     assert_includes realm_source, "-u GITHUB_ENV"
@@ -921,9 +927,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub(
-        '/usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 --',
-        '/usr/bin/sudo -n /usr/bin/chown root:root --'
+        '"$candidate_xtask" "$candidate_xtask_staged"',
+        '"$candidate_xtask"'
       )
+    end
+    assert_reusable_rejected(:candidate, "candidate tap recipe platform remains mutable") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub("candidate_platform_tools=(", "mutable_platform_tools=(")
     end
     assert_reusable_rejected(:candidate, "candidate shadows protected Python") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
