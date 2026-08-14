@@ -406,6 +406,10 @@ class WorkflowExecutionTests(unittest.TestCase):
                 kwargs["env"]["WASM_POSIX_BINARY_CACHE_ROOT"],
                 "/private/package-cache",
             )
+            self.assertEqual(
+                kwargs["env"]["WASM_POSIX_XTASK_BIN"],
+                "/protected/candidate/target/host/release/xtask",
+            )
             self.assertNotEqual(kwargs["env"]["HOME"], "/credentialed/home")
             self.assertEqual(
                 kwargs["env"]["XDG_CONFIG_HOME"],
@@ -468,6 +472,9 @@ class WorkflowExecutionTests(unittest.TestCase):
                     "KANDELO_HOMEBREW_PKILL_BIN": "/usr/bin/pkill",
                     "PLAYWRIGHT_BROWSERS_PATH": "/private/playwright",
                     "WASM_POSIX_BINARY_CACHE_ROOT": "/private/package-cache",
+                    "WASM_POSIX_XTASK_BIN": (
+                        "/protected/candidate/target/host/release/xtask"
+                    ),
                     "GITHUB_TOKEN": "must-not-survive",
                     "HOMEBREW_GITHUB_PACKAGES_TOKEN": "must-not-survive",
                     "ACTIONS_RUNTIME_TOKEN": "must-not-survive",
