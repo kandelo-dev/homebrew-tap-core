@@ -175,6 +175,7 @@ jobs:
           fi
           bash packages/registry/kernel/build-kernel.sh
           bash scripts/build-fork-instrument-tool.sh
+          bash scripts/build-local-root-spill-tool.sh
 
           host="$(rustc -vV | sed -n 's/^host: //p')"
           test -n "$host"

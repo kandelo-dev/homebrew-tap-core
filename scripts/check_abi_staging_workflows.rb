@@ -1149,6 +1149,9 @@ module AbiStagingWorkflowCheck
                          '"tools/bin/wasm-fork-instrument"'
                        ) &&
                        realm.fetch("run").include?(
+                         "scripts/build-local-root-spill-tool.sh"
+                       ) &&
+                       realm.fetch("run").include?(
                          '"tools/bin/wasm-local-root-spill"'
                        ) &&
                        realm.fetch("run").include?(
