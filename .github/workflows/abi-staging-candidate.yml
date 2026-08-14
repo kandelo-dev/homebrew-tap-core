@@ -270,6 +270,47 @@ jobs:
           test "$(/usr/bin/sha256sum "$candidate_xtask" | /usr/bin/awk '{print $1}')" = \
             "$candidate_xtask_sha256"
 
+          # Closed tap recipes are parsed once to derive the target dependency
+          # graph before the privileged launcher creates its smaller platform
+          # projection. Seal the exact tools and their directory ancestry now
+          # so that parse observes the same immutable platform authority later
+          # used for Formula execution.
+          candidate_platform_tools=(
+            "tools/bin/wasm-fork-instrument"
+            "tools/bin/wasm-local-root-spill"
+          )
+          for relative in "${candidate_platform_tools[@]}"; do
+            tool="$GITHUB_WORKSPACE/kandelo-source/$relative"
+            test -f "$tool" && test ! -L "$tool" && test -x "$tool"
+            tool_sha256="$(/usr/bin/sha256sum "$tool" | /usr/bin/awk '{print $1}')"
+            [[ "$tool_sha256" =~ ^[0-9a-f]{64}$ ]]
+            staged="$tool.abi-staging-staged"
+            test ! -e "$staged" && test ! -L "$staged"
+            /usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 -- \
+              "$tool" "$staged"
+            test "$(/usr/bin/stat -c '%u:%g:%a:%h' "$staged")" = "0:0:555:1"
+            test "$(/usr/bin/sha256sum "$staged" | /usr/bin/awk '{print $1}')" = \
+              "$tool_sha256"
+            /usr/bin/sudo -n /usr/bin/mv -f -- "$staged" "$tool"
+            test "$(/usr/bin/stat -c '%u:%g:%a:%h' "$tool")" = "0:0:555:1"
+            test "$(/usr/bin/sha256sum "$tool" | /usr/bin/awk '{print $1}')" = \
+              "$tool_sha256"
+          done
+          /usr/bin/sudo -n /usr/bin/chown root:root -- \
+            "$GITHUB_WORKSPACE/kandelo-source" \
+            "$GITHUB_WORKSPACE/kandelo-source/tools" \
+            "$GITHUB_WORKSPACE/kandelo-source/tools/bin"
+          /usr/bin/sudo -n /usr/bin/chmod 0755 -- \
+            "$GITHUB_WORKSPACE/kandelo-source" \
+            "$GITHUB_WORKSPACE/kandelo-source/tools" \
+            "$GITHUB_WORKSPACE/kandelo-source/tools/bin"
+          for directory in \
+            "$GITHUB_WORKSPACE/kandelo-source" \
+            "$GITHUB_WORKSPACE/kandelo-source/tools" \
+            "$GITHUB_WORKSPACE/kandelo-source/tools/bin"; do
+            test "$(/usr/bin/stat -c '%u:%g:%a' "$directory")" = "0:0:755"
+          done
+
           test "$(git -C "$brew_repository" rev-parse HEAD)" = \
             "$HOMEBREW_BREW_COMMIT"
           test -z "$(git -C "$brew_repository" status --short --untracked-files=no)"

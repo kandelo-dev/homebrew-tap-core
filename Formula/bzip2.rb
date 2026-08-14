@@ -153,6 +153,8 @@ class Bzip2 < Formula
       system kandelo_cc, "-shared", "-fPIC", plugin_source, *flags, "-o", plugin
       system kandelo_cc, loader_source, "-ldl", "-Wl,--export-all", "-o", loader
     end
+    kandelo_fork_instrument(loader)
+    kandelo_validate_wasm_artifact(loader, fork: :required)
     assert_equal "libbz2-ok\n", kandelo_run_wasm(wasm, [])
     assert_equal "bzip2-side-module #{version}, 13-Jul-2019 ok\n",
       kandelo_run_wasm(loader, [plugin])

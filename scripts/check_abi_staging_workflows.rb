@@ -1137,10 +1137,26 @@ module AbiStagingWorkflowCheck
                          '/usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 --'
                        ) &&
                        realm.fetch("run").include?(
+                         '"$candidate_xtask" "$candidate_xtask_staged"'
+                       ) &&
+                       realm.fetch("run").include?(
                          '/usr/bin/sudo -n /usr/bin/mv -f -- "$candidate_xtask_staged" "$candidate_xtask"'
                        ) &&
                        realm.fetch("run").include?("0:0:555:1") &&
                        realm.fetch("run").include?("candidate_xtask_sha256") &&
+                       realm.fetch("run").include?("candidate_platform_tools=(") &&
+                       realm.fetch("run").include?(
+                         '"tools/bin/wasm-fork-instrument"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         '"tools/bin/wasm-local-root-spill"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         '/usr/bin/sudo -n /usr/bin/chown root:root --'
+                       ) &&
+                       realm.fetch("run").include?(
+                         '"$GITHUB_WORKSPACE/kandelo-source/tools/bin"'
+                       ) &&
                        realm.fetch("run").scan("env -u GITHUB_TOKEN").length == 2 &&
                        realm.fetch("run").scan("-u ACTIONS_RUNTIME_TOKEN").length == 2,
                        "candidate producer build realm changed")

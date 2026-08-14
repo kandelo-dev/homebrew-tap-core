@@ -11,6 +11,7 @@ class Ed < Formula
   license "GPL-2.0-or-later"
   revision 1
 
+  depends_on "dash" => :test
   depends_on "lzip" => [:build, :test]
 
   skip_clean "bin/ed"
@@ -61,7 +62,8 @@ class Ed < Formula
       q
     ED
     output = kandelo_run_wasm(
-      bin/"ed", ["-", "document.txt"], env: { "KERNEL_CWD" => testpath }, stdin: commands
+      bin/"ed", ["-", "document.txt"], env: { "KERNEL_CWD" => testpath }, stdin: commands,
+      exec_programs: { "/bin/sh" => formula_opt_bin("kandelo-dev/tap-core/dash")/"dash" }
     )
     assert_match(/ed-child/, output)
     assert_equal "alpha\nBETA\ninserted\ngamma\n", document.read
