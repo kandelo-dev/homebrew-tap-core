@@ -291,6 +291,60 @@ class PublicBlobFetchTests(unittest.TestCase):
                     transport=transport,
                 )
 
+    def test_ghcr_blob_storage_redirect_is_exact_and_drops_authority(self) -> None:
+        transport = UrllibOciTransportV1(username="", token="")
+        payload = b"exact redirected public blob\n"
+        digest = hashlib.sha256(payload).hexdigest()
+        original = f"https://ghcr.io/v2/{REPOSITORY}/blobs/sha256:{digest}"
+        storage = (
+            "https://pkg-containers.githubusercontent.com/ghcrblobs09/blobs/"
+            f"sha256:{digest}?sv=2025-01-05&sig=fixture"
+        )
+        calls: list[tuple[str, str, dict[str, str]]] = []
+
+        def perform(method, url, *, headers, body, maximum_bytes):
+            del body, maximum_bytes
+            calls.append((method, url, dict(headers)))
+            if url == original and "authorization" not in headers:
+                return HttpResponseV1(
+                    401,
+                    {
+                        "www-authenticate": (
+                            'Bearer realm="https://ghcr.io/token",'
+                            'service="ghcr.io",'
+                            f'scope="repository:{REPOSITORY}:pull"'
+                        )
+                    },
+                    b"",
+                    original,
+                )
+            if url.startswith("https://ghcr.io/token?"):
+                return HttpResponseV1(200, {}, b'{"token":"fixture-bearer"}', url)
+            if url == original:
+                self.assertEqual(headers.get("authorization"), "Bearer fixture-bearer")
+                return HttpResponseV1(307, {"location": storage}, b"", storage)
+            if url == storage:
+                self.assertNotIn("authorization", headers)
+                return HttpResponseV1(
+                    200,
+                    {"content-length": str(len(payload))},
+                    payload,
+                    storage,
+                )
+            raise AssertionError(f"unexpected transport request: {method} {url}")
+
+        with patch.object(transport, "_perform", side_effect=perform):
+            self.assertEqual(
+                fetch_public_blob(
+                    f"ghcr.io/{REPOSITORY}@sha256:{digest}",
+                    expected_sha256=digest,
+                    expected_bytes=len(payload),
+                    transport=transport,
+                ),
+                payload,
+            )
+        self.assertEqual(calls[-1][1], storage)
+
 
 def _plan() -> OciRecordPlanV1:
     config = OciBlobV1(
