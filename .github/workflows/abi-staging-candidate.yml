@@ -154,7 +154,10 @@ jobs:
           brew_bin="$HOMEBREW_GUEST_PREFIX/bin/brew"
           test "$(readlink -f "$brew_bin")" = "$brew_repository/bin/brew"
 
-          playwright_browsers="$realm_root/playwright"
+          # The tap-owned browser runners recover this exact directory from
+          # dirname(HOMEBREW_CACHE)/ms-playwright after Homebrew isolates HOME
+          # and strips the ordinary Playwright environment variable.
+          playwright_browsers="$realm_root/ms-playwright"
           cd "$GITHUB_WORKSPACE/kandelo-source"
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_RUNTIME_TOKEN -u GITHUB_ENV -u GITHUB_OUTPUT \

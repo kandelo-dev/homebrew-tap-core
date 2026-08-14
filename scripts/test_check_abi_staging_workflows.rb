@@ -843,6 +843,8 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     refute_match(/^const image = await fs\.saveImage\(/, realm_source)
     refute_includes realm_source, "formula_test_packages"
     refute_includes realm_source, "--fetch-only resolve"
+    assert_includes realm_source,
+                    'playwright_browsers="$realm_root/ms-playwright"'
     assert_includes realm_source, "PLAYWRIGHT_BROWSERS_PATH"
     assert_includes realm_source, "WASM_POSIX_BINARY_CACHE_ROOT"
     assert_includes realm_source,
@@ -880,6 +882,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         step.dig("with", "path") == "homebrew-prefix/Homebrew"
       end
       checkout.fetch("with")["ref"] = "0" * 40
+    end
+    assert_reusable_rejected(:candidate, "candidate Playwright cache drift") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub(
+        'playwright_browsers="$realm_root/ms-playwright"',
+        'playwright_browsers="$realm_root/playwright"',
+      )
     end
     assert_reusable_rejected(:candidate, "candidate realm retains token") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
