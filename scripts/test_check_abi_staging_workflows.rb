@@ -845,13 +845,24 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     refute_includes realm_source, "formula_test_packages"
     refute_includes realm_source, "--fetch-only resolve"
     assert_includes realm_source,
-                    'playwright_browsers="$realm_root/ms-playwright"'
+                    'playwright_browsers="$shared_temp/ms-playwright"'
     assert_includes realm_source, "PLAYWRIGHT_BROWSERS_PATH"
     assert_includes realm_source, "WASM_POSIX_BINARY_CACHE_ROOT"
     assert_includes realm_source,
                     'package_cache="$GITHUB_WORKSPACE/kandelo-source/.ci-test-binary-cache"'
     assert_includes realm_source,
                     'mkdir -m 0700 "$package_cache" "$package_cache/programs"'
+    assert_includes realm_source, 'mkdir -m 0700 "$GITHUB_WORKSPACE/kandelo-source/binaries"'
+    assert_includes realm_source, "build-deps program-index-selected"
+    assert_includes realm_source, "rootfs \"$formula_test_index\""
+    assert_includes realm_source, 'build_user="kandelo-homebrew-build"'
+    assert_includes realm_source, 'recipe_user="kandelo-homebrew-recipe"'
+    assert_includes realm_source, "/usr/sbin/useradd"
+    assert_includes realm_source, 'shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"'
+    assert_includes realm_source, 'chmod 1777 "$shared_temp"'
+    assert_includes realm_source, 'echo "KANDELO_HOMEBREW_BUILD_USER=$build_user"'
+    assert_includes realm_source, 'echo "KANDELO_HOMEBREW_RECIPE_USER=$recipe_user"'
+    assert_includes realm_source, 'echo "KANDELO_HOMEBREW_SHARED_TEMP=$shared_temp"'
     refute_includes realm_source, '"$realm_root/package-cache"'
     assert_includes realm_source,
                     '/usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 --'
@@ -877,6 +888,11 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       HOMEBREW_BREW_FILE HOMEBREW_BREW_COMMIT HOMEBREW_CACHE HOMEBREW_TEMP
       KANDELO_HOMEBREW_RESOLVED_TAPS_FILE PLAYWRIGHT_BROWSERS_PATH
       WASM_POSIX_BINARY_CACHE_ROOT
+      KANDELO_HOMEBREW_BUILD_USER KANDELO_HOMEBREW_RECIPE_USER
+      KANDELO_HOMEBREW_SHARED_TEMP KANDELO_HOMEBREW_SUDO_BIN
+      KANDELO_HOMEBREW_SYSTEMD_RUN_BIN KANDELO_HOMEBREW_SYSTEMCTL_BIN
+      KANDELO_HOMEBREW_GETENT_BIN KANDELO_HOMEBREW_PGREP_BIN
+      KANDELO_HOMEBREW_PKILL_BIN
     ].each do |name|
       assert_includes execute_source, "#{name}=$#{name}"
     end
@@ -895,7 +911,7 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub(
-        'playwright_browsers="$realm_root/ms-playwright"',
+        'playwright_browsers="$shared_temp/ms-playwright"',
         'playwright_browsers="$realm_root/playwright"',
       )
     end
@@ -937,6 +953,24 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub("candidate_platform_tools=(", "mutable_platform_tools=(")
+    end
+    assert_reusable_rejected(:candidate, "candidate omits isolated recipe identity") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub(
+        'recipe_user="kandelo-homebrew-recipe"',
+        'recipe_user=""'
+      )
+    end
+    assert_reusable_rejected(:candidate, "candidate omits Formula test projection") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub(
+        "build-deps program-index-selected",
+        "build-deps program-index"
+      )
     end
     assert_reusable_rejected(:candidate, "candidate shadows protected Python") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|

@@ -1123,7 +1123,28 @@ module AbiStagingWorkflowCheck
                          'mkdir -m 0700 "$package_cache" "$package_cache/programs"'
                        ) &&
                        realm.fetch("run").include?(
-                         'playwright_browsers="$realm_root/ms-playwright"'
+                         'mkdir -m 0700 "$GITHUB_WORKSPACE/kandelo-source/binaries"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         "build-deps program-index-selected"
+                       ) &&
+                       realm.fetch("run").include?(
+                         'build_user="kandelo-homebrew-build"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'recipe_user="kandelo-homebrew-recipe"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'echo "KANDELO_HOMEBREW_BUILD_USER=$build_user"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'echo "KANDELO_HOMEBREW_RECIPE_USER=$recipe_user"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'playwright_browsers="$shared_temp/ms-playwright"'
                        ) &&
                        !realm.fetch("run").include?('"$realm_root/package-cache"') &&
                        realm.fetch("run").include?("homebrew-prepare-host-prefix.sh") &&
@@ -1189,6 +1210,17 @@ module AbiStagingWorkflowCheck
                      source.include?(
                        'PYTHONPATH=$GITHUB_WORKSPACE/tap-authority'
                      ) &&
+                     (kind != :candidate || %w[
+                       KANDELO_HOMEBREW_BUILD_USER
+                       KANDELO_HOMEBREW_RECIPE_USER
+                       KANDELO_HOMEBREW_SHARED_TEMP
+                       KANDELO_HOMEBREW_SUDO_BIN
+                       KANDELO_HOMEBREW_SYSTEMD_RUN_BIN
+                       KANDELO_HOMEBREW_SYSTEMCTL_BIN
+                       KANDELO_HOMEBREW_GETENT_BIN
+                       KANDELO_HOMEBREW_PGREP_BIN
+                       KANDELO_HOMEBREW_PKILL_BIN
+                     ].all? { |name| source.include?("#{name}=$#{name}") }) &&
                      !source.include?("../kandelo-source/scripts/dev-shell.sh") &&
                      (kind == :candidate ||
                        source.include?("python3 -m scripts.abi_staging.cli #{producer_cli}")) &&
