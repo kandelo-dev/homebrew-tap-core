@@ -1297,6 +1297,91 @@ class UrllibOciTransportV1:
             and 1 <= len(errors[0]["message"]) <= 1024
         )
 
+    @staticmethod
+    def _ghcr_blob_storage_target(
+        *, method: str, url: str, authenticated: bool, response: HttpResponseV1
+    ) -> str | None:
+        parsed = urlsplit(url)
+        blob = re.fullmatch(
+            r"/v2/[a-z0-9]+(?:[._-][a-z0-9]+)*"
+            r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+"
+            r"/blobs/(?P<digest>sha256:[0-9a-f]{64})",
+            parsed.path,
+        )
+        location = _header(response, "location")
+        if (
+            method != "GET"
+            or authenticated
+            or parsed.scheme != "https"
+            or parsed.netloc != REGISTRY_HOST
+            or parsed.query
+            or parsed.fragment
+            or blob is None
+            or response.status != 307
+            or location is None
+            or response.url != urljoin(url, location)
+            or len(response.url) > 8192
+        ):
+            return None
+        target = urlsplit(response.url)
+        try:
+            authority_is_exact = (
+                target.hostname == "pkg-containers.githubusercontent.com"
+                and target.port is None
+                and target.username is None
+                and target.password is None
+            )
+        except ValueError:
+            return None
+        if (
+            target.scheme != "https"
+            or not authority_is_exact
+            or not target.query
+            or target.fragment
+            or not target.path.endswith("/blobs/" + blob.group("digest"))
+        ):
+            return None
+        return response.url
+
+    def _follow_ghcr_blob_storage(
+        self,
+        *,
+        method: str,
+        url: str,
+        authenticated: bool,
+        request_headers: Mapping[str, str],
+        maximum_bytes: int,
+        response: HttpResponseV1,
+    ) -> HttpResponseV1:
+        target = self._ghcr_blob_storage_target(
+            method=method,
+            url=url,
+            authenticated=authenticated,
+            response=response,
+        )
+        if target is None:
+            return response
+        storage_headers = {
+            key: value
+            for key, value in request_headers.items()
+            if key in {"accept", "user-agent"}
+        }
+        followed = self._perform(
+            "GET",
+            target,
+            headers=storage_headers,
+            body=None,
+            maximum_bytes=maximum_bytes,
+        )
+        if followed.url != target:
+            return followed
+        return HttpResponseV1(
+            followed.status,
+            followed.headers,
+            followed.body,
+            url,
+        )
+
     def request(
         self,
         method: str,
@@ -1358,19 +1443,34 @@ class UrllibOciTransportV1:
             maximum_bytes=maximum_bytes,
         )
         if response.status != 401:
-            return response
+            return self._follow_ghcr_blob_storage(
+                method=method,
+                url=url,
+                authenticated=authenticated,
+                request_headers=request_headers,
+                maximum_bytes=maximum_bytes,
+                response=response,
+            )
         challenge = _header(response, "www-authenticate")
         if challenge is None:
             return response
         bearer = self._bearer(challenge, authenticated=authenticated)
         retried_headers = dict(request_headers)
         retried_headers["authorization"] = "Bearer " + bearer
-        return self._perform(
+        response = self._perform(
             method,
             url,
             headers=retried_headers,
             body=body,
             maximum_bytes=maximum_bytes,
+        )
+        return self._follow_ghcr_blob_storage(
+            method=method,
+            url=url,
+            authenticated=authenticated,
+            request_headers=retried_headers,
+            maximum_bytes=maximum_bytes,
+            response=response,
         )
 
 
