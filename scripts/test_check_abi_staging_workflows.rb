@@ -400,7 +400,9 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       assert_equal false, strategy["fail-fast"]
       assert_operator strategy["max-parallel"], :<=, 16
     end
-    assert_equal %w[discover-plan candidate verification reuse],
+    assert_equal %w[
+      discover-plan candidate verification reuse publish-product-evidence
+    ],
                  @workflow.dig("jobs", "plan-promotion", "needs")
     planner_tap = @workflow.dig("jobs", "plan-promotion", "steps").find do |step|
       step.dig("with", "path") == "tap-authority"

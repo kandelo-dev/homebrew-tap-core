@@ -308,6 +308,26 @@ def prepare_composition_input(
         or any(STABLE_ID.fullmatch(root) is None for root in roots)
     ):
         raise HandoffError("composition roots are invalid")
+    tap_name = _tap_name(tap_source["repository"])
+    dependencies = [
+        _text(item, f"composition dependency {index}", 384)
+        for index, item in enumerate(
+            _sequence(
+                value.get("direct_dependencies"),
+                "composition direct dependencies",
+            )
+        )
+    ]
+    dependency_prefix = tap_name + "/"
+    if (
+        dependencies != sorted(set(dependencies))
+        or any(
+            not dependency.startswith(dependency_prefix)
+            or STABLE_ID.fullmatch(dependency.removeprefix(dependency_prefix)) is None
+            for dependency in dependencies
+        )
+    ):
+        raise HandoffError("composition direct dependencies are invalid")
     if not isinstance(bottle_body, bytes) or not 1 <= len(bottle_body) <= 2 * 1024**3:
         raise HandoffError("composition bottle bytes are outside their bound")
     bottle_sha256 = hashlib.sha256(bottle_body).hexdigest()
@@ -318,7 +338,6 @@ def prepare_composition_input(
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise HandoffError(f"composition bottle metadata is not UTF-8 JSON: {error}") from error
     metadata = _mapping(metadata_value, "composition bottle metadata")
-    tap_name = _tap_name(tap_source["repository"])
     full_name = f"{tap_name}/{formula}"
     if frozenset(metadata) != {full_name}:
         raise HandoffError("composition bottle metadata names another Formula")
@@ -396,7 +415,7 @@ def prepare_composition_input(
     except BottleLinkError as error:
         raise HandoffError(f"cannot derive composition link manifest: {error}") from error
     result = {
-        "schema": 1,
+        "schema": 2,
         "kind": "kandelo-abi-staging-homebrew-composition-input",
         "source": source,
         "tap_source": tap_source,
@@ -418,6 +437,7 @@ def prepare_composition_input(
             "transport_url": transport_url,
         },
         "required_by": roots,
+        "dependencies": dependencies,
         "link_manifest": link_manifest,
     }
     return json.loads(canonical_bytes(result))
@@ -1291,6 +1311,10 @@ def prepare_build_context(
         "capture_authorization_sha256": authorization_digest,
         "dependency_layers": layers,
         "composition_roots": _composition_roots(plan, formula_plan),
+        "direct_dependencies": [
+            f"{_tap_name(repository)}/{dependency['formula']}"
+            for dependency in formula_plan["direct_dependencies"]
+        ],
         "bottle_root_url": f"https://ghcr.io/v2/{candidate_root}",
     }
     return json.loads(canonical_bytes(context))

@@ -275,6 +275,10 @@ class BuildHandoffTests(unittest.TestCase):
                 "normalized_formula_sha256": "5" * 64,
             },
             "composition_roots": ["mini-shell"],
+            "direct_dependencies": [
+                "kandelo-dev/tap-core/libcxx",
+                "kandelo-dev/tap-core/zlib",
+            ],
         }
         guest_layout = {
             "schema": 1,
@@ -295,6 +299,14 @@ class BuildHandoffTests(unittest.TestCase):
 
         self.assertEqual(prepared["formula"]["pkg_version"], "1.0.0_1")
         self.assertEqual(prepared["required_by"], ["mini-shell"])
+        self.assertEqual(prepared["schema"], 2)
+        self.assertEqual(
+            prepared["dependencies"],
+            [
+                "kandelo-dev/tap-core/libcxx",
+                "kandelo-dev/tap-core/zlib",
+            ],
+        )
         self.assertEqual(
             prepared["bottle"]["immutable_reference"],
             "ghcr.io/kandelo-dev/homebrew-tap-core-abi-9-candidates/"
@@ -316,6 +328,20 @@ class BuildHandoffTests(unittest.TestCase):
                 metadata_body=json.dumps(hostile).encode(),
                 guest_layout_body=canonical_bytes(guest_layout),
             )
+
+        for dependencies in (
+            ["kandelo-dev/tap-core/zlib", "kandelo-dev/tap-core/libcxx"],
+            ["kandelo-dev/tap-core/libcxx", "kandelo-dev/tap-core/libcxx"],
+            ["foreign/tap/libcxx"],
+        ):
+            hostile_context = {**context, "direct_dependencies": dependencies}
+            with self.subTest(dependencies=dependencies), self.assertRaises(HandoffError):
+                prepare_composition_input(
+                    context=hostile_context,
+                    bottle_body=bottle,
+                    metadata_body=json.dumps(metadata).encode(),
+                    guest_layout_body=canonical_bytes(guest_layout),
+                )
 
     def test_build_run_is_canonical_and_bound_to_the_tap_build_job(self) -> None:
         loader = getattr(handoff_module, "load_build_run", None)

@@ -9,3 +9,16 @@ canonical_repository_prefix = "homebrew-tap-core-abi-"
 require_anonymous_readback = true
 allow_independent_formula_promotion = true
 allow_global_completion_gate = false
+
+[[runtime_claims]]
+architecture = "wasm32"
+formulae = ["clang", "kandelo-sdk", "libcxx"]
+product_id = "browser-main-shell"
+
+[[runtime_claims.requirements]]
+host = "node"
+definition_id = "main-shell-toolchain-node"
+
+[[runtime_claims.requirements]]
+host = "browser"
+definition_id = "main-shell-toolchain-browser"

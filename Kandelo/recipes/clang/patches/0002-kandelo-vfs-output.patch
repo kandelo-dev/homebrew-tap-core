@@ -1,0 +1,98 @@
+diff --git a/llvm/lib/Support/Unix/Path.inc b/llvm/lib/Support/Unix/Path.inc
+index 277247e3c5c2..584bc39573ad 100644
+--- a/llvm/lib/Support/Unix/Path.inc
++++ b/llvm/lib/Support/Unix/Path.inc
+@@ -551,6 +551,9 @@ static bool is_local_impl(struct STATVFS &Vfs) {
+ 
+   // vmount entry not found; "remote" is the conservative answer.
+   return false;
++#elif defined(__wasm__) || defined(__wasm32__)
++  // Kandelo exposes a local VFS and does not provide BSD statvfs flags.
++  return true;
+ #elif defined(__MVS__)
+   // The file system can have an arbitrary structure on z/OS; must go with the
+   // conservative answer.
+diff --git a/llvm/lib/Support/FileOutputBuffer.cpp b/llvm/lib/Support/FileOutputBuffer.cpp
+index c8b035986ba0..1a0d41f44326 100644
+--- a/llvm/lib/Support/FileOutputBuffer.cpp
++++ b/llvm/lib/Support/FileOutputBuffer.cpp
+@@ -32,8 +32,10 @@ namespace {
+ // with the temporary file on commit().
+ class OnDiskBuffer : public FileOutputBuffer {
+ public:
+-  OnDiskBuffer(StringRef Path, fs::TempFile Temp, fs::mapped_file_region Buf)
+-      : FileOutputBuffer(Path), Buffer(std::move(Buf)), Temp(std::move(Temp)) {}
++  OnDiskBuffer(StringRef Path, fs::TempFile Temp, fs::mapped_file_region Buf,
++               unsigned Mode)
++      : FileOutputBuffer(Path), Buffer(std::move(Buf)), Temp(std::move(Temp)),
++        Mode(Mode) {}
+ 
+   uint8_t *getBufferStart() const override { return (uint8_t *)Buffer.data(); }
+ 
+@@ -46,11 +48,32 @@ public:
+   Error commit() override {
+     llvm::TimeTraceScope timeScope("Commit buffer to disk");
+ 
++#if defined(__wasm__) || defined(__wasm32__)
++    // Kandelo's file-backed mmap does not flush dirty pages back into the VFS
++    // file. Copy the mapped bytes to the destination explicitly before
++    // discarding the temporary file.
++    {
++      using namespace sys::fs;
++      int FD;
++      if (auto EC =
++              openFileForWrite(FinalPath, FD, CD_CreateAlways, OF_Delete, Mode))
++        return errorCodeToError(EC);
++      raw_fd_ostream OS(FD, /*shouldClose=*/true, /*unbuffered=*/true);
++      OS << StringRef((const char *)Buffer.data(), Buffer.size());
++      OS.flush();
++      if (std::error_code EC = OS.error())
++        return errorCodeToError(EC);
++    }
++
++    Buffer.unmap();
++    return Temp.discard();
++#else
+     // Unmap buffer, letting OS flush dirty pages to file on disk.
+     Buffer.unmap();
+ 
+     // Atomically replace the existing file with the new one.
+     return Temp.keep(FinalPath);
++#endif
+   }
+ 
+   ~OnDiskBuffer() override {
+@@ -69,6 +92,7 @@ public:
+ private:
+   fs::mapped_file_region Buffer;
+   fs::TempFile Temp;
++  unsigned Mode;
+ };
+ 
+ // A FileOutputBuffer which keeps data in memory and writes to the final
+@@ -151,7 +175,7 @@ createOnDiskBuffer(StringRef Path, size_t Size, unsigned Mode) {
+   }
+ 
+   return std::make_unique<OnDiskBuffer>(Path, std::move(File),
+-                                         std::move(MappedFile));
++                                         std::move(MappedFile), Mode);
+ }
+ 
+ // Create an instance of FileOutputBuffer.
+diff --git a/lld/wasm/Writer.cpp b/lld/wasm/Writer.cpp
+index ea7386e6dd13..2cf2a55a2d99 100644
+--- a/lld/wasm/Writer.cpp
++++ b/lld/wasm/Writer.cpp
+@@ -1867,9 +1867,12 @@ void Writer::openFile() {
+   log("writing: " + ctx.arg.outputFile);
+ 
++  constexpr unsigned outputFlags = FileOutputBuffer::F_executable;
++  static_assert((outputFlags & FileOutputBuffer::F_mmap) == 0,
++                "Kandelo Wasm LLD output must not use mmap-backed storage");
+   Expected<std::unique_ptr<FileOutputBuffer>> bufferOrErr =
+       FileOutputBuffer::create(ctx.arg.outputFile, fileSize,
+-                               FileOutputBuffer::F_executable);
++                               outputFlags);
+ 
+   if (!bufferOrErr)
+     error("failed to open " + ctx.arg.outputFile + ": " +

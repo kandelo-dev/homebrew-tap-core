@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import selectors
 import signal
 import shutil
@@ -105,6 +106,7 @@ from .records import (
 from .promotion import (
     ADMISSION_RECORD_MEDIA_TYPE,
     CanonicalBottlePublicationV1,
+    ProductEvidenceAuthorityV1,
     PromotionDecisionV1,
     PromotionError,
     admission_repository,
@@ -159,6 +161,7 @@ from .product import (
 )
 from .product_evidence import (
     ProductEvidenceError,
+    authenticate_product_evidence_record,
     build_candidate_product_oci_plan,
     build_product_evidence_context,
     candidate_product_repository,
@@ -282,6 +285,7 @@ def _parser() -> argparse.ArgumentParser:
     plan_products.add_argument("--github-output", required=True)
     plan_promotion = subcommands.add_parser("plan-workflow-promotion")
     plan_promotion.add_argument("--coordination-root", required=True)
+    plan_promotion.add_argument("--product-evidence-root", required=True)
     plan_promotion.add_argument("--kandelo-root", default="")
     plan_promotion.add_argument("--tap-root", required=True)
     plan_promotion.add_argument("--require-merged", action="store_true")
@@ -1304,6 +1308,7 @@ def _plan_workflow_promotion(args: argparse.Namespace) -> None:
         planned, work_details = _collect_active_promotion_inputs(
             tap_root=tap_root,
             kandelo_root=args.kandelo_root,
+            product_evidence_root=args.product_evidence_root,
             bundle=bundle,
             reconciliation=reconciliation,
             tap_source=tap_source,
@@ -1910,6 +1915,7 @@ def _admission_progress(
                 bottle_layer_sha256=update_value["bottle_layer_sha256"],
                 bottle_layer_bytes=update_value["bottle_layer_bytes"],
                 target_abi=update_value["target_abi"],
+                runtime_claim=update_value.get("runtime_claim"),
             )
             try:
                 validate_formula_admission_projection(tap_root, update)
@@ -1974,10 +1980,125 @@ def _admission_progress(
     )
 
 
+def _promotion_product_evidence_locators(
+    root_value: str,
+    *,
+    request_digest: str,
+    expected_product_ids: frozenset[str],
+    selected_product_ids: frozenset[str],
+) -> dict[str, dict[str, str]]:
+    """Load one bounded, collision-free set of workflow product-evidence locators."""
+
+    root = Path(root_value)
+    if root.is_symlink() or not root.is_dir():
+        raise ReconciliationError(
+            "promotion product evidence root must be a real directory"
+        )
+    root = root.resolve(strict=True)
+    entries = list(root.rglob("*"))
+    if len(entries) > 1024:
+        raise ReconciliationError("promotion product evidence root exceeds its file bound")
+    files = []
+    for entry in entries:
+        if entry.is_symlink():
+            raise ReconciliationError("promotion product evidence contains a symlink")
+        if entry.is_dir():
+            continue
+        if not entry.is_file() or entry.name != "product-evidence.json":
+            raise ReconciliationError(
+                "promotion product evidence contains an unexpected file"
+            )
+        if entry.stat().st_size > 4 * 1024 * 1024:
+            raise ReconciliationError(
+                "promotion product evidence locator exceeds its byte bound"
+            )
+        files.append(entry)
+    locators: dict[str, dict[str, str]] = {}
+    seen_product_ids: set[str] = set()
+    for path in sorted(files):
+        document = load_canonical_mapping(
+            path.read_bytes(), "promotion product evidence publication"
+        )
+        expected_fields = {
+            "schema",
+            "kind",
+            "request_sha256",
+            "product_id",
+            "product_work_id",
+            "work_id",
+            "record_sha256",
+            "record_locator",
+            "receipt_locators",
+        }
+        if (
+            set(document) != expected_fields
+            or document["schema"] != 1
+            or document["kind"] != "kandelo-vfs-product-evidence-publication"
+            or document["request_sha256"] != request_digest
+        ):
+            raise ReconciliationError(
+                "promotion product evidence publication identity changed"
+            )
+        product_id = document["product_id"]
+        if (
+            not isinstance(product_id, str)
+            or re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,127}", product_id) is None
+            or product_id not in selected_product_ids
+            or product_id in seen_product_ids
+        ):
+            raise ReconciliationError(
+                "promotion product evidence is duplicated, unselected, or malformed"
+            )
+        seen_product_ids.add(product_id)
+        for field in ("product_work_id", "work_id", "record_sha256"):
+            value = document[field]
+            if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+                raise ReconciliationError(
+                    f"promotion product evidence {field} is not a SHA-256"
+                )
+        raw_locator = document["record_locator"]
+        if not isinstance(raw_locator, Mapping) or set(raw_locator) != {
+            "repository",
+            "digest",
+            "immutable_reference",
+            "anonymous_readback_sha256",
+        }:
+            raise ReconciliationError(
+                "promotion product evidence record locator fields changed"
+            )
+        if (
+            raw_locator["digest"] != "sha256:" + document["record_sha256"]
+            or not isinstance(raw_locator["anonymous_readback_sha256"], str)
+            or re.fullmatch(
+                r"[0-9a-f]{64}", raw_locator["anonymous_readback_sha256"]
+            )
+            is None
+        ):
+            raise ReconciliationError(
+                "promotion product evidence record locator is inconsistent"
+            )
+        if not isinstance(document["receipt_locators"], list):
+            raise ReconciliationError(
+                "promotion product evidence receipt locators are not an array"
+            )
+        if product_id in expected_product_ids:
+            locators[product_id] = {
+                "repository": raw_locator["repository"],
+                "digest": raw_locator["digest"],
+                "immutable_reference": raw_locator["immutable_reference"],
+            }
+    if set(locators) != expected_product_ids:
+        raise ReconciliationError(
+            "promotion product evidence does not cover exact runtime policy"
+        )
+    return locators
+
+
 def _collect_active_promotion_inputs(
     *,
     tap_root: Path,
     kandelo_root: str,
+    product_evidence_root: str,
     bundle: Mapping[str, Any],
     reconciliation: ReconciliationDecisionV1,
     tap_source: Mapping[str, Any],
@@ -2141,6 +2262,69 @@ def _collect_active_promotion_inputs(
         commit=request["build_source"]["commit"],
         tree=request["build_source"]["tree"],
     )
+    active_runtime_rules = tuple(
+        rule
+        for rule in promotion_policy.runtime_claims
+        if any(
+            exact_formula_subject(formula, rule.architecture) in original_formulae
+            for formula in rule.formulae
+        )
+    )
+    expected_product_ids = frozenset(
+        rule.product_id for rule in active_runtime_rules
+    )
+    request_requirements = request.get("requirements")
+    if not isinstance(request_requirements, Mapping):
+        raise ReconciliationError("promotion request requirements are missing")
+    selected_product_ids = frozenset(
+        item.get("id")
+        for item in request_requirements.get("products", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    )
+    evidence_locators = _promotion_product_evidence_locators(
+        product_evidence_root,
+        request_digest=request_sha256,
+        expected_product_ids=expected_product_ids,
+        selected_product_ids=selected_product_ids,
+    )
+    definitions = load_canonical_mapping(
+        (exact_kandelo_root / "abi/staging/evidence-definitions.generated.json").read_bytes(),
+        "protected product evidence definitions",
+    )
+    product_evidence_authorities: dict[str, ProductEvidenceAuthorityV1] = {}
+    try:
+        for product_id, locator in evidence_locators.items():
+            authority = authenticate_product_evidence_record(
+                locator,
+                request=request,
+                request_digest=request_sha256,
+                definitions=definitions,
+                expected_product_id=product_id,
+                expected_source_repository=promotion_policy.tap_repository,
+                transport=transport,
+            )
+            requirements = sorted(
+                authority["requirements"],
+                key=lambda item: (
+                    0 if item["host"] == "node" else 1,
+                    item["id"],
+                ),
+            )
+            product_evidence_authorities[product_id] = ProductEvidenceAuthorityV1(
+                request_digest=authority["request_digest"],
+                source=authority["source"],
+                target_abi=authority["target_abi"],
+                product_id=authority["product_id"],
+                record_sha256=authority["record_sha256"],
+                outcome=authority["outcome"],
+                promotion_state=authority["promotion_state"],
+                resolved_formula_layers=tuple(authority["resolved_formula_layers"]),
+                requirements=tuple(requirements),
+            )
+    except ProductEvidenceError as error:
+        raise ReconciliationError(
+            f"promotion product evidence is invalid: {error}"
+        ) from error
 
     contexts: dict[str, dict[str, Any]] = {}
     for subject in tap_plan["required_subjects"] + tap_plan["background_subjects"]:
@@ -2209,6 +2393,12 @@ def _collect_active_promotion_inputs(
             expected_request_policy=request["issuance"],
             verification_tests=verification_tests,
             history_tap_source=history_tap_source,
+            product_evidence=tuple(
+                product_evidence_authorities[rule.product_id]
+                for rule in active_runtime_rules
+                if rule.architecture == formula_plan["identity"]["architecture"]
+                and formula_plan["identity"]["name"] in rule.formulae
+            ),
         )
         formula, architecture = parse_formula_subject(subject, "promotion subject")
         dependencies = tuple(
@@ -4663,6 +4853,7 @@ def _promotion_decision_from_detail(
             override_receipts=tuple(value["override_receipts"]),
             tap_source_state=value["tap_source_state"],
             eligibility=value["eligibility"],
+            runtime_claim=value.get("runtime_claim"),
         )
     except (KeyError, TypeError, PromotionError) as error:
         raise WorkflowPublicationError(

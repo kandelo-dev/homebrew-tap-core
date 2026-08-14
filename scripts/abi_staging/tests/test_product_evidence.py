@@ -21,6 +21,7 @@ from scripts.abi_staging.product_evidence import (
     PRODUCT_CANDIDATE_MEDIA_TYPE,
     CandidateProductLocatorV1,
     ProductEvidenceError,
+    authenticate_product_evidence_record,
     build_candidate_product_oci_plan,
     build_product_evidence_oci_plan,
     build_product_evidence_record,
@@ -1670,6 +1671,108 @@ class ProductEvidenceRecordTests(ProductEvidenceFixture, unittest.TestCase):
         self.assertEqual(entries[0].outcome, "success")
         self.assertEqual(
             entries[0].record_sha256, canonical_sha256(published["record"])
+        )
+
+    def test_promotion_authenticates_exact_public_product_evidence(self) -> None:
+        definitions = []
+        for host, definition_id in (
+            ("browser", "mini-browser"),
+            ("node", "mini-node"),
+        ):
+            identity = {
+                "host": host,
+                "id": definition_id,
+                "implementation": [
+                    {
+                        "path": f"tests/{definition_id}.ts",
+                        "sha256": _sha(f"implementation:{definition_id}"),
+                    }
+                ],
+                "probe": {"command": ["true"]},
+                "runner": "compile",
+                "timeout_seconds": 30,
+            }
+            definitions.append(
+                {**identity, "definition_sha256": canonical_sha256(identity)}
+            )
+        registry = {
+            "schema": 1,
+            "kind": "kandelo-vfs-evidence-definitions",
+            "version": 1,
+            "definitions": definitions,
+        }
+        request = {
+            "build_source": copy.deepcopy(self.inputs["source"]),
+            "target_abi": copy.deepcopy(self.inputs["target_abi"]),
+            "requirements": {
+                "products": [
+                    {
+                        "id": "mini-shell",
+                        "path": "images/vfs/products/mini-shell.toml",
+                        "manifest_sha256": self.inputs["product"]["manifest_sha256"],
+                    }
+                ],
+                "evidence": [
+                    {
+                        "applicability": "required",
+                        "browser": ["mini-browser"],
+                        "node": ["mini-node"],
+                        "product_id": "mini-shell",
+                    }
+                ],
+                "registries": copy.deepcopy(self.registries),
+            },
+        }
+        self.request_digest = canonical_sha256(request)
+        requirements = [
+            {
+                "applicability": "required",
+                "definition_sha256": definition["definition_sha256"],
+                "host": definition["host"],
+                "id": definition["id"],
+            }
+            for definition in definitions
+        ]
+        transport = FakeRegistryTransport()
+        published_candidate = publish_candidate_product(
+            self.plan,
+            transport=transport,
+            expected_source_repository=SOURCE_ASSOCIATION,
+        )
+        published = product_evidence_module.publish_exact_product_evidence(
+            request_digest=self.request_digest,
+            product=self.inputs["product"],
+            candidate_product=published_candidate,
+            runtime_bundle_body=canonical_bytes(self.runtime),
+            resolved_inputs_body=canonical_bytes(self.inputs),
+            builder_report_body=canonical_bytes(self.report),
+            selecting_registries=self.registries,
+            requirements=requirements,
+            results=[self.result(requirement) for requirement in requirements],
+            run=_record_run(),
+            transport=transport,
+            expected_source_repository=SOURCE_ASSOCIATION,
+        )
+        locator = published["record_locator"]
+        authority = authenticate_product_evidence_record(
+            {
+                "repository": locator.repository,
+                "digest": locator.digest,
+                "immutable_reference": locator.immutable_reference,
+            },
+            request=request,
+            request_digest=self.request_digest,
+            definitions=registry,
+            expected_product_id="mini-shell",
+            expected_source_repository=SOURCE_ASSOCIATION,
+            transport=transport,
+        )
+
+        self.assertEqual(authority["record_sha256"], canonical_sha256(published["record"]))
+        self.assertEqual(authority["outcome"], "success")
+        self.assertEqual(
+            [(item["host"], item["id"]) for item in authority["requirements"]],
+            [("browser", "mini-browser"), ("node", "mini-node")],
         )
 
     def test_product_work_respects_lifecycle_and_marks_active_authority(self) -> None:

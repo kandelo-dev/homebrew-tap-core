@@ -4843,6 +4843,73 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes error.message, "guest argv0 must be a nonempty normalized absolute path"
   end
 
+  def test_clang_formula_uses_a_sealed_tap_recipe
+    formula_path = Pathname(__dir__).join("../../..", "Formula/clang.rb").cleanpath
+    assert formula_path.file?, "Clang Formula is missing"
+    formula = formula_path.binread
+
+    assert_includes formula, "class Clang < Formula"
+    assert_includes formula, "KANDELO_TAP_RECIPE = true"
+    assert_includes formula, 'version "21.1.7"'
+    assert_includes formula, 'depends_on "kandelo-dev/tap-core/libcxx"'
+    assert_includes formula, "kandelo_validate_wasm_artifact"
+    refute_includes formula, "KANDELO_REGISTRY_BRIDGE"
+  end
+
+  def test_clang_recipe_has_only_reviewed_runtime_outputs
+    recipe_root = Pathname(__dir__).join("../..", "recipes/clang").cleanpath
+    manifest_path = recipe_root/"recipe.json"
+    assert manifest_path.file?, "Clang recipe manifest is missing"
+    recipe = JSON.parse(manifest_path.binread)
+
+    assert_equal 1, recipe.fetch("schema")
+    assert_equal "build.sh", recipe.fetch("entrypoint")
+    assert_equal ["kandelo-dev/tap-core/libcxx"], recipe.fetch("dependencies")
+    assert_equal [
+      "build.sh",
+      "patches/0001-kandelo-deterministic-runtime.patch",
+      "patches/0002-kandelo-vfs-output.patch",
+      "patches/0003-kandelo-wasm-only-lld.patch",
+    ], recipe.fetch("files").map { |entry| entry.fetch("path") }
+  end
+
+  def test_kandelo_sdk_formula_is_the_toolchain_dependency_root
+    formula_path = Pathname(__dir__).join("../../..", "Formula/kandelo-sdk.rb").cleanpath
+    assert formula_path.file?, "Kandelo SDK Formula is missing"
+    formula = formula_path.binread
+
+    assert_includes formula, "KANDELO_TAP_RECIPE = true"
+    assert_includes formula, 'depends_on "kandelo-dev/tap-core/clang"'
+    assert_includes formula, 'depends_on "kandelo-dev/tap-core/libcxx"'
+    refute_includes formula, "KANDELO_REGISTRY_BRIDGE"
+    assert_includes formula, "%w[cc c++ ar ranlib nm]"
+  end
+
+  def test_kandelo_sdk_source_lock_is_exact
+    lock_path = Pathname(__dir__).join(
+      "../..", "recipes/kandelo-sdk/source-lock.json"
+    ).cleanpath
+    assert lock_path.file?, "Kandelo SDK source lock is missing"
+    lock = JSON.parse(lock_path.binread)
+
+    assert_equal 1, lock.fetch("schema")
+    assert_match(/\A[0-9a-f]{40}\z/, lock.fetch("source").fetch("commit"))
+    assert_match(/\A[0-9a-f]{64}\z/, lock.fetch("source").fetch("archive_sha256"))
+    assert_match(/\A[0-9a-f]{40}\z/, lock.fetch("source").fetch("tree"))
+    assert_equal(
+      [
+        "COPYING", "COPYING.runtime", "LICENSE", "libc/glue",
+        "sdk/config.site", "sdk/kandelo",
+      ],
+      lock.fetch("paths").map { |entry| entry.fetch("path") },
+    )
+    lock.fetch("paths").each do |entry|
+      assert_match(/\A[0-9a-f]{40}\z/, entry.fetch("git_object"))
+      assert_match(/\A[0-9a-f]{64}\z/, entry.fetch("ledger_sha256"))
+    end
+    assert_operator lock.fetch("kandelo_abi"), :>, 0
+  end
+
   private
 
   def artifact_validation_harness(dir, harness_class = Harness)

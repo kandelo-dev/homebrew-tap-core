@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "dependencies": [
+    "kandelo-dev/tap-core/clang",
+    "kandelo-dev/tap-core/libcxx"
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 5782,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "36432bf2ee885f7ed9fd564aab4dfb2fd04d7b72a39ebfa650512c95eced7cd7"
+    },
+    {
+      "bytes": 1627,
+      "mode": "0644",
+      "path": "source-lock.json",
+      "sha256": "0c67a145d7b43cb6513ed8965e92c03d44920d2f411652a4819b9c344d05d488"
+    }
+  ]
+}

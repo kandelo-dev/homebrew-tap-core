@@ -3417,6 +3417,438 @@ def validate_product_evidence_record(
         raise ProductEvidenceError("product evidence record differs from exact rederivation")
 
 
+def authenticate_product_evidence_record(
+    locator: Mapping[str, object],
+    *,
+    request: Mapping[str, Any],
+    request_digest: str,
+    definitions: Mapping[str, Any],
+    expected_product_id: str,
+    expected_source_repository: str,
+    transport: OciTransportV1,
+) -> dict[str, Any]:
+    """Authenticate one promotion authority from public aggregate and candidate OCI bytes."""
+
+    checked_request = _plain(request)
+    checked_request_digest = _digest(request_digest, "product evidence authority request")
+    if canonical_sha256(checked_request) != checked_request_digest:
+        raise ProductEvidenceError(
+            "product evidence authority request differs from its canonical digest"
+        )
+    product_id = _stable_id(expected_product_id, "product evidence authority product")
+    publisher = _text(
+        expected_source_repository,
+        "product evidence authority publisher",
+        255,
+    )
+    if re.fullmatch(r"[A-Za-z0-9._-]+/[A-Za-z0-9._-]+", publisher) is None:
+        raise ProductEvidenceError(
+            "product evidence authority publisher is not owner/name"
+        )
+    checked_locator = _exact(
+        locator,
+        frozenset({"repository", "digest", "immutable_reference"}),
+        "product evidence authority locator",
+    )
+    evidence_repository = _text(
+        checked_locator["repository"], "product evidence authority repository", 520
+    )
+    if not evidence_repository.endswith(f"/products/{product_id}/evidence"):
+        raise ProductEvidenceError(
+            "product evidence authority repository differs from its product"
+        )
+
+    try:
+        header = fetch_public_record(
+            checked_locator,
+            transport=transport,
+            expected_artifact_type=PRODUCT_EVIDENCE_RECORD_MEDIA_TYPE,
+            required_layer_roles=(),
+        )
+        record = _load_canonical(header.config.body, "product evidence authority record")
+        validate_product_evidence_record(record)
+        payload = record["product_evidence"]
+        receipt_sha256s = payload["verification_receipt_sha256s"]
+        layer_roles = (
+            "runtime-bundle",
+            "resolved-inputs",
+            *(f"receipt-{index:04d}" for index in range(len(receipt_sha256s))),
+        )
+        fetched = fetch_public_record(
+            checked_locator,
+            transport=transport,
+            expected_artifact_type=PRODUCT_EVIDENCE_RECORD_MEDIA_TYPE,
+            required_layer_roles=layer_roles,
+        )
+    except (OciPublicationError, CanonicalJsonError) as error:
+        raise ProductEvidenceError(
+            f"product evidence authority OCI readback is invalid: {error}"
+        ) from error
+    if fetched.config.body != header.config.body:
+        raise ProductEvidenceError("product evidence authority config changed during readback")
+
+    manifest = _exact(
+        _load_canonical(fetched.manifest, "product evidence authority manifest"),
+        frozenset(
+            {
+                "schemaVersion",
+                "mediaType",
+                "artifactType",
+                "config",
+                "layers",
+                "annotations",
+            }
+        ),
+        "product evidence authority manifest",
+    )
+    expected_annotations = {
+        "dev.kandelo.abi-staging.candidate-product-manifest": None,
+        "dev.kandelo.abi-staging.classification": "public-candidate-not-endorsed",
+        "dev.kandelo.abi-staging.kind": "product-evidence-record",
+        "dev.kandelo.abi-staging.nonendorsed": "true",
+        "dev.kandelo.abi-staging.product": product_id,
+        "org.opencontainers.image.source": "https://github.com/" + publisher,
+    }
+    annotations = dict(manifest["annotations"])
+    candidate_manifest_digest = annotations.get(
+        "dev.kandelo.abi-staging.candidate-product-manifest"
+    )
+    _oci_digest(
+        candidate_manifest_digest,
+        "product evidence authority candidate manifest",
+    )
+    expected_annotations[
+        "dev.kandelo.abi-staging.candidate-product-manifest"
+    ] = candidate_manifest_digest
+    if annotations != expected_annotations:
+        raise ProductEvidenceError(
+            "product evidence authority annotations differ from protected policy"
+        )
+    config_descriptor = _candidate_manifest_descriptor(
+        manifest["config"], "product evidence authority config"
+    )
+    _require_public_candidate_descriptor(
+        config_descriptor,
+        artifact={"sha256": canonical_sha256(record), "bytes": len(fetched.config.body)},
+        role="product-evidence-record",
+        media_type=PRODUCT_EVIDENCE_RECORD_MEDIA_TYPE,
+        title="product-evidence-record.json",
+        field="product evidence authority config",
+    )
+    descriptors = [
+        _candidate_manifest_descriptor(value, f"product evidence authority layer {index}")
+        for index, value in enumerate(
+            _sequence(manifest["layers"], "product evidence authority layers")
+        )
+    ]
+    if [descriptor["role"] for descriptor in descriptors] != list(layer_roles):
+        raise ProductEvidenceError("product evidence authority layer roles changed")
+    fixed_descriptors = (
+        (
+            descriptors[0],
+            "runtime-bundle",
+            RUNTIME_BUNDLE_MEDIA_TYPE,
+            "runtime-bundle.json",
+            payload["runtime_evidence_sha256"],
+        ),
+        (
+            descriptors[1],
+            "resolved-inputs",
+            RESOLVED_INPUTS_MEDIA_TYPE,
+            "resolved-inputs.json",
+            payload["resolved_inputs_sha256"],
+        ),
+    )
+    # runtime_evidence_sha256 is an aggregate identity, so only the resolved
+    # layer's digest is record-carried directly. Runtime bytes are subsequently
+    # rebound by exact contextual rederivation.
+    for descriptor, role, media_type, title, expected_digest in fixed_descriptors:
+        if (
+            descriptor["role"] != role
+            or descriptor["media_type"] != media_type
+            or descriptor["title"] != title
+            or (role == "resolved-inputs" and descriptor["digest"] != "sha256:" + expected_digest)
+        ):
+            raise ProductEvidenceError(
+                f"product evidence authority {role} descriptor changed"
+            )
+    for index, (descriptor, receipt_sha256) in enumerate(
+        zip(descriptors[2:], receipt_sha256s, strict=True)
+    ):
+        if (
+            descriptor["role"] != f"receipt-{index:04d}"
+            or descriptor["media_type"] != PRODUCT_EVIDENCE_RECEIPT_MEDIA_TYPE
+            or descriptor["title"] != f"receipts/{index:04d}.json"
+            or descriptor["digest"] != "sha256:" + receipt_sha256
+        ):
+            raise ProductEvidenceError(
+                "product evidence authority receipt descriptor changed"
+            )
+
+    by_role = {layer.role: layer for layer in fetched.layers}
+    receipts = [
+        _load_canonical(by_role[f"receipt-{index:04d}"].body, f"product evidence receipt {index}")
+        for index in range(len(receipt_sha256s))
+    ]
+    for receipt in receipts:
+        validate_product_evidence_receipt(receipt)
+    if not receipts:
+        raise ProductEvidenceError("product evidence authority has no receipts")
+    candidate_identities = {
+        canonical_sha256(receipt["candidate_product"]): receipt["candidate_product"]
+        for receipt in receipts
+    }
+    if len(candidate_identities) != 1:
+        raise ProductEvidenceError(
+            "product evidence authority receipts name different candidates"
+        )
+    candidate_identity = next(iter(candidate_identities.values()))
+    candidate_repository = evidence_repository[: -len("/evidence")]
+    candidate_locator = CandidateProductLocatorV1(
+        product_id=product_id,
+        repository=candidate_repository,
+        manifest_digest=candidate_identity["manifest_digest"],
+        immutable_reference=(
+            candidate_repository + "@" + candidate_identity["manifest_digest"]
+        ),
+        vfs_layer_sha256=candidate_identity["vfs_layer_sha256"],
+        vfs_layer_bytes=candidate_identity["vfs_layer_bytes"],
+        builder_report_sha256=candidate_identity["builder_report_sha256"],
+    )
+    if candidate_locator.manifest_digest != candidate_manifest_digest:
+        raise ProductEvidenceError(
+            "product evidence authority annotation differs from its receipts"
+        )
+
+    try:
+        candidate = fetch_public_record(
+            candidate_locator.as_public_locator(),
+            transport=transport,
+            expected_artifact_type=PRODUCT_CANDIDATE_MEDIA_TYPE,
+            required_layer_roles=(
+                "builder-report",
+                "resolved-inputs",
+                "runtime-bundle",
+            ),
+        )
+    except OciPublicationError as error:
+        raise ProductEvidenceError(
+            f"product evidence candidate OCI readback is invalid: {error}"
+        ) from error
+    candidate_repository_without_registry = candidate.repository[len("ghcr.io/") :]
+    (
+        candidate_record,
+        candidate_product,
+        candidate_abi,
+        candidate_source,
+        candidate_artifacts,
+        candidate_lazy_inputs,
+    ) = _validate_candidate_record_body(
+        candidate.config.body,
+        repository=candidate_repository_without_registry,
+    )
+    if candidate_product["id"] != product_id:
+        raise ProductEvidenceError("product evidence candidate names another product")
+    candidate_manifest = _exact(
+        _load_canonical(candidate.manifest, "product evidence candidate manifest"),
+        frozenset(
+            {
+                "schemaVersion",
+                "mediaType",
+                "artifactType",
+                "config",
+                "layers",
+                "annotations",
+            }
+        ),
+        "product evidence candidate manifest",
+    )
+    candidate_config_descriptor = _candidate_manifest_descriptor(
+        candidate_manifest["config"], "product evidence candidate config"
+    )
+    _require_public_candidate_descriptor(
+        candidate_config_descriptor,
+        artifact={
+            "sha256": hashlib.sha256(candidate.config.body).hexdigest(),
+            "bytes": len(candidate.config.body),
+        },
+        role="candidate-product-record",
+        media_type=PRODUCT_CANDIDATE_MEDIA_TYPE,
+        title="candidate-product-record.json",
+        field="product evidence candidate config",
+    )
+    if dict(candidate_manifest["annotations"]) != {
+        "dev.kandelo.abi-staging.architecture": candidate_product["architecture"],
+        "dev.kandelo.abi-staging.classification": "public-candidate-not-endorsed",
+        "dev.kandelo.abi-staging.kind": "candidate-product",
+        "dev.kandelo.abi-staging.nonendorsed": "true",
+        "dev.kandelo.abi-staging.product": product_id,
+        "dev.kandelo.abi-staging.target-abi": str(candidate_abi),
+        "org.opencontainers.image.source": "https://github.com/" + publisher,
+    }:
+        raise ProductEvidenceError(
+            "product evidence candidate annotations differ from protected policy"
+        )
+    candidate_descriptors = [
+        _candidate_manifest_descriptor(value, f"product evidence candidate layer {index}")
+        for index, value in enumerate(
+            _sequence(candidate_manifest["layers"], "product evidence candidate layers")
+        )
+    ]
+    expected_candidate_roles = [
+        "vfs-image",
+        "builder-report",
+        "resolved-inputs",
+        "runtime-bundle",
+        *(f"lazy-input-{index:04d}" for index in range(len(candidate_lazy_inputs))),
+    ]
+    if [item["role"] for item in candidate_descriptors] != expected_candidate_roles:
+        raise ProductEvidenceError("product evidence candidate layer roles changed")
+    candidate_fixed = (
+        ("vfs_image", "vfs-image", VFS_IMAGE_MEDIA_TYPE, candidate_product["output"]),
+        ("builder_report", "builder-report", BUILDER_REPORT_MEDIA_TYPE, "builder-report.json"),
+        ("resolved_inputs", "resolved-inputs", RESOLVED_INPUTS_MEDIA_TYPE, "resolved-inputs.json"),
+        ("runtime_bundle", "runtime-bundle", RUNTIME_BUNDLE_MEDIA_TYPE, "runtime-bundle.json"),
+    )
+    for descriptor, (key, role, media_type, title) in zip(
+        candidate_descriptors, candidate_fixed, strict=False
+    ):
+        _require_public_candidate_descriptor(
+            descriptor,
+            artifact=_artifact(candidate_artifacts[key], f"product evidence candidate {key}"),
+            role=role,
+            media_type=media_type,
+            title=title,
+            field=f"product evidence candidate {key}",
+        )
+    for index, ((input_id, artifact), descriptor) in enumerate(
+        zip(candidate_lazy_inputs, candidate_descriptors[4:], strict=True)
+    ):
+        _require_public_candidate_descriptor(
+            descriptor,
+            artifact=artifact,
+            role=f"lazy-input-{index:04d}",
+            media_type=LAZY_INPUT_MEDIA_TYPE,
+            title=f"lazy-input-{input_id}",
+            field=f"product evidence candidate lazy input {input_id}",
+        )
+
+    candidate_by_role = {layer.role: layer for layer in candidate.layers}
+    runtime_body = by_role["runtime-bundle"].body
+    resolved_body = by_role["resolved-inputs"].body
+    builder_report_body = candidate_by_role["builder-report"].body
+    if (
+        candidate_by_role["runtime-bundle"].body != runtime_body
+        or candidate_by_role["resolved-inputs"].body != resolved_body
+    ):
+        raise ProductEvidenceError(
+            "product evidence aggregate differs from its candidate runtime inputs"
+        )
+
+    request_source = _validate_source(
+        checked_request.get("build_source"), "product evidence authority source"
+    )
+    request_target = _exact(
+        checked_request.get("target_abi"),
+        frozenset({"version", "snapshot_sha256"}),
+        "product evidence authority ABI",
+    )
+    target_abi = _integer(request_target["version"], "product evidence authority ABI")
+    _digest(request_target["snapshot_sha256"], "product evidence authority ABI snapshot")
+    request_requirements = checked_request.get("requirements")
+    if not isinstance(request_requirements, Mapping):
+        raise ProductEvidenceError(
+            "product evidence authority request requirements are missing"
+        )
+    binding = None
+    for candidate_binding in _sequence(
+        request_requirements.get("evidence"),
+        "product evidence authority bindings",
+    ):
+        checked_binding = _exact(
+            candidate_binding,
+            frozenset({"applicability", "browser", "node", "product_id"}),
+            "product evidence authority binding",
+        )
+        if checked_binding["product_id"] == product_id:
+            if binding is not None:
+                raise ProductEvidenceError(
+                    "product evidence authority repeats its product binding"
+                )
+            binding = checked_binding
+    if binding is None:
+        raise ProductEvidenceError("product evidence authority product is not selected")
+    base_identity = {
+        "applicability": binding["applicability"],
+        "manifest_sha256": candidate_product["manifest_sha256"],
+        "product_id": product_id,
+        "request_digest": checked_request_digest,
+    }
+    scope = select_product_evidence_publication_scope(
+        checked_request,
+        request_sha256=checked_request_digest,
+        product_id=product_id,
+        product_work_id=canonical_sha256({**base_identity, "stage": "compose-product"}),
+        work_id=canonical_sha256({**base_identity, "stage": "publish-product-evidence"}),
+        definitions=definitions,
+    )
+    if (
+        record["common"]["request_sha256"] != checked_request_digest
+        or record["common"]["source"] != request_source
+        or candidate_source != request_source
+        or candidate_abi != target_abi
+        or candidate_record["target_abi"] != request_target
+        or payload["product"] != candidate_product
+        or candidate_product["manifest_path"] != scope["manifest_path"]
+        or candidate_product["manifest_sha256"] != scope["manifest_sha256"]
+        or payload["selecting_registries"] != scope["selecting_registries"]
+    ):
+        raise ProductEvidenceError(
+            "product evidence authority differs from its exact request selection"
+        )
+    validate_product_evidence_record(
+        record,
+        request_digest=checked_request_digest,
+        candidate_product=candidate_locator,
+        resolved_inputs_body=resolved_body,
+        builder_report_body=builder_report_body,
+        runtime_bundle_body=runtime_body,
+        selecting_registries=scope["selecting_registries"],
+        requirements=scope["requirements"],
+        receipts=receipts,
+    )
+    if (
+        record["common"]["outcome"] != "success"
+        or record["common"]["promotion_state"] != "eligible"
+        or any(
+            receipt["outcome"] != "success"
+            or receipt["accepted_override"] is not None
+            for receipt in receipts
+        )
+    ):
+        raise ProductEvidenceError(
+            "product evidence authority is not an unoverridden success"
+        )
+    return {
+        "request_digest": checked_request_digest,
+        "source": request_source,
+        "target_abi": target_abi,
+        "product_id": product_id,
+        "record_sha256": canonical_sha256(record),
+        "outcome": record["common"]["outcome"],
+        "promotion_state": record["common"]["promotion_state"],
+        "resolved_formula_layers": _plain(payload["resolved_formula_layers"]),
+        "requirements": [
+            {
+                "host": requirement["host"],
+                "id": requirement["id"],
+                "definition_sha256": requirement["definition_sha256"],
+            }
+            for requirement in scope["requirements"]
+        ],
+    }
+
+
 def inspect_product_evidence_repository(
     repository: str,
     *,
