@@ -85,7 +85,13 @@ def _tar_bytes(*, unsafe: bool = False) -> bytes:
 def _composition_bottle_bytes() -> bytes:
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w:gz", format=tarfile.PAX_FORMAT) as archive:
-        for path in ("mini-tool", "mini-tool/1.0.0_1", "mini-tool/1.0.0_1/bin", "mini-tool/1.0.0_1/.brew"):
+        # Homebrew archives the requested Cellar keg and does not emit a
+        # separate tar member for the Formula-name parent directory.
+        for path in (
+            "mini-tool/1.0.0_1",
+            "mini-tool/1.0.0_1/bin",
+            "mini-tool/1.0.0_1/.brew",
+        ):
             member = tarfile.TarInfo(path)
             member.type = tarfile.DIRTYPE
             member.mode = 0o755

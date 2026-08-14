@@ -244,10 +244,8 @@ def inspect_bottle_link_inventory(
     except (OSError, tarfile.TarError, UnicodeError) as error:
         raise BottleLinkError(f"bottle archive is not a valid bounded gzip tar: {error}") from error
 
-    if entries.get(name, _ArchiveEntry("", "", 0, 0)).kind != "directory" or entries.get(
-        payload_root, _ArchiveEntry("", "", 0, 0)
-    ).kind != "directory":
-        raise BottleLinkError("bottle archive lacks its exact directory roots")
+    if entries.get(payload_root, _ArchiveEntry("", "", 0, 0)).kind != "directory":
+        raise BottleLinkError("bottle archive lacks its exact payload root")
 
     def resolve(path: str, trail: tuple[str, ...] = ()) -> _ArchiveEntry:
         if path in trail or len(trail) >= MAX_LINK_DEPTH:
