@@ -52,6 +52,7 @@ class FakeRegistryTransport:
         self.upload_location_query = ""
         self.package_absent_until_first_manifest = False
         self.registry_next_status: int | None = None
+        self.empty_write_response = False
 
     def _response(
         self,
@@ -163,7 +164,16 @@ class FakeRegistryTransport:
             if mount is not None and source is not None and (source, mount) in self.blobs:
                 self.blobs[(repository, mount)] = self.blobs[(source, mount)]
                 return self._response(
-                    201, url, headers={"docker-content-digest": mount}
+                    201,
+                    url,
+                    headers={
+                        "docker-content-digest": mount,
+                        **(
+                            {"content-length": "0"}
+                            if self.empty_write_response
+                            else {}
+                        ),
+                    },
                 )
             session = f"session-{len(self.uploads) + 1}"
             self.uploads[session] = repository
@@ -198,7 +208,16 @@ class FakeRegistryTransport:
             assert body is not None
             self.blobs[(repository, digest)] = body
             return self._response(
-                201, url, headers={"docker-content-digest": digest}
+                201,
+                url,
+                headers={
+                    "docker-content-digest": digest,
+                    **(
+                        {"content-length": "0"}
+                        if self.empty_write_response
+                        else {}
+                    ),
+                },
             )
         if "/blobs/" in remainder:
             repository, digest = remainder.split("/blobs/", 1)
@@ -599,6 +618,21 @@ class OciPublicationTests(unittest.TestCase):
         self.assertEqual(
             set(transport.blob_upload_content_types), {"application/octet-stream"}
         )
+
+    def test_blob_write_response_size_describes_the_empty_http_response(self) -> None:
+        transport = FakeRegistryTransport()
+        transport.empty_write_response = True
+        plan = _plan()
+        mounted = plan.layers[0]
+        transport.blobs[(mounted.mount_from, mounted.digest)] = mounted.body
+
+        locator = publish_record(
+            plan,
+            transport=transport,
+            expected_source_repository=SOURCE_ASSOCIATION,
+        )
+
+        self.assertIsInstance(locator, PublishedRecordLocatorV1)
 
     def test_oras_credentials_use_stdin_and_ephemeral_config(self) -> None:
         observed: dict[str, object] = {}

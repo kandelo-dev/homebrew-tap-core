@@ -704,7 +704,7 @@ def _request(
     return response
 
 
-def _validate_digest_size_headers(
+def _validate_digest_header(
     response: HttpResponseV1,
     blob: OciBlobV1,
     *,
@@ -716,6 +716,15 @@ def _validate_digest_size_headers(
             f"registry reported the wrong digest for {blob.role}",
             guard_code=guard_code,
         )
+
+
+def _validate_digest_size_headers(
+    response: HttpResponseV1,
+    blob: OciBlobV1,
+    *,
+    guard_code: str,
+) -> None:
+    _validate_digest_header(response, blob, guard_code=guard_code)
     length = _header(response, "content-length")
     if length is not None:
         try:
@@ -820,7 +829,7 @@ def _upload_blob(
             )
             if mounted.status == 201:
                 mounted_successfully = True
-                _validate_digest_size_headers(
+                _validate_digest_header(
                     mounted, blob, guard_code="namespace_bootstrap_failed"
                 )
             elif mounted.status == 202:
@@ -882,7 +891,7 @@ def _upload_blob(
                     f"registry blob upload returned HTTP {completed.status}",
                     guard_code="namespace_bootstrap_failed",
                 )
-            _validate_digest_size_headers(
+            _validate_digest_header(
                 completed, blob, guard_code="namespace_bootstrap_failed"
             )
     authenticated_read = _request(
