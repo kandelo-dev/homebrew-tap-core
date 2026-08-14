@@ -11,7 +11,7 @@ class Ed < Formula
   license "GPL-2.0-or-later"
   revision 1
 
-  depends_on "dash" => :test
+  depends_on "dash-shell" => :test
   depends_on "lzip" => [:build, :test]
 
   skip_clean "bin/ed"
