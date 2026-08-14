@@ -1122,6 +1122,9 @@ module AbiStagingWorkflowCheck
                        realm.fetch("run").include?(
                          'mkdir -m 0700 "$package_cache" "$package_cache/programs"'
                        ) &&
+                       realm.fetch("run").include?(
+                         'playwright_browsers="$realm_root/ms-playwright"'
+                       ) &&
                        !realm.fetch("run").include?('"$realm_root/package-cache"') &&
                        realm.fetch("run").include?("homebrew-prepare-host-prefix.sh") &&
                        realm.fetch("run").include?(
