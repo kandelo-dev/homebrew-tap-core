@@ -1064,6 +1064,8 @@ def _git_identity(root: Path, field: str) -> tuple[str, str]:
     command = [
         "git",
         "-c",
+        f"safe.directory={root.resolve(strict=True)}",
+        "-c",
         "core.hooksPath=/dev/null",
         "-c",
         "credential.helper=",

@@ -11,6 +11,7 @@ import socket
 import subprocess
 import tarfile
 import tempfile
+from unittest import mock
 import unittest
 
 from scripts.abi_staging.canonical import canonical_bytes
@@ -181,6 +182,28 @@ def _validate(
 
 
 class BuildHandoffTests(unittest.TestCase):
+    def test_git_identity_accepts_an_exact_protected_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "source"
+            expected = _fixture_repository(root, "source.txt")
+            run = subprocess.run
+
+            def run_as_different_owner(*arguments: object, **keywords: object) -> object:
+                keywords["env"] = {
+                    **keywords["env"],
+                    "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1",
+                }
+                return run(*arguments, **keywords)
+
+            with mock.patch.object(
+                handoff_module.subprocess,
+                "run",
+                side_effect=run_as_different_owner,
+            ):
+                identity = handoff_module._git_identity(root, "Kandelo")
+
+        self.assertEqual(identity, (expected["commit"], expected["tree"]))
+
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
