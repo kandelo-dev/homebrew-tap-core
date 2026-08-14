@@ -31,6 +31,19 @@ test("preserves an explicit guest shell without consulting the resolver", () => 
   });
 });
 
+test("uses an explicitly staged Dash as the default guest shell", () => {
+  const execPrograms = { "/bin/dash": "/formula/fresh-dash.wasm" };
+
+  addDefaultBaseExecPrograms(execPrograms, () => {
+    throw new Error("resolver must not run when Dash is already staged");
+  });
+
+  assert.deepEqual(execPrograms, {
+    "/bin/dash": "/formula/fresh-dash.wasm",
+    "/bin/sh": "/formula/fresh-dash.wasm",
+  });
+});
+
 test("fails closed when the resolver cannot provide Dash", () => {
   assert.throws(
     () =>

@@ -5,7 +5,9 @@ export function addDefaultBaseExecPrograms(
   resolveBinary: BinaryResolver,
 ): Record<string, string> {
   if (!Object.hasOwn(execPrograms, "/bin/sh")) {
-    execPrograms["/bin/sh"] = resolveBinary("programs/dash.wasm");
+    execPrograms["/bin/sh"] = Object.hasOwn(execPrograms, "/bin/dash")
+      ? execPrograms["/bin/dash"]
+      : resolveBinary("programs/dash.wasm");
   }
   return execPrograms;
 }
