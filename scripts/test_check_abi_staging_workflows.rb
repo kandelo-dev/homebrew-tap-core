@@ -887,6 +887,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         'realm_root="$RUNNER_TEMP/abi-staging-build-realm-$WORK_ID"'
       )
     end
+    assert_reusable_rejected(:candidate, "candidate Formula checker remains runner-owned") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub(
+        '/usr/bin/sudo -n /usr/bin/chown root:root -- "$candidate_xtask"',
+        'true # removed protected checker staging'
+      )
+    end
     assert_reusable_rejected(:candidate, "candidate shadows protected Python") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
         candidate.fetch("run", "").include?("execute-build-work")

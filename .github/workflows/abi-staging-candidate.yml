@@ -171,6 +171,7 @@ jobs:
           cargo build --release -p xtask --target "$host" --quiet
           xtask="$PWD/target/$host/release/xtask"
           test -x "$xtask" && test ! -L "$xtask"
+          printf '%s\n' "$host" >"$RUNNER_TEMP/abi-staging-host-target"
 
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --no-audit --no-fund
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
@@ -231,6 +232,25 @@ jobs:
             "$node_bin" \
               "$GITHUB_WORKSPACE/kandelo-source/apps/browser-demos/node_modules/playwright/cli.js" \
               install chromium --with-deps
+
+          host_target="$(cat "$RUNNER_TEMP/abi-staging-host-target")"
+          [[ "$host_target" =~ ^[A-Za-z0-9_.+-]+$ ]]
+          candidate_xtask="$GITHUB_WORKSPACE/kandelo-source/target/$host_target/release/xtask"
+          test -f "$candidate_xtask" && test ! -L "$candidate_xtask" && \
+            test -x "$candidate_xtask"
+          candidate_xtask_sha256="$(/usr/bin/sha256sum "$candidate_xtask")"
+          candidate_xtask_sha256="${candidate_xtask_sha256%% *}"
+          [[ "$candidate_xtask_sha256" =~ ^[0-9a-f]{64}$ ]]
+          # WHY: Homebrew preserves the checker path into Formula tests, whose
+          # support loader accepts only the same root-owned immutable shape as
+          # the production publisher. Freeze the exact candidate-built xtask
+          # after all realm setup and before any Formula code executes.
+          /usr/bin/sudo -n /usr/bin/chown root:root -- "$candidate_xtask"
+          /usr/bin/sudo -n /usr/bin/chmod 0555 -- "$candidate_xtask"
+          test "$(/usr/bin/stat -c '%u:%g:%a:%h' "$candidate_xtask")" = \
+            "0:0:555:1"
+          test "$(/usr/bin/sha256sum "$candidate_xtask" | /usr/bin/awk '{print $1}')" = \
+            "$candidate_xtask_sha256"
 
           test "$(git -C "$brew_repository" rev-parse HEAD)" = \
             "$HOMEBREW_BREW_COMMIT"
