@@ -836,6 +836,7 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes realm_source, "scripts/build-musl.sh"
     assert_includes realm_source, "packages/registry/kernel/build-kernel.sh"
     assert_includes realm_source, "scripts/build-fork-instrument-tool.sh"
+    assert_includes realm_source, "scripts/build-local-root-spill-tool.sh"
     assert_includes realm_source, "MemoryFileSystem.create"
     assert_includes realm_source, "host/wasm/rootfs.vfs"
     assert_includes realm_source, "async function main(): Promise<void>"
