@@ -18,7 +18,12 @@ import tarfile
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
-from .canonical import CanonicalJsonError, canonical_bytes, parse_canonical_bytes
+from .canonical import (
+    CanonicalJsonError,
+    canonical_bytes,
+    parse_canonical_bytes,
+    parse_json_bytes,
+)
 from .bottle_link import (
     BottleLinkError,
     build_link_manifest,
@@ -1443,6 +1448,17 @@ def _copy_regular(source: Path, destination: Path, field: str) -> None:
     destination.write_bytes(body)
 
 
+def _copy_canonical_json(source: Path, destination: Path, field: str) -> None:
+    body = _read_regular(source, field, MAX_JSON_BYTES)
+    try:
+        parsed = parse_json_bytes(body, maximum_bytes=MAX_JSON_BYTES)
+        canonical = canonical_bytes(parsed)
+    except CanonicalJsonError as error:
+        raise HandoffError(f"{field} is not unambiguous JSON: {error}") from error
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(canonical)
+
+
 def create_context_source_custody(
     *,
     context_path: Path,
@@ -1619,7 +1635,7 @@ def assemble_handoff(
                 "successful normal build must emit one bottle, metadata file, and VFS composition descriptor"
             )
         _copy_regular(archives[0], handoff / "bottle.tar.gz", "bottle archive")
-        _copy_regular(
+        _copy_canonical_json(
             metadata_files[0],
             handoff / "bottle-metadata.json",
             "bottle metadata",

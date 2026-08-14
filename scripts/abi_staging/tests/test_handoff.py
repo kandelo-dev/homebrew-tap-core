@@ -19,6 +19,7 @@ from scripts.abi_staging.custody import create_source_custody
 from scripts.abi_staging import handoff as handoff_module
 from scripts.abi_staging.handoff import (
     HandoffError,
+    assemble_handoff,
     build_handoff_inventory,
     build_miniature_build_result_fixture,
     build_miniature_handoff_inventory_fixture,
@@ -244,6 +245,80 @@ class BuildHandoffTests(unittest.TestCase):
                 self.assertEqual(validated["subject"], SUBJECT)
                 self.assertEqual(validated["request_sha256"], REQUEST)
                 self.assertEqual(validated["candidate"] is not None, outcome == "success")
+
+    def test_assembly_canonicalizes_homebrew_bottle_metadata(self) -> None:
+        if CUSTODY_SOURCES is None or CUSTODY_TEMPLATE is None:
+            raise AssertionError("source custody fixtures are not initialized")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            raw_output = root / "raw-output"
+            bottles = raw_output / "bottles"
+            bottles.mkdir(parents=True)
+            (raw_output / "diagnostics").mkdir()
+            (raw_output / "diagnostics/summary.txt").write_text(
+                "bounded summary\n", encoding="utf-8"
+            )
+            (bottles / "mini-tool.tar.gz").write_bytes(_tar_bytes())
+            metadata = {
+                "kandelo-dev/tap-core/mini-tool": {
+                    "formula": {"name": "mini-tool"},
+                    "bottle": {"rebuild": 0},
+                }
+            }
+            (bottles / "mini-tool.bottle.json").write_text(
+                json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+            )
+            (bottles / "mini-tool.vfs-composition.json").write_bytes(
+                canonical_bytes(
+                    {
+                        "schema": 1,
+                        "kind": "kandelo-homebrew-original-bottle-tree",
+                        "formula": "mini-tool",
+                    }
+                )
+            )
+            contract_path = TAP_ROOT / "Kandelo/staging/fixtures/bottle-contract.json"
+            context = {
+                "schema": 1,
+                "kind": "kandelo-abi-staging-build-context",
+                "request_sha256": REQUEST,
+                "subject": SUBJECT,
+                "request_source": CUSTODY_SOURCES["kandelo"],
+                "tap_source": CUSTODY_SOURCES["tap"],
+                "formula": "mini-tool",
+                "architecture": "wasm32",
+                "target_abi": 9,
+                "run": {
+                    "repository": "kandelo-dev/homebrew-tap-core",
+                    "workflow_ref": (
+                        ".github/workflows/abi-staging-reconcile.yml@refs/heads/main"
+                    ),
+                    "run_id": 1,
+                    "run_attempt": 1,
+                    "job": "build-candidate",
+                },
+                "retry_ordinal": 0,
+                "bottle_contract_sha256": hashlib.sha256(
+                    contract_path.read_bytes()
+                ).hexdigest(),
+                "bottle_contract_path": str(contract_path),
+            }
+            context_path = root / "context.json"
+            context_path.write_bytes(canonical_bytes(context))
+            handoff = root / "handoff"
+
+            assemble_handoff(
+                context_path=context_path,
+                raw_output=raw_output,
+                source_custody=CUSTODY_TEMPLATE,
+                handoff=handoff,
+                exit_code=0,
+            )
+
+            self.assertEqual(
+                (handoff / "bottle-metadata.json").read_bytes(),
+                canonical_bytes(metadata),
+            )
 
     def test_composition_input_is_derived_from_exact_plan_bottle_and_guest_layout(self) -> None:
         bottle = _composition_bottle_bytes()

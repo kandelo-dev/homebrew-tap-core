@@ -15,6 +15,7 @@ from scripts.abi_staging.canonical import (
     canonical_bytes,
     canonical_sha256,
     parse_canonical_bytes,
+    parse_json_bytes,
 )
 
 
@@ -56,6 +57,18 @@ class CanonicalJsonTests(unittest.TestCase):
             with self.subTest(body=body):
                 with self.assertRaises(CanonicalJsonError):
                     parse_canonical_bytes(body, maximum_bytes=1024)
+
+    def test_unambiguous_parser_accepts_formatting_but_not_ambiguous_values(self) -> None:
+        parsed = parse_json_bytes(b'{\n  "value": 1\n}\n', maximum_bytes=1024)
+        self.assertEqual(canonical_bytes(parsed), b'{"value":1}\n')
+        for body in (
+            b'{"value":1,"value":1}\n',
+            b'{"value":1.0}\n',
+            b'{"value":18446744073709551616}\n',
+            b'\xff',
+        ):
+            with self.subTest(body=body), self.assertRaises(CanonicalJsonError):
+                parse_json_bytes(body, maximum_bytes=1024)
 
     def test_bounds_and_integer_only_encoding_fail_closed(self) -> None:
         with self.assertRaises(CanonicalJsonError):
