@@ -121,6 +121,7 @@ class WorkflowPublicationTests(unittest.TestCase):
                 environment = {
                     "GITHUB_REPOSITORY": PUBLICATION_RUN["repository"],
                     "GITHUB_WORKFLOW_REF": PUBLICATION_RUN["workflow_ref"],
+                    "GITHUB_ACTOR": "github-actions",
                     "GITHUB_TOKEN": "github-token",
                     "HOMEBREW_GITHUB_PACKAGES_TOKEN": "package-token",
                     "HOMEBREW_GITHUB_PACKAGES_USER": "publisher",
@@ -148,12 +149,14 @@ class WorkflowPublicationTests(unittest.TestCase):
                         "load_build_result",
                         return_value={"outcome": "success", "exit_code": 0},
                     ),
-                    patch.object(cli, "_publish_candidate_paths", side_effect=error),
+                    patch.object(
+                        cli, "_publish_candidate_paths", side_effect=error
+                    ) as candidate_publisher,
                     patch.object(
                         cli,
                         "isolated_oras_transport",
                         return_value=nullcontext(object()),
-                    ),
+                    ) as registry_transport,
                     patch.object(cli, "publish_record", side_effect=publish_attempt),
                 ):
                     status_code = cli.main(
@@ -185,6 +188,17 @@ class WorkflowPublicationTests(unittest.TestCase):
                         ]
                     )
                 self.assertEqual(status_code, 0)
+                self.assertEqual(
+                    candidate_publisher.call_args.kwargs["registry_username"],
+                    "github-actions",
+                )
+                self.assertEqual(
+                    candidate_publisher.call_args.kwargs["registry_token"],
+                    "github-token",
+                )
+                registry_transport.assert_called_once_with(
+                    username="github-actions", token="github-token"
+                )
                 self.assertEqual(len(published_plans), 1)
                 attempt = json.loads(published_plans[0].config.body)["attempt"]
                 self.assertEqual(

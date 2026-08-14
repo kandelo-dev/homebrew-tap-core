@@ -2480,6 +2480,8 @@ def _publish_candidate_paths(
     tap_plan_value: Path,
     formula_plan_value: Path,
     publication_run_value: Path,
+    registry_username: str | None = None,
+    registry_token: str | None = None,
 ) -> dict[str, Any]:
     tap_root = tap_root_value.resolve(strict=True)
     if tap_root != TAP_ROOT.resolve(strict=True):
@@ -2533,8 +2535,18 @@ def _publish_candidate_paths(
         tap_root / "Kandelo/staging/candidate-publication-activation.toml"
     )
     if mode == "active":
-        username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
-        token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
+        if (registry_username is None) != (registry_token is None):
+            raise PolicyError("candidate registry credentials are incomplete")
+        username = (
+            os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
+            if registry_username is None
+            else registry_username
+        )
+        token = (
+            os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
+            if registry_token is None
+            else registry_token
+        )
         with isolated_oras_transport(username=username, token=token) as transport:
             try:
                 published_source = publish_record(
@@ -5563,9 +5575,12 @@ def _publish_workflow_candidate(args: argparse.Namespace) -> None:
     policy = load_tap_staging_policy(tap_root / "Kandelo/staging/tap-policy.toml")
     repository = os.environ.get("GITHUB_REPOSITORY", "")
     workflow_ref = os.environ.get("GITHUB_WORKFLOW_REF", "")
+    actor = os.environ.get("GITHUB_ACTOR", "")
     token = os.environ.get("GITHUB_TOKEN", "")
     if repository != policy.tap_repository:
         raise WorkflowPublicationError("current workflow repository differs from tap policy")
+    if not actor or not token:
+        raise WorkflowPublicationError("candidate publisher lacks workflow package authority")
     tap_source = snapshot_tap_source(tap_root, policy.tap_repository)
     if tap_source["commit"] != args.head_sha:
         raise WorkflowPublicationError("protected publisher checkout differs from workflow head")
@@ -5712,6 +5727,10 @@ def _publish_workflow_candidate(args: argparse.Namespace) -> None:
                         _recheck_workflow_activation(tap_root)
                         application_outcome = "success"
                         try:
+                            # A personal package token creates a new granular
+                            # GHCR package as private. The repository-scoped
+                            # workflow token creates the source-linked package
+                            # with this public tap's visibility instead.
                             candidate_publication = _publish_candidate_paths(
                                 tap_root_value=tap_root,
                                 handoff_value=handoff_root,
@@ -5719,6 +5738,8 @@ def _publish_workflow_candidate(args: argparse.Namespace) -> None:
                                 tap_plan_value=tap_plan_path,
                                 formula_plan_value=formula_plan_path,
                                 publication_run_value=publication_run_path,
+                                registry_username=actor,
+                                registry_token=token,
                             )
                         except OciPublicationError as error:
                             if error.phase is None:
@@ -5770,10 +5791,8 @@ def _publish_workflow_candidate(args: argparse.Namespace) -> None:
             ),
         )
         _recheck_workflow_activation(tap_root)
-        username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
-        package_token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
         with isolated_oras_transport(
-            username=username, token=package_token
+            username=actor, token=token
         ) as transport:
             published_attempt = publish_record(
                 attempt_plan,
