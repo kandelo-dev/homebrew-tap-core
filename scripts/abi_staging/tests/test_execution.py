@@ -364,6 +364,41 @@ class WorkflowExecutionTests(unittest.TestCase):
                 kwargs["env"]["KANDELO_HOMEBREW_TAP_SOURCE_COMMIT"], "b" * 40
             )
             self.assertEqual(
+                kwargs["env"]["KANDELO_HOMEBREW_BUILD_USER"],
+                "kandelo-homebrew-build",
+            )
+            self.assertEqual(
+                kwargs["env"]["KANDELO_HOMEBREW_RECIPE_USER"],
+                "kandelo-homebrew-recipe",
+            )
+            self.assertEqual(
+                kwargs["env"]["KANDELO_HOMEBREW_SHARED_TEMP"],
+                "/tmp/kandelo-homebrew.fixture",
+            )
+            self.assertEqual(
+                kwargs["env"]["KANDELO_HOMEBREW_SUDO_BIN"], "/usr/bin/sudo"
+            )
+            self.assertEqual(
+                kwargs["env"]["KANDELO_HOMEBREW_SYSTEMD_RUN_BIN"],
+                "/usr/bin/systemd-run",
+            )
+            self.assertEqual(
+                kwargs["env"]["KANDELO_HOMEBREW_SYSTEMCTL_BIN"],
+                "/usr/bin/systemctl",
+            )
+            self.assertEqual(
+                kwargs["env"]["KANDELO_HOMEBREW_GETENT_BIN"],
+                "/usr/bin/getent",
+            )
+            self.assertEqual(
+                kwargs["env"]["KANDELO_HOMEBREW_PGREP_BIN"],
+                "/usr/bin/pgrep",
+            )
+            self.assertEqual(
+                kwargs["env"]["KANDELO_HOMEBREW_PKILL_BIN"],
+                "/usr/bin/pkill",
+            )
+            self.assertEqual(
                 kwargs["env"]["PLAYWRIGHT_BROWSERS_PATH"],
                 "/private/playwright",
             )
@@ -420,6 +455,17 @@ class WorkflowExecutionTests(unittest.TestCase):
                         "/protected/resolved-taps.json"
                     ),
                     "KANDELO_HOMEBREW_TAP_SOURCE_COMMIT": "b" * 40,
+                    "KANDELO_HOMEBREW_BUILD_USER": "kandelo-homebrew-build",
+                    "KANDELO_HOMEBREW_RECIPE_USER": "kandelo-homebrew-recipe",
+                    "KANDELO_HOMEBREW_SHARED_TEMP": (
+                        "/tmp/kandelo-homebrew.fixture"
+                    ),
+                    "KANDELO_HOMEBREW_SUDO_BIN": "/usr/bin/sudo",
+                    "KANDELO_HOMEBREW_SYSTEMD_RUN_BIN": "/usr/bin/systemd-run",
+                    "KANDELO_HOMEBREW_SYSTEMCTL_BIN": "/usr/bin/systemctl",
+                    "KANDELO_HOMEBREW_GETENT_BIN": "/usr/bin/getent",
+                    "KANDELO_HOMEBREW_PGREP_BIN": "/usr/bin/pgrep",
+                    "KANDELO_HOMEBREW_PKILL_BIN": "/usr/bin/pkill",
                     "PLAYWRIGHT_BROWSERS_PATH": "/private/playwright",
                     "WASM_POSIX_BINARY_CACHE_ROOT": "/private/package-cache",
                     "GITHUB_TOKEN": "must-not-survive",
