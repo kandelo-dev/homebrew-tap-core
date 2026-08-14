@@ -35,6 +35,7 @@ from .custody import (
     load_source_custody_manifest,
     validate_source_custody,
 )
+from .git_policy import protected_git_arguments
 from .plan import exact_formula_subject
 from .policy import candidate_repository, load_tap_staging_policy
 from .records import load_tap_plan_record
@@ -1061,22 +1062,13 @@ def _git_identity(root: Path, field: str) -> tuple[str, str]:
         raise HandoffError(f"cannot inspect {field} checkout: {error}") from error
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
         raise HandoffError(f"{field} checkout must be a real directory")
-    command = [
-        "git",
-        "-c",
-        f"safe.directory={root.resolve(strict=True)}",
-        "-c",
-        "core.hooksPath=/dev/null",
-        "-c",
-        "credential.helper=",
-        "-c",
-        "protocol.file.allow=never",
-        "-C",
-        str(root),
+    command = protected_git_arguments(
+        root,
         "rev-parse",
         "HEAD",
         "HEAD^{tree}",
-    ]
+        file_protocol="never",
+    )
     try:
         result = subprocess.run(
             command,

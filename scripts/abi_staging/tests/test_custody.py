@@ -10,6 +10,7 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 from scripts.abi_staging.canonical import canonical_bytes, canonical_sha256
 from scripts.abi_staging.custody import (
@@ -167,6 +168,19 @@ class SourceCustodyTests(unittest.TestCase):
         self.assertEqual(
             manifest["submodules"][0]["gitlink_commit"],
             _git(self.submodule, "rev-parse", "HEAD", capture=True),
+        )
+
+    def test_construction_accepts_exact_protected_checkouts(self) -> None:
+        destination = self.root / "custody-protected-owner"
+
+        with mock.patch.dict(
+            os.environ, {"GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
+        ):
+            self._create(destination)
+
+        self.assertEqual(
+            self._validate(destination)["sources"][0]["commit"],
+            self.kandelo_source["commit"],
         )
 
     def test_bundle_object_tree_and_replacement_ref_fail_closed(self) -> None:
