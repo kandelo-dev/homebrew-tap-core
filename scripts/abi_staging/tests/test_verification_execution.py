@@ -735,6 +735,9 @@ class VerificationExecutionTests(unittest.TestCase):
             self.assertNotIn("NIX_CONFIG", kwargs["env"])
             self.assertEqual(kwargs["env"]["CC"], "/declared/cc")
             self.assertNotIn("GITHUB_ACTIONS", kwargs["env"])
+            self.assertNotIn("KANDELO_HOMEBREW_BUILD_USER", kwargs["env"])
+            self.assertNotIn("KANDELO_HOMEBREW_RECIPE_USER", kwargs["env"])
+            self.assertNotIn("KANDELO_HOMEBREW_SHARED_TEMP", kwargs["env"])
             self.assertNotEqual(kwargs["env"]["HOME"], "/credentialed/home")
             self.assertEqual(
                 kwargs["env"]["XDG_CONFIG_HOME"],
@@ -800,6 +803,9 @@ class VerificationExecutionTests(unittest.TestCase):
                     "HOMEBREW_GITHUB_PACKAGES_TOKEN": "must-not-survive",
                     "ACTIONS_RUNTIME_TOKEN": "must-not-survive",
                     "GITHUB_ENV": "/credentialed/github-env",
+                    "KANDELO_HOMEBREW_BUILD_USER": "kandelo-homebrew-build",
+                    "KANDELO_HOMEBREW_RECIPE_USER": "kandelo-homebrew-recipe",
+                    "KANDELO_HOMEBREW_SHARED_TEMP": "/tmp/kandelo-homebrew",
                     "RENAMED_WRITE_TOKEN": "must-not-survive",
                     "NIX_CONFIG": "access-tokens = github.com=must-not-survive",
                     "HOME": "/credentialed/home",

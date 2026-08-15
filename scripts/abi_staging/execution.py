@@ -1330,6 +1330,14 @@ def execute_verification_work(
         # installs, but do not require the publisher-only signed API preflight
         # that is intentionally absent from this reusable verification job.
         child_environment.pop("GITHUB_ACTIONS", None)
+        # Verification is already a credential-free consumer job. Reusing the
+        # publisher's reserved build identities here makes the exact adapter's
+        # private TemporaryDirectory inaccessible to the child Homebrew
+        # process. Candidate construction and publication retain the isolated
+        # identities; read-only verification runs as this uncredentialed job.
+        child_environment.pop("KANDELO_HOMEBREW_BUILD_USER", None)
+        child_environment.pop("KANDELO_HOMEBREW_RECIPE_USER", None)
+        child_environment.pop("KANDELO_HOMEBREW_SHARED_TEMP", None)
         result = run_process(command, cwd=kandelo, env=child_environment, check=False)
     returncode = getattr(result, "returncode", None)
     if isinstance(returncode, bool) or not isinstance(returncode, int):
