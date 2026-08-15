@@ -44,6 +44,19 @@ def _source(root: Path, revision: str) -> dict[str, str]:
 
 
 class PublicInventoryRetryTests(unittest.TestCase):
+    def test_protected_inventory_transport_uses_explicit_read_credentials(self) -> None:
+        with patch.dict(
+            cli_module.os.environ,
+            {
+                "HOMEBREW_GITHUB_PACKAGES_USER": "protected-reader",
+                "HOMEBREW_GITHUB_PACKAGES_TOKEN": "read-token",
+            },
+            clear=False,
+        ):
+            transport = cli_module._public_inventory_transport()
+        self.assertTrue(transport._authenticated)
+        self.assertTrue(transport._authenticated_public_reads)
+
     def test_retries_only_retryable_oci_failures_with_fresh_transports(self) -> None:
         transports: list[object] = []
         sleeps: list[float] = []

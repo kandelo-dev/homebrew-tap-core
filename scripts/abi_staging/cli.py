@@ -829,6 +829,16 @@ def _load_workflow_discovery(path: Path) -> dict[str, Any]:
     return dict(value)
 
 
+def _public_inventory_transport() -> UrllibOciTransportV1:
+    username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
+    token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
+    return UrllibOciTransportV1(
+        username=username,
+        token=token,
+        authenticated_public_reads=bool(token),
+    )
+
+
 def _scan_scheduling_inventory_with_retries(
     tap_plan: Mapping[str, Any],
     *,
@@ -842,7 +852,7 @@ def _scan_scheduling_inventory_with_retries(
 
     scan = scan_scheduling_inventory if scanner is None else scanner
     make_transport = (
-        (lambda: UrllibOciTransportV1(username="", token=""))
+        _public_inventory_transport
         if transport_factory is None
         else transport_factory
     )

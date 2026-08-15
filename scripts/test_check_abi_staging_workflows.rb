@@ -220,6 +220,22 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_operator steps.index(authority), :<, steps.index(requirements)
   end
 
+  def test_discovery_inventory_uses_only_the_read_scoped_job_token
+    job = @workflow.dig("jobs", "discover-plan")
+    assert_equal({"contents" => "read", "packages" => "read"}, job["permissions"])
+    coordinator = job.fetch("steps").find { |step| step["id"] == "coordinate" }
+    assert_equal(
+      {
+        "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
+        "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}"
+      },
+      coordinator["env"]
+    )
+    job.fetch("steps").reject { |step| step.equal?(coordinator) }.each do |step|
+      refute_includes(step.fetch("env", {}).keys, "HOMEBREW_GITHUB_PACKAGES_TOKEN")
+    end
+  end
+
   def test_requirements_change_classes_exclude_dev_shell_startup_output
     requirements = @workflow.dig("jobs", "discover-plan", "steps").find do |step|
       step["id"] == "requirements"
@@ -340,6 +356,12 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     workflows = [@workflow, @candidate, @reuse, @verification, @maintenance, @history]
     environments = workflows.flat_map do |workflow|
       package_publication_environments(workflow)
+    end
+    environments.reject! do |environment|
+      environment == {
+        "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
+        "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}"
+      }
     end
     refute_empty environments
     environments.each do |environment|
