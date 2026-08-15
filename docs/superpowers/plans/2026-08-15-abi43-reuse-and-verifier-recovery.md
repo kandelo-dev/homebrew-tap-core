@@ -111,7 +111,7 @@
 - Modify: `scripts/abi-staging-verify-bottle.sh`
 - Modify: `scripts/homebrew-verify-poured-bottle.sh`
 - Test: `scripts/test-abi-staging-verify-bottle.sh`
-- Test: `scripts/test-homebrew-verify-poured-bottle.sh`
+- Test: `scripts/test-homebrew-publish-workflow.sh`
 
 **Files in `Kandelo-dev/homebrew-tap-core`:**
 - Modify: `scripts/abi_staging/execution.py`
@@ -119,18 +119,18 @@
 
 **Interfaces:**
 - Produces: explicit `--playwright-browsers-path <absolute-directory>` verifier
-  input and a private Homebrew-cache projection consumed by ordinary
-  Playwright discovery.
+input and a private verifier-home cache projection consumed by ordinary
+Playwright discovery.
 - Consumes: the workflow-prepared `PLAYWRIGHT_BROWSERS_PATH` and the exact
   Kandelo verifier checkout.
 
-- [ ] **Step 1: Write failing tap executor tests**
+- [x] **Step 1: Write failing tap executor tests**
 
   Require the executor to leave composed Formula bytes unchanged and pass the
   prepared browser directory as an explicit adapter argument. Reject a missing
   prepared directory before adapter invocation.
 
-- [ ] **Step 2: Verify the tap tests fail for the current overlay**
+- [x] **Step 2: Verify the tap tests fail for the current overlay**
 
   ```bash
   scripts/dev-shell.sh env KANDELO_ROOT=/private/tmp/kandelo-abi43-main-merge-20260813 \
@@ -141,36 +141,40 @@
   Expected: the Formula contains `KandeloVerificationPlaywrightOverlay` and no
   explicit browser-cache argument exists.
 
-- [ ] **Step 3: Write failing Kandelo verifier fixtures**
+- [x] **Step 3: Write failing Kandelo verifier fixtures**
 
   Extend the shell fixtures so the outer verifier rejects an unsafe cache path,
   passes a valid path to the normal verifier, and the normal verifier exposes
   it at Playwright's default `ms-playwright` directory in its private native
   home without modifying Formula source.
 
-- [ ] **Step 4: Verify the Kandelo fixtures fail**
+- [x] **Step 4: Verify the Kandelo fixtures fail**
 
   ```bash
   scripts/dev-shell.sh bash scripts/test-abi-staging-verify-bottle.sh
-  scripts/dev-shell.sh bash scripts/test-homebrew-verify-poured-bottle.sh
+  scripts/dev-shell.sh env \
+    KANDELO_HOMEBREW_PUBLISH_TEST_FOCUS=verification-playwright-cache \
+    bash scripts/test-homebrew-publish-workflow.sh
   ```
 
   Expected: the new argument is rejected or the private cache projection is
   absent.
 
-- [ ] **Step 5: Implement the explicit cache bridge**
+- [x] **Step 5: Implement the explicit cache bridge**
 
   Remove `_install_verification_playwright_overlay`. Validate the prepared
-  cache as an absolute real directory in the tap executor and pass it to the
-  Kandelo adapter. Thread it through the exact outer verifier and place it at
-  the Playwright default cache location owned by the private Homebrew realm.
+cache as an absolute real directory in the tap executor and pass it to the
+Kandelo adapter. Thread it through the exact outer verifier and place it at
+the Playwright default cache location owned by the private target verifier
+home. The native-dependency launcher has a separate home and must not receive
+the target Formula's browser cache.
 
-- [ ] **Step 6: Run focused GREEN validation**
+- [x] **Step 6: Run focused GREEN validation**
 
   Run the commands from Steps 2 and 4. Expected: all pass and composed Formula
   bytes remain unchanged.
 
-- [ ] **Step 7: Commit both repository changes separately**
+- [x] **Step 7: Commit both repository changes separately**
 
   Kandelo:
 
@@ -178,7 +182,7 @@
   git add scripts/abi-staging-verify-bottle.sh \
     scripts/homebrew-verify-poured-bottle.sh \
     scripts/test-abi-staging-verify-bottle.sh \
-    scripts/test-homebrew-verify-poured-bottle.sh
+    scripts/test-homebrew-publish-workflow.sh
   git commit -m "[Homebrew] Isolate browser cache from Formula identity"
   ```
 
