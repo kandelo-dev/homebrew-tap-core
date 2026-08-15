@@ -79,9 +79,11 @@ class WorkflowPublicationTests(unittest.TestCase):
                     (destination / "build-result.json").write_bytes(b"{}\n")
                 return {}
 
+        public_api_tokens = []
+
         class PublicClient:
-            def __init__(self, _policy):
-                pass
+            def __init__(self, _policy, *, api_token):
+                public_api_tokens.append(api_token)
 
             def pull_request_lifecycle(self, _number):
                 return PullRequestLifecycleV1(
@@ -188,6 +190,8 @@ class WorkflowPublicationTests(unittest.TestCase):
                         ]
                     )
                 self.assertEqual(status_code, 0)
+                self.assertEqual(public_api_tokens, ["github-token"])
+                public_api_tokens.clear()
                 self.assertEqual(
                     candidate_publisher.call_args.kwargs["registry_username"],
                     "github-actions",
@@ -310,7 +314,9 @@ class WorkflowPublicationTests(unittest.TestCase):
             patch.object(cli, "GitHubPublicClient", PublicClient),
             patch.object(cli, "snapshot_tap_source", return_value=tap_source),
             patch.object(cli, "_recheck_workflow_activation"),
-            patch.object(cli, "_recheck_coordinated_lifecycle"),
+            patch.object(
+                cli, "_recheck_coordinated_lifecycle"
+            ) as lifecycle_recheck,
             patch.object(cli, "load_coordination_bundle", return_value=bundle),
             patch.object(cli, "load_verification_result", return_value=loaded_result),
             patch.object(cli, "_verification_result_matches_work", return_value=True),
@@ -353,6 +359,12 @@ class WorkflowPublicationTests(unittest.TestCase):
             )
             result = json.loads(output.read_bytes())
         self.assertEqual(status_code, 0)
+        lifecycle_recheck.assert_called_once_with(
+            cli.TAP_ROOT.resolve(strict=True),
+            unittest.mock.ANY,
+            bundle,
+            github_api_token="github-token",
+        )
         self.assertEqual(len(recovered), 1)
         self.assertEqual(
             recovered[0]["publication_failure"],
