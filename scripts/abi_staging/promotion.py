@@ -710,7 +710,7 @@ def _candidate_reuse_binding(
         "bottle_contract_sha256": contract_digest,
     }
     if (
-        candidate_reuse.repository != candidate.repository + "/reuse"
+        candidate_reuse.repository != candidate.repository
         or record["common"]["request_sha256"] != request_digest
         or record["common"]["source"] != request_source
         or payload["formula"] != expected_formula
@@ -2347,7 +2347,7 @@ def validate_promotion_candidate_binding(
     formula = payload["formula"]
     request_source = _source(reuse_record["common"]["source"], "reuse source")
     if (
-        candidate_reuse.repository != candidate.repository + "/reuse"
+        candidate_reuse.repository != candidate.repository
         or candidate_reuse.digest.removeprefix("sha256:")
         != decision.candidate_binding_digest
         or reuse_record["common"]["request_sha256"] != decision.request_digest

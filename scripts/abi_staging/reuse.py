@@ -8,7 +8,12 @@ from typing import Any
 from .canonical import canonical_sha256
 from .contract import make_candidate_reuse_record
 from .execution import ExecutionError, select_reuse_work
-from .oci import OciTransportV1, PublishedRecordLocatorV1, publish_record
+from .oci import (
+    REUSE_TAG_PREFIX,
+    OciTransportV1,
+    PublishedRecordLocatorV1,
+    publish_immutable_oci_plan,
+)
 from .policy import TapStagingPolicyV1, candidate_reuse_repository
 from .records import build_candidate_reuse_oci_plan, validate_candidate_record
 from .verification import validate_verification_receipt_record
@@ -202,10 +207,11 @@ def publish_candidate_reuse(
         ),
     )
     try:
-        locator = publish_record(
+        locator = publish_immutable_oci_plan(
             plan,
             transport=transport,
             expected_source_repository=policy.tap_repository,
+            tag_prefix=REUSE_TAG_PREFIX,
         )
     except ValueError as error:
         raise CandidateReuseError(f"cannot publish candidate reuse: {error}") from error

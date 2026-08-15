@@ -37,51 +37,68 @@
 - Consumes: existing `publish_immutable_oci_plan`, canonical reuse record
   validation, and public candidate repository identity.
 
-- [ ] **Step 1: Write failing repository and tag-filter tests**
+- [x] **Step 1: Write failing repository and tag-filter tests**
 
   Assert that reuse publication targets `candidate_repository(...)`, emits a
   `reuse-sha256-*` tag, candidate inventory ignores that valid separate class,
   and reuse inventory selects it. Assert that an unknown tag still fails.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
   Run:
 
   ```bash
-  scripts/dev-shell.sh env KANDELO_ROOT=/private/tmp/kandelo-abi43-main-merge-20260813 \
-    python3 -m unittest \
-      scripts.abi_staging.tests.test_oci \
-      scripts.abi_staging.tests.test_reuse \
-      scripts.abi_staging.tests.test_inventory \
-      scripts.abi_staging.tests.test_promotion -v
+  cd /private/tmp/kandelo-abi43-main-merge-20260813
+  scripts/dev-shell.sh bash -lc '
+    cd /private/tmp/tap-protected-verifier.oToGmF
+    env KANDELO_TAP_ROOT=$PWD \
+      KANDELO_ROOT=/private/tmp/kandelo-abi43-main-merge-20260813 \
+      PYTHONDONTWRITEBYTECODE=1 \
+      python3 -m unittest \
+        scripts.abi_staging.tests.test_oci \
+        scripts.abi_staging.tests.test_reuse \
+        scripts.abi_staging.tests.test_inventory \
+        scripts.abi_staging.tests.test_promotion -v
+  '
   ```
 
   Expected: failures show the `/reuse` repository and unsupported reuse tag.
 
-- [ ] **Step 3: Implement the minimal shared-package layout**
+- [x] **Step 3: Implement the minimal shared-package layout**
 
   Add the closed reuse tag grammar to `list_public_record_locators`, publish
   the reuse plan with `tag_prefix="reuse-sha256-"`, select that prefix during
   reuse inventory, and require promotion reuse locators to use the candidate
   repository itself.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
   Run the command from Step 2. Expected: all selected tests pass.
 
-- [ ] **Step 5: Run workflow and policy regressions**
+- [x] **Step 5: Run workflow and policy regressions**
 
   ```bash
-  scripts/dev-shell.sh python3 -m unittest \
-    scripts.abi_staging.tests.test_workflow_publication \
-    scripts.abi_staging.tests.test_scheduler \
-    scripts.abi_staging.tests.test_coordination -v
-  scripts/dev-shell.sh ruby scripts/test_check_abi_staging_workflows.rb
+  cd /private/tmp/kandelo-abi43-main-merge-20260813
+  scripts/dev-shell.sh bash -lc '
+    cd /private/tmp/tap-protected-verifier.oToGmF
+    env KANDELO_TAP_ROOT=$PWD \
+      KANDELO_ROOT=/private/tmp/kandelo-abi43-main-merge-20260813 \
+      PYTHONDWRITEBYTECODE=1 \
+      python3 -m unittest \
+        scripts.abi_staging.tests.test_workflow_publication \
+        scripts.abi_staging.tests.test_scheduler \
+        scripts.abi_staging.tests.test_coordination -v
+  '
+  scripts/dev-shell.sh bash -lc '
+    cd /private/tmp/tap-protected-verifier.oToGmF
+    env KANDELO_ROOT=/private/tmp/kandelo-abi43-main-merge-20260813 \
+      ruby scripts/test_check_abi_staging_workflows.rb
+  '
   ```
 
   Expected: all tests pass.
 
-- [ ] **Step 6: Commit the tap fix**
+- [x] **Step 6: Commit the tap fix**
 
   ```bash
   git add scripts/abi_staging docs/superpowers
@@ -205,4 +222,3 @@
   Redispatch the immutable request until required verification is complete,
   merge the ABI 43 PR, and run post-merge promotion, tap metadata admission,
   Pages readiness, and deployment.
-

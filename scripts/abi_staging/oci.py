@@ -37,13 +37,17 @@ MANIFEST_ACCEPT = OCI_MANIFEST_MEDIA_TYPE
 REGISTRY_HOST = "ghcr.io"
 GITHUB_API_HOST = "api.github.com"
 RECORD_TAG_PREFIX = "record-sha256-"
+REUSE_TAG_PREFIX = "reuse-sha256-"
 VERIFICATION_TAG_PREFIX = re.compile(
     r"verification-[0-9a-f]{32}-(?:build|node|browser)-sha256-"
 )
 
 
 def _immutable_tag_prefix(value: str) -> str:
-    if value != RECORD_TAG_PREFIX and VERIFICATION_TAG_PREFIX.fullmatch(value) is None:
+    if (
+        value not in {RECORD_TAG_PREFIX, REUSE_TAG_PREFIX}
+        and VERIFICATION_TAG_PREFIX.fullmatch(value) is None
+    ):
         raise OciPublicationError(
             "immutable OCI tag prefix is unsupported",
             guard_code="namespace_bootstrap_failed",
@@ -246,6 +250,7 @@ def list_public_record_locators(
     transport: OciTransportV1,
     tag_prefix: str = RECORD_TAG_PREFIX,
     allow_verification_tags: bool = False,
+    allow_reuse_tags: bool = False,
     page_size: int = 100,
     max_records: int = 4096,
 ) -> tuple[dict[str, str], ...]:
@@ -345,14 +350,20 @@ def list_public_record_locators(
                 r"(?:build|node|browser)-sha256-[0-9a-f]{64}",
                 tag,
             )
-            if record_tag is None and verification_tag is None:
+            reuse_tag = re.fullmatch(r"reuse-sha256-[0-9a-f]{64}", tag)
+            if record_tag is None and verification_tag is None and reuse_tag is None:
                 raise OciPublicationError(
                     "record inventory contains a mutable or unknown tag",
                     guard_code="candidate_integrity_mismatch",
                 )
             if tag.startswith(checked_prefix):
                 tags.add(tag)
-            elif not allow_verification_tags:
+            elif reuse_tag is not None and not allow_reuse_tags:
+                raise OciPublicationError(
+                    "record inventory contains another immutable record class",
+                    guard_code="candidate_integrity_mismatch",
+                )
+            elif reuse_tag is None and not allow_verification_tags:
                 raise OciPublicationError(
                     "record inventory contains another immutable record class",
                     guard_code="candidate_integrity_mismatch",

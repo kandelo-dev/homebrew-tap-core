@@ -482,7 +482,7 @@ class CandidateRecordTests(unittest.TestCase):
             _new_request_context(),
         )
         plan = build_candidate_reuse_oci_plan(
-            record, repository=CANDIDATE_REPOSITORY + "/reuse"
+            record, repository=CANDIDATE_REPOSITORY
         )
         self.assertEqual(plan.artifact_type, CANDIDATE_REUSE_RECORD_MEDIA_TYPE)
         self.assertEqual([layer.role for layer in plan.layers], ["immutable-record-bytes"])

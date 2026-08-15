@@ -912,9 +912,7 @@ class PromotionTests(unittest.TestCase):
         )
         plan = build_candidate_reuse_oci_plan(
             record,
-            repository=(
-                "kandelo-dev/homebrew-tap-core-abi-8-candidates/bash/reuse"
-            ),
+            repository="kandelo-dev/homebrew-tap-core-abi-8-candidates/bash",
         )
         return request, request_digest, tap_plan, record, _fetched_from_plan(plan)
 
@@ -1065,9 +1063,7 @@ class PromotionTests(unittest.TestCase):
         body = canonical_bytes(changed)
         changed_plan = build_candidate_reuse_oci_plan(
             changed,
-            repository=(
-                "kandelo-dev/homebrew-tap-core-abi-8-candidates/bash/reuse"
-            ),
+            repository="kandelo-dev/homebrew-tap-core-abi-8-candidates/bash",
         )
         self.assertEqual(
             changed_plan.artifact_type, CANDIDATE_REUSE_RECORD_MEDIA_TYPE
