@@ -125,6 +125,10 @@ class PolicyTests(unittest.TestCase):
         source = (TAP_ROOT / "Formula/musl-fts.rb").read_text(encoding="utf-8")
         self.assertIn('ENV["AUTOMAKE_LIBDIR"] = automake_modules.to_s', source)
         self.assertNotIn('ENV.prepend_path "PERL5LIB", automake_modules', source)
+        self.assertIn(
+            'ENV.prepend_path "ACLOCAL_PATH", Formula["libtool"].opt_share/"aclocal"',
+            source,
+        )
         self.assertIn("--automake-acdir=#{automake_macros}", source)
         self.assertIn("--system-acdir=#{automake_macros}", source)
 
