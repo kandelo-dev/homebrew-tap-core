@@ -453,6 +453,34 @@ class OciPublicationTests(unittest.TestCase):
                 list_public_record_locators(REPOSITORY, transport=transport), ()
             )
 
+    def test_anonymous_bearer_exchange_403_is_retryable_when_not_hidden(self) -> None:
+        transport = UrllibOciTransportV1(username="", token="")
+        inventory_url = f"https://ghcr.io/v2/{REPOSITORY}/tags/list?n=100"
+        token_url = (
+            "https://ghcr.io/token?service=ghcr.io&scope="
+            f"repository%3A{REPOSITORY.replace('/', '%2F')}%3Apull"
+        )
+        challenge = (
+            'Bearer realm="https://ghcr.io/token",service="ghcr.io",'
+            f'scope="repository:{REPOSITORY}:pull"'
+        )
+        responses = iter(
+            (
+                HttpResponseV1(
+                    401,
+                    {"www-authenticate": challenge},
+                    b"",
+                    inventory_url,
+                ),
+                HttpResponseV1(403, {}, b'{"message":"temporary denial"}', token_url),
+            )
+        )
+        with patch.object(transport, "_perform", side_effect=responses), self.assertRaises(
+            OciPublicationError
+        ) as raised:
+            list_public_record_locators(REPOSITORY, transport=transport)
+        self.assertTrue(raised.exception.retryable)
+
     def test_manifest_is_canonical_and_preserves_exact_descriptor_order(self) -> None:
         plan = _plan()
         manifest = build_oci_manifest(plan)
