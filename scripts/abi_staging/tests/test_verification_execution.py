@@ -738,6 +738,11 @@ class VerificationExecutionTests(unittest.TestCase):
             self.assertNotIn("KANDELO_HOMEBREW_BUILD_USER", kwargs["env"])
             self.assertNotIn("KANDELO_HOMEBREW_RECIPE_USER", kwargs["env"])
             self.assertNotIn("KANDELO_HOMEBREW_SHARED_TEMP", kwargs["env"])
+            self.assertNotIn("PLAYWRIGHT_BROWSERS_PATH", kwargs["env"])
+            self.assertEqual(
+                kwargs["env"]["HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH"],
+                "/private/playwright",
+            )
             self.assertNotEqual(kwargs["env"]["HOME"], "/credentialed/home")
             self.assertEqual(
                 kwargs["env"]["XDG_CONFIG_HOME"],
@@ -806,6 +811,7 @@ class VerificationExecutionTests(unittest.TestCase):
                     "KANDELO_HOMEBREW_BUILD_USER": "kandelo-homebrew-build",
                     "KANDELO_HOMEBREW_RECIPE_USER": "kandelo-homebrew-recipe",
                     "KANDELO_HOMEBREW_SHARED_TEMP": "/tmp/kandelo-homebrew",
+                    "PLAYWRIGHT_BROWSERS_PATH": "/private/playwright",
                     "RENAMED_WRITE_TOKEN": "must-not-survive",
                     "NIX_CONFIG": "access-tokens = github.com=must-not-survive",
                     "HOME": "/credentialed/home",

@@ -10,19 +10,3 @@ kandelo_paths = [
   "scripts/test-homebrew-inspect-bottle.sh",
 ]
 policy = "kandelo-bottle-structure-v1"
-
-[[tests]]
-id = "public-candidate-browser"
-hosts = ["browser"]
-kandelo_paths = [
-  "apps/browser-demos/test/homebrew-flat-vfs-shipping.spec.ts",
-]
-policy = "kandelo-public-candidate-browser-v1"
-
-[[tests]]
-id = "public-candidate-node"
-hosts = ["node"]
-kandelo_paths = [
-  "host/test/homebrew-public-bottle-verifier.test.ts",
-]
-policy = "kandelo-public-candidate-node-v1"

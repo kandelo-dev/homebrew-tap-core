@@ -1338,6 +1338,17 @@ def execute_verification_work(
         child_environment.pop("KANDELO_HOMEBREW_BUILD_USER", None)
         child_environment.pop("KANDELO_HOMEBREW_RECIPE_USER", None)
         child_environment.pop("KANDELO_HOMEBREW_SHARED_TEMP", None)
+        playwright_browsers = child_environment.pop(
+            "PLAYWRIGHT_BROWSERS_PATH", None
+        )
+        if playwright_browsers is not None:
+            # Homebrew removes Playwright's ordinary variable before Formula
+            # tests. Its documented HOMEBREW_* bridge survives that re-exec;
+            # the protected Formula support projects this exact prepared realm
+            # back to the browser runner and no other child.
+            child_environment[
+                "HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH"
+            ] = playwright_browsers
         result = run_process(command, cwd=kandelo, env=child_environment, check=False)
     returncode = getattr(result, "returncode", None)
     if isinstance(returncode, bool) or not isinstance(returncode, int):
