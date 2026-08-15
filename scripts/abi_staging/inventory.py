@@ -39,6 +39,7 @@ from .scheduler import (
 from .verification import (
     VERIFICATION_RECEIPT_MEDIA_TYPE,
     receipt_repository,
+    receipt_tag_prefix,
     validate_verification_receipt_record,
 )
 
@@ -192,6 +193,8 @@ def inspect_source_custody_records(
 def inspect_verification_repository(
     repository: str,
     *,
+    test_id: str,
+    host: str,
     candidates: Mapping[str, Mapping[str, Any]],
     transport: OciTransportV1,
 ) -> VerificationInventoryV1:
@@ -201,7 +204,12 @@ def inspect_verification_repository(
     locators: dict[str, dict[str, str]] = {}
     records: dict[str, dict[str, Any]] = {}
     try:
-        for locator in list_public_record_locators(repository, transport=transport):
+        for locator in list_public_record_locators(
+            repository,
+            transport=transport,
+            tag_prefix=receipt_tag_prefix(test_id, host),
+            allow_verification_tags=True,
+        ):
             fetched = fetch_public_record(
                 locator,
                 transport=transport,
@@ -305,11 +313,17 @@ def inspect_verification_repository(
 def scan_verification_repository(
     repository: str,
     *,
+    test_id: str,
+    host: str,
     candidates: Mapping[str, Mapping[str, Any]],
     transport: OciTransportV1,
 ) -> tuple[VerificationFactV1, ...]:
     return inspect_verification_repository(
-        repository, candidates=candidates, transport=transport
+        repository,
+        test_id=test_id,
+        host=host,
+        candidates=candidates,
+        transport=transport,
     ).facts
 
 
@@ -389,7 +403,9 @@ def inspect_candidate_repository(
     locators: dict[str, dict[str, str]] = {}
     records: dict[str, dict[str, Any]] = {}
     try:
-        inventory = list_public_record_locators(repository, transport=transport)
+        inventory = list_public_record_locators(
+            repository, transport=transport, allow_verification_tags=True
+        )
         for locator in inventory:
             fetched = fetch_public_record(
                 locator,
@@ -705,6 +721,8 @@ def scan_scheduling_inventory(
             for host in definition.hosts:
                 inspected = inspect_verification_repository(
                     receipt_repository(base, definition.id, host),
+                    test_id=definition.id,
+                    host=host,
                     candidates=candidate_subjects,
                     transport=transport,
                 )

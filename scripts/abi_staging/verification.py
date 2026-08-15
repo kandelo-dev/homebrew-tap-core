@@ -19,7 +19,7 @@ from .oci import (
     PublishedRecordLocatorV1,
     fetch_public_record,
     parse_public_record_locator,
-    publish_record,
+    publish_immutable_oci_plan,
 )
 from .policy import (
     TapStagingPolicyV1,
@@ -454,7 +454,13 @@ def receipt_repository(candidate_repository: str, test_id: str, host: str) -> st
         or host not in {"build", "node", "browser"}
     ):
         raise VerificationError("verification receipt repository inputs are invalid")
-    return f"{candidate_repository}/receipts/{test_id}/{host}"
+    return candidate_repository
+
+
+def receipt_tag_prefix(test_id: str, host: str) -> str:
+    receipt_repository("owner/package", test_id, host)
+    test_key = hashlib.sha256(test_id.encode("utf-8")).hexdigest()[:32]
+    return f"verification-{test_key}-{host}-sha256-"
 
 
 def validate_verification_receipt_record(value: Mapping[str, Any]) -> None:
@@ -921,6 +927,7 @@ def _publish_receipt_plan(
     layers: tuple[OciBlobV1, ...],
     completed_at: str,
     host: str,
+    test_id: str,
     outcome: str,
     candidate_record_sha256: str,
     test_definition_sha256: str,
@@ -950,10 +957,11 @@ def _publish_receipt_plan(
         },
     )
     try:
-        return publish_record(
+        return publish_immutable_oci_plan(
             plan,
             transport=transport,
             expected_source_repository=expected_source_repository,
+            tag_prefix=receipt_tag_prefix(test_id, host),
         )
     except OciPublicationError as error:
         raise VerificationPublicationError(
@@ -1040,6 +1048,7 @@ def publish_verification_receipt(
         layers=layers,
         completed_at=completed,
         host=selected["host"],
+        test_id=test_definition.id,
         outcome=result["outcome"],
         candidate_record_sha256=record_sha256,
         test_definition_sha256=test_definition.sha256,
@@ -1155,6 +1164,7 @@ def publish_protected_verification_outcome(
         layers=layers,
         completed_at=completed,
         host=host,
+        test_id=test_definition.id,
         outcome=outcome,
         candidate_record_sha256=record_sha256,
         test_definition_sha256=test_definition.sha256,

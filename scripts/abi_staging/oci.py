@@ -36,6 +36,19 @@ from .records import (
 MANIFEST_ACCEPT = OCI_MANIFEST_MEDIA_TYPE
 REGISTRY_HOST = "ghcr.io"
 GITHUB_API_HOST = "api.github.com"
+RECORD_TAG_PREFIX = "record-sha256-"
+VERIFICATION_TAG_PREFIX = re.compile(
+    r"verification-[0-9a-f]{32}-(?:build|node|browser)-sha256-"
+)
+
+
+def _immutable_tag_prefix(value: str) -> str:
+    if value != RECORD_TAG_PREFIX and VERIFICATION_TAG_PREFIX.fullmatch(value) is None:
+        raise OciPublicationError(
+            "immutable OCI tag prefix is unsupported",
+            guard_code="namespace_bootstrap_failed",
+        )
+    return value
 
 
 @dataclass(frozen=True)
@@ -231,6 +244,8 @@ def list_public_record_locators(
     repository: str,
     *,
     transport: OciTransportV1,
+    tag_prefix: str = RECORD_TAG_PREFIX,
+    allow_verification_tags: bool = False,
     page_size: int = 100,
     max_records: int = 4096,
 ) -> tuple[dict[str, str], ...]:
@@ -248,6 +263,7 @@ def list_public_record_locators(
             "record inventory repository is invalid",
             guard_code="candidate_integrity_mismatch",
         )
+    checked_prefix = _immutable_tag_prefix(tag_prefix)
     if not 1 <= page_size <= 1000 or not 1 <= max_records <= 65_536:
         raise OciPublicationError(
             "record inventory bounds are invalid",
@@ -318,15 +334,29 @@ def list_public_record_locators(
                 guard_code="candidate_integrity_mismatch",
             )
         for tag in value["tags"]:
-            if (
-                not isinstance(tag, str)
-                or re.fullmatch(r"record-sha256-[0-9a-f]{64}", tag) is None
-            ):
+            if not isinstance(tag, str):
                 raise OciPublicationError(
                     "record inventory contains a mutable or unknown tag",
                     guard_code="candidate_integrity_mismatch",
                 )
-            tags.add(tag)
+            record_tag = re.fullmatch(r"record-sha256-[0-9a-f]{64}", tag)
+            verification_tag = re.fullmatch(
+                r"verification-[0-9a-f]{32}-"
+                r"(?:build|node|browser)-sha256-[0-9a-f]{64}",
+                tag,
+            )
+            if record_tag is None and verification_tag is None:
+                raise OciPublicationError(
+                    "record inventory contains a mutable or unknown tag",
+                    guard_code="candidate_integrity_mismatch",
+                )
+            if tag.startswith(checked_prefix):
+                tags.add(tag)
+            elif not allow_verification_tags:
+                raise OciPublicationError(
+                    "record inventory contains another immutable record class",
+                    guard_code="candidate_integrity_mismatch",
+                )
             if len(tags) > max_records:
                 raise OciPublicationError(
                     "record inventory exceeds its bound",
@@ -358,9 +388,9 @@ def list_public_record_locators(
     return tuple(
         {
             "repository": "ghcr.io/" + repository,
-            "digest": "sha256:" + tag.removeprefix("record-sha256-"),
+            "digest": "sha256:" + tag.removeprefix(checked_prefix),
             "immutable_reference": (
-                "ghcr.io/" + repository + "@sha256:" + tag.removeprefix("record-sha256-")
+                "ghcr.io/" + repository + "@sha256:" + tag.removeprefix(checked_prefix)
             ),
         }
         for tag in sorted(tags)
@@ -995,11 +1025,10 @@ def publish_immutable_oci_plan(
 ) -> PublishedRecordLocatorV1:
     """Publish one digest-tagged plan and anonymously re-read every exact byte."""
 
-    if tag_prefix not in {"canonical-sha256-", "record-sha256-"}:
-        raise OciPublicationError(
-            "immutable OCI tag prefix is unsupported",
-            guard_code="namespace_bootstrap_failed",
-        )
+    if tag_prefix == "canonical-sha256-":
+        pass
+    else:
+        _immutable_tag_prefix(tag_prefix)
 
     # An anonymous authentication challenge cannot distinguish a missing
     # namespace from a private package. Resolve that ambiguity with protected
