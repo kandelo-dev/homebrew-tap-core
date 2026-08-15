@@ -46,6 +46,7 @@ class MuslFts < Formula
         *prefix_maps,
       ].join(" ")
       ENV.prepend_path "ACLOCAL_PATH", Formula["pkgconf"].opt_share/"aclocal"
+      ENV.prepend_path "ACLOCAL_PATH", Formula["libtool"].opt_share/"aclocal"
 
       # Homebrew relocates aclocal's compiled module root into the isolated
       # publisher prefix. Bind the declared native Automake keg explicitly so

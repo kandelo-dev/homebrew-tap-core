@@ -1316,7 +1316,7 @@ def execute_verification_work(
             "--dependency-provenance",
             str(prepared["dependency_provenance"]),
             "--sysroot-build-root",
-            str(prepared["sysroot"]),
+            str(kandelo),
         ]
         for forbidden in sorted({str(kandelo), str(tap), str(prepared["root"])}):
             command.extend(["--forbidden-root", forbidden])

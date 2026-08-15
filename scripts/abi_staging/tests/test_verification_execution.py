@@ -764,6 +764,10 @@ class VerificationExecutionTests(unittest.TestCase):
                     "source": bundle["request"]["build_source"],
                 },
             )
+            self.assertEqual(
+                Path(command[command.index("--sysroot-build-root") + 1]),
+                KANDELO_ROOT,
+            )
             return SimpleNamespace(returncode=7)
 
         with tempfile.TemporaryDirectory() as temporary, patch.object(
