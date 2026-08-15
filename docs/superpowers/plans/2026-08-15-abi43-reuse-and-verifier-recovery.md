@@ -226,3 +226,94 @@ the target Formula's browser cache.
   Redispatch the immutable request until required verification is complete,
   merge the ABI 43 PR, and run post-merge promotion, tap metadata admission,
   Pages readiness, and deployment.
+
+### Task 4: Recover corrected verification without rebuilding candidates
+
+**Files in `Kandelo-dev/homebrew-tap-core`:**
+- Modify: `scripts/abi_staging/scheduler.py`
+- Test: `scripts/abi_staging/tests/test_scheduler.py`
+
+**Files in `Automattic/kandelo`:**
+- Modify: `scripts/homebrew-verify-poured-bottle.sh`
+- Test: `scripts/test-homebrew-publish-workflow.sh`
+
+**Interfaces:**
+- Produces: request-local unsuccessful verification retry budgets while
+  preserving historical successful verification reuse.
+- Produces: validated `PLAYWRIGHT_BROWSERS_PATH` propagation across Homebrew's
+  Formula-test `HOME` replacement.
+- Consumes: immutable verification receipts, the current request digest, and
+  the explicit `--playwright-browsers-path` verifier input from Task 2.
+
+- [x] **Step 1: Write scheduler RED coverage**
+
+  Add a test with one historical failed receipt at the maximum ordinal and an
+  otherwise identical current request. Assert that scheduling emits
+  `verify-candidate` at ordinal zero. Keep the existing historical-success
+  reuse assertion.
+
+- [x] **Step 2: Run the focused scheduler test and verify RED**
+
+  ```bash
+  cd /private/tmp/kandelo-abi43-main-merge-20260813
+  scripts/dev-shell.sh bash -lc '
+    cd /private/tmp/tap-protected-verifier.oToGmF
+    env KANDELO_TAP_ROOT=$PWD \
+      KANDELO_ROOT=/private/tmp/kandelo-abi43-main-merge-20260813 \
+      PYTHONDONTWRITEBYTECODE=1 \
+      python3 -m unittest \
+        scripts.abi_staging.tests.test_scheduler.SchedulerTests.test_historical_failure_does_not_exhaust_current_request -v
+  '
+  ```
+
+  Expected: no ready verification exists because the historical failure is
+  incorrectly treated as the current request's terminal attempt.
+
+- [x] **Step 3: Filter retry failures to the current request**
+
+  Keep the historical-success lookup over every matching receipt. Before
+  selecting failure ordinals, restrict unsuccessful receipts to
+  `item.request_sha256 == request_sha256`. With no current-request failure,
+  schedule ordinal zero.
+
+- [x] **Step 4: Run scheduler GREEN and regression suites**
+
+  Run the command from Step 2, then the complete scheduler, coordination, and
+  workflow-publication Python modules. Expected: all pass.
+
+- [x] **Step 5: Write browser-cache RED coverage**
+
+  Extend the normal verifier fixture so the fake Homebrew test changes `HOME`
+  before asserting that `PLAYWRIGHT_BROWSERS_PATH` equals the canonical
+  prepared browser root. Assert that caller poisoning is replaced.
+
+- [x] **Step 6: Run the focused verifier fixture and verify RED**
+
+  ```bash
+  cd /private/tmp/kandelo-abi43-main-merge-20260813
+  scripts/dev-shell.sh env \
+    KANDELO_HOMEBREW_PUBLISH_TEST_FOCUS=verification-playwright-cache \
+    bash scripts/test-homebrew-publish-workflow.sh
+  ```
+
+  Expected: the fake Formula test sees no canonical Playwright browser path.
+
+- [x] **Step 7: Export the validated explicit browser path**
+
+  After canonical input validation, export
+  `PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH_INPUT"` for the normal
+  verifier process. Remove the ineffective verifier-home cache symlink and its
+  cleanup state.
+
+- [x] **Step 8: Run verifier GREEN and exact outer fixture**
+
+  Run the command from Step 6 and
+  `scripts/dev-shell.sh bash scripts/test-abi-staging-verify-bottle.sh`.
+  Expected: both pass and selected Formula bytes remain unchanged.
+
+- [ ] **Step 9: Commit, land, republish, and redispatch**
+
+  Commit the repositories separately, land both Why-first PR updates, publish
+  a new immutable request for the new Kandelo head, and require the next tap
+  plan to retain `build_count == 0` while retrying the four formerly stranded
+  required verifications at ordinal zero.

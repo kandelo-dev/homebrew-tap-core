@@ -646,12 +646,21 @@ def schedule_ready_batch(
                 ]
                 if any(item.outcome == "success" for item in receipts):
                     continue
-                if not receipts:
+                current_receipts = [
+                    item
+                    for item in receipts
+                    if item.request_sha256 == request_sha256
+                ]
+                if not current_receipts:
                     next_verification = (definition_sha256, host, _definition_id, 0)
                     break
-                latest_ordinal = max(item.attempt_ordinal for item in receipts)
+                latest_ordinal = max(
+                    item.attempt_ordinal for item in current_receipts
+                )
                 latest = [
-                    item for item in receipts if item.attempt_ordinal == latest_ordinal
+                    item
+                    for item in current_receipts
+                    if item.attempt_ordinal == latest_ordinal
                 ]
                 selected = _dominant_terminal_failure(latest)
                 if not isinstance(selected, VerificationFactV1):
