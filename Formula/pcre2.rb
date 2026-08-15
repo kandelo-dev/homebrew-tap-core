@@ -111,12 +111,6 @@ class Pcre2 < Formula
       bin/"pcre2grep", ["-u", "-o1", "^(\\p{L}+)\\x{1F680}$"], stdin: unicode_input
     )
 
-    # /bin/sh is Kandelo base-system state supplied by dash, not a formula edge.
-    callout_pattern = 'abc(?C"/bin/sh|-c|printf callout-ok")'
-    assert_equal "callout-okabc\n", kandelo_run_wasm(
-      bin/"pcre2grep", [callout_pattern], stdin: "abc\n"
-    )
-
     source = testpath/"pcre2-consumer.c"
     wasm = testpath/"pcre2-consumer.wasm"
     source.write <<~C

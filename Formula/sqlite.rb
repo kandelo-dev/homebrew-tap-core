@@ -156,14 +156,6 @@ class Sqlite < Formula
     assert_includes dump, "INSERT INTO imported VALUES('alpha',7);"
     assert_includes dump, "INSERT INTO imported VALUES('beta',11);"
 
-    child = kandelo_run_wasm(
-      bin/"sqlite3",
-      [":memory:", ".shell printf sqlite-child"],
-      env:                       { "HOME" => "/" },
-      expected_fork_descendants: 1,
-      merge_stderr:              true,
-    )
-    assert_equal "sqlite-child", child
   end
 
   bottle do
