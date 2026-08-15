@@ -245,6 +245,51 @@ class WorkflowExecutionTests(unittest.TestCase):
             self.assertEqual(output.read_text(encoding="utf-8"), "")
         self.assertEqual(status, 1)
 
+    def test_cli_exports_one_exact_candidate_verification_realm(self) -> None:
+        from scripts.abi_staging import cli
+
+        bundle = _active_bundle()
+        work = bundle["workflow"]["build_work"][0]
+        subject = json.loads(work["subject"])
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            coordination = root / "coordination.json"
+            output = root / "github-env"
+            coordination.write_bytes(canonical_bytes(bundle))
+            output.write_text("", encoding="utf-8")
+            with patch.object(
+                cli, "select_verification_work", return_value=work
+            ):
+                status = cli.main(
+                    [
+                        "export-verification-realm",
+                        "--coordination",
+                        str(coordination),
+                        "--work-id",
+                        work["work_id"],
+                        "--tap-root",
+                        str(TAP_ROOT),
+                        "--github-env",
+                        str(output),
+                    ]
+                )
+            observed = output.read_text(encoding="utf-8")
+        self.assertEqual(status, 0)
+        self.assertEqual(
+            observed,
+            (
+                "KANDELO_ABI_STAGING_ARCHITECTURE="
+                f"{subject['architecture']}\n"
+                "KANDELO_ABI_STAGING_FORMULA="
+                f"{subject['identity']}\n"
+                "KANDELO_ABI_STAGING_TAP_COMMIT="
+                f"{bundle['tap_plan']['tap_source']['commit']}\n"
+                "KANDELO_ABI_STAGING_TAP_NAME=kandelo-dev/tap-core\n"
+                "KANDELO_ABI_STAGING_TAP_REPOSITORY="
+                f"{bundle['tap_plan']['tap_source']['repository']}\n"
+            ),
+        )
+
     def test_build_work_materializes_only_exact_declared_inputs(self) -> None:
         try:
             execution = importlib.import_module("scripts.abi_staging.execution")

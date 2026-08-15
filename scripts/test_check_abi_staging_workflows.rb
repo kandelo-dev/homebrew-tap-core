@@ -1036,6 +1036,52 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     end
   end
 
+  def test_candidate_verification_provisions_the_exact_homebrew_realm
+    steps = @verification.dig("jobs", "verify", "steps")
+    homebrew = steps.find do |step|
+      step.dig("with", "path") == "homebrew-prefix/Homebrew"
+    end
+    export = steps.find do |step|
+      step["name"] == "Export exact candidate verification identity"
+    end
+    realm = steps.find do |step|
+      step["name"] == "Prepare exact uncredentialed Homebrew realm"
+    end
+    execute = steps.find do |step|
+      step.fetch("run", "").include?("execute-verification-work")
+    end
+
+    refute_nil homebrew
+    assert_equal "Homebrew/brew", homebrew.dig("with", "repository")
+    assert_match(/\A[0-9a-f]{40}\z/, homebrew.dig("with", "ref"))
+    assert_equal false, homebrew.dig("with", "persist-credentials")
+    refute_nil export
+    refute_nil realm
+    refute_nil execute
+    assert_operator steps.index(homebrew), :<, steps.index(realm)
+    assert_operator steps.index(export), :<, steps.index(realm)
+    assert_operator steps.index(realm), :<, steps.index(execute)
+    assert_includes export.fetch("run"), "export-verification-realm"
+    assert_includes export.fetch("run"), '"PYTHONSAFEPATH=1"'
+    assert_includes export.fetch("run"),
+                    "python3 -P -m scripts.abi_staging.cli export-verification-realm"
+    assert_includes realm.fetch("run"), "abi-staging-candidate.yml"
+    assert_includes realm.fetch("run"),
+                    "Prepare exact uncredentialed Homebrew realm"
+    %w[
+      HOMEBREW_BREW_FILE HOMEBREW_BREW_COMMIT HOMEBREW_CACHE HOMEBREW_TEMP
+      KANDELO_HOMEBREW_RESOLVED_TAPS_FILE PLAYWRIGHT_BROWSERS_PATH
+      WASM_POSIX_BINARY_CACHE_ROOT WASM_POSIX_XTASK_BIN
+      KANDELO_HOMEBREW_BUILD_USER KANDELO_HOMEBREW_RECIPE_USER
+      KANDELO_HOMEBREW_SHARED_TEMP KANDELO_HOMEBREW_SUDO_BIN
+      KANDELO_HOMEBREW_SYSTEMD_RUN_BIN KANDELO_HOMEBREW_SYSTEMCTL_BIN
+      KANDELO_HOMEBREW_GETENT_BIN KANDELO_HOMEBREW_PGREP_BIN
+      KANDELO_HOMEBREW_PKILL_BIN
+    ].each do |name|
+      assert_includes execute.fetch("run"), "#{name}=$#{name}"
+    end
+  end
+
   def test_uncredentialed_executors_enter_the_immutable_kandelo_dev_shell
     lanes = [
       [:candidate, @candidate, "build", "execute-build-work"],
