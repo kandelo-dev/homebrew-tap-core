@@ -5643,9 +5643,9 @@ def _publish_workflow_candidate(args: argparse.Namespace) -> None:
             tap_root / "Kandelo/staging/request-issuers.toml",
             expected_tap=policy.tap_repository,
         )
-        lifecycle = GitHubPublicClient(issuer_policy).pull_request_lifecycle(
-            bundle["request"]["pull_request"]["number"]
-        )
+        lifecycle = GitHubPublicClient(
+            issuer_policy, api_token=token
+        ).pull_request_lifecycle(bundle["request"]["pull_request"]["number"])
         discovered = DiscoveredRequestV1(
             bundle["request_sha256"],
             Path(urlsplit(bundle["request_asset_url"]).path).name,
@@ -5828,14 +5828,16 @@ def _recheck_coordinated_lifecycle(
     tap_root: Path,
     policy: Any,
     bundle: Mapping[str, Any],
+    *,
+    github_api_token: str,
 ) -> None:
     issuer_policy = load_request_issuer_policy(
         tap_root / "Kandelo/staging/request-issuers.toml",
         expected_tap=policy.tap_repository,
     )
-    lifecycle = GitHubPublicClient(issuer_policy).pull_request_lifecycle(
-        bundle["request"]["pull_request"]["number"]
-    )
+    lifecycle = GitHubPublicClient(
+        issuer_policy, api_token=github_api_token
+    ).pull_request_lifecycle(bundle["request"]["pull_request"]["number"])
     asset_path = Path(urlsplit(bundle["request_asset_url"]).path)
     discovered = DiscoveredRequestV1(
         bundle["request_sha256"],
@@ -5911,7 +5913,9 @@ def _publish_workflow_reuse(args: argparse.Namespace) -> None:
             raise WorkflowPublicationError(
                 "protected reuse source differs from coordinated tap source"
             )
-        _recheck_coordinated_lifecycle(tap_root, policy, bundle)
+        _recheck_coordinated_lifecycle(
+            tap_root, policy, bundle, github_api_token=token
+        )
         _recheck_workflow_activation(tap_root)
         username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
         package_token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
@@ -6055,7 +6059,9 @@ def _publish_workflow_receipt(args: argparse.Namespace) -> None:
                 "verification work lacks one current protected test definition"
             )
         definition = definitions[0]
-        _recheck_coordinated_lifecycle(tap_root, policy, bundle)
+        _recheck_coordinated_lifecycle(
+            tap_root, policy, bundle, github_api_token=token
+        )
         job = _workflow_job_from_needs(
             name="verify-candidate " + args.work_id,
             conclusion=args.producer_conclusion,
