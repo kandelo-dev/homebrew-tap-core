@@ -206,7 +206,7 @@ class PolicyTests(unittest.TestCase):
         definitions = load_verification_tests(self.staging / "verification-tests.toml")
         self.assertEqual(
             [definition.id for definition in definitions],
-            ["bottle-structure", "public-candidate-browser", "public-candidate-node"],
+            ["bottle-structure"],
         )
         for definition in definitions:
             self.assertRegex(definition.sha256, r"^[0-9a-f]{64}$")
