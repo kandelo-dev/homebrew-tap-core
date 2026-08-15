@@ -511,11 +511,13 @@ def prepare_composition_input(
         ]
         if (
             len(raw_all_files) > 200_000
-            or raw_all_files != sorted(set(raw_all_files))
-            or raw_path_exec_files != sorted(set(raw_path_exec_files))
+            or len(raw_all_files) != len(set(raw_all_files))
+            or len(raw_path_exec_files) != len(set(raw_path_exec_files))
             or not set(raw_path_exec_files).issubset(raw_all_files)
         ):
             raise HandoffError("composition bottle file metadata is noncanonical")
+        raw_all_files.sort()
+        raw_path_exec_files.sort()
         _mapping(tag["tab"], "composition bottle tab")
         _mapping(tag["sbom"], "composition bottle SBOM")
     transport_url = f"{root_url}/blobs/sha256:{bottle_sha256}"

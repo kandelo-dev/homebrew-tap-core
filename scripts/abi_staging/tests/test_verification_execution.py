@@ -441,16 +441,31 @@ class VerificationExecutionTests(unittest.TestCase):
             "https://ghcr.io/v2/kandelo-dev/"
             "homebrew-tap-core-abi-8-candidates/asa"
         )
+        metadata_root_url = root_url.rsplit("/", 1)[0]
         metadata = canonical_bytes(
             {
                 "kandelo-dev/tap-core/asa": {
                     "bottle": {
                         "cellar": "any_skip_relocation",
                         "rebuild": 1,
-                        "root_url": root_url,
-                        "tags": {"wasm32_kandelo": {"sha256": digest}},
+                        "root_url": metadata_root_url,
+                        "tags": {
+                            "wasm32_kandelo": {
+                                "all_files": ["bin/asa", "INSTALL_RECEIPT.json"],
+                                "filename": "asa-15.0.0.wasm32_kandelo.bottle.1.tar.gz",
+                                "installed_size": 1234,
+                                "local_filename": "asa--15.0.0.wasm32_kandelo.bottle.1.tar.gz",
+                                "path_exec_files": ["bin/asa"],
+                                "sbom": {},
+                                "sha256": digest,
+                                "tab": {},
+                            }
+                        },
                     },
                     "formula": {
+                        "desc": "Miniature asa fixture",
+                        "homepage": "https://example.test/asa",
+                        "license": "MIT",
                         "name": "asa",
                         "path": (
                             "Library/Taps/kandelo-dev/homebrew-tap-core/"
@@ -472,7 +487,14 @@ class VerificationExecutionTests(unittest.TestCase):
                 candidates=[
                     {
                         "architecture": "wasm32",
-                        "bottle_layer": {"sha256": digest},
+                        "bottle_layer": {
+                            "immutable_reference": (
+                                "ghcr.io/kandelo-dev/"
+                                "homebrew-tap-core-abi-8-candidates/asa@sha256:"
+                                + digest
+                            ),
+                            "sha256": digest,
+                        },
                         "formula": "asa",
                         "metadata": metadata_path,
                         "tap_repository": TAP_SOURCE["repository"],
@@ -483,6 +505,61 @@ class VerificationExecutionTests(unittest.TestCase):
             formula = (composed / "Formula/asa.rb").read_text(encoding="utf-8")
         self.assertIn(f'root_url "{root_url}"', formula)
         self.assertIn(f'wasm32_kandelo: "{digest}"', formula)
+
+    def test_candidate_tap_composition_rejects_foreign_raw_bottle_root(self) -> None:
+        from scripts.abi_staging import execution
+
+        digest = "a" * 64
+        metadata = canonical_bytes(
+            {
+                "kandelo-dev/tap-core/asa": {
+                    "bottle": {
+                        "cellar": "any_skip_relocation",
+                        "rebuild": 1,
+                        "root_url": "https://ghcr.io/v2/attacker/foreign",
+                        "tags": {"wasm32_kandelo": {"sha256": digest}},
+                    },
+                    "formula": {
+                        "name": "asa",
+                        "path": (
+                            "Library/Taps/kandelo-dev/homebrew-tap-core/"
+                            "Formula/asa.rb"
+                        ),
+                        "pkg_version": "15.0.0",
+                    },
+                }
+            }
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            metadata_path = root / "bottle.json"
+            metadata_path.write_bytes(metadata)
+            with self.assertRaisesRegex(
+                execution.ExecutionError,
+                "publication namespace",
+            ):
+                execution.compose_candidate_tap(
+                    tap_root=TAP_ROOT,
+                    kandelo_root=KANDELO_ROOT,
+                    destination=root / "tap",
+                    candidates=[
+                        {
+                            "architecture": "wasm32",
+                            "bottle_layer": {
+                                "immutable_reference": (
+                                    "ghcr.io/kandelo-dev/"
+                                    "homebrew-tap-core-abi-8-candidates/asa@sha256:"
+                                    + digest
+                                ),
+                                "sha256": digest,
+                            },
+                            "formula": "asa",
+                            "metadata": metadata_path,
+                            "tap_repository": TAP_SOURCE["repository"],
+                            "target_abi": TARGET_ABI,
+                        }
+                    ],
+                )
 
     def test_candidate_tap_composition_rejects_ambiguous_formula_identity(self) -> None:
         from scripts.abi_staging import execution
@@ -528,7 +605,14 @@ class VerificationExecutionTests(unittest.TestCase):
                     candidates=[
                         {
                             "architecture": "wasm32",
-                            "bottle_layer": {"sha256": digest},
+                            "bottle_layer": {
+                                "immutable_reference": (
+                                    "ghcr.io/kandelo-dev/"
+                                    "homebrew-tap-core-abi-8-candidates/asa@sha256:"
+                                    + digest
+                                ),
+                                "sha256": digest,
+                            },
                             "formula": "asa",
                             "metadata": metadata_path,
                             "tap_repository": TAP_SOURCE["repository"],
