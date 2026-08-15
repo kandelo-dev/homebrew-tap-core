@@ -44,6 +44,24 @@ class Abi43DynamicLoaderFormulaeTest(unittest.TestCase):
                 self.assertLess(link, instrument)
                 self.assertLess(instrument, execute)
 
+    def test_dynamic_loader_side_modules_export_the_exact_abi_identity(self) -> None:
+        for name, linked_output in (
+            ("bzip2", '"-o", plugin'),
+            ("libcxx", '"-o", side_module'),
+        ):
+            with self.subTest(name=name):
+                formula = (ROOT / f"Formula/{name}.rb").read_text(encoding="utf-8")
+                declaration = formula.index('#include "abi_constants.h"')
+                export = formula.index('export_name("__abi_version")', declaration)
+                value = formula.index("return WASM_POSIX_ABI_VERSION;", export)
+                link = formula.index(linked_output, value)
+                glue_include = formula.index('"-I#{root}/libc/glue"', value, link)
+
+                self.assertLess(declaration, export)
+                self.assertLess(export, value)
+                self.assertLess(value, glue_include)
+                self.assertLess(glue_include, link)
+
     def test_ed_shell_escape_declares_the_exact_tap_dash_dependency(self) -> None:
         formula = (ROOT / "Formula/ed.rb").read_text(encoding="utf-8")
 

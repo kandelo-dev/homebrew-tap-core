@@ -81,6 +81,12 @@ class Bzip2 < Formula
     C
     plugin_source.write <<~C
       #include <bzlib.h>
+      #include "abi_constants.h"
+
+      __attribute__((export_name("__abi_version")))
+      unsigned __abi_version(void) {
+        return WASM_POSIX_ABI_VERSION;
+      }
 
       const char *kandelo_bzip2_version(void) {
         return BZ2_bzlibVersion();
@@ -139,7 +145,7 @@ class Bzip2 < Formula
         return 0;
       }
     C
-    kandelo_wasm_build do
+    kandelo_wasm_build do |root|
       ENV["PKG_CONFIG_LIBDIR"] = (lib/"pkgconfig").to_s
       ENV.delete("PKG_CONFIG_PATH")
       ENV.delete("PKG_CONFIG_SYSROOT_DIR")
@@ -150,7 +156,8 @@ class Bzip2 < Formula
       assert_includes flags, "-L#{opt_lib}"
       assert_includes flags, "-lbz2"
       system kandelo_cc, source, *flags, "-o", wasm
-      system kandelo_cc, "-shared", "-fPIC", plugin_source, *flags, "-o", plugin
+      system kandelo_cc, "-shared", "-fPIC", plugin_source,
+        "-I#{root}/libc/glue", *flags, "-o", plugin
       system kandelo_cc, loader_source, "-ldl", "-Wl,--export-all", "-o", loader
     end
     kandelo_fork_instrument(plugin)
