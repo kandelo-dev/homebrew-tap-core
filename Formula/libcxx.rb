@@ -278,6 +278,12 @@ class Libcxx < Formula
       #include <cstring>
       #include <string>
       #include <typeinfo>
+      #include "abi_constants.h"
+
+      extern "C" __attribute__((export_name("__abi_version")))
+      unsigned __abi_version(void) {
+        return WASM_POSIX_ABI_VERSION;
+      }
 
       struct base { virtual ~base() = default; };
       struct derived : base {};
@@ -323,7 +329,8 @@ class Libcxx < Formula
     kandelo_wasm_build do |root|
       cxx = kandelo_tool("c++", root)
       common = ["-O2", "-fwasm-exceptions", "-nostdinc++", "-isystem", include/"c++/v1"]
-      system cxx, side_source, *common, "-fPIC", "-shared", "-Wl,--export=__tls_base", "-nostdlib++",
+      system cxx, side_source, *common, "-fPIC", "-shared", "-I#{root}/libc/glue",
+        "-Wl,--export=__tls_base", "-nostdlib++",
         lib/"libc++-pic.a", lib/"libc++abi-pic.a", "-o", side_module
 
       nonpic_module = testpath/"libcxx-nonpic-negative.so"
