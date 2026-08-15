@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -433,6 +434,49 @@ def _fixture() -> tuple[dict[str, object], dict[str, FetchedOciRecordV1]]:
 
 
 class VerificationExecutionTests(unittest.TestCase):
+    def test_verification_overlay_projects_one_prepared_browser_root(self) -> None:
+        from scripts.abi_staging import execution
+
+        with tempfile.TemporaryDirectory() as temporary:
+            composed = Path(temporary) / "tap"
+            formula = composed / "Formula" / "mini-tool.rb"
+            formula.parent.mkdir(parents=True)
+            formula.write_text(
+                'require "pathname"\nrequire "shellwords"\n'
+                "module KandeloFormulaSupport\n"
+                "  def kandelo_node_runner_environment\n"
+                '    "KANDELO_RUNNER_BUILTINS=explicit "\n'
+                "  end\n"
+                "end\nclass Harness; include KandeloFormulaSupport; end\n"
+            )
+            browsers = Path(temporary) / "ms-playwright"
+            browsers.mkdir()
+            execution._install_verification_playwright_overlay(composed, "mini-tool")
+            ruby = subprocess.run(
+                [
+                    "ruby",
+                    "-r",
+                    str(formula),
+                    "-e",
+                    (
+                        "print Harness.new.kandelo_node_runner_environment"
+                    ),
+                ],
+                check=True,
+                env={
+                    **os.environ,
+                    "HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH": str(browsers),
+                },
+                stdout=subprocess.PIPE,
+            )
+            self.assertEqual(
+                ruby.stdout.decode(),
+                (
+                    f"PLAYWRIGHT_BROWSERS_PATH={browsers} "
+                    "KANDELO_RUNNER_BUILTINS=explicit "
+                ),
+            )
+
     def test_candidate_tap_composition_uses_the_exact_generic_namespace(self) -> None:
         from scripts.abi_staging import execution
 
@@ -710,6 +754,10 @@ class VerificationExecutionTests(unittest.TestCase):
         bundle, fetched = _fixture()
         work = bundle["workflow"]["verify_work"][0]
         calls = []
+        support_relative = Path(
+            "Kandelo/formula_support/kandelo_formula_support.rb"
+        )
+        protected_support = (TAP_ROOT / support_relative).read_bytes()
 
         def snapshot(_root: Path, repository: str) -> dict[str, str]:
             return dict(TAP_SOURCE if repository == TAP_SOURCE["repository"] else SOURCE)
@@ -719,7 +767,14 @@ class VerificationExecutionTests(unittest.TestCase):
                 [candidate["formula"] for candidate in kwargs["candidates"]],
                 ["mini-base", "mini-tool"],
             )
-            return kwargs["tap_root"]
+            composed = kwargs["destination"]
+            support = composed / support_relative
+            support.parent.mkdir(parents=True)
+            support.write_bytes(protected_support)
+            formula = composed / "Formula" / "mini-tool.rb"
+            formula.parent.mkdir(parents=True)
+            formula.write_text("class MiniTool\nend\n")
+            return composed
 
         def run_process(command, **kwargs):
             calls.append((command, kwargs))
@@ -743,6 +798,13 @@ class VerificationExecutionTests(unittest.TestCase):
                 kwargs["env"]["HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH"],
                 "/private/playwright",
             )
+            composed_tap = Path(command[command.index("--tap-root") + 1])
+            composed_formula = (
+                composed_tap / "Formula" / "mini-tool.rb"
+            ).read_text()
+            self.assertIn("KandeloVerificationPlaywrightOverlay", composed_formula)
+            self.assertIn("HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH", composed_formula)
+            self.assertEqual((TAP_ROOT / support_relative).read_bytes(), protected_support)
             self.assertNotEqual(kwargs["env"]["HOME"], "/credentialed/home")
             self.assertEqual(
                 kwargs["env"]["XDG_CONFIG_HOME"],

@@ -189,7 +189,7 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     attr_accessor :build_path, :dependency_formulae, :formula_full_name, :formula_name, :formula_path,
                   :formula_pkg_version, :formula_version, :formula_binary_cache_root,
-                  :formula_checker_path, :formula_playwright_browsers_path,
+                  :formula_checker_path,
                   :formula_resolver_repo_root, :homebrew_prefix_path, :nix_path, :prefix_path,
                   :root_path, :runtime_formulae, :shell_result, :stable_spec, :test_path,
                   :tier2_runtime, :resources
@@ -259,12 +259,6 @@ class KandeloFormulaSupportTest < Minitest::Test
 
     def kandelo_formula_resolver_repo_root
       return formula_resolver_repo_root unless formula_resolver_repo_root.nil?
-
-      super
-    end
-
-    def kandelo_formula_playwright_browsers_path
-      return formula_playwright_browsers_path unless formula_playwright_browsers_path.nil?
 
       super
     end
@@ -3967,11 +3961,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       test_path = Pathname(dir)/"formula test"
       checker = root/"target/host triple/release/xtask"
       binary_cache_root = root/KandeloFormulaSupport::KANDELO_PORTABLE_BINARY_CACHE_BASENAME
-      playwright_browsers = Pathname(dir)/"prepared ms-playwright"
-      [
-        root, test_path, checker.dirname, binary_cache_root/"programs",
-        playwright_browsers,
-      ].each(&:mkpath)
+      [root, test_path, checker.dirname, binary_cache_root/"programs"].each(&:mkpath)
       checker.binwrite("sealed checker\n")
       checker.chmod(0555)
       ENV["HOMEBREW_KANDELO_XTASK_BIN"] = "/caller/mutable/xtask"
@@ -3984,7 +3974,6 @@ class KandeloFormulaSupportTest < Minitest::Test
       harness.test_path = test_path
       harness.formula_binary_cache_root = binary_cache_root.to_s.freeze
       harness.formula_checker_path = checker.to_s.freeze
-      harness.formula_playwright_browsers_path = playwright_browsers.to_s
       harness.formula_resolver_repo_root = root.to_s.freeze
       invocations = {
         "default Node runner" => lambda do
@@ -4026,7 +4015,6 @@ class KandeloFormulaSupportTest < Minitest::Test
       invocations.each do |label, invoke|
         invoke.call
         prefixes = %w[
-          PLAYWRIGHT_BROWSERS_PATH=
           WASM_POSIX_BINARY_CACHE_ROOT=
           WASM_POSIX_BINARY_RESOLVER_REPO_ROOT=
           WASM_POSIX_XTASK_BIN=
@@ -4036,7 +4024,6 @@ class KandeloFormulaSupportTest < Minitest::Test
         end
         assert_equal(
           [
-            "PLAYWRIGHT_BROWSERS_PATH=#{playwright_browsers}",
             "WASM_POSIX_BINARY_CACHE_ROOT=#{binary_cache_root}",
             "WASM_POSIX_BINARY_RESOLVER_REPO_ROOT=#{root}",
             "WASM_POSIX_XTASK_BIN=#{checker}",
