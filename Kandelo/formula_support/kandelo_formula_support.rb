@@ -100,7 +100,6 @@ module KandeloFormulaSupport
   KANDELO_TIER2_TRUSTED_ENV_KEYS = %w[
     HOMEBREW_KANDELO_ARCH HOMEBREW_KANDELO_FORK_INSTRUMENT
     HOMEBREW_KANDELO_LLVM_BIN HOMEBREW_KANDELO_LOCAL_ROOT_SPILL HOMEBREW_KANDELO_NODE
-    HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH
     HOMEBREW_KANDELO_PRIMARY_TAP_ROOT HOMEBREW_KANDELO_ROOT
     HOMEBREW_KANDELO_SYSROOT HOMEBREW_KANDELO_TAP_RECIPE_RUNNER
     HOMEBREW_KANDELO_TAP_RECIPE_SEALED_ROOT
@@ -1456,7 +1455,6 @@ module KandeloFormulaSupport
     explicit = %w[
       HOMEBREW_KANDELO_ARCH HOMEBREW_KANDELO_PRIMARY_TAP_ROOT
       HOMEBREW_KANDELO_FORK_INSTRUMENT HOMEBREW_KANDELO_LOCAL_ROOT_SPILL
-      HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH
       HOMEBREW_KANDELO_ROOT HOMEBREW_KANDELO_SYSROOT
       HOMEBREW_KANDELO_TAP_RECIPE_RUNNER HOMEBREW_KANDELO_TAP_RECIPE_SEALED_ROOT
       KANDELO_HOMEBREW_ARCH KANDELO_HOMEBREW_KANDELO_ROOT
@@ -2915,27 +2913,12 @@ module KandeloFormulaSupport
     KANDELO_TIER2_RUNTIME.fetch("trusted_env").fetch("HOMEBREW_KANDELO_ROOT")
   end
 
-  def kandelo_formula_playwright_browsers_path
-    KANDELO_TIER2_RUNTIME.fetch("trusted_env").fetch(
-      "HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH", nil
-    ).to_s
-  end
-
   def kandelo_node_runner_environment
     # Formula tests run only the staged candidate bottle and explicitly listed
     # bottle executables. Do not preload Kandelo's legacy package generations.
     assignments = ["KANDELO_RUNNER_BUILTINS=explicit"]
     checker = kandelo_formula_checker_path
     return assignments.join(" ") << " " if checker.nil?
-
-    playwright_browsers = kandelo_formula_playwright_browsers_path
-    unless playwright_browsers.empty?
-      browser_root = Pathname(playwright_browsers)
-      unless browser_root.absolute? && browser_root.directory? && !browser_root.symlink?
-        odie "prepared Playwright browser root is unavailable"
-      end
-      assignments << "PLAYWRIGHT_BROWSERS_PATH=#{Shellwords.escape(browser_root.to_s)}"
-    end
 
     binary_cache_root = kandelo_formula_binary_cache_root
     resolver_repo_root = kandelo_formula_resolver_repo_root
