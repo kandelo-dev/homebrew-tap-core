@@ -16,6 +16,7 @@ import { dirname, join, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { configureFormulaPlaywrightBrowserPath } from "./playwright-browser-path.ts";
 import { rootfsSizeForStagedBytes, validateGuestPath } from "./rootfs-size.ts";
 
 const O_WRONLY = 0x0001;
@@ -181,21 +182,6 @@ async function stopProcess(process: ChildProcess): Promise<void> {
       resolveExit();
     });
   });
-}
-
-function configurePlaywrightBrowserPath(): void {
-  if (process.env.PLAYWRIGHT_BROWSERS_PATH) return;
-
-  // Homebrew runs formula tests with HOME set to the isolated test directory.
-  // Playwright's downloaded browser remains beside Homebrew's real cache, so
-  // derive that stable location without escaping the formula sandbox for any
-  // writes. Explicit PLAYWRIGHT_BROWSERS_PATH and channel overrides still win.
-  const homebrewCache = process.env.HOMEBREW_CACHE;
-  if (!homebrewCache) return;
-  const playwrightCache = resolve(dirname(homebrewCache), "ms-playwright");
-  if (existsSync(playwrightCache)) {
-    process.env.PLAYWRIGHT_BROWSERS_PATH = playwrightCache;
-  }
 }
 
 function writeGuestFile(
@@ -417,7 +403,7 @@ async function main(): Promise<void> {
     const viteLog = captureChildProcessLog(vite);
     await waitForVite(`${urlBase}/`, vite, viteLog);
 
-    configurePlaywrightBrowserPath();
+    configureFormulaPlaywrightBrowserPath();
     const requireFromBrowserApp = createRequire(
       join(browserDemoDir, "package.json"),
     );

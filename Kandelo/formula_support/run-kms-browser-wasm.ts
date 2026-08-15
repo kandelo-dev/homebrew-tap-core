@@ -14,6 +14,8 @@ import { dirname, join, posix, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { configureFormulaPlaywrightBrowserPath } from "./playwright-browser-path.ts";
+
 interface RunnerConfig {
   argv: string[];
   minPageFlips: number;
@@ -100,21 +102,6 @@ async function stopProcess(process: ChildProcess): Promise<void> {
       resolveExit();
     });
   });
-}
-
-function configurePlaywrightBrowserPath(): void {
-  if (process.env.PLAYWRIGHT_BROWSERS_PATH) return;
-
-  // Homebrew runs formula tests with HOME set to the isolated test directory.
-  // Playwright's downloaded browser remains beside Homebrew's real cache, so
-  // derive that stable location without escaping the formula sandbox for any
-  // writes. Explicit PLAYWRIGHT_BROWSERS_PATH and channel overrides still win.
-  const homebrewCache = process.env.HOMEBREW_CACHE;
-  if (!homebrewCache) return;
-  const playwrightCache = resolve(dirname(homebrewCache), "ms-playwright");
-  if (existsSync(playwrightCache)) {
-    process.env.PLAYWRIGHT_BROWSERS_PATH = playwrightCache;
-  }
 }
 
 async function buildVfs(
@@ -270,7 +257,7 @@ async function main(): Promise<void> {
     vite.stderr?.on("data", (data: Buffer) => viteLog.push(data.toString()));
     await waitForVite(`${urlBase}/`, vite, viteLog);
 
-    configurePlaywrightBrowserPath();
+    configureFormulaPlaywrightBrowserPath();
     const requireFromBrowserApp = createRequire(join(browserDemoDir, "package.json"));
     const { chromium } = requireFromBrowserApp("playwright") as typeof import("playwright");
     browser = await chromium.launch({
