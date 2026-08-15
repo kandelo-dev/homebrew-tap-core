@@ -49,6 +49,11 @@ Formula source currently present in this repository includes:
   guest environment policy used to activate `brew` lazily inside Kandelo;
 - `zlib` and `ruby`, the first dependency and heavy-runtime Formulae;
 - `python`, CPython 3.13.3 with its complete standard library and license tree;
+- `php`, the CLI and FastCGI runtime with its WordPress extension surface,
+  opt-in opcache, curl, Phar, zend_test, ZIP, and intl side modules, and the
+  matching ICU data archive; opcache is off by default and the supported
+  service configuration uses its file-cache-only mode because anonymous shared
+  mappings are not coherent across forked Wasm memories;
 - `erlang`, an embedded Erlang/OTP 28.2 runtime with the real `erlexec`, BEAM,
   boot tree, and fork helper path;
 - `sqlite`, including the library and real command-line shell, plus the `bzip2`/`xz`
