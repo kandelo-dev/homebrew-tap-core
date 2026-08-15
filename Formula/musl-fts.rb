@@ -47,6 +47,21 @@ class MuslFts < Formula
       ].join(" ")
       ENV.prepend_path "ACLOCAL_PATH", Formula["pkgconf"].opt_share/"aclocal"
 
+      # Homebrew relocates aclocal's compiled module root into the isolated
+      # publisher prefix. Bind the declared native Automake keg explicitly so
+      # autoreconf never follows that removed global prefix.
+      automake = Formula["automake"]
+      automake_version = automake.version.to_s[/\A([0-9]+[.][0-9]+)/, 1]
+      odie "native Automake dependency has an unsupported version" if automake_version.nil?
+      automake_modules = automake.prefix/"share/automake-#{automake_version}"
+      automake_macros = automake.prefix/"share/aclocal-#{automake_version}"
+      unless automake_modules.directory? && !automake_modules.symlink? &&
+             automake_macros.directory? && !automake_macros.symlink?
+        odie "native Automake module or macro root is unavailable"
+      end
+      ENV.prepend_path "PERL5LIB", automake_modules
+      ENV["ACLOCAL"] = "aclocal --automake-acdir=#{automake_macros}"
+
       system "autoreconf", "-fi"
       system kandelo_configure, *kandelo_std_configure_args,
         "--disable-shared",
