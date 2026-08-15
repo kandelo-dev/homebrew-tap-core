@@ -126,6 +126,16 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("--automake-acdir=#{automake_macros}", source)
         self.assertIn("--system-acdir=#{automake_macros}", source)
 
+    def test_sudo_make_receives_the_stable_path_maps_directly(self) -> None:
+        source = (TAP_ROOT / "Kandelo/recipes/sudo/build.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            '"$MAKE" -j2 CFLAGS="-O2 -D_GNU_SOURCE $PREFIX_MAPS"',
+            source,
+        )
+        self.assertIn('CPPFLAGS="$PREFIX_MAPS"', source)
+
     def test_expanded_capture_matches_observed_build_entrypoints(self) -> None:
         policy = load_formula_build_inputs(
             self.staging / "formula-build-inputs.toml", tap_root=TAP_ROOT
