@@ -148,7 +148,12 @@ class Abi43LoginFormulaRootsTest(unittest.TestCase):
         )
         self.assertNotIn("grep -q 'kernel_fork'", build)
         self.assertIn("grep 'kernel_fork' >/dev/null", build)
-        self.assertIn('CFLAGS="-O2 -D_GNU_SOURCE"', build)
+        self.assertIn('FORMULA_ROOT="$(dirname "$SOURCE_ROOT")"', build)
+        for option in ("file", "debug", "macro"):
+            self.assertIn(
+                f'-f{option}-prefix-map=${{FORMULA_ROOT}}=/usr/src/sudo-1.9.17p2',
+                build,
+            )
         self.assertIn("char **envp = environ;", patch)
 
     def test_recipes_expose_the_posix_types_required_by_shared_sdk_glue(self) -> None:

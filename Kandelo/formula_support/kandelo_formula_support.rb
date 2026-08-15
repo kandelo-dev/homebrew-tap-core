@@ -1206,7 +1206,7 @@ module KandeloFormulaSupport
   def kandelo_export_native_automake_modules!
     return unless respond_to?(:deps)
 
-    module_roots = deps.filter_map do |dependency|
+    automake_roots = deps.filter_map do |dependency|
       next unless dependency.build? || dependency.test?
 
       formula = dependency.to_formula
@@ -1216,16 +1216,20 @@ module KandeloFormulaSupport
       version = version_match&.[](1)
       odie "native Automake dependency has an unsupported version" if version.nil?
       modules = Pathname(formula.prefix)/"share/automake-#{version}"
-      unless modules.directory? && !modules.symlink?
-        odie "native Automake module root is unavailable: #{modules}"
+      macros = Pathname(formula.prefix)/"share/aclocal-#{version}"
+      unless modules.directory? && !modules.symlink? &&
+             macros.directory? && !macros.symlink?
+        odie "native Automake module or macro root is unavailable"
       end
-      modules.to_s
+      [modules.to_s, macros.to_s]
     end.uniq
-    odie "multiple native Automake module roots are unsupported" if module_roots.length > 1
-    return if module_roots.empty?
+    odie "multiple native Automake roots are unsupported" if automake_roots.length > 1
+    return if automake_roots.empty?
 
+    modules, macros = automake_roots.fetch(0)
     existing = ENV.fetch("PERL5LIB", "").split(File::PATH_SEPARATOR).reject(&:empty?)
-    ENV["PERL5LIB"] = [module_roots.fetch(0), *existing].uniq.join(File::PATH_SEPARATOR)
+    ENV["PERL5LIB"] = [modules, *existing].uniq.join(File::PATH_SEPARATOR)
+    ENV["ACLOCAL"] = "aclocal --automake-acdir=#{macros}"
   end
 
   # The SDK configure wrapper supplies the target host and a default prefix.

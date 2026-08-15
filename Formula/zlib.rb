@@ -10,6 +10,9 @@ class Zlib < Formula
   license "Zlib"
   revision 4
 
+  depends_on KandeloFormulaSupport::BinaryenRequirement => :build
+  depends_on KandeloFormulaSupport::WabtRequirement => :build
+
   skip_clean "lib/libz.a"
 
   def install
@@ -36,8 +39,8 @@ class Zlib < Formula
     assert_path_exists include/"zconf.h"
     assert_path_exists lib/"pkgconfig/zlib.pc"
 
-    kandelo_activate_sdk!
-    kandelo_activate_sysroot!
+    root = kandelo_activate_sdk!
+    kandelo_activate_sysroot!(root)
 
     smoke_c = testpath/"zlib-smoke.c"
     smoke_wasm = testpath/"zlib-smoke.wasm"
@@ -81,6 +84,12 @@ class Zlib < Formula
 
     plugin_c.write <<~C
       #include <zlib.h>
+      #include "abi_constants.h"
+
+      __attribute__((export_name("__abi_version")))
+      unsigned __abi_version(void) {
+        return WASM_POSIX_ABI_VERSION;
+      }
 
       const char *kandelo_zlib_version(void) {
         return zlibVersion();
@@ -118,8 +127,11 @@ class Zlib < Formula
     C
 
     system kandelo_cc, "-shared", "-fPIC", plugin_c,
-      "-I#{include}", "-L#{lib}", "-lz", "-o", plugin_so
+      "-I#{root}/libc/glue", "-I#{include}", "-L#{lib}", "-lz", "-o", plugin_so
     system kandelo_cc, loader_c, "-ldl", "-Wl,--export-all", "-o", loader_wasm
+    kandelo_fork_instrument(plugin_so)
+    kandelo_fork_instrument(loader_wasm)
+    kandelo_validate_wasm_artifact(loader_wasm, fork: :required)
     assert_equal "zlib-side-module #{version} ok\n",
       kandelo_run_wasm(loader_wasm, [plugin_so])
   end

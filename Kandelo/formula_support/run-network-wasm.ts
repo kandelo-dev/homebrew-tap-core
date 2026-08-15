@@ -222,7 +222,14 @@ async function main(): Promise<void> {
     maxWorkers: 8,
     execPrograms,
     extraMounts: Object.entries(writableHostDirectories).map(
-      ([mountPoint, hostPath]) => ({ mountPoint, hostPath, readonly: false }),
+      ([mountPoint, hostPath]) => ({
+        mountPoint,
+        hostPath,
+        readonly: false,
+        // Formula test directories are private to this runner until the guest
+        // exits, so the host backend can return an exact POSIX append end.
+        exclusiveNativeWriters: true,
+      }),
     ),
     enableTcpNetwork: process.env.KANDELO_FORMULA_ENABLE_NETWORK === "1",
     rootfsImage,

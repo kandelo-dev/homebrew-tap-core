@@ -1181,7 +1181,9 @@ class KandeloFormulaSupportTest < Minitest::Test
     Dir.mktmpdir("kandelo-native-automake-modules") do |dir|
       prefix = Pathname(dir)/"Cellar/automake/1.18.1_1"
       modules = prefix/"share/automake-1.18"
+      macros = prefix/"share/aclocal-1.18"
       modules.mkpath
+      macros.mkpath
       formula_class = Struct.new(:full_name, :prefix, :version, keyword_init: true)
       dependency_class = Struct.new(:formula, :build_tag, keyword_init: true) do
         def build? = build_tag
@@ -1201,6 +1203,7 @@ class KandeloFormulaSupportTest < Minitest::Test
       harness.kandelo_export_native_automake_modules!
 
       assert_equal [modules.to_s, "/ambient/perl"].join(File::PATH_SEPARATOR), ENV.fetch("PERL5LIB")
+      assert_equal "aclocal --automake-acdir=#{macros}", ENV.fetch("ACLOCAL")
     end
   ensure
     ENV.replace(original) if original
