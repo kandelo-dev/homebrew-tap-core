@@ -434,49 +434,6 @@ def _fixture() -> tuple[dict[str, object], dict[str, FetchedOciRecordV1]]:
 
 
 class VerificationExecutionTests(unittest.TestCase):
-    def test_verification_overlay_projects_one_prepared_browser_root(self) -> None:
-        from scripts.abi_staging import execution
-
-        with tempfile.TemporaryDirectory() as temporary:
-            composed = Path(temporary) / "tap"
-            formula = composed / "Formula" / "mini-tool.rb"
-            formula.parent.mkdir(parents=True)
-            formula.write_text(
-                'require "pathname"\nrequire "shellwords"\n'
-                "module KandeloFormulaSupport\n"
-                "  def kandelo_node_runner_environment\n"
-                '    "KANDELO_RUNNER_BUILTINS=explicit "\n'
-                "  end\n"
-                "end\nclass Harness; include KandeloFormulaSupport; end\n"
-            )
-            browsers = Path(temporary) / "ms-playwright"
-            browsers.mkdir()
-            execution._install_verification_playwright_overlay(composed, "mini-tool")
-            ruby = subprocess.run(
-                [
-                    "ruby",
-                    "-r",
-                    str(formula),
-                    "-e",
-                    (
-                        "print Harness.new.kandelo_node_runner_environment"
-                    ),
-                ],
-                check=True,
-                env={
-                    **os.environ,
-                    "HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH": str(browsers),
-                },
-                stdout=subprocess.PIPE,
-            )
-            self.assertEqual(
-                ruby.stdout.decode(),
-                (
-                    f"PLAYWRIGHT_BROWSERS_PATH={browsers} "
-                    "KANDELO_RUNNER_BUILTINS=explicit "
-                ),
-            )
-
     def test_candidate_tap_composition_uses_the_exact_generic_namespace(self) -> None:
         from scripts.abi_staging import execution
 
@@ -754,6 +711,7 @@ class VerificationExecutionTests(unittest.TestCase):
         bundle, fetched = _fixture()
         work = bundle["workflow"]["verify_work"][0]
         calls = []
+        expected_formula = b"class MiniTool\nend\n"
         support_relative = Path(
             "Kandelo/formula_support/kandelo_formula_support.rb"
         )
@@ -773,7 +731,7 @@ class VerificationExecutionTests(unittest.TestCase):
             support.write_bytes(protected_support)
             formula = composed / "Formula" / "mini-tool.rb"
             formula.parent.mkdir(parents=True)
-            formula.write_text("class MiniTool\nend\n")
+            formula.write_bytes(expected_formula)
             return composed
 
         def run_process(command, **kwargs):
@@ -794,16 +752,18 @@ class VerificationExecutionTests(unittest.TestCase):
             self.assertNotIn("KANDELO_HOMEBREW_RECIPE_USER", kwargs["env"])
             self.assertNotIn("KANDELO_HOMEBREW_SHARED_TEMP", kwargs["env"])
             self.assertNotIn("PLAYWRIGHT_BROWSERS_PATH", kwargs["env"])
+            self.assertNotIn(
+                "HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH", kwargs["env"]
+            )
             self.assertEqual(
-                kwargs["env"]["HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH"],
-                "/private/playwright",
+                Path(command[command.index("--playwright-browsers-path") + 1]),
+                browsers.resolve(),
             )
             composed_tap = Path(command[command.index("--tap-root") + 1])
-            composed_formula = (
-                composed_tap / "Formula" / "mini-tool.rb"
-            ).read_text()
-            self.assertIn("KandeloVerificationPlaywrightOverlay", composed_formula)
-            self.assertIn("HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH", composed_formula)
+            self.assertEqual(
+                (composed_tap / "Formula" / "mini-tool.rb").read_bytes(),
+                expected_formula,
+            )
             self.assertEqual((TAP_ROOT / support_relative).read_bytes(), protected_support)
             self.assertNotEqual(kwargs["env"]["HOME"], "/credentialed/home")
             self.assertEqual(
@@ -843,6 +803,24 @@ class VerificationExecutionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, patch.object(
             execution, "load_coordination_bundle", return_value=bundle
         ):
+            browsers = Path(temporary) / "ms-playwright"
+            browsers.mkdir()
+            environment = {
+                "PATH": os.environ["PATH"],
+                "CC": "/declared/cc",
+                "GITHUB_ACTIONS": "true",
+                "GITHUB_TOKEN": "must-not-survive",
+                "HOMEBREW_GITHUB_PACKAGES_TOKEN": "must-not-survive",
+                "ACTIONS_RUNTIME_TOKEN": "must-not-survive",
+                "GITHUB_ENV": "/credentialed/github-env",
+                "KANDELO_HOMEBREW_BUILD_USER": "kandelo-homebrew-build",
+                "KANDELO_HOMEBREW_RECIPE_USER": "kandelo-homebrew-recipe",
+                "KANDELO_HOMEBREW_SHARED_TEMP": "/tmp/kandelo-homebrew",
+                "PLAYWRIGHT_BROWSERS_PATH": str(browsers),
+                "RENAMED_WRITE_TOKEN": "must-not-survive",
+                "NIX_CONFIG": "access-tokens = github.com=must-not-survive",
+                "HOME": "/credentialed/home",
+            }
             status = execution.execute_verification_work(
                 coordination_path=Path(temporary) / "coordination.json",
                 work_id=work["work_id"],
@@ -862,23 +840,49 @@ class VerificationExecutionTests(unittest.TestCase):
                 fetch_candidate=lambda locator: fetched[locator["immutable_reference"]],
                 compose_tap=compose,
                 run_process=run_process,
-                environment={
-                    "PATH": os.environ["PATH"],
-                    "CC": "/declared/cc",
-                    "GITHUB_ACTIONS": "true",
-                    "GITHUB_TOKEN": "must-not-survive",
-                    "HOMEBREW_GITHUB_PACKAGES_TOKEN": "must-not-survive",
-                    "ACTIONS_RUNTIME_TOKEN": "must-not-survive",
-                    "GITHUB_ENV": "/credentialed/github-env",
-                    "KANDELO_HOMEBREW_BUILD_USER": "kandelo-homebrew-build",
-                    "KANDELO_HOMEBREW_RECIPE_USER": "kandelo-homebrew-recipe",
-                    "KANDELO_HOMEBREW_SHARED_TEMP": "/tmp/kandelo-homebrew",
-                    "PLAYWRIGHT_BROWSERS_PATH": "/private/playwright",
-                    "RENAMED_WRITE_TOKEN": "must-not-survive",
-                    "NIX_CONFIG": "access-tokens = github.com=must-not-survive",
-                    "HOME": "/credentialed/home",
-                },
+                environment=environment,
             )
+            invalid_environments = [
+                {
+                    key: value
+                    for key, value in environment.items()
+                    if key != "PLAYWRIGHT_BROWSERS_PATH"
+                },
+            ]
+            browser_link = Path(temporary) / "playwright-link"
+            browser_link.symlink_to(browsers, target_is_directory=True)
+            invalid_environments.append(
+                {**environment, "PLAYWRIGHT_BROWSERS_PATH": str(browser_link)}
+            )
+            for invalid_environment in invalid_environments:
+                with self.assertRaisesRegex(
+                    execution.ExecutionError,
+                    "prepared Playwright browser root is unavailable",
+                ):
+                    execution.execute_verification_work(
+                        coordination_path=Path(temporary) / "coordination.json",
+                        work_id=work["work_id"],
+                        kandelo_root=KANDELO_ROOT,
+                        tap_root=TAP_ROOT,
+                        run={
+                            "repository": TAP_SOURCE["repository"],
+                            "workflow_ref": (
+                                ".github/workflows/abi-staging-reconcile.yml"
+                                "@refs/heads/main"
+                            ),
+                            "run_id": 808,
+                            "run_attempt": 2,
+                            "job": "verify-candidate",
+                        },
+                        output=Path(temporary) / "invalid-result",
+                        snapshot_source=snapshot,
+                        fetch_candidate=lambda locator: fetched[
+                            locator["immutable_reference"]
+                        ],
+                        compose_tap=compose,
+                        run_process=run_process,
+                        environment=invalid_environment,
+                    )
         self.assertEqual(status, 7)
         self.assertEqual(len(calls), 1)
 

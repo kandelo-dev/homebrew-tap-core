@@ -25,26 +25,6 @@ from .records import CANDIDATE_RECORD_MEDIA_TYPE, validate_candidate_record
 
 MAX_COORDINATION_BYTES = 64 * 1024 * 1024
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
-VERIFICATION_PLAYWRIGHT_OVERLAY = r'''
-
-# Verification-only host adaptation. This is installed into the private
-# composed tap after candidate identity has been checked, so preparing a host
-# browser cache does not change the Formula build contract or bottle bytes.
-module KandeloVerificationPlaywrightOverlay
-  def kandelo_node_runner_environment
-    environment = super
-    value = ENV.fetch("HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH", "").to_s
-    return environment if value.empty?
-
-    browser_root = Pathname(value)
-    unless browser_root.absolute? && browser_root.directory? && !browser_root.symlink?
-      odie "prepared Playwright browser root is unavailable"
-    end
-    "PLAYWRIGHT_BROWSERS_PATH=#{Shellwords.escape(browser_root.to_s)} #{environment}"
-  end
-end
-KandeloFormulaSupport.prepend(KandeloVerificationPlaywrightOverlay)
-'''
 
 
 class ExecutionError(ValueError):
@@ -1245,34 +1225,6 @@ def compose_candidate_tap(
     return destination.resolve(strict=True)
 
 
-def _install_verification_playwright_overlay(
-    composed_tap: Path, formula: str
-) -> None:
-    """Add host-only browser discovery to one private verification tap."""
-
-    if re.fullmatch(r"[a-z0-9][a-z0-9._-]*", formula) is None:
-        raise ExecutionError("verification overlay Formula name is invalid")
-    formula_path = composed_tap / "Formula" / f"{formula}.rb"
-    try:
-        metadata = formula_path.lstat()
-        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
-            raise ExecutionError(
-                "composed verification Formula must be a regular non-symlink file"
-            )
-        source = formula_path.read_bytes()
-        if not source or len(source) > 1024 * 1024:
-            raise ExecutionError("composed verification Formula is empty or oversized")
-        if b"KandeloVerificationPlaywrightOverlay" in source:
-            raise ExecutionError("composed verification Formula already contains the overlay")
-        formula_path.write_bytes(
-            source + VERIFICATION_PLAYWRIGHT_OVERLAY.encode("utf-8")
-        )
-    except OSError as error:
-        raise ExecutionError(
-            f"cannot install the verification Playwright overlay: {error}"
-        ) from error
-
-
 def execute_verification_work(
     *,
     coordination_path: Path,
@@ -1339,8 +1291,6 @@ def execute_verification_work(
             destination=temporary_root / "tap",
             candidates=prepared["candidates"],
         )
-        formula = _formula_for_subject(bundle, work["subject"])["identity"]["name"]
-        _install_verification_playwright_overlay(composed_tap, str(formula))
         command = [
             str(adapter),
             "--candidate-locator",
@@ -1391,14 +1341,24 @@ def execute_verification_work(
         playwright_browsers = child_environment.pop(
             "PLAYWRIGHT_BROWSERS_PATH", None
         )
-        if playwright_browsers is not None:
-            # Homebrew removes Playwright's ordinary variable before Formula
-            # tests. Its documented HOMEBREW_* bridge survives that re-exec;
-            # the private verification overlay projects this exact prepared
-            # realm back to the browser runner and no other child.
-            child_environment[
-                "HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH"
-            ] = playwright_browsers
+        if not isinstance(playwright_browsers, str) or not playwright_browsers:
+            raise ExecutionError("prepared Playwright browser root is unavailable")
+        browser_root = Path(playwright_browsers)
+        try:
+            resolved_browser_root = browser_root.resolve(strict=True)
+        except OSError as error:
+            raise ExecutionError(
+                f"prepared Playwright browser root is unavailable: {error}"
+            ) from error
+        if (
+            not browser_root.is_absolute()
+            or browser_root.is_symlink()
+            or not resolved_browser_root.is_dir()
+        ):
+            raise ExecutionError("prepared Playwright browser root is unavailable")
+        command.extend(
+            ["--playwright-browsers-path", str(resolved_browser_root)]
+        )
         result = run_process(command, cwd=kandelo, env=child_environment, check=False)
     returncode = getattr(result, "returncode", None)
     if isinstance(returncode, bool) or not isinstance(returncode, int):
