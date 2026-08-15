@@ -388,6 +388,57 @@ def _plan() -> OciRecordPlanV1:
 
 
 class OciPublicationTests(unittest.TestCase):
+    def test_authenticated_public_reads_use_credentials_only_for_ghcr(self) -> None:
+        transport = UrllibOciTransportV1(
+            username="protected-reader",
+            token="read-token",
+            authenticated_public_reads=True,
+        )
+        inventory_url = f"https://ghcr.io/v2/{REPOSITORY}/tags/list?n=100"
+        token_url = (
+            "https://ghcr.io/token?service=ghcr.io&scope="
+            f"repository%3A{REPOSITORY.replace('/', '%2F')}%3Apull"
+        )
+        challenge = (
+            'Bearer realm="https://ghcr.io/token",service="ghcr.io",'
+            f'scope="repository:{REPOSITORY}:pull"'
+        )
+        calls: list[tuple[str, str, dict[str, str]]] = []
+
+        def perform(method, url, *, headers, body, maximum_bytes):
+            del body, maximum_bytes
+            calls.append((method, url, dict(headers)))
+            if url == inventory_url and len(calls) == 1:
+                self.assertTrue(headers["authorization"].startswith("Basic "))
+                return HttpResponseV1(
+                    401,
+                    {"www-authenticate": challenge},
+                    b"",
+                    inventory_url,
+                )
+            if url == token_url:
+                self.assertTrue(headers["authorization"].startswith("Basic "))
+                return HttpResponseV1(200, {}, b'{"token":"fixture-bearer"}', token_url)
+            if url == inventory_url:
+                self.assertEqual(headers["authorization"], "Bearer fixture-bearer")
+                return HttpResponseV1(
+                    200,
+                    {},
+                    canonical_bytes({"name": REPOSITORY, "tags": []}),
+                    inventory_url,
+                )
+            raise AssertionError(f"unexpected request {method} {url}")
+
+        with patch.object(transport, "_perform", side_effect=perform):
+            self.assertEqual(
+                list_public_record_locators(REPOSITORY, transport=transport), ()
+            )
+        self.assertEqual([url for _method, url, _headers in calls], [
+            inventory_url,
+            token_url,
+            inventory_url,
+        ])
+
     def test_anonymous_transport_cannot_be_upgraded_to_authenticated_access(self) -> None:
         transport = UrllibOciTransportV1(username="", token="")
         with self.assertRaises(OciPublicationError):

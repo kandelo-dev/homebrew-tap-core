@@ -218,8 +218,9 @@ module AbiStagingWorkflowCheck
                          step["uses"]&.start_with?("./kandelo-source/")
                      end, "discovery executes with an unsafe workflow capability")
     check_actions(discover)
-    require_contract(discover.fetch("permissions") == {"contents" => "read"},
-                     "discovery must remain contents-read only")
+    require_contract(discover.fetch("permissions") == {
+                       "contents" => "read", "packages" => "read"
+                     }, "discovery must remain contents and packages read only")
     require_contract(discover.fetch("timeout-minutes").between?(1, 30),
                      "discovery timeout is not bounded")
     discovery_checkouts = action_steps(discover, CHECKOUT)
@@ -312,11 +313,21 @@ module AbiStagingWorkflowCheck
     require_contract(coordinator.fetch("if") ==
                        "steps.discover.outputs.selected == 'true'" &&
                        coordinator.fetch("working-directory") == "tap-authority" &&
+                       coordinator.fetch("env") == {
+                         "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
+                         "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}"
+                       } &&
                        coordinator_source.include?("python3 -m scripts.abi_staging.cli prepare-workflow") &&
                        coordinator_source.include?('--kandelo-root "$GITHUB_WORKSPACE/kandelo-source"') &&
                        coordinator_source.include?('--discovery "$out/discovery.json"') &&
                        coordinator_source.include?('--formula-requirements "$RUNNER_TEMP/abi-staging-formula-requirements.json"'),
                      "coordination does not bind exact-head request requirements")
+    require_contract(
+      commands.reject { |step| step.equal?(coordinator) }.none? do |step|
+        step.fetch("env", {}).key?("HOMEBREW_GITHUB_PACKAGES_TOKEN")
+      end,
+      "package read token escaped the protected inventory coordinator"
+    )
     steps = discover.fetch("steps")
     require_contract(steps.index(request_discovery) < steps.index(exact_kandelo) &&
                        steps.index(exact_kandelo) < steps.index(policy_kandelo) &&

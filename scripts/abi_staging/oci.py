@@ -1131,7 +1131,13 @@ class _NoRedirect(HTTPRedirectHandler):
 class UrllibOciTransportV1:
     """Bounded OCI/GitHub HTTP transport with explicit bearer challenges."""
 
-    def __init__(self, *, username: str, token: str) -> None:
+    def __init__(
+        self,
+        *,
+        username: str,
+        token: str,
+        authenticated_public_reads: bool = False,
+    ) -> None:
         if (
             bool(username) != bool(token)
             or any(character.isspace() for character in username)
@@ -1144,6 +1150,12 @@ class UrllibOciTransportV1:
         self._username = username
         self._token = token
         self._authenticated = bool(token)
+        if authenticated_public_reads and not self._authenticated:
+            raise OciPublicationError(
+                "authenticated public reads require registry credentials",
+                guard_code="namespace_bootstrap_failed",
+            )
+        self._authenticated_public_reads = authenticated_public_reads
         self._opener = build_opener(_NoRedirect())
         self._bearer_tokens: dict[tuple[bool, str], str] = {}
 
@@ -1320,7 +1332,6 @@ class UrllibOciTransportV1:
         location = _header(response, "location")
         if (
             method != "GET"
-            or authenticated
             or parsed.scheme != "https"
             or parsed.netloc != REGISTRY_HOST
             or parsed.query
@@ -1437,6 +1448,9 @@ class UrllibOciTransportV1:
                 body=body,
                 maximum_bytes=maximum_bytes,
             )
+        authenticated = authenticated or (
+            self._authenticated_public_reads and method in {"GET", "HEAD"}
+        )
         if authenticated:
             if not self._authenticated:
                 raise OciPublicationError(
