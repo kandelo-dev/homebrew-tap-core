@@ -67,12 +67,21 @@ class Abi43DynamicLoaderFormulaeTest(unittest.TestCase):
                 export = formula.index('export_name("__abi_version")', declaration)
                 value = formula.index("return WASM_POSIX_ABI_VERSION;", export)
                 link = formula.index(linked_output, value)
-                glue_include = formula.index('"-I#{root}/libc/glue"', value, link)
+                glue_root = "kandelo_require_root!" if name == "xz" else "root"
+                glue_include = formula.index(
+                    f'"-I#{{{glue_root}}}/libc/glue"', value, link
+                )
 
                 self.assertLess(declaration, export)
                 self.assertLess(export, value)
                 self.assertLess(value, glue_include)
                 self.assertLess(glue_include, link)
+
+    def test_xz_test_resolves_the_attested_kandelo_root(self) -> None:
+        formula = (ROOT / "Formula/xz.rb").read_text(encoding="utf-8")
+
+        self.assertIn('"-I#{kandelo_require_root!}/libc/glue"', formula)
+        self.assertNotIn('"-I#{root}/libc/glue"', formula)
 
     def test_libcxx_nonpic_probe_can_compile_the_abi_identity(self) -> None:
         formula = (ROOT / "Formula/libcxx.rb").read_text(encoding="utf-8")

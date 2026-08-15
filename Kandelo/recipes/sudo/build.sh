@@ -45,7 +45,7 @@ if [ ! -d "$SOURCE_ROOT" ] || [ -L "$SOURCE_ROOT" ] ||
     echo "sudo: source or Kandelo sysroot is incomplete" >&2
     exit 2
 fi
-for tool in wasm32posix-configure wasm-objdump; do
+for tool in wasm32posix-configure wasm-objdump wasm-opt; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "sudo: required build tool is unavailable: $tool" >&2
         exit 2
@@ -123,7 +123,13 @@ while IFS=: read -r relative output; do
         echo "sudo: expected build output is unavailable: $relative" >&2
         exit 1
     fi
-    install -m 0755 "$source_path" "$artifact"
+    # Upstream sudo retains compilation-directory DWARF in its main executable
+    # even with the normal compiler prefix maps. Bottle bytes must not depend
+    # on Homebrew's per-run staging path, so remove debug sections before fork
+    # instrumentation and before the artifact crosses the sealed output
+    # boundary. ABI and runtime custom sections remain intact and are checked
+    # by the Formula after materialization.
+    wasm-opt --strip-debug "$source_path" -o "$artifact"
     if wasm-objdump -x "$artifact" | grep 'kernel_fork' >/dev/null; then
         instrumented="$WORK_ROOT/.${output}.instrumented"
         "$FORK_INSTRUMENT" "$artifact" -o "$instrumented"
