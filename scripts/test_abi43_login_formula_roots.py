@@ -154,6 +154,12 @@ class Abi43LoginFormulaRootsTest(unittest.TestCase):
                 f'-f{option}-prefix-map=${{FORMULA_ROOT}}=/usr/src/sudo-1.9.17p2',
                 build,
             )
+        self.assertIn('for tool in wasm32posix-configure wasm-objdump wasm-opt; do', build)
+        self.assertIn('wasm-opt --strip-debug "$source_path" -o "$artifact"', build)
+        self.assertLess(
+            build.index('wasm-opt --strip-debug "$source_path" -o "$artifact"'),
+            build.index('if wasm-objdump -x "$artifact"'),
+        )
         self.assertIn("char **envp = environ;", patch)
 
     def test_recipes_expose_the_posix_types_required_by_shared_sdk_glue(self) -> None:

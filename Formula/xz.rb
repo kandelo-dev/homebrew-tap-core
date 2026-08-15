@@ -160,7 +160,7 @@ class Xz < Formula
       assert_includes flags, "-lpthread"
       system kandelo_cc, source, *flags, "-o", wasm
       system kandelo_cc, "-shared", "-fPIC", plugin_source,
-        "-I#{root}/libc/glue", *flags, "-o", plugin
+        "-I#{kandelo_require_root!}/libc/glue", *flags, "-o", plugin
       system kandelo_cc, loader_source, "-ldl", "-Wl,--export-all", "-o", loader
     end
     kandelo_fork_instrument(plugin)
