@@ -123,18 +123,19 @@ class PolicyTests(unittest.TestCase):
 
     def test_musl_fts_binds_both_relocated_automake_macro_roots(self) -> None:
         source = (TAP_ROOT / "Formula/musl-fts.rb").read_text(encoding="utf-8")
+        self.assertIn('ENV["AUTOMAKE_LIBDIR"] = automake_modules.to_s', source)
+        self.assertNotIn('ENV.prepend_path "PERL5LIB", automake_modules', source)
         self.assertIn("--automake-acdir=#{automake_macros}", source)
         self.assertIn("--system-acdir=#{automake_macros}", source)
 
-    def test_sudo_make_receives_the_stable_path_maps_directly(self) -> None:
+    def test_sudo_configure_owns_flags_without_overriding_submake_cppflags(self) -> None:
         source = (TAP_ROOT / "Kandelo/recipes/sudo/build.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn(
-            '"$MAKE" -j2 CFLAGS="-O2 -D_GNU_SOURCE $PREFIX_MAPS"',
-            source,
-        )
-        self.assertIn('CPPFLAGS="$PREFIX_MAPS"', source)
+        self.assertIn('CFLAGS="-O2 -D_GNU_SOURCE $PREFIX_MAPS"', source)
+        self.assertIn('    "$MAKE" -j2\n', source)
+        self.assertNotIn('"$MAKE" -j2 CFLAGS=', source)
+        self.assertNotIn('        CPPFLAGS="$PREFIX_MAPS"', source)
 
     def test_expanded_capture_matches_observed_build_entrypoints(self) -> None:
         policy = load_formula_build_inputs(

@@ -59,7 +59,7 @@ class MuslFts < Formula
              automake_macros.directory? && !automake_macros.symlink?
         odie "native Automake module or macro root is unavailable"
       end
-      ENV.prepend_path "PERL5LIB", automake_modules
+      ENV["AUTOMAKE_LIBDIR"] = automake_modules.to_s
       ENV["ACLOCAL"] = "aclocal --automake-acdir=#{automake_macros} " \
                        "--system-acdir=#{automake_macros}"
 
