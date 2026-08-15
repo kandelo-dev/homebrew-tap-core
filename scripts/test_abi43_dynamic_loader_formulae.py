@@ -27,11 +27,28 @@ class Abi43DynamicLoaderFormulaeTest(unittest.TestCase):
                 self.assertLess(instrument, validate)
                 self.assertLess(validate, execute)
 
-    def test_ed_shell_escape_uses_the_current_native_dash_test_dependency(self) -> None:
+    def test_dynamic_loader_side_modules_are_fork_instrumented(self) -> None:
+        for name, side_module, linked_output in (
+            ("bzip2", "plugin", '"-o", plugin'),
+            ("libcxx", "side_module", '"-o", side_module'),
+        ):
+            with self.subTest(name=name):
+                formula = (ROOT / f"Formula/{name}.rb").read_text(encoding="utf-8")
+                link = formula.index(linked_output)
+                instrument = formula.index(
+                    f"kandelo_fork_instrument({side_module})",
+                    link,
+                )
+                execute = formula.index("kandelo_run_wasm(loader", instrument)
+
+                self.assertLess(link, instrument)
+                self.assertLess(instrument, execute)
+
+    def test_ed_shell_escape_declares_the_exact_tap_dash_dependency(self) -> None:
         formula = (ROOT / "Formula/ed.rb").read_text(encoding="utf-8")
 
-        self.assertIn('depends_on "dash-shell" => :test', formula)
-        self.assertNotIn('depends_on "dash" => :test', formula)
+        self.assertIn('depends_on "kandelo-dev/tap-core/dash" => :test', formula)
+        self.assertNotIn('depends_on "dash-shell" => :test', formula)
         self.assertIn(
             'exec_programs: { "/bin/sh" => '
             'formula_opt_bin("kandelo-dev/tap-core/dash")/"dash" }',

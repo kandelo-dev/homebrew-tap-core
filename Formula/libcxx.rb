@@ -344,6 +344,7 @@ class Libcxx < Formula
     side_info = Utils.safe_popen_read("wasm-objdump", "-x", side_module)
     assert_match(/dylink\.0/, side_info)
     assert_match(/memory.*<- env\.memory/, side_info)
+    kandelo_fork_instrument(side_module)
     kandelo_fork_instrument(loader)
     kandelo_validate_wasm_artifact(loader, fork: :required)
     assert_equal "libcxx-pic-ok\n", kandelo_run_wasm(loader, [side_module])

@@ -431,9 +431,9 @@ class BuildHandoffTests(unittest.TestCase):
         }
         rich_entry["bottle"]["tags"]["wasm32_kandelo"] = {
             "all_files": [
-                ".brew/mini-tool.rb",
-                "INSTALL_RECEIPT.json",
                 "bin/mini-tool",
+                "INSTALL_RECEIPT.json",
+                ".brew/mini-tool.rb",
             ],
             "filename": (
                 "mini-tool-1.0.0_1.wasm32_kandelo.bottle.2.tar.gz"
@@ -471,6 +471,11 @@ class BuildHandoffTests(unittest.TestCase):
             "wasm32_kandelo"
         ]["trusted"] = True
         rich_mutations.append(extra_field)
+        duplicate_inventory = copy.deepcopy(rich_metadata)
+        duplicate_inventory["kandelo-dev/tap-core/mini-tool"]["bottle"]["tags"][
+            "wasm32_kandelo"
+        ]["all_files"].append("bin/mini-tool")
+        rich_mutations.append(duplicate_inventory)
         for mutation in rich_mutations:
             with self.subTest(rich_mutation=mutation), self.assertRaises(HandoffError):
                 prepare_composition_input(

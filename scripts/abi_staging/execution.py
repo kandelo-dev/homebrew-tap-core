@@ -588,6 +588,91 @@ def _bottle_metadata_formula_key(tap_repository: Any, formula: Any) -> str:
     return f"{owner}/{repository.removeprefix('homebrew-')}/{formula}"
 
 
+def _normalized_candidate_bottle_metadata(
+    candidate: Mapping[str, Any], metadata: Mapping[str, Any]
+) -> tuple[dict[str, Any], str, str]:
+    """Reduce authenticated Homebrew output to the strict Formula composer input."""
+
+    formula = candidate.get("formula")
+    tap_repository = candidate.get("tap_repository")
+    target_abi = candidate.get("target_abi")
+    architecture = candidate.get("architecture")
+    formula_key = _bottle_metadata_formula_key(tap_repository, formula)
+    candidate_repository = _candidate_repository_name(
+        tap_repository, target_abi, formula
+    )
+    expected_root_url = (
+        "https://ghcr.io/v2/" + candidate_repository.removeprefix("ghcr.io/")
+    )
+    metadata_root_url = expected_root_url.rsplit("/", 1)[0]
+    bottle_layer = _mapping(candidate.get("bottle_layer"), "candidate bottle layer")
+    bottle_sha256 = _digest(
+        bottle_layer.get("sha256"), "candidate bottle layer digest"
+    )
+    if bottle_layer.get("immutable_reference") != (
+        candidate_repository + "@sha256:" + bottle_sha256
+    ):
+        raise ExecutionError(
+            "candidate bottle layer differs from its exact publication namespace"
+        )
+    if architecture not in {"wasm32", "wasm64"}:
+        raise ExecutionError("candidate bottle architecture is invalid")
+    if list(metadata) != [formula_key]:
+        raise ExecutionError(
+            "candidate bottle metadata must contain exactly one fully qualified Formula"
+        )
+    entry = _mapping(metadata.get(formula_key), "candidate bottle metadata entry")
+    formula_metadata = _mapping(
+        entry.get("formula"), "candidate bottle Formula metadata"
+    )
+    bottle = _mapping(entry.get("bottle"), "candidate bottle metadata bottle")
+    tags = _mapping(bottle.get("tags"), "candidate bottle metadata tags")
+    tag_name = f"{architecture}_kandelo"
+    tag = _mapping(tags.get(tag_name), "candidate bottle metadata tag")
+    owner, repository = tap_repository.split("/", 1)
+    formula_path = (
+        f"Library/Taps/{owner}/homebrew-{repository.removeprefix('homebrew-')}/"
+        f"Formula/{formula}.rb"
+    )
+    pkg_version = formula_metadata.get("pkg_version")
+    cellar = bottle.get("cellar")
+    rebuild = bottle.get("rebuild")
+    if (
+        formula_metadata.get("name") != formula
+        or formula_metadata.get("path") != formula_path
+        or not isinstance(pkg_version, str)
+        or not pkg_version
+        or len(pkg_version.encode("utf-8")) > 255
+        or bottle.get("root_url") != metadata_root_url
+        or cellar
+        not in {"any", "any_skip_relocation", "/opt/kandelo/homebrew/Cellar"}
+        or isinstance(rebuild, bool)
+        or not isinstance(rebuild, int)
+        or rebuild < 0
+        or list(tags) != [tag_name]
+        or tag.get("sha256") != bottle_sha256
+    ):
+        raise ExecutionError(
+            "candidate bottle metadata differs from its exact publication namespace"
+        )
+    normalized = {
+        formula_key: {
+            "bottle": {
+                "cellar": cellar,
+                "rebuild": rebuild,
+                "root_url": expected_root_url,
+                "tags": {tag_name: {"sha256": bottle_sha256}},
+            },
+            "formula": {
+                "name": formula,
+                "path": formula_path,
+                "pkg_version": pkg_version,
+            },
+        }
+    }
+    return normalized, expected_root_url, cellar
+
+
 def _candidate_entry(
     bundle: Mapping[str, Any], record_sha256: str
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -1078,54 +1163,51 @@ def compose_candidate_tap(
                 Path(candidate["metadata"]).read_bytes(), maximum_bytes=4 * 1024 * 1024
             )
             metadata_entries = _mapping(metadata, "candidate bottle metadata")
-            formula_key = _bottle_metadata_formula_key(
-                candidate["tap_repository"], candidate["formula"]
-            )
-            if list(metadata_entries) != [formula_key]:
-                raise ExecutionError(
-                    "candidate bottle metadata must contain exactly one fully qualified Formula"
-                )
-            entry = _mapping(
-                metadata_entries.get(formula_key),
-                "candidate bottle metadata entry",
-            )
-            bottle = _mapping(entry.get("bottle"), "candidate bottle metadata bottle")
         except (OSError, CanonicalJsonError) as error:
             raise ExecutionError(f"cannot read candidate bottle metadata: {error}") from error
-        command = [
-            str(merge),
-            "--tap-root",
-            str(destination),
-            "--tap-repository",
-            str(candidate["tap_repository"]),
-        ]
-        command.extend(
-            [
-                "--formula",
-                str(candidate["formula"]),
-                "--arch",
-                str(candidate["architecture"]),
-                "--release-tag",
-                f"bottles-abi-v{candidate['target_abi']}",
-                "--bottle-json",
-                str(candidate["metadata"]),
-                "--expected-sha256",
-                str(candidate["bottle_layer"]["sha256"]),
-                "--expected-root-url",
-                str(bottle.get("root_url", "")),
-                "--expected-cellar",
-                str(bottle.get("cellar", "")),
-                "--staging-candidate-abi",
-                str(candidate["target_abi"]),
-            ]
+        normalized, expected_root_url, expected_cellar = (
+            _normalized_candidate_bottle_metadata(candidate, metadata_entries)
         )
-        result = subprocess.run(
-            command,
-            check=False,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        try:
+            with tempfile.NamedTemporaryFile(
+                prefix="kandelo-candidate-bottle-", suffix=".json"
+            ) as normalized_file:
+                normalized_file.write(canonical_bytes(normalized))
+                normalized_file.flush()
+                command = [
+                    str(merge),
+                    "--tap-root",
+                    str(destination),
+                    "--tap-repository",
+                    str(candidate["tap_repository"]),
+                    "--formula",
+                    str(candidate["formula"]),
+                    "--arch",
+                    str(candidate["architecture"]),
+                    "--release-tag",
+                    f"bottles-abi-v{candidate['target_abi']}",
+                    "--bottle-json",
+                    normalized_file.name,
+                    "--expected-sha256",
+                    str(candidate["bottle_layer"]["sha256"]),
+                    "--expected-root-url",
+                    expected_root_url,
+                    "--expected-cellar",
+                    expected_cellar,
+                    "--staging-candidate-abi",
+                    str(candidate["target_abi"]),
+                ]
+                result = subprocess.run(
+                    command,
+                    check=False,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+        except OSError as error:
+            raise ExecutionError(
+                f"cannot write normalized candidate bottle metadata: {error}"
+            ) from error
         if result.returncode != 0:
             detail = result.stderr.decode("utf-8", errors="replace")[:4096]
             raise ExecutionError(
