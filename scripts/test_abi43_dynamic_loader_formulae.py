@@ -62,6 +62,16 @@ class Abi43DynamicLoaderFormulaeTest(unittest.TestCase):
                 self.assertLess(value, glue_include)
                 self.assertLess(glue_include, link)
 
+    def test_libcxx_nonpic_probe_can_compile_the_abi_identity(self) -> None:
+        formula = (ROOT / "Formula/libcxx.rb").read_text(encoding="utf-8")
+        command = formula.index("nonpic_command =")
+        command_end = formula.index("].shelljoin", command)
+
+        self.assertIn(
+            '"-I#{root}/libc/glue"',
+            formula[command:command_end],
+        )
+
     def test_ed_shell_escape_declares_the_exact_tap_dash_dependency(self) -> None:
         formula = (ROOT / "Formula/ed.rb").read_text(encoding="utf-8")
 
