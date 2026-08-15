@@ -25,6 +25,7 @@ RETRYABLE_GUARDS = frozenset(
     {
         "build_timeout",
         "transient_infrastructure_failure",
+        "verification_failed",
         "verification_timeout",
     }
 )
