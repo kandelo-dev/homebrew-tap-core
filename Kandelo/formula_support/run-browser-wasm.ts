@@ -20,6 +20,7 @@ import {
   rootfsUsedBytes,
   validateGuestPath,
 } from "./rootfs-size.ts";
+import { configureFormulaPlaywrightBrowserPath } from "./playwright-browser-path.ts";
 
 interface RunnerConfig {
   argv: string[];
@@ -184,28 +185,33 @@ async function stopProcess(process: ChildProcess): Promise<void> {
   });
 }
 
-function configurePlaywrightBrowserPath(): void {
-  if (process.env.PLAYWRIGHT_BROWSERS_PATH) return;
-
-  // Formula tests isolate HOME, while the downloaded Chromium remains beside
-  // Homebrew's real cache. Explicit browser-path and channel overrides win.
-  const homebrewCache = process.env.HOMEBREW_CACHE;
-  if (!homebrewCache) return;
-  const playwrightCache = resolve(dirname(homebrewCache), "ms-playwright");
-  if (existsSync(playwrightCache)) {
-    process.env.PLAYWRIGHT_BROWSERS_PATH = playwrightCache;
+export function resolveArtifactCandidate(
+  candidates: string[],
+  resolveBinary: (name: string) => string | undefined,
+  exists: (path: string) => boolean,
+): string | undefined {
+  for (const candidate of candidates) {
+    if (candidate.startsWith("resolve:")) {
+      const resolved = resolveBinary(candidate.slice("resolve:".length));
+      if (resolved) return resolved;
+      continue;
+    }
+    if (exists(candidate)) return candidate;
   }
+  return undefined;
 }
 
 async function resolveArtifact(root: string, candidates: string[], label: string): Promise<string> {
   const { tryResolveBinary } = await import(
     pathToFileURL(join(root, "host/src/binary-resolver.ts")).href
   );
-  const resolved = candidates
-    .map((candidate) => candidate.startsWith("resolve:")
-      ? tryResolveBinary(candidate.slice("resolve:".length))
-      : join(root, candidate))
-    .find((candidate): candidate is string => Boolean(candidate && existsSync(candidate)));
+  const resolved = resolveArtifactCandidate(
+    candidates.map((candidate) => candidate.startsWith("resolve:")
+      ? candidate
+      : join(root, candidate)),
+    tryResolveBinary,
+    existsSync,
+  );
   if (!resolved) throw new Error(`${label} not found; build or fetch Kandelo runtime artifacts`);
   return resolved;
 }
@@ -393,7 +399,7 @@ async function main(): Promise<void> {
     vite.stderr?.on("data", (data: Buffer) => viteLog.push(data.toString()));
     await waitForVite(url, vite, viteLog);
 
-    configurePlaywrightBrowserPath();
+    configureFormulaPlaywrightBrowserPath();
     const requireFromBrowserApp = createRequire(join(browserApp, "package.json"));
     const { chromium } = requireFromBrowserApp("playwright") as typeof import("playwright");
     const channel = process.env.KANDELO_PLAYWRIGHT_CHANNEL;
