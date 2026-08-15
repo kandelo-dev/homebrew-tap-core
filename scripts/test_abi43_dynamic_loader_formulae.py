@@ -83,6 +83,25 @@ class Abi43DynamicLoaderFormulaeTest(unittest.TestCase):
         self.assertIn('"-I#{kandelo_require_root!}/libc/glue"', formula)
         self.assertNotIn('"-I#{root}/libc/glue"', formula)
 
+    def test_musl_fts_binds_native_automake_before_autoreconf(self) -> None:
+        formula = (ROOT / "Formula/musl-fts.rb").read_text(encoding="utf-8")
+
+        dependency = formula.index('automake = Formula["automake"]')
+        modules = formula.index('"share/automake-#{automake_version}"', dependency)
+        macros = formula.index('"share/aclocal-#{automake_version}"', modules)
+        perl_modules = formula.index('ENV.prepend_path "PERL5LIB", automake_modules', macros)
+        aclocal = formula.index(
+            'ENV["ACLOCAL"] = "aclocal --automake-acdir=#{automake_macros}"',
+            perl_modules,
+        )
+        autoreconf = formula.index('system "autoreconf", "-fi"', aclocal)
+
+        self.assertLess(dependency, modules)
+        self.assertLess(modules, macros)
+        self.assertLess(macros, perl_modules)
+        self.assertLess(perl_modules, aclocal)
+        self.assertLess(aclocal, autoreconf)
+
     def test_libcxx_nonpic_probe_can_compile_the_abi_identity(self) -> None:
         formula = (ROOT / "Formula/libcxx.rb").read_text(encoding="utf-8")
         command = formula.index("nonpic_command =")
