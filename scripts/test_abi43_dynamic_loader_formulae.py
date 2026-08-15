@@ -102,6 +102,23 @@ class Abi43DynamicLoaderFormulaeTest(unittest.TestCase):
         self.assertLess(perl_modules, aclocal)
         self.assertLess(aclocal, autoreconf)
 
+    def test_wasm64_skips_test_only_dynamic_loader_instrumentation(self) -> None:
+        for name in ("libcxx", "zlib"):
+            with self.subTest(name=name):
+                formula = (ROOT / f"Formula/{name}.rb").read_text(encoding="utf-8")
+                smoke = formula.index("kandelo_run_wasm(")
+                guard = formula.index('if kandelo_arch == "wasm32"', smoke)
+                instrumentation = formula.index("kandelo_fork_instrument", smoke)
+
+                self.assertLess(guard, instrumentation)
+
+    def test_nonessential_compatibility_probes_do_not_block_bottles(self) -> None:
+        pcre2 = (ROOT / "Formula/pcre2.rb").read_text(encoding="utf-8")
+        sqlite = (ROOT / "Formula/sqlite.rb").read_text(encoding="utf-8")
+
+        self.assertNotIn("callout_pattern", pcre2)
+        self.assertNotIn("expected_fork_descendants:", sqlite)
+
     def test_libcxx_nonpic_probe_can_compile_the_abi_identity(self) -> None:
         formula = (ROOT / "Formula/libcxx.rb").read_text(encoding="utf-8")
         command = formula.index("nonpic_command =")

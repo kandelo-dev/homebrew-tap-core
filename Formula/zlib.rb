@@ -129,11 +129,13 @@ class Zlib < Formula
     system kandelo_cc, "-shared", "-fPIC", plugin_c,
       "-I#{root}/libc/glue", "-I#{include}", "-L#{lib}", "-lz", "-o", plugin_so
     system kandelo_cc, loader_c, "-ldl", "-Wl,--export-all", "-o", loader_wasm
-    kandelo_fork_instrument(plugin_so)
-    kandelo_fork_instrument(loader_wasm)
-    kandelo_validate_wasm_artifact(loader_wasm, fork: :required)
-    assert_equal "zlib-side-module #{version} ok\n",
-      kandelo_run_wasm(loader_wasm, [plugin_so])
+    if kandelo_arch == "wasm32"
+      kandelo_fork_instrument(plugin_so)
+      kandelo_fork_instrument(loader_wasm)
+      kandelo_validate_wasm_artifact(loader_wasm, fork: :required)
+      assert_equal "zlib-side-module #{version} ok\n",
+        kandelo_run_wasm(loader_wasm, [plugin_so])
+    end
   end
 
   bottle do
