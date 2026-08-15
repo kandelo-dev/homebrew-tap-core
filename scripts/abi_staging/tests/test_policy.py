@@ -12,6 +12,7 @@ from scripts.abi_staging.policy import (
     PolicyError,
     attempt_repository,
     candidate_repository,
+    candidate_reuse_repository,
     check_policy_files,
     generate_formula_capture_catalog,
     load_candidate_publication_activation,
@@ -31,6 +32,13 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(
             attempt_repository(policy, 8, formula="mini-tool"),
             "kandelo-dev/homebrew-tap-core-abi-8-candidates/mini-tool/attempts",
+        )
+
+    def test_reuse_records_share_the_public_candidate_subject(self) -> None:
+        policy = load_tap_staging_policy(TAP_ROOT / "Kandelo/staging/tap-policy.toml")
+        self.assertEqual(
+            candidate_reuse_repository(policy, 8, formula="mini-tool"),
+            "kandelo-dev/homebrew-tap-core-abi-8-candidates/mini-tool",
         )
 
     def setUp(self) -> None:

@@ -17,7 +17,9 @@ from scripts.abi_staging.oci import build_oci_manifest
 from scripts.abi_staging.reuse import (
     CandidateReuseError,
     build_candidate_reuse_from_bundle,
+    publish_candidate_reuse,
 )
+from scripts.abi_staging.policy import load_tap_staging_policy
 from scripts.abi_staging.records import (
     build_candidate_oci_plan,
     build_source_custody_oci_plan,
@@ -27,6 +29,7 @@ from scripts.abi_staging.tests.test_records import (
     SOURCE_REPOSITORY,
     _write_handoff,
 )
+from scripts.abi_staging.tests.test_oci import FakeRegistryTransport
 
 
 SUBJECT = '{"architecture":"wasm32","identity":"mini-tool","kind":"formula"}'
@@ -37,6 +40,8 @@ PUBLICATION_RUN = {
     "run_attempt": 1,
     "job": "publish-reuse",
 }
+TAP_ROOT = Path(__file__).resolve().parents[3]
+REUSE_TAG_PREFIX = "reuse-sha256-"
 
 
 class CandidateReusePublicationTests(unittest.TestCase):
@@ -203,6 +208,30 @@ class CandidateReusePublicationTests(unittest.TestCase):
                 self.work["work_id"],
                 publication_run=PUBLICATION_RUN,
             )
+
+    def test_reuse_publishes_in_the_public_candidate_package_with_its_own_tag(self) -> None:
+        transport = FakeRegistryTransport()
+        policy = load_tap_staging_policy(TAP_ROOT / "Kandelo/staging/tap-policy.toml")
+        with patch(
+            "scripts.abi_staging.reuse.select_reuse_work",
+            return_value=self.work,
+        ):
+            _record, locator = publish_candidate_reuse(
+                self.bundle,
+                self.work["work_id"],
+                publication_run=PUBLICATION_RUN,
+                policy=policy,
+                transport=transport,
+            )
+
+        self.assertEqual(locator.repository, "ghcr.io/" + CANDIDATE_REPOSITORY)
+        self.assertIn(
+            (CANDIDATE_REPOSITORY, REUSE_TAG_PREFIX + locator.digest.removeprefix("sha256:")),
+            transport.manifests,
+        )
+        self.assertFalse(
+            any(repository.endswith("/reuse") for repository, _tag in transport.manifests)
+        )
 
 
 if __name__ == "__main__":

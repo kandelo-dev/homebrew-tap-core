@@ -9,6 +9,7 @@ from typing import Any
 from .contract import load_canonical_mapping, validate_candidate_reuse_record
 from .custody import load_source_custody_manifest
 from .oci import (
+    REUSE_TAG_PREFIX,
     OciPublicationError,
     OciTransportV1,
     fetch_public_record,
@@ -209,6 +210,7 @@ def inspect_verification_repository(
             transport=transport,
             tag_prefix=receipt_tag_prefix(test_id, host),
             allow_verification_tags=True,
+            allow_reuse_tags=True,
         ):
             fetched = fetch_public_record(
                 locator,
@@ -404,7 +406,10 @@ def inspect_candidate_repository(
     records: dict[str, dict[str, Any]] = {}
     try:
         inventory = list_public_record_locators(
-            repository, transport=transport, allow_verification_tags=True
+            repository,
+            transport=transport,
+            allow_verification_tags=True,
+            allow_reuse_tags=True,
         )
         for locator in inventory:
             fetched = fetch_public_record(
@@ -468,7 +473,13 @@ def inspect_candidate_reuse_repository(
     locators: dict[str, dict[str, str]] = {}
     records: dict[str, dict[str, Any]] = {}
     try:
-        for locator in list_public_record_locators(repository, transport=transport):
+        for locator in list_public_record_locators(
+            repository,
+            transport=transport,
+            tag_prefix=REUSE_TAG_PREFIX,
+            allow_verification_tags=True,
+            allow_reuse_tags=True,
+        ):
             fetched = fetch_public_record(
                 locator,
                 transport=transport,

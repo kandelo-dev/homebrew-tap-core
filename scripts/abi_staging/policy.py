@@ -314,7 +314,7 @@ def attempt_repository(
 def candidate_reuse_repository(
     policy: TapStagingPolicyV1, target_abi: int, *, formula: str
 ) -> str:
-    return candidate_repository(policy, target_abi, formula=formula) + "/reuse"
+    return candidate_repository(policy, target_abi, formula=formula)
 
 
 def source_custody_repository(policy: TapStagingPolicyV1, target_abi: int) -> str:

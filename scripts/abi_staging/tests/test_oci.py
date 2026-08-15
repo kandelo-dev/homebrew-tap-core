@@ -30,6 +30,7 @@ from scripts.abi_staging.records import (
 
 REPOSITORY = "kandelo-dev/homebrew-tap-core-abi-8-candidates/mini-tool"
 SOURCE_ASSOCIATION = "kandelo-dev/homebrew-tap-core"
+REUSE_TAG_PREFIX = "reuse-sha256-"
 
 
 class FakeRegistryTransport:
@@ -468,6 +469,48 @@ class OciPublicationTests(unittest.TestCase):
         transport.manifests[(REPOSITORY, "latest")] = build_oci_manifest(_plan())
         with self.assertRaises(OciPublicationError):
             list_public_record_locators(REPOSITORY, transport=transport)
+
+    def test_mixed_candidate_package_selects_each_closed_record_class(self) -> None:
+        transport = FakeRegistryTransport()
+        record_digest = "a" * 64
+        verification_digest = "b" * 64
+        reuse_digest = "c" * 64
+        transport.manifests[(REPOSITORY, "record-sha256-" + record_digest)] = b"record"
+        transport.manifests[
+            (
+                REPOSITORY,
+                "verification-" + "d" * 32 + "-build-sha256-" + verification_digest,
+            )
+        ] = b"verification"
+        transport.manifests[(REPOSITORY, REUSE_TAG_PREFIX + reuse_digest)] = b"reuse"
+
+        candidate_locators = list_public_record_locators(
+            REPOSITORY,
+            transport=transport,
+            allow_verification_tags=True,
+            allow_reuse_tags=True,
+        )
+        reuse_locators = list_public_record_locators(
+            REPOSITORY,
+            transport=transport,
+            tag_prefix=REUSE_TAG_PREFIX,
+            allow_verification_tags=True,
+            allow_reuse_tags=True,
+        )
+
+        self.assertEqual(
+            candidate_locators,
+            (
+                {
+                    "repository": "ghcr.io/" + REPOSITORY,
+                    "digest": "sha256:" + record_digest,
+                    "immutable_reference": (
+                        "ghcr.io/" + REPOSITORY + "@sha256:" + record_digest
+                    ),
+                },
+            ),
+        )
+        self.assertEqual(reuse_locators[0]["digest"], "sha256:" + reuse_digest)
 
     def test_hidden_anonymous_namespace_is_empty_only_for_public_inventory(self) -> None:
         transport = UrllibOciTransportV1(username="", token="")

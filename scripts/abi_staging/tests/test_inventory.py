@@ -58,6 +58,7 @@ SOURCE_REPOSITORY = "kandelo-dev/homebrew-tap-core-abi-8-source-custody"
 CANDIDATE_REPOSITORY = (
     "kandelo-dev/homebrew-tap-core-abi-8-candidates/mini-tool"
 )
+REUSE_TAG_PREFIX = "reuse-sha256-"
 
 
 class PublicInventoryTests(unittest.TestCase):
@@ -551,13 +552,14 @@ class PublicInventoryTests(unittest.TestCase):
                     },
                 },
             )
-            reuse_repository_name = CANDIDATE_REPOSITORY + "/reuse"
-            reuse_locator = publish_record(
+            reuse_repository_name = CANDIDATE_REPOSITORY
+            reuse_locator = publish_immutable_oci_plan(
                 build_candidate_reuse_oci_plan(
                     reuse_record, repository=reuse_repository_name
                 ),
                 transport=transport,
                 expected_source_repository="kandelo-dev/homebrew-tap-core",
+                tag_prefix=REUSE_TAG_PREFIX,
             )
             reuse_inventory = inspect_candidate_reuse_repository(
                 reuse_repository_name,
