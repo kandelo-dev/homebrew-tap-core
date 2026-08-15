@@ -81,6 +81,7 @@ chmod -R u+w "$SRC_DIR"
     PREFIX_MAPS="-ffile-prefix-map=${FORMULA_ROOT}=/usr/src/sudo-1.9.17p2"
     PREFIX_MAPS+=" -fdebug-prefix-map=${FORMULA_ROOT}=/usr/src/sudo-1.9.17p2"
     PREFIX_MAPS+=" -fmacro-prefix-map=${FORMULA_ROOT}=/usr/src/sudo-1.9.17p2"
+    PREFIX_MAPS+=" -fdebug-compilation-dir=/usr/src/sudo-1.9.17p2"
 
     "$SRC_DIR/configure" \
         --host=wasm32-unknown-none \

@@ -137,6 +137,10 @@ class PolicyTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('CFLAGS="-O2 -D_GNU_SOURCE $PREFIX_MAPS"', source)
+        self.assertIn(
+            'PREFIX_MAPS+=" -fdebug-compilation-dir=/usr/src/sudo-1.9.17p2"',
+            source,
+        )
         self.assertIn('    "$MAKE" -j2\n', source)
         self.assertNotIn('"$MAKE" -j2 CFLAGS=', source)
         self.assertNotIn('        CPPFLAGS="$PREFIX_MAPS"', source)
