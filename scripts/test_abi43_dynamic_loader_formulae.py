@@ -12,16 +12,24 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class Abi43DynamicLoaderFormulaeTest(unittest.TestCase):
     def test_dynamic_loader_main_programs_are_fork_instrumented(self) -> None:
-        for name in ("bzip2", "libcxx"):
+        for name, loader, execute_call in (
+            ("bzip2", "loader", "kandelo_run_wasm(loader"),
+            ("libcxx", "loader", "kandelo_run_wasm(loader"),
+            ("xz", "loader", "kandelo_run_wasm(loader"),
+            ("zlib", "loader_wasm", "kandelo_run_wasm(loader_wasm"),
+        ):
             with self.subTest(name=name):
                 formula = (ROOT / f"Formula/{name}.rb").read_text(encoding="utf-8")
                 link = formula.index('"-ldl"')
-                instrument = formula.index("kandelo_fork_instrument(loader)", link)
+                instrument = formula.index(
+                    f"kandelo_fork_instrument({loader})",
+                    link,
+                )
                 validate = formula.index(
-                    "kandelo_validate_wasm_artifact(loader, fork: :required)",
+                    f"kandelo_validate_wasm_artifact({loader}, fork: :required)",
                     instrument,
                 )
-                execute = formula.index("kandelo_run_wasm(loader", validate)
+                execute = formula.index(execute_call, validate)
 
                 self.assertLess(link, instrument)
                 self.assertLess(instrument, validate)
@@ -31,6 +39,8 @@ class Abi43DynamicLoaderFormulaeTest(unittest.TestCase):
         for name, side_module, linked_output in (
             ("bzip2", "plugin", '"-o", plugin'),
             ("libcxx", "side_module", '"-o", side_module'),
+            ("xz", "plugin", '"-o", plugin'),
+            ("zlib", "plugin_so", '"-o", plugin_so'),
         ):
             with self.subTest(name=name):
                 formula = (ROOT / f"Formula/{name}.rb").read_text(encoding="utf-8")
@@ -48,6 +58,8 @@ class Abi43DynamicLoaderFormulaeTest(unittest.TestCase):
         for name, linked_output in (
             ("bzip2", '"-o", plugin'),
             ("libcxx", '"-o", side_module'),
+            ("xz", '"-o", plugin'),
+            ("zlib", '"-o", plugin_so'),
         ):
             with self.subTest(name=name):
                 formula = (ROOT / f"Formula/{name}.rb").read_text(encoding="utf-8")

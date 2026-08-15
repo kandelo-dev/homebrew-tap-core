@@ -22,7 +22,7 @@ class Sudo < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "85fd7343dad4fd5c51dbc0478e310066223fdd9e1f7e51a77c80f2911c1c1a72",
+      manifest_sha256: "780468bb1d13028f33c40365a82feb0ba6a446248107dcf9f71dc3d6010a72c2",
       script_env:      {
         "WASM_POSIX_DEP_MAKE"  => formula_opt_bin("make")/"make",
         "WASM_POSIX_DEP_PATCH" => formula_opt_bin("gpatch")/"patch",

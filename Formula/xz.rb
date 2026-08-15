@@ -105,6 +105,12 @@ class Xz < Formula
     C
     plugin_source.write <<~C
       #include <lzma.h>
+      #include "abi_constants.h"
+
+      __attribute__((export_name("__abi_version")))
+      unsigned __abi_version(void) {
+        return WASM_POSIX_ABI_VERSION;
+      }
 
       const char *kandelo_liblzma_version(void) {
         return lzma_version_string();
@@ -153,9 +159,13 @@ class Xz < Formula
       assert_includes flags, "-pthread"
       assert_includes flags, "-lpthread"
       system kandelo_cc, source, *flags, "-o", wasm
-      system kandelo_cc, "-shared", "-fPIC", plugin_source, *flags, "-o", plugin
+      system kandelo_cc, "-shared", "-fPIC", plugin_source,
+        "-I#{root}/libc/glue", *flags, "-o", plugin
       system kandelo_cc, loader_source, "-ldl", "-Wl,--export-all", "-o", loader
     end
+    kandelo_fork_instrument(plugin)
+    kandelo_fork_instrument(loader)
+    kandelo_validate_wasm_artifact(loader, fork: :required)
     assert_equal "liblzma-mt-ok\n", kandelo_run_wasm(wasm, [])
     assert_equal "liblzma-side-module #{version} ok\n",
       kandelo_run_wasm(loader, [plugin])

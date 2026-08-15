@@ -14,6 +14,7 @@ PATCH="${WASM_POSIX_DEP_PATCH:?}"
 MAKE="${WASM_POSIX_DEP_MAKE:?}"
 FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"
 SDK_ROOT="$(cd "$(dirname "$(command -v wasm32posix-configure)")/.." && pwd)"
+FORMULA_ROOT="$(dirname "$SOURCE_ROOT")"
 EXPECTED_SOURCE_URL="https://github.com/sudo-project/sudo/archive/refs/tags/v1.9.17p2.tar.gz"
 EXPECTED_SOURCE_SHA256="cabee23359afa698d147478c3a141437dbfecb510382e114eaf4b5087a1f8ca5"
 
@@ -77,6 +78,9 @@ chmod -R u+w "$SRC_DIR"
     export ac_cv_func_setpassent=no
     export ac_cv_func_sysctl=no
     export CONFIG_SITE="$SDK_ROOT/config.site"
+    PREFIX_MAPS="-ffile-prefix-map=${FORMULA_ROOT}=/usr/src/sudo-1.9.17p2"
+    PREFIX_MAPS+=" -fdebug-prefix-map=${FORMULA_ROOT}=/usr/src/sudo-1.9.17p2"
+    PREFIX_MAPS+=" -fmacro-prefix-map=${FORMULA_ROOT}=/usr/src/sudo-1.9.17p2"
 
     "$SRC_DIR/configure" \
         --host=wasm32-unknown-none \
@@ -107,7 +111,7 @@ chmod -R u+w "$SRC_DIR"
         RANLIB=wasm32posix-ranlib \
         NM=wasm32posix-nm \
         STRIP=wasm32posix-strip \
-        CFLAGS="-O2 -D_GNU_SOURCE"
+        CFLAGS="-O2 -D_GNU_SOURCE $PREFIX_MAPS"
     "$MAKE" -j2
 )
 
