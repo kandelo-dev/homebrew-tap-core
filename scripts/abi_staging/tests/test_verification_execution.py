@@ -726,6 +726,7 @@ class VerificationExecutionTests(unittest.TestCase):
             self.assertEqual(
                 command[0], str(KANDELO_ROOT / "scripts/abi-staging-verify-bottle.sh")
             )
+            self.assertEqual(kwargs["cwd"], KANDELO_ROOT)
             self.assertNotIn("GITHUB_TOKEN", kwargs["env"])
             self.assertNotIn("HOMEBREW_GITHUB_PACKAGES_TOKEN", kwargs["env"])
             self.assertNotIn("ACTIONS_RUNTIME_TOKEN", kwargs["env"])

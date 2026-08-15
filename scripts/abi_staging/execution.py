@@ -1325,7 +1325,7 @@ def execute_verification_work(
             os.environ if environment is None else environment,
             sandbox_root=temporary_root / "environment",
         )
-        result = run_process(command, cwd=tap, env=child_environment, check=False)
+        result = run_process(command, cwd=kandelo, env=child_environment, check=False)
     returncode = getattr(result, "returncode", None)
     if isinstance(returncode, bool) or not isinstance(returncode, int):
         raise ExecutionError("candidate verification process returned no exact status")
