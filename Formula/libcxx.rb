@@ -335,7 +335,8 @@ class Libcxx < Formula
 
       nonpic_module = testpath/"libcxx-nonpic-negative.so"
       nonpic_command = [
-        cxx, side_source, *common, "-fPIC", "-shared", "-Wl,--export=__tls_base", "-nostdlib++",
+        cxx, side_source, *common, "-fPIC", "-shared", "-I#{root}/libc/glue",
+        "-Wl,--export=__tls_base", "-nostdlib++",
         lib/"libc++.a", lib/"libc++abi.a", "-o", nonpic_module
       ].shelljoin
       nonpic_output = shell_output("#{nonpic_command} 2>&1", 1)
