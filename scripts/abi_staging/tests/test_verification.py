@@ -8,6 +8,10 @@ import tempfile
 import unittest
 
 from scripts.abi_staging.canonical import canonical_bytes, canonical_sha256
+from scripts.abi_staging.inventory import (
+    inspect_candidate_repository,
+    inspect_verification_repository,
+)
 from scripts.abi_staging.oci import build_oci_manifest, publish_record
 from scripts.abi_staging.policy import (
     VerificationTestDefinitionV1,
@@ -31,7 +35,7 @@ from scripts.abi_staging.verification import (
     load_verification_result,
     publish_protected_verification_outcome,
     publish_verification_receipt,
-    receipt_repository,
+    receipt_tag_prefix,
     validate_verification_receipt_record,
 )
 
@@ -213,6 +217,13 @@ class VerificationReceiptTests(unittest.TestCase):
         config_digest = manifest["config"]["digest"]
         return manifest, json.loads(self.transport.blobs[(repository, config_digest)])
 
+    def test_receipt_tag_prefix_is_registry_safe_and_identity_specific(self) -> None:
+        first = receipt_tag_prefix("test@" + "a" * 200, "browser")
+        second = receipt_tag_prefix("test+" + "a" * 200, "browser")
+        self.assertRegex(first, r"^[a-z0-9._-]+$")
+        self.assertLessEqual(len(first + "f" * 64), 128)
+        self.assertNotEqual(first, second)
+
     def test_success_failure_and_timeout_publish_distinct_factual_receipts(self) -> None:
         expected = {
             "success": ([], "eligible"),
@@ -387,14 +398,37 @@ class VerificationReceiptTests(unittest.TestCase):
         self.assertNotEqual(first.digest, second.digest)
         self.assertEqual(
             first.repository,
-            "ghcr.io/" + receipt_repository(
-                CANDIDATE_REPOSITORY, TEST_DEFINITION.id, "build"
-            ),
+            "ghcr.io/" + CANDIDATE_REPOSITORY,
         )
         self.assertEqual(
             self.candidate_locator.digest,
             "sha256:" + hashlib.sha256(self.candidate_manifest).hexdigest(),
         )
+        candidate_digest = self.candidate_locator.digest.removeprefix("sha256:")
+        try:
+            candidates = inspect_candidate_repository(
+                CANDIDATE_REPOSITORY, transport=self.transport
+            )
+            receipts = inspect_verification_repository(
+                CANDIDATE_REPOSITORY,
+                test_id=TEST_DEFINITION.id,
+                host="build",
+                candidates={
+                    candidate_digest: {
+                        "request_sha256": self.candidate["common"]["request_sha256"],
+                        "subject": (
+                            '{"architecture":"wasm32","identity":"mini-tool",'
+                            '"kind":"formula"}'
+                        ),
+                        "bottle_layer": self.candidate["candidate"]["bottle_layer"],
+                    }
+                },
+                transport=self.transport,
+            )
+        except Exception as error:  # pragma: no cover - assertion reports the boundary
+            self.fail(f"candidate and verification records did not coexist: {error}")
+        self.assertEqual(len(candidates.facts), 1)
+        self.assertEqual(len(receipts.facts), 2)
 
     def test_historical_candidate_receipt_binds_current_request_without_rewriting_producer(self) -> None:
         current_request = "f" * 64

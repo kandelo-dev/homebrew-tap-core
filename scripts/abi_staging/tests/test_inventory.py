@@ -24,7 +24,11 @@ from scripts.abi_staging.contract import (
     load_bottle_contract,
     make_candidate_reuse_record,
 )
-from scripts.abi_staging.oci import build_oci_manifest, publish_record
+from scripts.abi_staging.oci import (
+    build_oci_manifest,
+    publish_immutable_oci_plan,
+    publish_record,
+)
 from scripts.abi_staging.records import (
     OciBlobV1,
     OciRecordPlanV1,
@@ -42,6 +46,7 @@ from scripts.abi_staging.verification import (
     VERIFICATION_RECEIPT_MEDIA_TYPE,
     VERIFICATION_RESULT_MEDIA_TYPE,
     receipt_repository,
+    receipt_tag_prefix,
 )
 from scripts.abi_staging.tests.test_oci import FakeRegistryTransport
 from scripts.abi_staging.tests.test_records import _write_handoff
@@ -159,13 +164,16 @@ class PublicInventoryTests(unittest.TestCase):
             },
         )
         transport = FakeRegistryTransport()
-        published = publish_record(
+        published = publish_immutable_oci_plan(
             plan,
             transport=transport,
             expected_source_repository="kandelo-dev/homebrew-tap-core",
+            tag_prefix=receipt_tag_prefix("bottle-structure", "build"),
         )
         facts = scan_verification_repository(
             repository,
+            test_id="bottle-structure",
+            host="build",
             candidates={
                 candidate_record: {
                     "request_sha256": request,
@@ -188,6 +196,8 @@ class PublicInventoryTests(unittest.TestCase):
         with self.assertRaises(InventoryError):
             scan_verification_repository(
                 repository,
+                test_id="bottle-structure",
+                host="build",
                 candidates={
                     candidate_record: {
                         "request_sha256": request,
@@ -471,13 +481,16 @@ class PublicInventoryTests(unittest.TestCase):
                     "org.opencontainers.image.source": "https://github.com/kandelo-dev/homebrew-tap-core",
                 },
             )
-            receipt_locator = publish_record(
+            receipt_locator = publish_immutable_oci_plan(
                 receipt_plan,
                 transport=transport,
                 expected_source_repository="kandelo-dev/homebrew-tap-core",
+                tag_prefix=receipt_tag_prefix("bottle-structure", "build"),
             )
             receipt_inventory = inspect_verification_repository(
                 receipt_repository_name,
+                test_id="bottle-structure",
+                host="build",
                 candidates={
                     candidate_digest: {
                         "request_sha256": candidate["common"]["request_sha256"],
