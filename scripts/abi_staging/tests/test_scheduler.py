@@ -609,6 +609,32 @@ class SchedulingTests(unittest.TestCase):
         )
         self.assertIn(subject, complete.complete)
 
+    def test_historical_failure_does_not_exhaust_current_request(self) -> None:
+        plan = _plan()
+        subject = plan["required_subjects"][0]
+        candidate, receipt = _complete(plan, subject)
+        historical_failure = replace(
+            receipt,
+            request_sha256=_digest("historical-request"),
+            outcome="failure",
+            guard_code="verification_failed",
+            attempt_ordinal=3,
+            record_sha256=_digest("historical-failed-verification"),
+        )
+
+        decision = schedule_ready_batch(
+            plan,
+            _records(candidate, historical_failure),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+
+        intent = next(item for item in decision.ready if item.subject == subject)
+        self.assertEqual(intent.action, "verify-candidate")
+        self.assertEqual(intent.attempt_ordinal, 0)
+
     def test_historical_candidates_with_conflicting_layers_fail_closed(self) -> None:
         plan = _plan()
         subject = plan["required_subjects"][0]
