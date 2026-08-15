@@ -1339,10 +1339,10 @@ class ProductInputResolverTests(unittest.TestCase):
         for resolution in self.resolve():
             self.assertEqual(resolution.resolved_inputs["target_abi"]["version"], target)
 
-    def test_fixture_and_activation_are_strict_and_observe_only(self) -> None:
+    def test_fixture_is_strict_and_checked_in_evidence_activation_is_active(self) -> None:
         document = load_resolved_product_inputs(FIXTURE.read_bytes())
         self.assertEqual(document["kind"], "kandelo-resolved-vfs-product-inputs")
-        self.assertEqual(load_product_evidence_activation(ACTIVATION), "observe")
+        self.assertEqual(load_product_evidence_activation(ACTIVATION), "active")
         self.assertEqual(cli_main(["fixture-check", "--fixture", str(FIXTURE)]), 0)
 
         hostile = json.loads(canonical_bytes(document))
