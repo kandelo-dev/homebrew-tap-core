@@ -829,6 +829,46 @@ def _load_workflow_discovery(path: Path) -> dict[str, Any]:
     return dict(value)
 
 
+def _scan_scheduling_inventory_with_retries(
+    tap_plan: Mapping[str, Any],
+    *,
+    policy: Any,
+    verification_tests: Any,
+    scanner: Any = None,
+    transport_factory: Any = None,
+    sleeper: Any = None,
+) -> Any:
+    """Retry only explicitly transient immutable public-inventory reads."""
+
+    scan = scan_scheduling_inventory if scanner is None else scanner
+    make_transport = (
+        (lambda: UrllibOciTransportV1(username="", token=""))
+        if transport_factory is None
+        else transport_factory
+    )
+    wait = time.sleep if sleeper is None else sleeper
+    for attempt in range(3):
+        try:
+            return scan(
+                tap_plan,
+                policy=policy,
+                verification_tests=verification_tests,
+                transport=make_transport(),
+            )
+        except InventoryError as error:
+            cause: BaseException | None = error
+            retryable = False
+            while cause is not None:
+                if isinstance(cause, OciPublicationError):
+                    retryable = cause.retryable
+                    break
+                cause = cause.__cause__
+            if not retryable or attempt == 2:
+                raise
+            wait(float(2 ** (attempt + 1)))
+    raise AssertionError("public inventory retry loop did not terminate")
+
+
 def _prepare_workflow(args: argparse.Namespace) -> None:
     tap_root = _protected_tap_root(args.tap_root)
     kandelo_root = Path(args.kandelo_root).resolve(strict=True)
@@ -898,12 +938,10 @@ def _prepare_workflow(args: argparse.Namespace) -> None:
     verification_tests = load_verification_tests(
         tap_root / "Kandelo/staging/verification-tests.toml"
     )
-    transport = UrllibOciTransportV1(username="", token="")
-    inventory = scan_scheduling_inventory(
+    inventory = _scan_scheduling_inventory_with_retries(
         tap_plan,
         policy=staging_policy,
         verification_tests=verification_tests,
-        transport=transport,
     )
     reconciliation_mode = load_reconciliation_activation(
         tap_root / "Kandelo/staging/reconciliation-activation.toml"

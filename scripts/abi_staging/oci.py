@@ -1259,7 +1259,16 @@ class UrllibOciTransportV1:
             raise OciPublicationError(
                 "registry bearer-token exchange failed",
                 guard_code="namespace_bootstrap_failed",
-                retryable=response.status >= 500 or response.status == 429,
+                # GHCR intermittently returns a generic 403 from its public
+                # token service even when the package is public. A true
+                # hidden namespace was recognized above from its exact DENIED
+                # body; the remaining anonymous 403 is safe to retry because
+                # the caller still fetches only immutable public identities.
+                retryable=(
+                    response.status >= 500
+                    or response.status == 429
+                    or (not authenticated and response.status == 403)
+                ),
             )
         try:
             payload = json.loads(response.body)

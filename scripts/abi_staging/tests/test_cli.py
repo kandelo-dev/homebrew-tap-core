@@ -13,6 +13,8 @@ from scripts.abi_staging import cli as cli_module
 from scripts.abi_staging.tests import test_tap_metadata as tap_metadata_tests
 from scripts.abi_staging.canonical import canonical_bytes, canonical_sha256
 from scripts.abi_staging.cli import main as cli_main
+from scripts.abi_staging.inventory import InventoryError
+from scripts.abi_staging.oci import OciPublicationError
 from scripts.abi_staging.plan import snapshot_tap_source
 from scripts.abi_staging.tap_metadata import (
     load_abi_state,
@@ -39,6 +41,69 @@ def _source(root: Path, revision: str) -> dict[str, str]:
         "commit": _git(root, "rev-parse", revision),
         "tree": _git(root, "rev-parse", f"{revision}^{{tree}}"),
     }
+
+
+class PublicInventoryRetryTests(unittest.TestCase):
+    def test_retries_only_retryable_oci_failures_with_fresh_transports(self) -> None:
+        transports: list[object] = []
+        sleeps: list[float] = []
+        calls = 0
+
+        def transport_factory() -> object:
+            transport = object()
+            transports.append(transport)
+            return transport
+
+        def scanner(*_args, transport: object, **_kwargs):
+            nonlocal calls
+            self.assertIs(transport, transports[calls])
+            calls += 1
+            if calls < 3:
+                cause = OciPublicationError(
+                    "temporary public inventory failure",
+                    guard_code="candidate_public_readback_failed",
+                    retryable=True,
+                )
+                raise InventoryError("inventory failed") from cause
+            return "inventory"
+
+        self.assertEqual(
+            cli_module._scan_scheduling_inventory_with_retries(
+                {},
+                policy=object(),
+                verification_tests=(),
+                scanner=scanner,
+                transport_factory=transport_factory,
+                sleeper=sleeps.append,
+            ),
+            "inventory",
+        )
+        self.assertEqual(calls, 3)
+        self.assertEqual(len(transports), 3)
+        self.assertEqual(sleeps, [2.0, 4.0])
+
+    def test_does_not_retry_nonretryable_inventory_failure(self) -> None:
+        calls = 0
+
+        def scanner(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            cause = OciPublicationError(
+                "invalid public inventory",
+                guard_code="candidate_integrity_mismatch",
+            )
+            raise InventoryError("inventory failed") from cause
+
+        with self.assertRaisesRegex(InventoryError, "inventory failed"):
+            cli_module._scan_scheduling_inventory_with_retries(
+                {},
+                policy=object(),
+                verification_tests=(),
+                scanner=scanner,
+                transport_factory=lambda: object(),
+                sleeper=lambda _seconds: self.fail("nonretryable failure slept"),
+            )
+        self.assertEqual(calls, 1)
 
 
 class AdmissionProjectionCliTests(unittest.TestCase):
