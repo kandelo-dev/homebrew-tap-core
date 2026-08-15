@@ -274,7 +274,6 @@ class FailureClassifierTests(unittest.TestCase):
 
         deterministic = {
             "formula-nonzero": "build_failed",
-            "test-assertion": "verification_failed",
             "contract-failure": "build_input_capture_incomplete",
             "capture-failure": "build_input_capture_incomplete",
             "source-mismatch": "source_identity_mismatch",
@@ -297,6 +296,19 @@ class FailureClassifierTests(unittest.TestCase):
                 )
                 self.assertEqual(result.guard_code, guard)
                 self.assertFalse(result.automatic_retry)
+
+        verification = classify_protected_failure(
+            ProtectedFailureFactsV1(
+                "protected-workflow",
+                "test-assertion",
+                "failure",
+                None,
+                True,
+                "failure",
+            )
+        )
+        self.assertEqual(verification.guard_code, "verification_failed")
+        self.assertTrue(verification.automatic_retry)
 
         reset = classify_protected_failure(
             ProtectedFailureFactsV1(
@@ -356,7 +368,7 @@ class SchedulingTests(unittest.TestCase):
         self.assertEqual(retry.action, "build-candidate")
         self.assertEqual(retry.attempt_ordinal, 1)
 
-    def test_duplicate_verifiers_preserve_success_and_application_failure_dominance(self) -> None:
+    def test_duplicate_verifiers_preserve_success_and_retry_failures(self) -> None:
         plan = _plan()
         subject = plan["required_subjects"][0]
         candidate, success = _complete(plan, subject)
@@ -390,9 +402,9 @@ class SchedulingTests(unittest.TestCase):
             policy=POLICY,
             verification_tests=(DEFINITION,),
         )
-        blocker = next(item for item in failed.blocked if item.subject == subject)
-        self.assertEqual(blocker.guard_code, "verification_failed")
-        self.assertEqual(blocker.next_action, "not-retryable")
+        retry = next(item for item in failed.ready if item.subject == subject)
+        self.assertEqual(retry.action, "verify-candidate")
+        self.assertEqual(retry.attempt_ordinal, 1)
 
     def test_transient_verification_receipt_advances_the_bounded_retry_ordinal(self) -> None:
         plan = _plan()
@@ -413,6 +425,28 @@ class SchedulingTests(unittest.TestCase):
         decision = schedule_ready_batch(
             plan,
             _records(candidate, transient),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        intent = next(item for item in decision.ready if item.subject == subject)
+        self.assertEqual(intent.action, "verify-candidate")
+        self.assertEqual(intent.attempt_ordinal, 1)
+
+    def test_verification_failure_advances_the_bounded_retry_ordinal(self) -> None:
+        plan = _plan()
+        subject = plan["required_subjects"][0]
+        candidate, receipt = _complete(plan, subject)
+        failed = replace(
+            receipt,
+            outcome="failure",
+            guard_code="verification_failed",
+            record_sha256=_digest("failed-verification"),
+        )
+        decision = schedule_ready_batch(
+            plan,
+            _records(candidate, failed),
             _decision(plan),
             now=NOW,
             policy=POLICY,
