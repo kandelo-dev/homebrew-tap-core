@@ -734,7 +734,7 @@ class VerificationExecutionTests(unittest.TestCase):
             self.assertNotIn("RENAMED_WRITE_TOKEN", kwargs["env"])
             self.assertNotIn("NIX_CONFIG", kwargs["env"])
             self.assertEqual(kwargs["env"]["CC"], "/declared/cc")
-            self.assertEqual(kwargs["env"]["GITHUB_ACTIONS"], "true")
+            self.assertNotIn("GITHUB_ACTIONS", kwargs["env"])
             self.assertNotEqual(kwargs["env"]["HOME"], "/credentialed/home")
             self.assertEqual(
                 kwargs["env"]["XDG_CONFIG_HOME"],
