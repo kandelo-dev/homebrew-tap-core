@@ -112,7 +112,8 @@ chmod -R u+w "$SRC_DIR"
         NM=wasm32posix-nm \
         STRIP=wasm32posix-strip \
         CFLAGS="-O2 -D_GNU_SOURCE $PREFIX_MAPS"
-    "$MAKE" -j2
+    "$MAKE" -j2 CFLAGS="-O2 -D_GNU_SOURCE $PREFIX_MAPS" \
+        CPPFLAGS="$PREFIX_MAPS"
 )
 
 mkdir -p "$OUT_ROOT"
