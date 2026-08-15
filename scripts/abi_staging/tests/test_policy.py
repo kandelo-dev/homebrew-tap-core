@@ -41,7 +41,7 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(policy.version, 1)
         self.assertEqual(policy.tap_repository, "kandelo-dev/homebrew-tap-core")
         self.assertEqual(policy.kandelo_repository, "Automattic/kandelo")
-        self.assertEqual(policy.max_ready_subjects_per_cycle, 16)
+        self.assertEqual(policy.max_ready_subjects_per_cycle, 64)
         self.assertEqual(policy.max_formulae, 256)
         self.assertEqual(policy.max_edges, 4096)
         self.assertEqual(policy.max_handoff_files, 256)
