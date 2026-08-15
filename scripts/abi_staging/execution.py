@@ -1325,6 +1325,11 @@ def execute_verification_work(
             os.environ if environment is None else environment,
             sandbox_root=temporary_root / "environment",
         )
+        # Candidate verification is a credential-free consumer, not the
+        # production Homebrew publisher.  Keep the real isolated native-tool
+        # installs, but do not require the publisher-only signed API preflight
+        # that is intentionally absent from this reusable verification job.
+        child_environment.pop("GITHUB_ACTIONS", None)
         result = run_process(command, cwd=kandelo, env=child_environment, check=False)
     returncode = getattr(result, "returncode", None)
     if isinstance(returncode, bool) or not isinstance(returncode, int):
