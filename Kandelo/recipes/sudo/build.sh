@@ -82,6 +82,11 @@ chmod -R u+w "$SRC_DIR"
     PREFIX_MAPS+=" -fdebug-prefix-map=${FORMULA_ROOT}=/usr/src/sudo-1.9.17p2"
     PREFIX_MAPS+=" -fmacro-prefix-map=${FORMULA_ROOT}=/usr/src/sudo-1.9.17p2"
     PREFIX_MAPS+=" -fdebug-compilation-dir=/usr/src/sudo-1.9.17p2"
+    # Autoconf records command-line variable assignments in CONFIGURE_ARGS,
+    # which sudo exposes at runtime. Keep the path maps in the environment so
+    # the compiler still receives them without preserving the private
+    # Homebrew build root in the executable.
+    export CFLAGS="-O2 -D_GNU_SOURCE $PREFIX_MAPS"
 
     "$SRC_DIR/configure" \
         --host=wasm32-unknown-none \
@@ -111,8 +116,7 @@ chmod -R u+w "$SRC_DIR"
         AR=wasm32posix-ar \
         RANLIB=wasm32posix-ranlib \
         NM=wasm32posix-nm \
-        STRIP=wasm32posix-strip \
-        CFLAGS="-O2 -D_GNU_SOURCE $PREFIX_MAPS"
+        STRIP=wasm32posix-strip
     "$MAKE" -j2
 )
 
