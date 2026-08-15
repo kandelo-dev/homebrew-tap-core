@@ -1094,9 +1094,7 @@ module AbiStagingWorkflowCheck
                        "artifact-id" => "${{ steps.upload.outputs.artifact-id }}",
                        "artifact-digest" => "${{ steps.upload.outputs.artifact-digest }}"
                      }, "candidate producer authority or outputs changed")
-    require_candidate_checkouts(
-      producer, producer_name, include_homebrew: kind == :candidate
-    )
+    require_candidate_checkouts(producer, producer_name, include_homebrew: true)
     downloads = action_steps(producer, DOWNLOAD_ARTIFACT)
     require_contract(downloads.length == 1 &&
                      downloads.fetch(0).fetch("with") == {
@@ -1217,8 +1215,38 @@ module AbiStagingWorkflowCheck
                        realm.fetch("run").scan("-u ACTIONS_RUNTIME_TOKEN").length == 2,
                        "candidate producer build realm changed")
     else
-      require_contract(commands.length == 1,
-                       "candidate producer command inputs changed")
+      export = commands.find do |step|
+        step["name"] == "Export exact candidate verification identity"
+      end
+      realm = commands.find do |step|
+        step["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      require_contract(
+        commands.length == 3 && !export.nil? && !realm.nil? &&
+          export.fetch("working-directory") == "kandelo-authority" &&
+          export.fetch("env") == {"WORK_ID" => "${{ inputs.work-id }}"} &&
+          export.fetch("run").include?("export-verification-realm") &&
+          export.fetch("run").include?('"PYTHONDONTWRITEBYTECODE=1"') &&
+          export.fetch("run").include?('"PYTHONSAFEPATH=1"') &&
+          export.fetch("run").include?(
+            "python3 -P -m scripts.abi_staging.cli export-verification-realm"
+          ) &&
+          export.fetch("run").include?('--github-env "$GITHUB_ENV"') &&
+          realm.fetch("working-directory") == "kandelo-authority" &&
+          realm.fetch("env") == {
+            "HOMEBREW_BREW_COMMIT" =>
+              "a92554a538e81fad0c5074443885dbcc4c36221d",
+            "WORK_ID" => "${{ inputs.work-id }}"
+          } &&
+          realm.fetch("run").include?(
+            'candidate_workflow="$GITHUB_WORKSPACE/tap-authority/.github/workflows/abi-staging-candidate.yml"'
+          ) &&
+          realm.fetch("run").include?(
+            '/^      - name: Prepare exact uncredentialed Homebrew realm$/'
+          ) &&
+          realm.fetch("run").include?('bash "$realm_script"'),
+        "verification producer build realm changed"
+      )
     end
     command_step = commands.find do |step|
       step.fetch("run", "").include?(producer_cli)
@@ -1233,16 +1261,15 @@ module AbiStagingWorkflowCheck
     require_contract(source.include?("env -u GITHUB_TOKEN") &&
                      source.include?("-u ACTIONS_RUNTIME_TOKEN") &&
                      source.include?("scripts/dev-shell.sh env") &&
-                     (kind != :candidate ||
-                       (source.include?('"PYTHONDONTWRITEBYTECODE=1"') &&
-                        source.include?('"PYTHONSAFEPATH=1"') &&
-                        source.include?(
-                          "python3 -P -m scripts.abi_staging.cli #{producer_cli}"
-                        ))) &&
+                     source.include?('"PYTHONDONTWRITEBYTECODE=1"') &&
+                     source.include?('"PYTHONSAFEPATH=1"') &&
+                     source.include?(
+                       "python3 -P -m scripts.abi_staging.cli #{producer_cli}"
+                     ) &&
                      source.include?(
                        'PYTHONPATH=$GITHUB_WORKSPACE/tap-authority'
                      ) &&
-                     (kind != :candidate || %w[
+                     %w[
                        KANDELO_HOMEBREW_BUILD_USER
                        KANDELO_HOMEBREW_RECIPE_USER
                        KANDELO_HOMEBREW_SHARED_TEMP
@@ -1253,10 +1280,8 @@ module AbiStagingWorkflowCheck
                        KANDELO_HOMEBREW_PGREP_BIN
                        KANDELO_HOMEBREW_PKILL_BIN
                        WASM_POSIX_XTASK_BIN
-                     ].all? { |name| source.include?("#{name}=$#{name}") }) &&
+                     ].all? { |name| source.include?("#{name}=$#{name}") } &&
                      !source.include?("../kandelo-source/scripts/dev-shell.sh") &&
-                     (kind == :candidate ||
-                       source.include?("python3 -m scripts.abi_staging.cli #{producer_cli}")) &&
                      source.include?('--run-id "$GITHUB_RUN_ID"') &&
                      source.include?('--run-attempt "$GITHUB_RUN_ATTEMPT"') &&
                      source.include?('--workflow-ref "$GITHUB_WORKFLOW_REF"'),

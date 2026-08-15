@@ -60,7 +60,8 @@ class MuslFts < Formula
         odie "native Automake module or macro root is unavailable"
       end
       ENV.prepend_path "PERL5LIB", automake_modules
-      ENV["ACLOCAL"] = "aclocal --automake-acdir=#{automake_macros}"
+      ENV["ACLOCAL"] = "aclocal --automake-acdir=#{automake_macros} " \
+                       "--system-acdir=#{automake_macros}"
 
       system "autoreconf", "-fi"
       system kandelo_configure, *kandelo_std_configure_args,

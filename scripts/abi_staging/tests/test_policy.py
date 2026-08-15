@@ -121,6 +121,11 @@ class PolicyTests(unittest.TestCase):
             self.assertTrue(entry.profiles)
             self.assertEqual(tuple(sorted(entry.profiles)), entry.profiles)
 
+    def test_musl_fts_binds_both_relocated_automake_macro_roots(self) -> None:
+        source = (TAP_ROOT / "Formula/musl-fts.rb").read_text(encoding="utf-8")
+        self.assertIn("--automake-acdir=#{automake_macros}", source)
+        self.assertIn("--system-acdir=#{automake_macros}", source)
+
     def test_expanded_capture_matches_observed_build_entrypoints(self) -> None:
         policy = load_formula_build_inputs(
             self.staging / "formula-build-inputs.toml", tap_root=TAP_ROOT

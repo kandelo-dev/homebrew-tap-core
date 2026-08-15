@@ -414,6 +414,13 @@ def _parser() -> argparse.ArgumentParser:
     export_build_realm.add_argument("--work-id", required=True)
     export_build_realm.add_argument("--tap-root", required=True)
     export_build_realm.add_argument("--github-env", required=True)
+    export_verification_realm = subcommands.add_parser(
+        "export-verification-realm"
+    )
+    export_verification_realm.add_argument("--coordination", required=True)
+    export_verification_realm.add_argument("--work-id", required=True)
+    export_verification_realm.add_argument("--tap-root", required=True)
+    export_verification_realm.add_argument("--github-env", required=True)
     execute_verification = subcommands.add_parser("execute-verification-work")
     execute_verification.add_argument("--coordination", required=True)
     execute_verification.add_argument("--work-id", required=True)
@@ -2697,8 +2704,13 @@ def _export_runtime_realm(args: argparse.Namespace) -> None:
     )
 
 
-def _export_build_realm(args: argparse.Namespace) -> None:
-    """Export one protected Formula build identity without shell parsing."""
+def _export_formula_realm(
+    args: argparse.Namespace,
+    *,
+    select_work: Any,
+    subject_label: str,
+) -> None:
+    """Export one protected Formula identity without shell parsing."""
 
     tap_root = _protected_tap_root(args.tap_root)
     policy = load_tap_staging_policy(
@@ -2708,9 +2720,9 @@ def _export_build_realm(args: argparse.Namespace) -> None:
     if coordination.is_dir():
         coordination = coordination / "coordination.json"
     bundle = load_coordination_bundle(coordination, policy=policy)
-    work = select_build_work(bundle, args.work_id)
+    work = select_work(bundle, args.work_id)
     formula, architecture = parse_formula_subject(
-        work["subject"], "build work subject"
+        work["subject"], subject_label
     )
     tap_source = bundle["tap_plan"]["tap_source"]
     repository = tap_source["repository"]
@@ -2728,6 +2740,26 @@ def _export_build_realm(args: argparse.Namespace) -> None:
             ),
             "KANDELO_ABI_STAGING_TAP_REPOSITORY": repository,
         },
+    )
+
+
+def _export_build_realm(args: argparse.Namespace) -> None:
+    """Export one protected Formula build identity without shell parsing."""
+
+    _export_formula_realm(
+        args,
+        select_work=select_build_work,
+        subject_label="build work subject",
+    )
+
+
+def _export_verification_realm(args: argparse.Namespace) -> None:
+    """Export one protected Formula verification identity."""
+
+    _export_formula_realm(
+        args,
+        select_work=select_verification_work,
+        subject_label="verification work subject",
     )
 
 
@@ -6608,6 +6640,9 @@ def main(arguments: list[str] | None = None) -> int:
             return 0
         if args.command == "export-build-realm":
             _export_build_realm(args)
+            return 0
+        if args.command == "export-verification-realm":
+            _export_verification_realm(args)
             return 0
         if args.command == "execute-verification-work":
             return _execute_verification(args)
