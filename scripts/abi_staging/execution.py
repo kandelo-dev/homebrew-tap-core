@@ -30,6 +30,9 @@ from .records import CANDIDATE_RECORD_MEDIA_TYPE, validate_candidate_record
 
 MAX_VFS_COMPOSITION_JSON_ITEMS = 4_000_000
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+COMMIT = re.compile(r"^[0-9a-f]{40}$")
+TAP_NAME = re.compile(r"^[a-z0-9_.-]+/[a-z0-9_.-]+$")
+TAP_REPOSITORY = re.compile(r"^[a-z0-9_.-]+/homebrew-[a-z0-9_.-]+$")
 
 
 class ExecutionError(ValueError):
@@ -1317,7 +1320,317 @@ def compose_candidate_tap(
     for line in status:
         if not line.startswith(" M ") or line[3:] not in allowed:
             raise ExecutionError("candidate composition changed an undeclared tap path")
+    try:
+        subprocess.run(
+            ["git", "-C", str(destination), "add", "--", *sorted(allowed)],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+        )
+        tree = subprocess.run(
+            ["git", "-C", str(destination), "write-tree"],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+        ).stdout.decode("ascii").strip()
+        commit_environment = {
+            **os.environ,
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_AUTHOR_NAME": "Kandelo ABI staging",
+            "GIT_AUTHOR_EMAIL": "abi-staging@kandelo.invalid",
+            "GIT_COMMITTER_NAME": "Kandelo ABI staging",
+            "GIT_COMMITTER_EMAIL": "abi-staging@kandelo.invalid",
+            "GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z",
+            "GIT_COMMITTER_DATE": "2000-01-01T00:00:00Z",
+        }
+        prepared_commit = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(destination),
+                "commit-tree",
+                tree,
+                "-p",
+                expected_head,
+                "-m",
+                "Prepare exact ABI candidate verification closure",
+            ],
+            check=True,
+            env=commit_environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+        ).stdout.decode("ascii").strip()
+        subprocess.run(
+            ["git", "-C", str(destination), "reset", "--hard", prepared_commit],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+        )
+        prepared_status = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(destination),
+                "status",
+                "--short",
+                "--untracked-files=all",
+            ],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ExecutionError(f"cannot seal candidate verification tap: {error}") from error
+    if prepared_status:
+        raise ExecutionError("candidate verification tap is not clean after sealing")
     return destination.resolve(strict=True)
+
+
+def _prepare_verification_resolved_taps(
+    *,
+    source_path: Path,
+    destination: Path,
+    tap_root: Path,
+    composed_tap: Path,
+    tap_source: Mapping[str, Any],
+) -> str:
+    """Bind dependency parsing to the clean prepared verification checkout."""
+
+    try:
+        metadata = source_path.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise ExecutionError(
+                "resolved tap map must be a regular non-symlink file"
+            )
+        if metadata.st_size > 65_536:
+            raise ExecutionError("resolved tap map exceeds its byte limit")
+        document = json.loads(source_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        if isinstance(error, ExecutionError):
+            raise
+        raise ExecutionError(f"cannot read resolved tap map: {error}") from error
+    root = dict(_mapping(document, "resolved tap map"))
+    if frozenset(root) != frozenset({"dependencies", "primary", "schema"}):
+        raise ExecutionError("resolved tap map fields changed")
+    schema = root.get("schema")
+    if schema not in {1, 2}:
+        raise ExecutionError("resolved tap map schema is unsupported")
+    primary = dict(_mapping(root.get("primary"), "resolved tap map primary"))
+    primary_fields = {
+        "root",
+        "tap_commit",
+        "tap_name",
+        "tap_repository",
+    }
+    if schema == 2:
+        primary_fields.add("checkout_commit")
+    primary_repository = primary.get("tap_repository")
+    primary_name = primary.get("tap_name")
+    if (
+        not isinstance(root.get("dependencies"), list)
+        or frozenset(primary) != frozenset(primary_fields)
+        or primary_repository != tap_source.get("repository")
+        or primary.get("tap_commit") != tap_source.get("commit")
+        or (schema == 2 and primary.get("checkout_commit") != tap_source.get("commit"))
+        or not isinstance(primary_repository, str)
+        or TAP_REPOSITORY.fullmatch(primary_repository) is None
+        or not isinstance(primary_name, str)
+        or TAP_NAME.fullmatch(primary_name) is None
+        or primary_name
+        != (
+            f"{primary_repository.split('/', 1)[0]}/"
+            f"{primary_repository.split('/', 1)[1].removeprefix('homebrew-')}"
+        )
+    ):
+        raise ExecutionError("resolved tap map primary differs from coordinated source")
+    try:
+        source_root = Path(str(primary.get("root"))).resolve(strict=True)
+    except OSError as error:
+        raise ExecutionError(f"resolved primary tap is unavailable: {error}") from error
+    if source_root != tap_root:
+        raise ExecutionError("resolved tap map primary root differs from protected tap")
+
+    lock_path = tap_root / "Kandelo" / "dependency-taps.json"
+    try:
+        if lock_path.exists() or lock_path.is_symlink():
+            lock_metadata = lock_path.lstat()
+            if stat.S_ISLNK(lock_metadata.st_mode) or not stat.S_ISREG(
+                lock_metadata.st_mode
+            ):
+                raise ExecutionError(
+                    "protected dependency tap lock must be a regular non-symlink file"
+                )
+            if lock_metadata.st_size > 65_536:
+                raise ExecutionError("protected dependency tap lock exceeds its byte limit")
+            lock = json.loads(lock_path.read_text(encoding="utf-8"))
+        else:
+            lock = {"schema": 1, "taps": []}
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        if isinstance(error, ExecutionError):
+            raise
+        raise ExecutionError(f"cannot read protected dependency tap lock: {error}") from error
+    lock_root = dict(_mapping(lock, "protected dependency tap lock"))
+    if frozenset(lock_root) != frozenset({"schema", "taps"}):
+        raise ExecutionError("protected dependency tap lock fields changed")
+    locked_taps = lock_root.get("taps")
+    if (
+        lock_root.get("schema") != 1
+        or not isinstance(locked_taps, list)
+        or len(locked_taps) > 8
+    ):
+        raise ExecutionError("protected dependency tap lock is invalid")
+
+    expected_dependencies: list[dict[str, str]] = []
+    prior_name = ""
+    seen_repositories: set[str] = set()
+    for index, value in enumerate(locked_taps):
+        entry = dict(_mapping(value, f"protected dependency tap lock taps[{index}]"))
+        if frozenset(entry) != frozenset(
+            {"tap_commit", "tap_name", "tap_repository"}
+        ):
+            raise ExecutionError("protected dependency tap lock entry fields changed")
+        name = entry.get("tap_name")
+        repository = entry.get("tap_repository")
+        commit = entry.get("tap_commit")
+        if (
+            not isinstance(name, str)
+            or TAP_NAME.fullmatch(name) is None
+            or name <= prior_name
+            or not isinstance(repository, str)
+            or TAP_REPOSITORY.fullmatch(repository) is None
+            or repository in seen_repositories
+            or name
+            != (
+                f"{repository.split('/', 1)[0]}/"
+                f"{repository.split('/', 1)[1].removeprefix('homebrew-')}"
+            )
+            or not isinstance(commit, str)
+            or COMMIT.fullmatch(commit) is None
+        ):
+            raise ExecutionError("protected dependency tap lock entry is invalid")
+        prior_name = name
+        seen_repositories.add(repository)
+        expected_dependencies.append(entry)
+
+    dependencies = root["dependencies"]
+    if len(dependencies) != len(expected_dependencies):
+        raise ExecutionError("dependency tap map differs from the protected lock")
+    prepared_dependencies: list[dict[str, str]] = []
+    for index, (value, expected) in enumerate(
+        zip(dependencies, expected_dependencies, strict=True)
+    ):
+        entry = dict(_mapping(value, f"resolved dependency tap[{index}]"))
+        entry_fields = {
+            "root",
+            "tap_commit",
+            "tap_name",
+            "tap_repository",
+        }
+        if schema == 2:
+            entry_fields.add("checkout_commit")
+        if (
+            frozenset(entry) != frozenset(entry_fields)
+            or {key: entry.get(key) for key in expected} != expected
+            or (schema == 2 and entry.get("checkout_commit") != expected["tap_commit"])
+        ):
+            raise ExecutionError("dependency tap map differs from the protected lock")
+        try:
+            dependency_root = Path(str(entry.get("root")))
+            if dependency_root.is_symlink() or not dependency_root.is_dir():
+                raise ExecutionError("resolved dependency tap root is unavailable")
+            dependency_root = dependency_root.resolve(strict=True)
+            formula_root = dependency_root / "Formula"
+            if formula_root.is_symlink() or not formula_root.is_dir():
+                raise ExecutionError("resolved dependency tap Formula root is unavailable")
+            dependency_head = subprocess.run(
+                ["git", "-C", str(dependency_root), "rev-parse", "HEAD"],
+                check=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+            ).stdout.decode("ascii").strip()
+            dependency_status = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(dependency_root),
+                    "status",
+                    "--short",
+                    "--untracked-files=all",
+                ],
+                check=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+            ).stdout
+        except (OSError, subprocess.CalledProcessError, UnicodeDecodeError) as error:
+            if isinstance(error, ExecutionError):
+                raise
+            raise ExecutionError(f"cannot inspect resolved dependency tap: {error}") from error
+        if dependency_head != expected["tap_commit"] or dependency_status:
+            raise ExecutionError("resolved dependency tap differs from the protected lock")
+        prepared_dependencies.append(
+            {**entry, "checkout_commit": expected["tap_commit"], "root": str(dependency_root)}
+        )
+    try:
+        composed_head = subprocess.run(
+            ["git", "-C", str(composed_tap), "rev-parse", "HEAD"],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+        ).stdout.decode("ascii").strip()
+        status = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(composed_tap),
+                "status",
+                "--short",
+                "--untracked-files=all",
+            ],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+        ).stdout
+        ancestry = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(composed_tap),
+                "merge-base",
+                "--is-ancestor",
+                str(tap_source.get("commit")),
+                composed_head,
+            ],
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError) as error:
+        raise ExecutionError(f"cannot inspect prepared verification tap: {error}") from error
+    if (
+        re.fullmatch(r"[0-9a-f]{40}", composed_head) is None
+        or composed_head == tap_source.get("commit")
+        or status
+        or ancestry.returncode != 0
+    ):
+        raise ExecutionError("prepared verification tap is not one clean descendant")
+    root["schema"] = 2
+    root["dependencies"] = prepared_dependencies
+    root["primary"] = {
+        **primary,
+        "checkout_commit": composed_head,
+        "root": str(composed_tap),
+    }
+    payload = (json.dumps(root, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    if len(payload) > 65_536:
+        raise ExecutionError("prepared resolved tap map exceeds its byte limit")
+    try:
+        destination.write_bytes(payload)
+        destination.chmod(0o600)
+    except OSError as error:
+        raise ExecutionError(f"cannot write prepared resolved tap map: {error}") from error
+    return composed_head
 
 
 def execute_verification_work(
@@ -1386,6 +1699,25 @@ def execute_verification_work(
             destination=temporary_root / "tap",
             candidates=prepared["candidates"],
         )
+        child_environment = _uncredentialed_environment(
+            os.environ if environment is None else environment,
+            sandbox_root=temporary_root / "environment",
+        )
+        resolved_taps_value = child_environment.get(
+            "KANDELO_HOMEBREW_RESOLVED_TAPS_FILE"
+        )
+        if not isinstance(resolved_taps_value, str) or not resolved_taps_value:
+            raise ExecutionError("resolved tap map is unavailable")
+        composed_head = _prepare_verification_resolved_taps(
+            source_path=Path(resolved_taps_value),
+            destination=temporary_root / "resolved-taps.json",
+            tap_root=tap,
+            composed_tap=composed_tap,
+            tap_source=bundle["tap_plan"]["tap_source"],
+        )
+        child_environment["KANDELO_HOMEBREW_RESOLVED_TAPS_FILE"] = str(
+            temporary_root / "resolved-taps.json"
+        )
         command = [
             str(adapter),
             "--candidate-locator",
@@ -1407,7 +1739,7 @@ def execute_verification_work(
             "--tap-commit",
             str(bundle["tap_plan"]["tap_source"]["commit"]),
             "--tap-checkout-commit",
-            str(bundle["tap_plan"]["tap_source"]["commit"]),
+            composed_head,
             "--dependency-provenance",
             str(prepared["dependency_provenance"]),
             "--sysroot-build-root",
@@ -1416,10 +1748,6 @@ def execute_verification_work(
         for forbidden in sorted({str(kandelo), str(tap), str(prepared["root"])}):
             command.extend(["--forbidden-root", forbidden])
         command.extend(["--out", str(output)])
-        child_environment = _uncredentialed_environment(
-            os.environ if environment is None else environment,
-            sandbox_root=temporary_root / "environment",
-        )
         # Candidate verification is a credential-free consumer, not the
         # production Homebrew publisher.  Keep the real isolated native-tool
         # installs, but do not require the publisher-only signed API preflight

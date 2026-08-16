@@ -573,6 +573,28 @@ class VerificationExecutionTests(unittest.TestCase):
                     }
                 ],
             )
+            source_head = subprocess.run(
+                ["git", "-C", str(TAP_ROOT), "rev-parse", "HEAD"],
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout.decode("ascii").strip()
+            composed_head = subprocess.run(
+                ["git", "-C", str(composed), "rev-parse", "HEAD"],
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout.decode("ascii").strip()
+            composed_status = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(composed),
+                    "status",
+                    "--short",
+                    "--untracked-files=all",
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout
             resolved = subprocess.run(
                 [
                     "ruby",
@@ -586,6 +608,21 @@ class VerificationExecutionTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
+            ancestry = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(composed),
+                    "merge-base",
+                    "--is-ancestor",
+                    source_head,
+                    composed_head,
+                ],
+                check=False,
+            )
+        self.assertNotEqual(composed_head, source_head)
+        self.assertEqual(composed_status, b"")
+        self.assertEqual(ancestry.returncode, 0)
         self.assertEqual(
             resolved.returncode,
             0,
@@ -799,6 +836,21 @@ class VerificationExecutionTests(unittest.TestCase):
         from scripts.abi_staging import execution
 
         bundle, fetched = _fixture()
+        tap_commit = subprocess.run(
+            ["git", "-C", str(TAP_ROOT), "rev-parse", "HEAD"],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout.decode("ascii").strip()
+        tap_tree = subprocess.run(
+            ["git", "-C", str(TAP_ROOT), "rev-parse", "HEAD^{tree}"],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout.decode("ascii").strip()
+        bundle["tap_plan"]["tap_source"] = {
+            "repository": TAP_SOURCE["repository"],
+            "commit": tap_commit,
+            "tree": tap_tree,
+        }
         work = bundle["workflow"]["verify_work"][0]
         calls = []
         expected_formula = b"class MiniTool\nend\n"
@@ -808,7 +860,11 @@ class VerificationExecutionTests(unittest.TestCase):
         protected_support = (TAP_ROOT / support_relative).read_bytes()
 
         def snapshot(_root: Path, repository: str) -> dict[str, str]:
-            return dict(TAP_SOURCE if repository == TAP_SOURCE["repository"] else SOURCE)
+            return dict(
+                bundle["tap_plan"]["tap_source"]
+                if repository == TAP_SOURCE["repository"]
+                else SOURCE
+            )
 
         def compose(**kwargs):
             self.assertEqual(
@@ -816,12 +872,40 @@ class VerificationExecutionTests(unittest.TestCase):
                 ["mini-base", "mini-tool"],
             )
             composed = kwargs["destination"]
+            subprocess.run(
+                [
+                    "git",
+                    "clone",
+                    "--quiet",
+                    "--no-hardlinks",
+                    str(TAP_ROOT),
+                    str(composed),
+                ],
+                check=True,
+            )
             support = composed / support_relative
-            support.parent.mkdir(parents=True)
-            support.write_bytes(protected_support)
             formula = composed / "Formula" / "mini-tool.rb"
-            formula.parent.mkdir(parents=True)
             formula.write_bytes(expected_formula)
+            commit_environment = {
+                **os.environ,
+                "GIT_CONFIG_GLOBAL": "/dev/null",
+                "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_AUTHOR_NAME": "Kandelo ABI staging",
+                "GIT_AUTHOR_EMAIL": "abi-staging@kandelo.invalid",
+                "GIT_COMMITTER_NAME": "Kandelo ABI staging",
+                "GIT_COMMITTER_EMAIL": "abi-staging@kandelo.invalid",
+                "GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z",
+                "GIT_COMMITTER_DATE": "2000-01-01T00:00:00Z",
+            }
+            subprocess.run(
+                ["git", "-C", str(composed), "add", "--", str(formula)],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(composed), "commit", "--quiet", "-m", "fixture"],
+                check=True,
+                env=commit_environment,
+            )
             return composed
 
         def run_process(command, **kwargs):
@@ -850,11 +934,35 @@ class VerificationExecutionTests(unittest.TestCase):
                 browsers.resolve(),
             )
             composed_tap = Path(command[command.index("--tap-root") + 1])
+            composed_head = subprocess.run(
+                ["git", "-C", str(composed_tap), "rev-parse", "HEAD"],
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout.decode("ascii").strip()
             self.assertEqual(
                 (composed_tap / "Formula" / "mini-tool.rb").read_bytes(),
                 expected_formula,
             )
             self.assertEqual((TAP_ROOT / support_relative).read_bytes(), protected_support)
+            self.assertEqual(
+                command[command.index("--tap-checkout-commit") + 1],
+                composed_head,
+            )
+            resolved_taps_path = Path(
+                kwargs["env"]["KANDELO_HOMEBREW_RESOLVED_TAPS_FILE"]
+            )
+            self.assertNotEqual(resolved_taps_path, original_resolved_taps)
+            resolved_taps = json.loads(resolved_taps_path.read_bytes())
+            self.assertEqual(
+                resolved_taps["primary"],
+                {
+                    "checkout_commit": composed_head,
+                    "root": str(composed_tap),
+                    "tap_commit": tap_commit,
+                    "tap_name": "kandelo-dev/tap-core",
+                    "tap_repository": TAP_SOURCE["repository"],
+                },
+            )
             self.assertNotEqual(kwargs["env"]["HOME"], "/credentialed/home")
             self.assertEqual(
                 kwargs["env"]["XDG_CONFIG_HOME"],
@@ -895,6 +1003,21 @@ class VerificationExecutionTests(unittest.TestCase):
         ):
             browsers = Path(temporary) / "ms-playwright"
             browsers.mkdir()
+            original_resolved_taps = Path(temporary) / "resolved-taps.json"
+            original_resolved_taps.write_bytes(
+                canonical_bytes(
+                    {
+                        "dependencies": [],
+                        "primary": {
+                            "root": str(TAP_ROOT),
+                            "tap_commit": tap_commit,
+                            "tap_name": "kandelo-dev/tap-core",
+                            "tap_repository": TAP_SOURCE["repository"],
+                        },
+                        "schema": 1,
+                    }
+                )
+            )
             environment = {
                 "PATH": os.environ["PATH"],
                 "CC": "/declared/cc",
@@ -906,6 +1029,9 @@ class VerificationExecutionTests(unittest.TestCase):
                 "KANDELO_HOMEBREW_BUILD_USER": "kandelo-homebrew-build",
                 "KANDELO_HOMEBREW_RECIPE_USER": "kandelo-homebrew-recipe",
                 "KANDELO_HOMEBREW_SHARED_TEMP": "/tmp/kandelo-homebrew",
+                "KANDELO_HOMEBREW_RESOLVED_TAPS_FILE": str(
+                    original_resolved_taps
+                ),
                 "PLAYWRIGHT_BROWSERS_PATH": str(browsers),
                 "RENAMED_WRITE_TOKEN": "must-not-survive",
                 "NIX_CONFIG": "access-tokens = github.com=must-not-survive",
@@ -973,6 +1099,56 @@ class VerificationExecutionTests(unittest.TestCase):
                         run_process=run_process,
                         environment=invalid_environment,
                     )
+
+            original_resolved_taps.write_bytes(
+                canonical_bytes(
+                    {
+                        "dependencies": [
+                            {
+                                "root": str(TAP_ROOT),
+                                "tap_commit": tap_commit,
+                                "tap_name": "example/external",
+                                "tap_repository": "example/homebrew-external",
+                            }
+                        ],
+                        "primary": {
+                            "root": str(TAP_ROOT),
+                            "tap_commit": tap_commit,
+                            "tap_name": "kandelo-dev/tap-core",
+                            "tap_repository": TAP_SOURCE["repository"],
+                        },
+                        "schema": 1,
+                    }
+                )
+            )
+            with self.assertRaisesRegex(
+                execution.ExecutionError,
+                "dependency tap map differs from the protected lock",
+            ):
+                execution.execute_verification_work(
+                    coordination_path=Path(temporary) / "coordination.json",
+                    work_id=work["work_id"],
+                    kandelo_root=KANDELO_ROOT,
+                    tap_root=TAP_ROOT,
+                    run={
+                        "repository": TAP_SOURCE["repository"],
+                        "workflow_ref": (
+                            ".github/workflows/abi-staging-reconcile.yml"
+                            "@refs/heads/main"
+                        ),
+                        "run_id": 808,
+                        "run_attempt": 2,
+                        "job": "verify-candidate",
+                    },
+                    output=Path(temporary) / "foreign-dependency-result",
+                    snapshot_source=snapshot,
+                    fetch_candidate=lambda locator: fetched[
+                        locator["immutable_reference"]
+                    ],
+                    compose_tap=compose,
+                    run_process=run_process,
+                    environment=environment,
+                )
         self.assertEqual(status, 7)
         self.assertEqual(len(calls), 1)
 
