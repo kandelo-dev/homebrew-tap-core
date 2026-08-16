@@ -801,7 +801,7 @@ def execute_build_work(
             {
                 "KANDELO_ABI_STAGING_CANDIDATE_ROOT": str(kandelo),
                 "KANDELO_ABI_STAGING_NORMAL_BUILDER": str(staging_builder),
-                "KANDELO_ABI_STAGING_TESTING": "1",
+                "KANDELO_ABI_STAGING_PROTECTED_NORMAL_BUILDER": "1",
             }
         )
         result = run_process(command, cwd=tap, env=child_environment, check=False)
@@ -1138,20 +1138,37 @@ def _dependency_candidate(
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
     artifact = _mapping(direct.get("artifact"), "candidate dependency artifact")
     direct_id = direct.get("id")
-    matches: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
-    records = _mapping(bundle["candidates"]["records"], "candidate records")
-    for record_sha256 in sorted(records):
-        record, locator = _candidate_entry(bundle, record_sha256)
-        payload = record["candidate"]
-        formula = payload["formula"]
-        if (
-            direct_id == f"{formula['formula']}-{formula['architecture']}"
-            and payload["bottle_layer"] == artifact
-        ):
-            matches.append((record_sha256, record, locator))
-    if not matches:
-        raise ExecutionError("candidate dependency lacks its exact public record")
-    return matches[0]
+    architecture = next(
+        (
+            candidate
+            for candidate in ("wasm32", "wasm64")
+            if isinstance(direct_id, str) and direct_id.endswith(f"-{candidate}")
+        ),
+        None,
+    )
+    if architecture is None:
+        raise ExecutionError("candidate dependency identity is invalid")
+    formula = direct_id.removesuffix(f"-{architecture}")
+    if not formula:
+        raise ExecutionError("candidate dependency identity is invalid")
+    dependency = {
+        "architecture": architecture,
+        "bottle_layer_bytes": artifact.get("bytes"),
+        "bottle_layer_sha256": artifact.get("sha256"),
+        "formula": formula,
+    }
+    record, locator = _matching_dependency(bundle, dependency)
+    payload = _mapping(record.get("candidate"), "dependency candidate payload")
+    if payload.get("bottle_layer") != artifact:
+        raise ExecutionError("candidate dependency differs from its exact binding")
+    locator_digest = locator.get("digest")
+    if (
+        not isinstance(locator_digest, str)
+        or not locator_digest.startswith("sha256:")
+        or SHA256.fullmatch(locator_digest.removeprefix("sha256:")) is None
+    ):
+        raise ExecutionError("candidate dependency locator digest is invalid")
+    return locator_digest.removeprefix("sha256:"), dict(record), dict(locator)
 
 
 def _candidate_closure(

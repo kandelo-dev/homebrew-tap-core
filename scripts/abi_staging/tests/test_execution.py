@@ -572,6 +572,95 @@ done <"$DEPENDENCY_POUR_LIST"
             bottle,
         )
 
+    def test_transitive_reuse_ignores_same_layer_historical_candidate(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        bottle = b"reused dependency bottle\n"
+        bottle_sha256 = hashlib.sha256(bottle).hexdigest()
+        repository = "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/dash"
+        layer = {
+            "bytes": len(bottle),
+            "immutable_reference": f"{repository}@sha256:{bottle_sha256}",
+            "sha256": bottle_sha256,
+        }
+        current = {
+            "candidate": {
+                "bottle_layer": layer,
+                "direct_dependency_layers": [],
+                "formula": {
+                    "architecture": "wasm32",
+                    "bottle_contract_sha256": "b" * 64,
+                    "formula": "dash",
+                    "tap": "kandelo-dev/homebrew-tap-core",
+                    "target_abi": 8,
+                },
+            },
+            "common": {"request_sha256": "1" * 64},
+        }
+        historical = copy.deepcopy(current)
+        historical["common"]["request_sha256"] = "0" * 64
+        historical["candidate"]["formula"]["bottle_contract_sha256"] = "c" * 64
+        historical_sha256 = "1" * 64
+        current_sha256 = "2" * 64
+        historical_locator = {
+            "digest": f"sha256:{historical_sha256}",
+            "immutable_reference": f"{repository}@sha256:{historical_sha256}",
+            "repository": repository,
+        }
+        current_locator = {
+            "digest": f"sha256:{current_sha256}",
+            "immutable_reference": f"{repository}@sha256:{current_sha256}",
+            "repository": repository,
+        }
+        reuse = {
+            "candidate_reuse": {
+                "bottle_layer": layer,
+                "existing_candidate": {
+                    "immutable_reference": current_locator["immutable_reference"],
+                    "record_sha256": current_sha256,
+                },
+                "formula": current["candidate"]["formula"],
+            },
+            "common": {"request_sha256": "a" * 64},
+        }
+        bundle = {
+            "request_sha256": "a" * 64,
+            "tap_plan": {
+                "tap_source": {"repository": "kandelo-dev/homebrew-tap-core"},
+                "target_abi": {"version": 8},
+            },
+            "candidates": {
+                "locators": {
+                    historical_sha256: historical_locator,
+                    current_sha256: current_locator,
+                },
+                "records": {
+                    historical_sha256: historical,
+                    current_sha256: current,
+                },
+            },
+            "reuse_bindings": {
+                "locators": {},
+                "records": {canonical_sha256(reuse): reuse},
+            },
+        }
+
+        with patch.object(
+            execution,
+            "_candidate_entry",
+            side_effect=lambda _bundle, digest: (
+                bundle["candidates"]["records"][digest],
+                bundle["candidates"]["locators"][digest],
+            ),
+        ):
+            selected_sha256, record, locator = execution._dependency_candidate(
+                bundle,
+                {"artifact": layer, "id": "dash-wasm32"},
+            )
+
+        self.assertEqual(selected_sha256, current_sha256)
+        self.assertEqual(record, current)
+        self.assertEqual(locator, current_locator)
+
     def test_unknown_or_mutated_work_id_fails_closed(self) -> None:
         try:
             execution = importlib.import_module("scripts.abi_staging.execution")
@@ -629,7 +718,11 @@ done <"$DEPENDENCY_POUR_LIST"
                 kwargs["env"]["KANDELO_ABI_STAGING_CANDIDATE_ROOT"],
                 str(KANDELO_ROOT.resolve()),
             )
-            self.assertEqual(kwargs["env"]["KANDELO_ABI_STAGING_TESTING"], "1")
+            self.assertEqual(
+                kwargs["env"]["KANDELO_ABI_STAGING_PROTECTED_NORMAL_BUILDER"],
+                "1",
+            )
+            self.assertNotIn("KANDELO_ABI_STAGING_TESTING", kwargs["env"])
             protected_builder = Path(
                 kwargs["env"]["KANDELO_ABI_STAGING_NORMAL_BUILDER"]
             )
