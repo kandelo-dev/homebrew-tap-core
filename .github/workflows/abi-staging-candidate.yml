@@ -440,7 +440,8 @@ jobs:
           CANDIDATE_ENTRYPOINT
           chmod 0500 "$candidate_entrypoint"
           trap 'rm -f -- "$candidate_entrypoint"' EXIT
-          /usr/bin/sg "$KANDELO_HOMEBREW_BUILD_USER" -c "$candidate_entrypoint"
+          invoker_user="$(/usr/bin/id -un)"
+          /usr/bin/sudo -n -E -u "$invoker_user" -- "$candidate_entrypoint"
 
       - name: Upload exact inert build handoff
         id: upload

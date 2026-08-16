@@ -949,8 +949,10 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes execute_source, '"PYTHONDONTWRITEBYTECODE=1"'
     assert_includes execute_source, '"PYTHONSAFEPATH=1"'
     assert_includes execute_source, "umask 0007"
+    assert_includes execute_source, 'invoker_user="$(/usr/bin/id -un)"'
     assert_includes execute_source,
-                    '/usr/bin/sg "$KANDELO_HOMEBREW_BUILD_USER" -c "$candidate_entrypoint"'
+                    '/usr/bin/sudo -n -E -u "$invoker_user" -- "$candidate_entrypoint"'
+    refute_includes execute_source, "/usr/bin/sg"
     assert_includes execute_source,
                     "python3 -P -m scripts.abi_staging.cli execute-build-work"
     assert_reusable_rejected(:candidate, "candidate Homebrew ref drift") do |workflow|
@@ -986,12 +988,12 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         ':'
       )
     end
-    assert_reusable_rejected(:candidate, "candidate handoff omits the shared build group") do |workflow|
+    assert_reusable_rejected(:candidate, "candidate handoff omits refreshed runner groups") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
         candidate["name"] == "Build one exact uncredentialed candidate handoff"
       end
       step["run"] = step.fetch("run").sub(
-        '/usr/bin/sg "$KANDELO_HOMEBREW_BUILD_USER" -c "$candidate_entrypoint"',
+        '/usr/bin/sudo -n -E -u "$invoker_user" -- "$candidate_entrypoint"',
         '"$candidate_entrypoint"'
       )
     end
