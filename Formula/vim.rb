@@ -19,7 +19,8 @@ class Vim < Formula
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
   depends_on KandeloFormulaSupport::WabtRequirement => :build
-  depends_on "kandelo-dev/tap-core/dash" => :test
+  # Exact staged builds hydrate a runtime-only local dependency map.
+  depends_on "kandelo-dev/tap-core/dash"
   depends_on "kandelo-dev/tap-core/ncurses"
 
   skip_clean "bin"

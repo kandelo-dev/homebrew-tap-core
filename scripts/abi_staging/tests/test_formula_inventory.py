@@ -178,7 +178,7 @@ class FormulaInventoryTests(unittest.TestCase):
         self.assertEqual(by_name["curl"]["architectures"], ["wasm32", "wasm64"])
         self.assertEqual(by_name["sqlite"]["architectures"], ["wasm32", "wasm64"])
         self.assertIn(
-            {"name": "dash", "scopes": ["build", "test"]},
+            {"name": "dash", "scopes": ["runtime"]},
             by_name["nginx"]["target_dependencies"],
         )
         self.assertEqual(
