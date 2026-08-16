@@ -530,6 +530,7 @@ def schedule_ready_batch(
     now: str,
     policy: TapStagingPolicyV1,
     verification_tests: Sequence[VerificationTestDefinitionV1],
+    retry_exhausted_builds: bool = False,
 ) -> SchedulingDecisionV1:
     validate_tap_plan(plan)
     _timestamp(now, "scheduling clock")
@@ -774,7 +775,12 @@ def schedule_ready_batch(
             now=now,
             policy=policy,
         )
-        if retry.action == "retry":
+        manual_retry = (
+            retry_exhausted_builds
+            and retry.exhausted
+            and selected.retry_ordinal == policy.automatic_retry_count
+        )
+        if retry.action == "retry" or manual_retry:
             state[subject] = "pending"
             if allowed:
                 ready.append(
@@ -782,7 +788,7 @@ def schedule_ready_batch(
                         subject,
                         work_class,
                         "build-candidate",
-                        retry.next_ordinal,
+                        selected.retry_ordinal if manual_retry else retry.next_ordinal,
                         contract,
                     )
                 )

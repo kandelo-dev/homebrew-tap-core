@@ -9,6 +9,11 @@ on:
         description: "One exact public request asset URL; empty scans the feed"
         required: false
         type: string
+      retry_exhausted_builds:
+        description: "Reschedule exhausted Formula builds for this manual run"
+        required: false
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -132,6 +137,10 @@ jobs:
           set -euo pipefail
           out="$RUNNER_TEMP/abi-staging-coordination"
           now="$(python3 -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"))')"
+          retry_args=()
+          if [[ "${{ inputs.retry_exhausted_builds }}" == "true" ]]; then
+            retry_args+=(--retry-exhausted-builds)
+          fi
           python3 -m scripts.abi_staging.cli prepare-workflow \
             --tap-root "$PWD" \
             --kandelo-root "$GITHUB_WORKSPACE/kandelo-source" \
@@ -139,6 +148,7 @@ jobs:
             --request "$out/request.json" \
             --formula-requirements "$RUNNER_TEMP/abi-staging-formula-requirements.json" \
             --now "$now" \
+            "${retry_args[@]}" \
             --github-output "$GITHUB_OUTPUT" \
             --out "$out"
 

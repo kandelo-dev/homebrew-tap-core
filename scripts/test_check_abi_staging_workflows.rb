@@ -127,6 +127,22 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     AbiStagingWorkflowCheck.check_cleanup(@cleanup)
   end
 
+  def test_exhausted_build_retry_is_manual_and_false_by_default
+    assert_rejected("retry input defaults on") do |workflow|
+      event = workflow.key?("on") ? workflow["on"] : workflow[true]
+      event.dig("workflow_dispatch", "inputs", "retry_exhausted_builds")["default"] = true
+    end
+    assert_rejected("coordinator always retries exhausted builds") do |workflow|
+      step = workflow.dig("jobs", "discover-plan", "steps").find do |candidate|
+        candidate["id"] == "coordinate"
+      end
+      step["run"] = step.fetch("run").sub(
+        'if [[ "${{ inputs.retry_exhausted_builds }}" == "true" ]]; then',
+        'if true; then'
+      )
+    end
+  end
+
   def test_public_discovery_rejects_broad_release_listing
     broad = @public_discovery.sub(
       "tags = self._request_release_tags()",

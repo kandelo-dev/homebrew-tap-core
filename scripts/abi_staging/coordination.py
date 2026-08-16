@@ -484,6 +484,7 @@ def coordinate_planned_request(
     now: str,
     policy: TapStagingPolicyV1,
     verification_tests: Sequence[VerificationTestDefinitionV1],
+    retry_exhausted_builds: bool = False,
 ) -> dict[str, Any]:
     """Build one canonical coordination bundle from protected and public facts."""
 
@@ -501,6 +502,7 @@ def coordinate_planned_request(
         now=now,
         policy=policy,
         verification_tests=verification_tests,
+        retry_exhausted_builds=retry_exhausted_builds,
     )
     lifecycle = {
         "state": reconciliation.lifecycle.state,
