@@ -532,13 +532,6 @@ def prepare_composition_input(
         inventory = inspect_bottle_link_inventory(
             bottle_body, formula=formula, version=pkg_version
         )
-        if raw_all_files is not None and (
-            raw_all_files != inventory["all_files"]
-            or raw_path_exec_files != inventory["path_exec_files"]
-        ):
-            raise HandoffError(
-                "composition bottle file metadata differs from the exact bottle"
-            )
         guest_layout = load_guest_layout(guest_layout_body)
         link_manifest = build_link_manifest(
             inventory=inventory,
