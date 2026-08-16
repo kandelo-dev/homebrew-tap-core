@@ -95,6 +95,39 @@ class PublicInventoryRetryTests(unittest.TestCase):
         self.assertEqual(len(transports), 3)
         self.assertEqual(sleeps, [2.0, 4.0])
 
+    def test_parallel_inventory_workers_receive_fresh_transports(self) -> None:
+        transports: list[object] = []
+
+        def transport_factory() -> object:
+            transport = object()
+            transports.append(transport)
+            return transport
+
+        def scanner(
+            *_args,
+            transport: object,
+            worker_transport_factory,
+            **_kwargs,
+        ):
+            self.assertIs(transport, transports[0])
+            first = worker_transport_factory()
+            second = worker_transport_factory()
+            self.assertIsNot(first, second)
+            return "inventory"
+
+        self.assertEqual(
+            cli_module._scan_scheduling_inventory_with_retries(
+                {},
+                policy=object(),
+                verification_tests=(),
+                scanner=scanner,
+                transport_factory=transport_factory,
+                sleeper=lambda _seconds: None,
+            ),
+            "inventory",
+        )
+        self.assertEqual(len(transports), 3)
+
     def test_does_not_retry_nonretryable_inventory_failure(self) -> None:
         calls = 0
 

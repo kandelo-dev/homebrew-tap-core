@@ -871,6 +871,7 @@ def _scan_scheduling_inventory_with_retries(
                 policy=policy,
                 verification_tests=verification_tests,
                 transport=make_transport(),
+                worker_transport_factory=make_transport,
             )
         except InventoryError as error:
             cause: BaseException | None = error

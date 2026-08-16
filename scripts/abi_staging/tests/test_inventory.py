@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 
 from scripts.abi_staging import inventory as inventory_module
@@ -62,6 +63,63 @@ REUSE_TAG_PREFIX = "reuse-sha256-"
 
 
 class PublicInventoryTests(unittest.TestCase):
+    def _assert_formula_phase_reads_overlap(self, occurrence: int) -> None:
+        class OverlapRegistryTransport(FakeRegistryTransport):
+            def __init__(self) -> None:
+                super().__init__()
+                self.first_started = threading.Event()
+                self.second_started = threading.Event()
+                self.serialized = False
+                self.counts = {"libcxx": 0, "openssl": 0}
+                self.count_lock = threading.Lock()
+
+            def request(self, method, url, **kwargs):
+                selected = None
+                for formula in self.counts:
+                    if f"-candidates/{formula}/tags/list?" in url:
+                        selected = formula
+                        break
+                current = 0
+                if selected is not None:
+                    with self.count_lock:
+                        self.counts[selected] += 1
+                        current = self.counts[selected]
+                if selected == "libcxx" and current == occurrence:
+                    self.first_started.set()
+                    if not self.second_started.wait(timeout=0.5):
+                        self.serialized = True
+                elif selected == "openssl" and current == occurrence:
+                    self.second_started.set()
+                return super().request(method, url, **kwargs)
+
+        transport = OverlapRegistryTransport()
+        scan_scheduling_inventory(
+            PLAN,
+            policy=load_tap_staging_policy(
+                TAP_ROOT / "Kandelo/staging/tap-policy.toml"
+            ),
+            verification_tests=load_verification_tests(
+                TAP_ROOT / "Kandelo/staging/verification-tests.toml"
+            ),
+            transport=transport,
+        )
+
+        self.assertTrue(transport.first_started.is_set())
+        self.assertTrue(transport.second_started.is_set())
+        self.assertFalse(
+            transport.serialized,
+            "independent Formula repositories were read serially",
+        )
+
+    def test_formula_candidate_inventory_reads_overlap(self) -> None:
+        self._assert_formula_phase_reads_overlap(1)
+
+    def test_formula_verification_inventory_reads_overlap(self) -> None:
+        self._assert_formula_phase_reads_overlap(2)
+
+    def test_formula_reuse_inventory_reads_overlap(self) -> None:
+        self._assert_formula_phase_reads_overlap(3)
+
     def test_empty_public_namespaces_form_one_complete_scheduler_inventory(self) -> None:
         transport = FakeRegistryTransport()
         inventory = scan_scheduling_inventory(

@@ -1268,6 +1268,33 @@ def compose_candidate_tap(
             raise ExecutionError(
                 f"cannot compose exact candidate Formula {candidate['formula']}: {detail}"
             )
+        # Homebrew appends the Formula name to a bottle root when it derives
+        # the blob URL. Candidate OCI packages already use one repository per
+        # Formula, so the composed dependency Formula must retain the common
+        # ABI candidate parent here; otherwise Homebrew resolves
+        # `.../<formula>/<formula>/blobs/...`. The exact-head composer still
+        # validates the per-Formula publication namespace before this
+        # protected, deterministic runtime normalization.
+        formula_path = destination / "Formula" / f"{candidate['formula']}.rb"
+        candidate_root_line = f'root_url "{expected_root_url}"'
+        bottle_root_url = expected_root_url.rsplit("/", 1)[0]
+        bottle_root_line = f'root_url "{bottle_root_url}"'
+        try:
+            formula_source = formula_path.read_text(
+                encoding="utf-8", errors="strict"
+            )
+            if formula_source.count(candidate_root_line) != 1:
+                raise ExecutionError(
+                    "composed candidate Formula lacks one exact package root"
+                )
+            formula_path.write_text(
+                formula_source.replace(candidate_root_line, bottle_root_line),
+                encoding="utf-8",
+            )
+        except OSError as error:
+            raise ExecutionError(
+                f"cannot normalize candidate Formula bottle root: {error}"
+            ) from error
     allowed = {f"Formula/{candidate['formula']}.rb" for candidate in candidates}
     status = subprocess.run(
         ["git", "-C", str(destination), "status", "--short", "--untracked-files=all"],

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -47,6 +48,35 @@ from .verification import (
 
 class InventoryError(ValueError):
     """Raised when public immutable records cannot be reconstructed safely."""
+
+
+MAX_INVENTORY_WORKERS = 8
+
+
+def _parallel_formula_inventory(
+    names: tuple[str, ...], operation: Callable[[str], Any]
+) -> dict[str, Any]:
+    """Run one independent immutable Formula read per bounded worker."""
+
+    if not names:
+        return {}
+    futures: dict[Future[Any], str] = {}
+    results: dict[str, Any] = {}
+    with ThreadPoolExecutor(
+        max_workers=min(MAX_INVENTORY_WORKERS, len(names)),
+        thread_name_prefix="abi-staging-inventory",
+    ) as executor:
+        for name in names:
+            futures[executor.submit(operation, name)] = name
+        try:
+            for future in as_completed(futures):
+                name = futures[future]
+                results[name] = future.result()
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            raise
+    return {name: results[name] for name in names}
 
 
 @dataclass(frozen=True)
@@ -669,12 +699,15 @@ def scan_scheduling_inventory(
     policy: TapStagingPolicyV1,
     verification_tests: tuple[VerificationTestDefinitionV1, ...],
     transport: OciTransportV1,
+    worker_transport_factory: Callable[[], OciTransportV1] | None = None,
 ) -> PublicSchedulingInventoryV1:
     """Reconstruct one request's scheduler inputs from dedicated public repos."""
 
     validate_tap_plan(tap_plan)
     target_abi = tap_plan["target_abi"]["version"]
-    names = sorted({item["identity"]["name"] for item in tap_plan["formulae"]})
+    names = tuple(
+        sorted({item["identity"]["name"] for item in tap_plan["formulae"]})
+    )
     if not names or len(names) > policy.max_formulae:
         raise InventoryError("tap plan Formula inventory exceeds protected policy")
     attempts: list[AttemptFactV1] = []
@@ -690,14 +723,29 @@ def scan_scheduling_inventory(
     reuse_locators: dict[str, Mapping[str, str]] = {}
     reuse_records: dict[str, Mapping[str, Any]] = {}
 
-    for name in names:
+    make_transport = (
+        (lambda: transport)
+        if worker_transport_factory is None
+        else worker_transport_factory
+    )
+
+    def inspect_formula_records(
+        name: str,
+    ) -> tuple[CandidateInventoryV1, AttemptInventoryV1]:
+        worker_transport = make_transport()
         repository = candidate_repository(policy, target_abi, formula=name)
-        inspected = inspect_candidate_repository(repository, transport=transport)
-        candidates.extend(inspected.facts)
-        attempt_inspected = inspect_attempt_repository(
-            attempt_repository(policy, target_abi, formula=name),
-            transport=transport,
+        return (
+            inspect_candidate_repository(repository, transport=worker_transport),
+            inspect_attempt_repository(
+                attempt_repository(policy, target_abi, formula=name),
+                transport=worker_transport,
+            ),
         )
+
+    formula_records = _parallel_formula_inventory(names, inspect_formula_records)
+    for name in names:
+        inspected, attempt_inspected = formula_records[name]
+        candidates.extend(inspected.facts)
         attempts.extend(attempt_inspected.facts)
         for digest in attempt_inspected.locators:
             if digest in attempt_locators or digest in attempt_records:
@@ -726,40 +774,58 @@ def scan_scheduling_inventory(
         transport=transport,
     )
 
-    for name in names:
+    def inspect_formula_verifications(
+        name: str,
+    ) -> tuple[VerificationInventoryV1, ...]:
+        worker_transport = make_transport()
         base = candidate_repository(policy, target_abi, formula=name)
+        inspected_for_formula: list[VerificationInventoryV1] = []
         for definition in verification_tests:
             for host in definition.hosts:
-                inspected = inspect_verification_repository(
-                    receipt_repository(base, definition.id, host),
-                    test_id=definition.id,
-                    host=host,
-                    candidates=candidate_subjects,
-                    transport=transport,
+                inspected_for_formula.append(
+                    inspect_verification_repository(
+                        receipt_repository(base, definition.id, host),
+                        test_id=definition.id,
+                        host=host,
+                        candidates=candidate_subjects,
+                        transport=worker_transport,
+                    )
                 )
-                verifications.extend(inspected.facts)
-                for digest in inspected.locators:
-                    if digest in verification_locators:
-                        raise InventoryError(
-                            "verification digest appears in multiple repositories"
-                        )
-                    verification_locators[digest] = inspected.locators[digest]
-                    verification_records[digest] = inspected.records[digest]
+        return tuple(inspected_for_formula)
+
+    formula_verifications = _parallel_formula_inventory(
+        names, inspect_formula_verifications
+    )
+    for name in names:
+        for inspected in formula_verifications[name]:
+            verifications.extend(inspected.facts)
+            for digest in inspected.locators:
+                if digest in verification_locators:
+                    raise InventoryError(
+                        "verification digest appears in multiple repositories"
+                    )
+                verification_locators[digest] = inspected.locators[digest]
+                verification_records[digest] = inspected.records[digest]
 
     verification_facts = {
         fact.record_sha256: fact for fact in verifications
     }
     if len(verification_facts) != len(verifications):
         raise InventoryError("verification inventory repeats a record digest")
-    for name in names:
-        inspected = inspect_candidate_reuse_repository(
+
+    def inspect_formula_reuse(name: str) -> CandidateReuseInventoryV1:
+        return inspect_candidate_reuse_repository(
             candidate_reuse_repository(policy, target_abi, formula=name),
             candidates=candidate_records,
             candidate_locators=locators,
             verifications=verification_facts,
             verification_locators=verification_locators,
-            transport=transport,
+            transport=make_transport(),
         )
+
+    formula_reuse = _parallel_formula_inventory(names, inspect_formula_reuse)
+    for name in names:
+        inspected = formula_reuse[name]
         candidates.extend(inspected.facts)
         for digest in inspected.locators:
             if digest in reuse_locators:
