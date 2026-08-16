@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib
 import json
 import os
@@ -341,6 +342,80 @@ class WorkflowExecutionTests(unittest.TestCase):
                 json.loads((root / "inputs/run.json").read_bytes()), run
             )
             self.assertEqual(list((root / "inputs/layers").iterdir()), [])
+
+    def test_reused_dependency_resolves_to_its_exact_original_candidate(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        bottle = b"reused dependency bottle\n"
+        bottle_sha256 = hashlib.sha256(bottle).hexdigest()
+        repository = "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/dash"
+        layer = {
+            "bytes": len(bottle),
+            "immutable_reference": f"{repository}@sha256:{bottle_sha256}",
+            "sha256": bottle_sha256,
+        }
+        original = {
+            "candidate": {
+                "bottle_layer": layer,
+                "formula": {
+                    "architecture": "wasm32",
+                    "bottle_contract_sha256": "b" * 64,
+                    "formula": "dash",
+                    "tap": "kandelo-dev/homebrew-tap-core",
+                    "target_abi": 8,
+                },
+            },
+            "common": {"request_sha256": "1" * 64},
+        }
+        original_sha256 = "2" * 64
+        locator = {
+            "digest": f"sha256:{original_sha256}",
+            "immutable_reference": f"{repository}@sha256:{original_sha256}",
+            "repository": repository,
+        }
+        reuse = {
+            "candidate_reuse": {
+                "bottle_layer": layer,
+                "existing_candidate": {
+                    "immutable_reference": locator["immutable_reference"],
+                    "record_sha256": original_sha256,
+                },
+                "formula": {
+                    "architecture": "wasm32",
+                    "bottle_contract_sha256": "b" * 64,
+                    "formula": "dash",
+                    "tap": "kandelo-dev/homebrew-tap-core",
+                    "target_abi": 8,
+                },
+            },
+            "common": {"request_sha256": "a" * 64},
+        }
+        bundle = {
+            "request_sha256": "a" * 64,
+            "tap_plan": {
+                "tap_source": {"repository": "kandelo-dev/homebrew-tap-core"},
+                "target_abi": {"version": 8},
+            },
+            "candidates": {
+                "locators": {original_sha256: locator},
+                "records": {original_sha256: original},
+            },
+            "reuse_bindings": {
+                "locators": {},
+                "records": {canonical_sha256(reuse): reuse},
+            },
+        }
+        dependency = {
+            "architecture": "wasm32",
+            "bottle_layer_bytes": len(bottle),
+            "bottle_layer_sha256": bottle_sha256,
+            "formula": "dash",
+            "materialization_policy_sha256": "f" * 64,
+        }
+
+        record, selected_locator = execution._matching_dependency(bundle, dependency)
+
+        self.assertEqual(record, original)
+        self.assertEqual(selected_locator, locator)
 
     def test_unknown_or_mutated_work_id_fails_closed(self) -> None:
         try:

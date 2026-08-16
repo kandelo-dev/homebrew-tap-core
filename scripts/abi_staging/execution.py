@@ -176,6 +176,62 @@ def _matching_dependency(
         ):
             locator = _mapping(locators.get(record_sha256), "dependency candidate locator")
             matches.append((record_sha256, candidate, locator))
+    reuse_bindings = _mapping(
+        bundle.get("reuse_bindings", {}), "coordination reuse bindings"
+    )
+    reuse_records = _mapping(
+        reuse_bindings.get("records", {}), "coordination reuse binding records"
+    )
+    for reuse_value in reuse_records.values():
+        reuse = _mapping(reuse_value, "dependency reuse binding")
+        common = _mapping(reuse.get("common"), "dependency reuse common")
+        payload = _mapping(
+            reuse.get("candidate_reuse"), "dependency reuse payload"
+        )
+        formula = _mapping(payload.get("formula"), "dependency reuse Formula")
+        layer = _mapping(payload.get("bottle_layer"), "dependency reuse layer")
+        if (
+            common.get("request_sha256") != bundle["request_sha256"]
+            or formula.get("tap") != bundle["tap_plan"]["tap_source"]["repository"]
+            or formula.get("formula") != dependency["formula"]
+            or formula.get("architecture") != dependency["architecture"]
+            or formula.get("target_abi") != bundle["tap_plan"]["target_abi"]["version"]
+            or layer.get("sha256") != dependency["bottle_layer_sha256"]
+            or layer.get("bytes") != dependency["bottle_layer_bytes"]
+        ):
+            continue
+        existing = _mapping(
+            payload.get("existing_candidate"), "dependency reused candidate"
+        )
+        record_sha256 = existing.get("record_sha256")
+        candidate = _mapping(records.get(record_sha256), "dependency candidate")
+        locator = _mapping(locators.get(record_sha256), "dependency candidate locator")
+        candidate_payload = _mapping(
+            candidate.get("candidate"), "dependency candidate payload"
+        )
+        candidate_formula = _mapping(
+            candidate_payload.get("formula"), "dependency candidate Formula"
+        )
+        candidate_layer = _mapping(
+            candidate_payload.get("bottle_layer"), "dependency candidate layer"
+        )
+        if (
+            locator.get("digest") != f"sha256:{record_sha256}"
+            or locator.get("immutable_reference")
+            != existing.get("immutable_reference")
+            or candidate_formula.get("tap") != formula.get("tap")
+            or candidate_formula.get("formula") != formula.get("formula")
+            or candidate_formula.get("architecture") != formula.get("architecture")
+            or candidate_formula.get("target_abi") != formula.get("target_abi")
+            or candidate_formula.get("bottle_contract_sha256")
+            != formula.get("bottle_contract_sha256")
+            or candidate_layer.get("sha256") != layer.get("sha256")
+            or candidate_layer.get("bytes") != layer.get("bytes")
+        ):
+            raise ExecutionError(
+                "dependency reuse binding differs from its exact public candidate"
+            )
+        matches.append((record_sha256, candidate, locator))
     if not matches:
         raise ExecutionError("contract dependency lacks its exact public candidate")
     matches.sort(key=lambda item: item[0])
