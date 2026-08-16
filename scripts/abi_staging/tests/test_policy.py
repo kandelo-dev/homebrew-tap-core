@@ -149,6 +149,25 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("kandelo_fork_instrument(side_module)", source)
         self.assertIn("kandelo_fork_instrument(loader)", source)
 
+    def test_libcurl_inspects_the_pic_side_module_before_instrumenting_it(self) -> None:
+        source = (TAP_ROOT / "Formula/libcurl.rb").read_text(encoding="utf-8")
+        inspection = source.index(
+            'side_info = Utils.safe_popen_read("wasm-objdump", "-x", side_module)'
+        )
+        instrumentation = source.index("kandelo_fork_instrument(side_module)")
+        self.assertLess(inspection, instrumentation)
+
+    def test_ed_test_mounts_its_host_workspace_at_a_guest_path(self) -> None:
+        source = (TAP_ROOT / "Formula/ed.rb").read_text(encoding="utf-8")
+        self.assertIn('env = { "KERNEL_CWD" => "/work" }', source)
+        self.assertIn('mount = { "/work" => testpath }', source)
+        self.assertEqual(source.count("writable_host_directories: mount"), 2)
+        self.assertNotIn('{ "KERNEL_CWD" => testpath }', source)
+
+    def test_ruby_does_not_install_a_redundant_native_llvm_keg(self) -> None:
+        source = (TAP_ROOT / "Formula/ruby.rb").read_text(encoding="utf-8")
+        self.assertNotIn('depends_on "llvm" => :build', source)
+
     def test_sudo_configure_owns_flags_without_overriding_submake_cppflags(self) -> None:
         source = (TAP_ROOT / "Kandelo/recipes/sudo/build.sh").read_text(
             encoding="utf-8"
