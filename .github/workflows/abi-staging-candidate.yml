@@ -136,9 +136,10 @@ jobs:
             --tap-commit "$KANDELO_ABI_STAGING_TAP_COMMIT" \
             --out "$resolved_taps"
 
-          # Candidate jobs intentionally omit the production-only separate
-          # Formula user, but still use the reviewed Brew implementation and
-          # exact Kandelo toolchain without any GitHub write credential.
+          # Candidate jobs run in an ephemeral, uncredentialed runner account.
+          # Keep production's multi-user publisher isolation out of this build
+          # lane: Homebrew must retain one writable cache and trust realm while
+          # it resolves exact dependency bottles and compiles the Formula.
           # shellcheck disable=SC1091
           . scripts/homebrew-guest-layout.sh
           homebrew_select_guest_layout
@@ -154,37 +155,14 @@ jobs:
           brew_bin="$HOMEBREW_GUEST_PREFIX/bin/brew"
           test "$(readlink -f "$brew_bin")" = "$brew_repository/bin/brew"
 
-          build_user="kandelo-homebrew-build"
-          recipe_user="kandelo-homebrew-recipe"
-          for reserved_user in "$build_user" "$recipe_user"; do
-            if id "$reserved_user" >/dev/null 2>&1; then
-              echo "reserved Homebrew identity already exists: $reserved_user" >&2
-              exit 2
-            fi
-          done
-          invoker_gid="$(/usr/bin/id -g)"
-          /usr/bin/sudo -n -- /usr/sbin/useradd --system \
-            --gid "$invoker_gid" \
-            --create-home --home-dir "/home/$build_user" \
-            --shell /usr/sbin/nologin "$build_user"
-          /usr/bin/sudo -n -- /usr/sbin/useradd --system --user-group \
-            --no-create-home --home-dir /nonexistent \
-            --shell /usr/sbin/nologin "$recipe_user"
-          test "$(/usr/bin/id -g "$build_user")" = "$invoker_gid"
           shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"
-          /usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp"
-          /usr/bin/sudo -n /usr/bin/chmod 1777 "$shared_temp"
-          # Dependency hydration runs as this workflow identity. The protected
-          # launcher verifies this ownership, then transfers the completed
-          # cache to the isolated build user without changing the shared GID.
-          mkdir -m 0770 "$shared_temp/cache"
-          mkdir "$shared_temp/tmp"
-          test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/cache")" = "$(/usr/bin/id -u):$invoker_gid:770"
-          test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/tmp")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):755"
+          chmod 0700 "$shared_temp"
+          mkdir -m 0700 "$shared_temp/cache" "$shared_temp/tmp"
+          test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"
 
           # The tap-owned browser runners recover this exact directory from
-          # dirname(HOMEBREW_CACHE)/ms-playwright after Homebrew isolates HOME
-          # and strips the ordinary Playwright environment variable.
+          # dirname(HOMEBREW_CACHE)/ms-playwright after Homebrew re-executes a
+          # Formula test with its private configuration environment.
           playwright_browsers="$shared_temp/ms-playwright"
           cd "$GITHUB_WORKSPACE/kandelo-source"
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
@@ -375,15 +353,6 @@ jobs:
             echo "HOMEBREW_DEVELOPER=1"
             echo "KANDELO_HOMEBREW_RESOLVED_TAPS_FILE=$resolved_taps"
             echo "KANDELO_HOMEBREW_TAP_SOURCE_COMMIT=$KANDELO_ABI_STAGING_TAP_COMMIT"
-            echo "KANDELO_HOMEBREW_BUILD_USER=$build_user"
-            echo "KANDELO_HOMEBREW_RECIPE_USER=$recipe_user"
-            echo "KANDELO_HOMEBREW_SHARED_TEMP=$shared_temp"
-            echo "KANDELO_HOMEBREW_SUDO_BIN=/usr/bin/sudo"
-            echo "KANDELO_HOMEBREW_SYSTEMD_RUN_BIN=/usr/bin/systemd-run"
-            echo "KANDELO_HOMEBREW_SYSTEMCTL_BIN=/usr/bin/systemctl"
-            echo "KANDELO_HOMEBREW_GETENT_BIN=/usr/bin/getent"
-            echo "KANDELO_HOMEBREW_PGREP_BIN=/usr/bin/pgrep"
-            echo "KANDELO_HOMEBREW_PKILL_BIN=/usr/bin/pkill"
             echo "PLAYWRIGHT_BROWSERS_PATH=$playwright_browsers"
             echo "WASM_POSIX_BINARY_CACHE_ROOT=$package_cache"
             echo "WASM_POSIX_XTASK_BIN=$candidate_xtask"
@@ -414,15 +383,6 @@ jobs:
               "HOMEBREW_DEVELOPER=$HOMEBREW_DEVELOPER" \
               "KANDELO_HOMEBREW_RESOLVED_TAPS_FILE=$KANDELO_HOMEBREW_RESOLVED_TAPS_FILE" \
               "KANDELO_HOMEBREW_TAP_SOURCE_COMMIT=$KANDELO_HOMEBREW_TAP_SOURCE_COMMIT" \
-              "KANDELO_HOMEBREW_BUILD_USER=$KANDELO_HOMEBREW_BUILD_USER" \
-              "KANDELO_HOMEBREW_RECIPE_USER=$KANDELO_HOMEBREW_RECIPE_USER" \
-              "KANDELO_HOMEBREW_SHARED_TEMP=$KANDELO_HOMEBREW_SHARED_TEMP" \
-              "KANDELO_HOMEBREW_SUDO_BIN=$KANDELO_HOMEBREW_SUDO_BIN" \
-              "KANDELO_HOMEBREW_SYSTEMD_RUN_BIN=$KANDELO_HOMEBREW_SYSTEMD_RUN_BIN" \
-              "KANDELO_HOMEBREW_SYSTEMCTL_BIN=$KANDELO_HOMEBREW_SYSTEMCTL_BIN" \
-              "KANDELO_HOMEBREW_GETENT_BIN=$KANDELO_HOMEBREW_GETENT_BIN" \
-              "KANDELO_HOMEBREW_PGREP_BIN=$KANDELO_HOMEBREW_PGREP_BIN" \
-              "KANDELO_HOMEBREW_PKILL_BIN=$KANDELO_HOMEBREW_PKILL_BIN" \
               "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" \
               "WASM_POSIX_BINARY_CACHE_ROOT=$WASM_POSIX_BINARY_CACHE_ROOT" \
               "WASM_POSIX_XTASK_BIN=$WASM_POSIX_XTASK_BIN" \
