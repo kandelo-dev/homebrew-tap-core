@@ -1164,50 +1164,21 @@ module AbiStagingWorkflowCheck
                          "build-deps program-index-selected"
                        ) &&
                        realm.fetch("run").include?(
-                         'build_user="kandelo-homebrew-build"'
-                       ) &&
-                       realm.fetch("run").include?(
-                         'recipe_user="kandelo-homebrew-recipe"'
-                       ) &&
-                       realm.fetch("run").include?(
                          'shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"'
                        ) &&
                        realm.fetch("run").include?(
-                         'invoker_gid="$(/usr/bin/id -g)"'
+                         'chmod 0700 "$shared_temp"'
                        ) &&
                        realm.fetch("run").include?(
-                         '--gid "$invoker_gid"'
+                         'mkdir -m 0700 "$shared_temp/cache" "$shared_temp/tmp"'
                        ) &&
                        realm.fetch("run").include?(
-                         'test "$(/usr/bin/id -g "$build_user")" = "$invoker_gid"'
+                         'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"'
                        ) &&
-                       realm.fetch("run").include?(
-                         'mkdir -m 0770 "$shared_temp/cache"'
-                       ) &&
-                       realm.fetch("run").include?(
-                         'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$invoker_gid:770"'
-                       ) &&
-                       !realm.fetch("run").include?(
-                         '/usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"'
-                       ) &&
-                       !realm.fetch("run").include?(
-                         '/usr/bin/sudo -n /usr/bin/chown "$invoker_user:$build_user" "$shared_temp/cache"'
-                       ) &&
-                       !realm.fetch("run").include?(
-                         "/usr/sbin/usermod"
-                       ) &&
-                       realm.fetch("run").include?(
-                         'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/tmp")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):755"'
-                       ) &&
-                       !realm.fetch("run").include?(
-                         '/usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp/tmp"'
-                       ) &&
-                       realm.fetch("run").include?(
-                         'echo "KANDELO_HOMEBREW_BUILD_USER=$build_user"'
-                       ) &&
-                       realm.fetch("run").include?(
-                         'echo "KANDELO_HOMEBREW_RECIPE_USER=$recipe_user"'
-                       ) &&
+                       !realm.fetch("run").include?("KANDELO_HOMEBREW_BUILD_USER") &&
+                       !realm.fetch("run").include?("KANDELO_HOMEBREW_RECIPE_USER") &&
+                       !realm.fetch("run").include?("KANDELO_HOMEBREW_SHARED_TEMP") &&
+                       !realm.fetch("run").include?("/usr/sbin/useradd") &&
                        realm.fetch("run").include?(
                          'playwright_browsers="$shared_temp/ms-playwright"'
                        ) &&
@@ -1313,6 +1284,9 @@ module AbiStagingWorkflowCheck
                        !source.include?("/usr/bin/sg")
                      )) &&
                      (kind != :candidate || source.include?("umask 0007")) &&
+                     source.include?(
+                       "WASM_POSIX_XTASK_BIN=$WASM_POSIX_XTASK_BIN"
+                     ) &&
                      %w[
                        KANDELO_HOMEBREW_BUILD_USER
                        KANDELO_HOMEBREW_RECIPE_USER
@@ -1323,8 +1297,7 @@ module AbiStagingWorkflowCheck
                        KANDELO_HOMEBREW_GETENT_BIN
                        KANDELO_HOMEBREW_PGREP_BIN
                        KANDELO_HOMEBREW_PKILL_BIN
-                       WASM_POSIX_XTASK_BIN
-                     ].all? { |name| source.include?("#{name}=$#{name}") } &&
+                     ].none? { |name| source.include?(name) } &&
                      !source.include?("../kandelo-source/scripts/dev-shell.sh") &&
                      source.include?('--run-id "$GITHUB_RUN_ID"') &&
                      source.include?('--run-attempt "$GITHUB_RUN_ATTEMPT"') &&
