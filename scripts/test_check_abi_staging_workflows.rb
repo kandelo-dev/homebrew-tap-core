@@ -912,14 +912,14 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes realm_source, "/usr/sbin/useradd"
     assert_includes realm_source, 'shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"'
     assert_includes realm_source, 'chmod 1777 "$shared_temp"'
+    assert_includes realm_source, 'invoker_user="$(/usr/bin/id -un)"'
     assert_includes realm_source,
-                    '/usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"'
+                    '/usr/bin/sudo -n /usr/bin/chown "$invoker_user:$build_user" "$shared_temp/cache"'
     assert_includes realm_source,
                     '/usr/bin/sudo -n /usr/bin/chmod 0770 "$shared_temp/cache"'
     assert_includes realm_source,
-                    'test "$(/usr/bin/stat -c \'%U:%G:%a\' "$shared_temp/cache")" = "$build_user:$build_user:770"'
-    assert_includes realm_source,
-                    '/usr/bin/sudo -n /usr/sbin/usermod --append --groups "$build_user" "$invoker_user"'
+                    'test "$(/usr/bin/stat -c \'%U:%G:%a\' "$shared_temp/cache")" = "$invoker_user:$build_user:770"'
+    refute_includes realm_source, "/usr/sbin/usermod"
     assert_includes realm_source,
                     'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/tmp")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):755"'
     refute_includes realm_source,
@@ -965,9 +965,8 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes execute_source, '"PYTHONDONTWRITEBYTECODE=1"'
     assert_includes execute_source, '"PYTHONSAFEPATH=1"'
     assert_includes execute_source, "umask 0007"
-    assert_includes execute_source, 'invoker_user="$(/usr/bin/id -un)"'
-    assert_includes execute_source,
-                    '/usr/bin/sudo -n -E -u "$invoker_user" -- "$candidate_entrypoint"'
+    assert_includes execute_source, '"$candidate_entrypoint"'
+    refute_includes execute_source, '/usr/bin/sudo -n -E -u'
     refute_includes execute_source, "/usr/bin/sg"
     assert_includes execute_source,
                     "python3 -P -m scripts.abi_staging.cli execute-build-work"
@@ -991,26 +990,26 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub(
-        '/usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"',
+        '/usr/bin/sudo -n /usr/bin/chown "$invoker_user:$build_user" "$shared_temp/cache"',
         ':'
       )
     end
-    assert_reusable_rejected(:candidate, "candidate Homebrew cache drops its shared build group") do |workflow|
+    assert_reusable_rejected(:candidate, "candidate Homebrew cache drops its build group") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub(
-        '/usr/bin/sudo -n /usr/sbin/usermod --append --groups "$build_user" "$invoker_user"',
-        ':'
+        '/usr/bin/sudo -n /usr/bin/chown "$invoker_user:$build_user" "$shared_temp/cache"',
+        '/usr/bin/sudo -n /usr/bin/chown "$invoker_user:$invoker_user" "$shared_temp/cache"'
       )
     end
-    assert_reusable_rejected(:candidate, "candidate handoff omits refreshed runner groups") do |workflow|
+    assert_reusable_rejected(:candidate, "candidate handoff re-enters through sudo") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
         candidate["name"] == "Build one exact uncredentialed candidate handoff"
       end
       step["run"] = step.fetch("run").sub(
-        '/usr/bin/sudo -n -E -u "$invoker_user" -- "$candidate_entrypoint"',
-        '"$candidate_entrypoint"'
+        '"$candidate_entrypoint"',
+        '/usr/bin/sudo -n -E -u runner -- "$candidate_entrypoint"'
       )
     end
     assert_reusable_rejected(:candidate, "candidate Homebrew temp loses invoker ownership") do |workflow|

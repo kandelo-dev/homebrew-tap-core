@@ -1173,19 +1173,19 @@ module AbiStagingWorkflowCheck
                          'shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"'
                        ) &&
                        realm.fetch("run").include?(
-                         '/usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"'
+                         '/usr/bin/sudo -n /usr/bin/chown "$invoker_user:$build_user" "$shared_temp/cache"'
                        ) &&
                        realm.fetch("run").include?(
                          '/usr/bin/sudo -n /usr/bin/chmod 0770 "$shared_temp/cache"'
                        ) &&
                        realm.fetch("run").include?(
-                         'test "$(/usr/bin/stat -c \'%U:%G:%a\' "$shared_temp/cache")" = "$build_user:$build_user:770"'
+                         'test "$(/usr/bin/stat -c \'%U:%G:%a\' "$shared_temp/cache")" = "$invoker_user:$build_user:770"'
                        ) &&
                        realm.fetch("run").include?(
-                         '/usr/bin/sudo -n /usr/sbin/usermod --append --groups'
+                         'invoker_user="$(/usr/bin/id -un)"'
                        ) &&
-                       realm.fetch("run").include?(
-                         '"$build_user" "$invoker_user"'
+                       !realm.fetch("run").include?(
+                         "/usr/sbin/usermod"
                        ) &&
                        realm.fetch("run").include?(
                          'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/tmp")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):755"'
@@ -1299,10 +1299,8 @@ module AbiStagingWorkflowCheck
                        'PYTHONPATH=$GITHUB_WORKSPACE/tap-authority'
                      ) &&
                      (kind != :candidate || (
-                       source.include?('invoker_user="$(/usr/bin/id -un)"') &&
-                       source.include?(
-                         '/usr/bin/sudo -n -E -u "$invoker_user" -- "$candidate_entrypoint"'
-                       ) &&
+                       source.include?('"$candidate_entrypoint"') &&
+                       !source.include?("/usr/bin/sudo -n -E -u") &&
                        !source.include?("/usr/bin/sg")
                      )) &&
                      (kind != :candidate || source.include?("umask 0007")) &&
