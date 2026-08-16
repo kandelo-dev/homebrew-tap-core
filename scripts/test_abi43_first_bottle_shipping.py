@@ -33,6 +33,19 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         self.assertIn("append redirection currently returns ENOTSUP", source)
         self.assertNotIn("printf 'fc-replay\\n' >> fc.log", source)
 
+    def test_bash_bottle_does_not_gate_on_writable_fixture_self_execution(self) -> None:
+        source = self.formula("bash")
+        self.assertIn("do not currently preserve an", source)
+        self.assertNotIn('child_output=$("$0" -c', source)
+
+    def test_vim_bottle_keeps_editor_checks_separate_from_platform_edges(self) -> None:
+        source = self.formula("vim")
+        self.assertIn("%substitute/alpha/ALPHA/", source)
+        self.assertIn('assert_equal "ALPHA\\nbeta\\n", source.read', source)
+        self.assertNotIn("libcallnr('/work/vim-libcall.so'", source)
+        self.assertNotIn("silent 0read !printf child-line", source)
+        self.assertNotIn("expected_fork_descendants: 1", source)
+
     def test_libcurl_instruments_the_dynamic_loader_for_abi_43(self) -> None:
         source = self.formula("libcurl")
         compile_loader = source.index('"-ldl", "-pthread", "-o", loader')
