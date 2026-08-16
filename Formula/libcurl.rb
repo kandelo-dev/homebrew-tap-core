@@ -489,7 +489,8 @@ class Libcurl < Formula
 
       nonpic_module = testpath/"libcurl-nonpic-negative.so"
       nonpic_command = [
-        kandelo_cc(sdk_root), side_source, "-O2", "-fPIC", "-shared", "-I#{include}",
+        kandelo_cc(sdk_root), side_source, "-O2", "-fPIC", "-shared",
+        "-I#{sdk_root}/libc/glue", "-I#{include}",
         *normal_whole_archive, "-o", nonpic_module
       ].shelljoin
       nonpic_output = shell_output("#{nonpic_command} 2>&1", 1)
