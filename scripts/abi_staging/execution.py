@@ -34,9 +34,77 @@ COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TAP_NAME = re.compile(r"^[a-z0-9_.-]+/[a-z0-9_.-]+$")
 TAP_REPOSITORY = re.compile(r"^[a-z0-9_.-]+/homebrew-[a-z0-9_.-]+$")
 
+_CANDIDATE_ROOT_ASSIGNMENT = 'KANDELO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"'
+_FORMULA_DEPENDENCY_INSTALL = """  run_brew_logged run_brew_for_kandelo_bottles "$BREW_BIN" install \\
+    --force-bottle \\
+    --as-dependency \\
+    --ignore-dependencies \\
+    --formula "$dependency"""
+_LOCAL_ARCHIVE_DEPENDENCY_INSTALL = """  dependency_sha="$(jq -er --arg dependency "$dependency" \\
+    '.[$dependency].sha256' "$LOCAL_DEPENDENCIES_JSON")"
+  dependency_archive="$(HOMEBREW_KANDELO_BOTTLE_TAG="$BOTTLE_TAG" \\
+    KANDELO_HOMEBREW_BOTTLE_TAG="$BOTTLE_TAG" \\
+    "$BREW_BIN" --cache --bottle-tag="$BOTTLE_TAG" --formula "$dependency")"
+  case "$dependency_archive" in
+    *$'\\n'*|*$'\\t'*|"$HOMEBREW_CACHE")
+      echo "homebrew-bottle-build.sh: local dependency archive path is invalid" >&2
+      exit 1
+      ;;
+    "$HOMEBREW_CACHE"/*) ;;
+    *)
+      echo "homebrew-bottle-build.sh: local dependency archive escapes its private cache" >&2
+      exit 1
+      ;;
+  esac
+  if [ ! -f "$dependency_archive" ] || [ -L "$dependency_archive" ] || \\
+     [ "$(sha256sum "$dependency_archive" | awk '{print $1}')" != "$dependency_sha" ]; then
+    echo "homebrew-bottle-build.sh: exact local dependency archive changed before install: $dependency" >&2
+    exit 1
+  fi
+  run_brew_logged run_brew_for_kandelo_bottles "$BREW_BIN" install \\
+    --force-bottle \\
+    --as-dependency \\
+    --ignore-dependencies \\
+    "$dependency_archive"""
+
 
 class ExecutionError(ValueError):
     """Raised when protected work cannot be tied to exact coordinated inputs."""
+
+
+def _prepare_staging_normal_builder(*, source: Path, destination: Path) -> Path:
+    """Derive the staging-only builder without changing Formula contracts."""
+
+    try:
+        metadata = source.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise ExecutionError("candidate normal builder must be a regular file")
+        if metadata.st_size < 1 or metadata.st_size > 2 * 1024 * 1024:
+            raise ExecutionError("candidate normal builder is outside its byte bound")
+        body = source.read_text(encoding="utf-8", errors="strict")
+    except (OSError, UnicodeError) as error:
+        raise ExecutionError(f"cannot read candidate normal builder: {error}") from error
+    if "\r" in body or not body.endswith("\n"):
+        raise ExecutionError("candidate normal builder is not canonical LF text")
+    if body.count(_CANDIDATE_ROOT_ASSIGNMENT) != 1:
+        raise ExecutionError("candidate normal builder root boundary changed")
+    if body.count(_FORMULA_DEPENDENCY_INSTALL) != 1:
+        raise ExecutionError("candidate dependency install boundary changed")
+    prepared = body.replace(
+        _CANDIDATE_ROOT_ASSIGNMENT,
+        'KANDELO_ROOT="${KANDELO_ABI_STAGING_CANDIDATE_ROOT:?}"',
+    ).replace(
+        _FORMULA_DEPENDENCY_INSTALL,
+        _LOCAL_ARCHIVE_DEPENDENCY_INSTALL,
+    )
+    if destination.exists() or destination.is_symlink():
+        raise ExecutionError("protected staging builder destination already exists")
+    try:
+        destination.write_text(prepared, encoding="utf-8", errors="strict")
+        destination.chmod(0o500)
+    except OSError as error:
+        raise ExecutionError(f"cannot write protected staging builder: {error}") from error
+    return destination.resolve(strict=True)
 
 
 def _plain(value: Any) -> Any:
@@ -284,6 +352,102 @@ def _fetched_layer(
     return body
 
 
+def _build_dependency_closure(
+    bundle: Mapping[str, Any], contract: Mapping[str, Any]
+) -> list[tuple[dict[str, Any], Mapping[str, Any], Mapping[str, Any]]]:
+    """Resolve every exact candidate reachable from a build contract."""
+
+    resolved: dict[
+        tuple[str, str],
+        tuple[dict[str, Any], Mapping[str, Any], Mapping[str, Any]],
+    ] = {}
+    visiting: set[str] = set()
+
+    def visit(record: Mapping[str, Any], locator: Mapping[str, Any]) -> None:
+        payload = _mapping(record.get("candidate"), "dependency candidate payload")
+        formula = _mapping(payload.get("formula"), "dependency candidate Formula")
+        layer = _mapping(
+            payload.get("bottle_layer"), "dependency candidate bottle layer"
+        )
+        name = formula.get("formula")
+        architecture = formula.get("architecture")
+        if (
+            not isinstance(name, str)
+            or not name
+            or architecture not in {"wasm32", "wasm64"}
+        ):
+            raise ExecutionError("dependency candidate Formula identity is invalid")
+        entry = {
+            "architecture": architecture,
+            "bottle_layer_bytes": layer.get("bytes"),
+            "bottle_layer_sha256": layer.get("sha256"),
+            "formula": name,
+        }
+        _digest(entry["bottle_layer_sha256"], "dependency candidate layer")
+        if (
+            isinstance(entry["bottle_layer_bytes"], bool)
+            or not isinstance(entry["bottle_layer_bytes"], int)
+            or entry["bottle_layer_bytes"] <= 0
+        ):
+            raise ExecutionError("dependency candidate layer size is invalid")
+        key = (name, architecture)
+        prior = resolved.get(key)
+        if prior is not None:
+            if prior != (entry, record, locator):
+                raise ExecutionError(
+                    "build dependency closure conflicts by Formula architecture"
+                )
+            return
+        locator_digest = locator.get("digest")
+        if (
+            not isinstance(locator_digest, str)
+            or not locator_digest.startswith("sha256:")
+            or SHA256.fullmatch(locator_digest.removeprefix("sha256:")) is None
+        ):
+            raise ExecutionError("dependency candidate locator digest is invalid")
+        record_sha256 = locator_digest.removeprefix("sha256:")
+        if record_sha256 in visiting:
+            raise ExecutionError("build dependency closure contains a cycle")
+        if len(resolved) + len(visiting) >= 256:
+            raise ExecutionError("build dependency closure exceeds its bound")
+        visiting.add(record_sha256)
+        direct_layers = payload.get("direct_dependency_layers", ())
+        if not isinstance(direct_layers, Sequence) or isinstance(
+            direct_layers, (str, bytes, bytearray)
+        ):
+            raise ExecutionError("dependency candidate direct layers are invalid")
+        for direct in direct_layers:
+            _record_sha256, child, child_locator = _dependency_candidate(
+                bundle, _mapping(direct, "candidate dependency")
+            )
+            visit(child, child_locator)
+        visiting.remove(record_sha256)
+        resolved[key] = (entry, record, locator)
+
+    direct_dependencies = contract.get("direct_dependencies", ())
+    if not isinstance(direct_dependencies, Sequence) or isinstance(
+        direct_dependencies, (str, bytes, bytearray)
+    ):
+        raise ExecutionError("build contract direct dependencies are invalid")
+    for raw_dependency in direct_dependencies:
+        dependency = _mapping(raw_dependency, "build contract dependency")
+        record, locator = _matching_dependency(bundle, dependency)
+        payload = _mapping(record.get("candidate"), "dependency candidate payload")
+        formula = _mapping(payload.get("formula"), "dependency candidate Formula")
+        layer = _mapping(payload.get("bottle_layer"), "dependency candidate layer")
+        if (
+            formula.get("formula") != dependency.get("formula")
+            or formula.get("architecture") != dependency.get("architecture")
+            or layer.get("sha256") != dependency.get("bottle_layer_sha256")
+            or layer.get("bytes") != dependency.get("bottle_layer_bytes")
+        ):
+            raise ExecutionError(
+                "build contract dependency differs from its exact candidate"
+            )
+        visit(record, locator)
+    return [resolved[key] for key in sorted(resolved)]
+
+
 def prepare_build_inputs(
     bundle: Mapping[str, Any],
     work: Mapping[str, Any],
@@ -318,11 +482,39 @@ def prepare_build_inputs(
         root / "contracts" / f"sha256-{contract_sha256}.json": contract,
         root / "contracts" / f"sha256-{contract_sha256}.capture.json": assessment,
     }
+    closure = _build_dependency_closure(bundle, contract)
+    for dependency, record, _locator in closure:
+        formula = _mapping(record.get("candidate"), "dependency candidate payload")
+        formula_identity = _mapping(
+            formula.get("formula"), "dependency candidate Formula"
+        )
+        subject = exact_formula_subject(
+            str(formula_identity.get("formula")),
+            str(formula_identity.get("architecture")),
+        )
+        dependency_plan = _formula_for_subject(bundle, subject)
+        dependency_contract_sha256 = dependency_plan.get("contract_sha256")
+        dependency_contract = _mapping(
+            _mapping(bundle.get("contracts"), "coordination contracts").get(subject),
+            "dependency bottle contract",
+        )
+        if (
+            canonical_sha256(dependency_contract) != dependency_contract_sha256
+            or formula_identity.get("bottle_contract_sha256")
+            != dependency_contract_sha256
+        ):
+            raise ExecutionError(
+                "dependency candidate differs from its exact bottle contract"
+            )
+        documents[
+            root
+            / "contracts"
+            / f"sha256-{dependency_contract_sha256}.json"
+        ] = dependency_contract
     try:
         for path, value in documents.items():
             path.write_bytes(canonical_bytes(value))
-        for dependency in contract["direct_dependencies"]:
-            record, locator = _matching_dependency(bundle, dependency)
+        for dependency, record, locator in closure:
             validate_candidate_record(record)
             body = _fetched_layer(
                 fetch_candidate(locator),
@@ -600,6 +792,17 @@ def execute_build_work(
         child_environment = _uncredentialed_environment(
             os.environ if environment is None else environment,
             sandbox_root=Path(temporary) / "environment",
+        )
+        staging_builder = _prepare_staging_normal_builder(
+            source=kandelo / "scripts/homebrew-bottle-build.sh",
+            destination=Path(temporary) / "protected-normal-builder.sh",
+        )
+        child_environment.update(
+            {
+                "KANDELO_ABI_STAGING_CANDIDATE_ROOT": str(kandelo),
+                "KANDELO_ABI_STAGING_NORMAL_BUILDER": str(staging_builder),
+                "KANDELO_ABI_STAGING_TESTING": "1",
+            }
         )
         result = run_process(command, cwd=tap, env=child_environment, check=False)
     returncode = getattr(result, "returncode", None)

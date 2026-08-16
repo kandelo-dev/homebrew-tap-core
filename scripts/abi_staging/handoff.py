@@ -1246,6 +1246,151 @@ def _composition_roots(
     return [target[0]]
 
 
+def _dependency_layer_closure(
+    *,
+    formulae: Sequence[Mapping[str, Any]],
+    root_formula_plan: Mapping[str, Any],
+    root_contract: Mapping[str, Any],
+    dependency_root: Path,
+) -> list[dict[str, Any]]:
+    """Reconstruct every reachable dependency layer from exact tap contracts."""
+
+    plans: dict[tuple[str, str], Mapping[str, Any]] = {}
+    for index, candidate in enumerate(formulae):
+        plan = _mapping(candidate, f"dependency Formula plan {index}")
+        identity = _mapping(
+            plan.get("identity"), f"dependency Formula identity {index}"
+        )
+        name = _text(identity.get("name"), f"dependency Formula name {index}", 128)
+        architecture = identity.get("architecture")
+        key = (name, str(architecture))
+        if architecture not in {"wasm32", "wasm64"} or key in plans:
+            raise HandoffError("tap plan dependency Formula identity is invalid")
+        plans[key] = plan
+
+    resolved: dict[tuple[str, str], dict[str, Any]] = {}
+    visiting: set[tuple[str, str]] = set()
+
+    def dependencies(
+        plan: Mapping[str, Any], contract: Mapping[str, Any]
+    ) -> list[tuple[tuple[str, str], Mapping[str, Any]]]:
+        planned: dict[tuple[str, str], Mapping[str, Any]] = {}
+        for raw in _sequence(
+            plan.get("direct_dependencies"), "Formula plan direct dependencies"
+        ):
+            dependency = _mapping(raw, "Formula plan direct dependency")
+            name = _text(
+                dependency.get("formula"), "Formula plan dependency name", 128
+            )
+            architecture = dependency.get("architecture")
+            key = (name, str(architecture))
+            if architecture not in {"wasm32", "wasm64"} or key in planned:
+                raise HandoffError(
+                    "Formula plan direct dependencies are invalid or duplicated"
+                )
+            _digest(
+                dependency.get("materialization_policy_sha256"),
+                "Formula plan dependency materialization policy",
+            )
+            planned[key] = dependency
+
+        contracted: dict[tuple[str, str], Mapping[str, Any]] = {}
+        for raw in _sequence(
+            contract.get("direct_dependencies"), "bottle contract direct dependencies"
+        ):
+            dependency = _mapping(raw, "bottle contract direct dependency")
+            name = _text(
+                dependency.get("formula"), "bottle contract dependency name", 128
+            )
+            architecture = dependency.get("architecture")
+            key = (name, str(architecture))
+            if architecture not in {"wasm32", "wasm64"} or key in contracted:
+                raise HandoffError(
+                    "bottle contract direct dependencies are invalid or duplicated"
+                )
+            contracted[key] = dependency
+        if set(planned) != set(contracted):
+            raise HandoffError("bottle contract dependency set differs from Formula plan")
+        for key in sorted(contracted):
+            dependency = contracted[key]
+            if dependency.get("materialization_policy_sha256") != planned[key].get(
+                "materialization_policy_sha256"
+            ):
+                raise HandoffError(
+                    "dependency materialization policy differs from tap plan"
+                )
+        return [(key, contracted[key]) for key in sorted(contracted)]
+
+    def load_child(
+        key: tuple[str, str], plan: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        digest = _digest(
+            plan.get("contract_sha256"),
+            f"dependency bottle contract {key[0]}",
+        )
+        path = dependency_root / "contracts" / f"sha256-{digest}.json"
+        body = _read_regular(path, f"dependency bottle contract {key[0]}", 16 * 1024 * 1024)
+        if hashlib.sha256(body).hexdigest() != digest:
+            raise HandoffError(
+                f"content-addressed dependency contract differs for {key[0]}"
+            )
+        contract = load_bottle_contract(body)
+        formula = _mapping(contract.get("formula"), "dependency contract Formula")
+        target = _mapping(contract.get("target"), "dependency contract target")
+        if formula.get("name") != key[0] or target.get("architecture") != key[1]:
+            raise HandoffError(
+                "dependency contract differs from its exact Formula plan identity"
+            )
+        return contract
+
+    def visit(plan: Mapping[str, Any], contract: Mapping[str, Any]) -> None:
+        for key, dependency in dependencies(plan, contract):
+            digest = _digest(
+                dependency.get("bottle_layer_sha256"),
+                f"dependency layer {key[0]}",
+            )
+            size = _integer(
+                dependency.get("bottle_layer_bytes"),
+                f"dependency layer bytes {key[0]}",
+                positive=True,
+            )
+            path = dependency_root / "layers" / f"sha256-{digest}.tar.gz"
+            body = _read_regular(path, f"dependency layer {key[0]}", 2**32)
+            if len(body) != size or hashlib.sha256(body).hexdigest() != digest:
+                raise HandoffError(
+                    f"dependency layer identity differs for {key[0]}"
+                )
+            layer = {
+                "formula": key[0],
+                "architecture": key[1],
+                "sha256": digest,
+                "bytes": size,
+                "source_path": str(path.resolve(strict=True)),
+            }
+            prior = resolved.get(key)
+            if prior is not None:
+                if prior != layer:
+                    raise HandoffError(
+                        "dependency closure conflicts by Formula architecture"
+                    )
+                continue
+            if key in visiting:
+                raise HandoffError("dependency closure contains a cycle")
+            child_plan = plans.get(key)
+            if child_plan is None:
+                raise HandoffError("dependency closure is absent from the tap plan")
+            if len(resolved) + len(visiting) >= 256:
+                raise HandoffError("dependency closure exceeds its bound")
+            visiting.add(key)
+            child_contract = load_child(key, child_plan)
+            visit(child_plan, child_contract)
+            visiting.remove(key)
+            resolved[key] = layer
+
+    visit(root_formula_plan, root_contract)
+    return [resolved[key] for key in sorted(resolved)]
+
+
 def prepare_build_context(
     *,
     kandelo_root: Path,
@@ -1360,41 +1505,12 @@ def prepare_build_context(
         )
         authorization_digest = hashlib.sha256(authorization_body).hexdigest()
 
-    planned_dependencies = {
-        (dependency["formula"], dependency["architecture"]): dependency
-        for dependency in formula_plan["direct_dependencies"]
-    }
-    contract_dependencies = {
-        (dependency["formula"], dependency["architecture"]): dependency
-        for dependency in contract["direct_dependencies"]
-    }
-    if set(planned_dependencies) != set(contract_dependencies):
-        raise HandoffError("bottle contract dependency set differs from Formula plan")
-    layers = []
-    for key in sorted(contract_dependencies):
-        dependency = contract_dependencies[key]
-        planned = planned_dependencies[key]
-        if (
-            dependency["materialization_policy_sha256"]
-            != planned["materialization_policy_sha256"]
-        ):
-            raise HandoffError("dependency materialization policy differs from tap plan")
-        digest = dependency["bottle_layer_sha256"]
-        path = dependency_root / "layers" / f"sha256-{digest}.tar.gz"
-        body = _read_regular(path, f"dependency layer {key[0]}", 2**32)
-        if len(body) != dependency["bottle_layer_bytes"]:
-            raise HandoffError(f"dependency layer byte count differs for {key[0]}")
-        if hashlib.sha256(body).hexdigest() != digest:
-            raise HandoffError(f"dependency layer digest differs for {key[0]}")
-        layers.append(
-            {
-                "formula": key[0],
-                "architecture": key[1],
-                "sha256": digest,
-                "bytes": len(body),
-                "source_path": str(path.resolve(strict=True)),
-            }
-        )
+    layers = _dependency_layer_closure(
+        formulae=plan["formulae"],
+        root_formula_plan=formula_plan,
+        root_contract=contract,
+        dependency_root=dependency_root,
+    )
 
     repository = _text(tap_source["repository"], "tap repository", 256)
     run = load_build_run(
