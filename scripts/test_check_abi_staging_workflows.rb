@@ -907,18 +907,21 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes realm_source, 'mkdir -m 0700 "$GITHUB_WORKSPACE/kandelo-source/binaries"'
     assert_includes realm_source, "build-deps program-index-selected"
     assert_includes realm_source, "rootfs \"$formula_test_index\""
-    refute_includes realm_source, 'build_user="kandelo-homebrew-build"'
-    refute_includes realm_source, 'recipe_user="kandelo-homebrew-recipe"'
-    refute_includes realm_source, "/usr/sbin/useradd"
+    assert_includes realm_source, 'protected_recipe_formula=false'
+    assert_includes realm_source, 'if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then'
+    assert_includes realm_source, 'build_user="kandelo-homebrew-build"'
+    assert_includes realm_source, 'recipe_user="kandelo-homebrew-recipe"'
+    assert_includes realm_source, "/usr/sbin/useradd"
     assert_includes realm_source, 'shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"'
     assert_includes realm_source, 'chmod 0700 "$shared_temp"'
     assert_includes realm_source,
                     'mkdir -m 0700 "$shared_temp/cache" "$shared_temp/tmp"'
     assert_includes realm_source,
                     'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"'
-    refute_includes realm_source, "KANDELO_HOMEBREW_BUILD_USER"
-    refute_includes realm_source, "KANDELO_HOMEBREW_RECIPE_USER"
-    refute_includes realm_source, "KANDELO_HOMEBREW_SHARED_TEMP"
+    assert_includes realm_source, 'if [ "$protected_recipe_formula" = true ]; then'
+    assert_includes realm_source, 'echo "KANDELO_HOMEBREW_BUILD_USER=$build_user"'
+    assert_includes realm_source, 'echo "KANDELO_HOMEBREW_RECIPE_USER=$recipe_user"'
+    assert_includes realm_source, 'echo "KANDELO_HOMEBREW_SHARED_TEMP=$shared_temp"'
     refute_includes realm_source, '"$realm_root/package-cache"'
     assert_includes realm_source,
                     '/usr/bin/sudo -n /usr/bin/install -o root -g root -m 0555 --'
@@ -956,8 +959,10 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       KANDELO_HOMEBREW_GETENT_BIN KANDELO_HOMEBREW_PGREP_BIN
       KANDELO_HOMEBREW_PKILL_BIN
     ].each do |name|
-      refute_includes execute_source, name
+      assert_includes execute_source, "#{name}=$#{name}"
     end
+    assert_includes execute_source,
+                    'if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then'
     assert_includes execute_source, '"PYTHONDONTWRITEBYTECODE=1"'
     assert_includes execute_source, '"PYTHONSAFEPATH=1"'
     assert_includes execute_source, "umask 0007"

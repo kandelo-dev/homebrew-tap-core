@@ -1175,10 +1175,25 @@ module AbiStagingWorkflowCheck
                        realm.fetch("run").include?(
                          'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"'
                        ) &&
-                       !realm.fetch("run").include?("KANDELO_HOMEBREW_BUILD_USER") &&
-                       !realm.fetch("run").include?("KANDELO_HOMEBREW_RECIPE_USER") &&
-                       !realm.fetch("run").include?("KANDELO_HOMEBREW_SHARED_TEMP") &&
-                       !realm.fetch("run").include?("/usr/sbin/useradd") &&
+                       realm.fetch("run").include?(
+                         'if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'build_user="kandelo-homebrew-build"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'recipe_user="kandelo-homebrew-recipe"'
+                       ) &&
+                       realm.fetch("run").include?("/usr/sbin/useradd") &&
+                       realm.fetch("run").include?(
+                         'echo "KANDELO_HOMEBREW_BUILD_USER=$build_user"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'echo "KANDELO_HOMEBREW_RECIPE_USER=$recipe_user"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'echo "KANDELO_HOMEBREW_SHARED_TEMP=$shared_temp"'
+                       ) &&
                        realm.fetch("run").include?(
                          'playwright_browsers="$shared_temp/ms-playwright"'
                        ) &&
@@ -1287,7 +1302,7 @@ module AbiStagingWorkflowCheck
                      source.include?(
                        "WASM_POSIX_XTASK_BIN=$WASM_POSIX_XTASK_BIN"
                      ) &&
-                     %w[
+                     (kind != :candidate || %w[
                        KANDELO_HOMEBREW_BUILD_USER
                        KANDELO_HOMEBREW_RECIPE_USER
                        KANDELO_HOMEBREW_SHARED_TEMP
@@ -1297,7 +1312,10 @@ module AbiStagingWorkflowCheck
                        KANDELO_HOMEBREW_GETENT_BIN
                        KANDELO_HOMEBREW_PGREP_BIN
                        KANDELO_HOMEBREW_PKILL_BIN
-                     ].none? { |name| source.include?(name) } &&
+                     ].all? { |name| source.include?("#{name}=$#{name}") }) &&
+                     (kind != :candidate || source.include?(
+                       'if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then'
+                     )) &&
                      !source.include?("../kandelo-source/scripts/dev-shell.sh") &&
                      source.include?('--run-id "$GITHUB_RUN_ID"') &&
                      source.include?('--run-attempt "$GITHUB_RUN_ATTEMPT"') &&
