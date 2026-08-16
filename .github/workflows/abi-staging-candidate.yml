@@ -21,6 +21,18 @@ on:
       tap-commit:
         required: true
         type: string
+      realm-artifact-id:
+        required: true
+        type: string
+      realm-artifact-digest:
+        required: true
+        type: string
+      realm-archive-sha256:
+        required: true
+        type: string
+      realm-source-tree:
+        required: true
+        type: string
       work-id:
         required: true
         type: string
@@ -50,16 +62,6 @@ jobs:
           persist-credentials: false
           path: tap-authority
 
-      - name: Check out exact Kandelo PR head
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: ${{ inputs.kandelo-repository }}
-          ref: ${{ inputs.kandelo-head }}
-          fetch-depth: 1
-          submodules: recursive
-          persist-credentials: false
-          path: kandelo-source
-
       - name: Check out immutable Kandelo policy tools
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -86,8 +88,33 @@ jobs:
           path: ${{ runner.temp }}/coordination
           merge-multiple: true
 
+      - name: Download exact prepared Homebrew realm
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.realm-artifact-id }}
+          path: ${{ runner.temp }}/shared-realm
+          merge-multiple: true
+
       - name: Set up immutable Kandelo policy tools
         uses: ./kandelo-authority/.github/actions/setup-nix
+
+      - name: Restore exact prepared Homebrew realm
+        working-directory: kandelo-authority
+        env:
+          EXPECTED_REALM_ARTIFACT_DIGEST: ${{ inputs.realm-artifact-digest }}
+          EXPECTED_REALM_ARCHIVE_SHA256: ${{ inputs.realm-archive-sha256 }}
+          EXPECTED_REALM_COMMIT: ${{ inputs.kandelo-head }}
+          EXPECTED_REALM_TREE: ${{ inputs.realm-source-tree }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_REALM_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          scripts/dev-shell.sh bash \
+            "$GITHUB_WORKSPACE/tap-authority/scripts/abi-staging-restore-homebrew-realm.sh" \
+              --archive "$RUNNER_TEMP/shared-realm/shared-homebrew-realm.tar.zst" \
+              --expected-archive-sha256 "$EXPECTED_REALM_ARCHIVE_SHA256" \
+              --expected-commit "$EXPECTED_REALM_COMMIT" \
+              --expected-tree "$EXPECTED_REALM_TREE" \
+              --destination-root "$GITHUB_WORKSPACE/kandelo-source"
 
       - name: Export exact candidate build identity
         working-directory: kandelo-authority
@@ -122,11 +149,10 @@ jobs:
           # required real programs directory; candidate bottle bytes are
           # injected independently by the Formula test adapter.
           package_cache="$GITHUB_WORKSPACE/kandelo-source/.ci-test-binary-cache"
-          test ! -e "$package_cache" && test ! -L "$package_cache"
-          mkdir -m 0700 "$package_cache" "$package_cache/programs"
-          test ! -e "$GITHUB_WORKSPACE/kandelo-source/binaries" && \
+          test -d "$package_cache" && test ! -L "$package_cache"
+          test -d "$package_cache/programs" && test ! -L "$package_cache/programs"
+          test -d "$GITHUB_WORKSPACE/kandelo-source/binaries" && \
             test ! -L "$GITHUB_WORKSPACE/kandelo-source/binaries"
-          mkdir -m 0700 "$GITHUB_WORKSPACE/kandelo-source/binaries"
 
           resolved_taps="$realm_root/resolved-taps.json"
           python3 scripts/homebrew-dependency-taps.py resolve \
@@ -200,6 +226,15 @@ jobs:
           # dirname(HOMEBREW_CACHE)/ms-playwright after Homebrew re-executes a
           # Formula test with its private configuration environment.
           playwright_browsers="$shared_temp/ms-playwright"
+          playwright_seed="$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/ms-playwright"
+          test -d "$playwright_seed" && test ! -L "$playwright_seed"
+          mkdir -m 0700 "$playwright_browsers"
+          cp -a "$playwright_seed/." "$playwright_browsers/"
+
+          # Entering the exact candidate shell realizes the immutable Nix
+          # closure referenced by the prepared realm. All compiled Kandelo
+          # outputs and Node dependency trees are restored from the one
+          # run-scoped artifact; no Formula job rebuilds them.
           cd "$GITHUB_WORKSPACE/kandelo-source"
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_RUNTIME_TOKEN -u GITHUB_ENV -u GITHUB_OUTPUT \
@@ -209,76 +244,9 @@ jobs:
               "WASM_POSIX_BINARY_CACHE_ROOT=$package_cache" \
               "PLAYWRIGHT_BROWSERS_PATH=$playwright_browsers" \
               "KANDELO_ABI_STAGING_ARCHITECTURE=$KANDELO_ABI_STAGING_ARCHITECTURE" \
-              bash -euo pipefail -s <<'BUILD_REALM'
-          cd "$GITHUB_WORKSPACE/kandelo-source"
-          bash scripts/build-musl.sh
-          if [ "$KANDELO_ABI_STAGING_ARCHITECTURE" = wasm64 ]; then
-            bash scripts/build-musl.sh --arch wasm64posix
-          fi
-          bash packages/registry/kernel/build-kernel.sh
-          bash scripts/build-fork-instrument-tool.sh
-          bash scripts/build-local-root-spill-tool.sh
+              true
 
-          host="$(rustc -vV | sed -n 's/^host: //p')"
-          test -n "$host"
-          cargo build --release -p xtask --target "$host" --quiet
-          xtask="$PWD/target/$host/release/xtask"
-          test -x "$xtask" && test ! -L "$xtask"
-          formula_test_index="$PWD/target/$host/release/formula-test-program-packages.json"
-          WASM_POSIX_DEPS_REGISTRY="$PWD/packages/registry" \
-            "$xtask" build-deps program-index-selected \
-              --source-repo-root "$PWD" \
-              rootfs "$formula_test_index"
-          test -f "$formula_test_index" && test ! -L "$formula_test_index"
-          printf '%s\n' "$host" >"$RUNNER_TEMP/abi-staging-host-target"
-
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --no-audit --no-fund
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-            npm --prefix host ci --no-audit --no-fund
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-            npm --prefix apps/browser-demos ci --no-audit --no-fund
-          # The first candidate wave stages each tested Formula executable
-          # into its own browser image. It needs an ABI-bound base filesystem,
-          # not the legacy published rootfs/program package closure.
-          cat >"$RUNNER_TEMP/abi-staging-empty-rootfs.ts" <<'EMPTY_ROOTFS'
-          import { writeFileSync } from "node:fs";
-          import { join } from "node:path";
-          import { pathToFileURL } from "node:url";
-
-          async function main(): Promise<void> {
-            const root = process.argv[2];
-            if (!root) throw new Error("Kandelo root is required");
-            const memory = await import(
-              pathToFileURL(join(root, "host/src/vfs/memory-fs.ts")).href
-            );
-            const abi = await import(
-              pathToFileURL(join(root, "host/src/generated/abi.ts")).href
-            );
-            const fs = memory.MemoryFileSystem.create(
-              new SharedArrayBuffer(2 * 1024 * 1024),
-            );
-            const image = await fs.saveImage({
-              metadata: {
-                version: 1,
-                kernelAbi: abi.ABI_VERSION,
-                createdBy: "abi-staging-candidate-formula-test",
-              },
-              normalizeTimestampsMs: 0,
-            });
-            writeFileSync(join(root, "host/wasm/rootfs.vfs"), image);
-          }
-
-          main().catch((error) => {
-            console.error(error);
-            process.exitCode = 1;
-          });
-          EMPTY_ROOTFS
-          node --experimental-wasm-exnref --import tsx/esm \
-            "$RUNNER_TEMP/abi-staging-empty-rootfs.ts" "$PWD"
-          command -v node >"$RUNNER_TEMP/abi-staging-node-bin"
-          BUILD_REALM
-
-          node_bin="$(cat "$RUNNER_TEMP/abi-staging-node-bin")"
+          node_bin="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/node-bin")"
           case "$node_bin" in
             /nix/store/*/bin/node) ;;
             *) echo "candidate realm resolved an undeclared Node: $node_bin" >&2; exit 2 ;;
@@ -292,7 +260,7 @@ jobs:
               "$GITHUB_WORKSPACE/kandelo-source/apps/browser-demos/node_modules/playwright/cli.js" \
               install chromium --with-deps
 
-          host_target="$(cat "$RUNNER_TEMP/abi-staging-host-target")"
+          host_target="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/host-target")"
           [[ "$host_target" =~ ^[A-Za-z0-9_.+-]+$ ]]
           candidate_xtask="$GITHUB_WORKSPACE/kandelo-source/target/$host_target/release/xtask"
           test -f "$candidate_xtask" && test ! -L "$candidate_xtask" && \

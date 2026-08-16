@@ -163,10 +163,91 @@ jobs:
           retention-days: 7
           compression-level: 0
 
-  candidate:
-    name: candidate ${{ matrix.work_id }}
+  prepare-homebrew-realm:
     needs: discover-plan
     if: needs.discover-plan.outputs.mode == 'active'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    outputs:
+      artifact-id: ${{ steps.upload-realm.outputs.artifact-id }}
+      artifact-digest: ${{ steps.upload-realm.outputs.artifact-digest }}
+      archive-sha256: ${{ steps.realm-identity.outputs.archive_sha256 }}
+      source-tree: ${{ steps.realm-identity.outputs.source_tree }}
+    steps:
+      - name: Check out exact protected tap revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.discover-plan.outputs.tap-commit }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: tap-authority
+
+      - name: Check out exact Kandelo PR head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
+          ref: ${{ needs.discover-plan.outputs.kandelo-head }}
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+          path: kandelo-source
+
+      - name: Set up exact Kandelo build tools
+        uses: ./kandelo-source/.github/actions/setup-nix
+
+      - name: Prepare one shared uncredentialed Homebrew realm
+        working-directory: kandelo-source
+        run: |
+          set -euo pipefail
+          playwright_browsers="$PWD/.ci-homebrew-realm/ms-playwright"
+          env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_RUNTIME_TOKEN -u GITHUB_ENV -u GITHUB_OUTPUT \
+            -u GITHUB_STEP_SUMMARY \
+            scripts/dev-shell.sh env \
+              "PYTHONDONTWRITEBYTECODE=1" \
+              bash "$GITHUB_WORKSPACE/tap-authority/scripts/abi-staging-prepare-shared-homebrew-realm.sh" \
+                --source-root "$PWD" \
+                --playwright-browsers "$playwright_browsers"
+
+      - name: Pack exact shared Homebrew realm
+        id: realm-identity
+        working-directory: kandelo-source
+        env:
+          EXPECTED_COMMIT: ${{ needs.discover-plan.outputs.kandelo-head }}
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/shared-homebrew-realm.tar.zst"
+          source_tree="$(git rev-parse 'HEAD^{tree}')"
+          scripts/dev-shell.sh bash \
+            "$GITHUB_WORKSPACE/tap-authority/scripts/abi-staging-pack-homebrew-realm.sh" \
+              --source-root "$PWD" \
+              --expected-commit "$EXPECTED_COMMIT" \
+              --expected-tree "$source_tree" \
+              --archive "$archive"
+          archive_sha256="$(sha256sum "$archive" | awk '{print $1}')"
+          [[ "$archive_sha256" =~ ^[0-9a-f]{64}$ ]]
+          {
+            echo "archive_sha256=$archive_sha256"
+            echo "source_tree=$source_tree"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Upload exact shared Homebrew realm
+        id: upload-realm
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: abi-staging-homebrew-realm-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/shared-homebrew-realm.tar.zst
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 1
+          compression-level: 0
+
+  candidate:
+    name: candidate ${{ matrix.work_id }}
+    needs: [discover-plan, prepare-homebrew-realm]
+    if: needs.discover-plan.outputs.mode == 'active' && needs.prepare-homebrew-realm.result == 'success'
     permissions:
       actions: read
       contents: read
@@ -183,14 +264,18 @@ jobs:
       kandelo-policy-commit: ${{ needs.discover-plan.outputs.kandelo-policy-commit }}
       kandelo-repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
       tap-commit: ${{ needs.discover-plan.outputs.tap-commit }}
+      realm-artifact-id: ${{ needs.prepare-homebrew-realm.outputs.artifact-id }}
+      realm-artifact-digest: ${{ needs.prepare-homebrew-realm.outputs.artifact-digest }}
+      realm-archive-sha256: ${{ needs.prepare-homebrew-realm.outputs.archive-sha256 }}
+      realm-source-tree: ${{ needs.prepare-homebrew-realm.outputs['source-tree'] }}
       work-id: ${{ matrix.work_id }}
     secrets:
       HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
 
   verification:
     name: verification ${{ matrix.work_id }}
-    needs: discover-plan
-    if: needs.discover-plan.outputs.mode == 'active'
+    needs: [discover-plan, prepare-homebrew-realm]
+    if: needs.discover-plan.outputs.mode == 'active' && needs.prepare-homebrew-realm.result == 'success'
     permissions:
       actions: read
       contents: read
@@ -207,6 +292,10 @@ jobs:
       kandelo-policy-commit: ${{ needs.discover-plan.outputs.kandelo-policy-commit }}
       kandelo-repository: ${{ needs.discover-plan.outputs.kandelo-repository }}
       tap-commit: ${{ needs.discover-plan.outputs.tap-commit }}
+      realm-artifact-id: ${{ needs.prepare-homebrew-realm.outputs.artifact-id }}
+      realm-artifact-digest: ${{ needs.prepare-homebrew-realm.outputs.artifact-digest }}
+      realm-archive-sha256: ${{ needs.prepare-homebrew-realm.outputs.archive-sha256 }}
+      realm-source-tree: ${{ needs.prepare-homebrew-realm.outputs['source-tree'] }}
       work-id: ${{ matrix.work_id }}
     secrets:
       HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
