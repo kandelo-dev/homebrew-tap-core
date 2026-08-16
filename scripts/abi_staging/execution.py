@@ -1223,11 +1223,18 @@ def compose_candidate_tap(
         normalized, expected_root_url, expected_cellar = (
             _normalized_candidate_bottle_metadata(candidate, metadata_entries)
         )
+        # The tap-owned validator above requires Homebrew's fully qualified
+        # Formula identity.  Kandelo's exact-head merge helper predates that
+        # contract and accepts the bare Formula key, so give only that
+        # already-validated entry to the compatibility boundary.
+        composer_metadata = {
+            str(candidate["formula"]): next(iter(normalized.values()))
+        }
         try:
             with tempfile.NamedTemporaryFile(
                 prefix="kandelo-candidate-bottle-", suffix=".json"
             ) as normalized_file:
-                normalized_file.write(canonical_bytes(normalized))
+                normalized_file.write(canonical_bytes(composer_metadata))
                 normalized_file.flush()
                 command = [
                     str(merge),

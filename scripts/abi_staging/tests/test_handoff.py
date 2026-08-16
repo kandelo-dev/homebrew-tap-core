@@ -584,11 +584,19 @@ class BuildHandoffTests(unittest.TestCase):
         self.assertEqual(rich_prepared, prepared)
 
         rich_mutations = []
-        foreign_revision = copy.deepcopy(rich_metadata)
-        foreign_revision["kandelo-dev/tap-core/mini-tool"]["formula"][
+        prepared_revision = copy.deepcopy(rich_metadata)
+        prepared_revision["kandelo-dev/tap-core/mini-tool"]["formula"][
             "tap_git_revision"
         ] = "f" * 40
-        rich_mutations.append(foreign_revision)
+        self.assertEqual(
+            prepare_composition_input(
+                context=context,
+                bottle_body=bottle,
+                metadata_body=json.dumps(prepared_revision).encode(),
+                guest_layout_body=canonical_bytes(guest_layout),
+            ),
+            prepared,
+        )
         foreign_inventory = copy.deepcopy(rich_metadata)
         foreign_inventory["kandelo-dev/tap-core/mini-tool"]["bottle"]["tags"][
             "wasm32_kandelo"

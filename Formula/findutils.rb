@@ -13,11 +13,11 @@ class Findutils < Formula
   # WHY: F901 published rebuild-2 OCI bytes before its immutable handoff was
   # sealed. Reserve a new Homebrew identity so recovery never overwrites or
   # relabels those public bytes.
-  revision 1
+  revision 2
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
-  depends_on "kandelo-dev/tap-core/dash" => :test
+  depends_on "kandelo-dev/tap-core/dash"
 
   skip_clean "bin/find", "bin/xargs"
 
