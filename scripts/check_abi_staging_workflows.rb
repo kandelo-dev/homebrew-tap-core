@@ -1176,6 +1176,12 @@ module AbiStagingWorkflowCheck
                          'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"'
                        ) &&
                        realm.fetch("run").include?(
+                         'mkdir -m 0770 "$shared_temp/cache/downloads"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache/downloads")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):770"'
+                       ) &&
+                       realm.fetch("run").include?(
                          'if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then'
                        ) &&
                        realm.fetch("run").include?(
