@@ -366,6 +366,10 @@ async function main(): Promise<void> {
       join(supportDir, "framebuffer-smoke-page.ts"),
       join(pageDir, "main.ts"),
     );
+    copyFileSync(
+      join(supportDir, "framebuffer-evidence-readiness.ts"),
+      join(pageDir, "framebuffer-evidence-readiness.ts"),
+    );
     const rootfsPath = await buildVfs(
       root,
       programPath,
