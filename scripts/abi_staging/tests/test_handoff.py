@@ -184,6 +184,44 @@ def _validate(
 
 
 class BuildHandoffTests(unittest.TestCase):
+    def test_materializes_dependency_layers_for_the_normal_builder_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bottle = root / "dependency.tar.gz"
+            body = b"exact candidate dependency bottle\n"
+            bottle.write_bytes(body)
+            digest = hashlib.sha256(body).hexdigest()
+            context = root / "context.json"
+            context.write_bytes(
+                canonical_bytes(
+                    {
+                        "schema": 1,
+                        "kind": "kandelo-abi-staging-build-context",
+                        "dependency_layers": [
+                            {
+                                "formula": "bzip2",
+                                "architecture": "wasm32",
+                                "sha256": digest,
+                                "bytes": len(body),
+                                "source_path": str(bottle),
+                            }
+                        ],
+                    }
+                )
+            )
+
+            output = root / "cache"
+            handoff_module.materialize_dependency_layers(
+                context_path=context,
+                output=output,
+            )
+
+            self.assertEqual(
+                [path.name for path in output.iterdir()],
+                [f"{digest}.tar.gz"],
+            )
+            self.assertEqual((output / f"{digest}.tar.gz").read_bytes(), body)
+
     def test_prepares_exact_candidate_dependency_bottle_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
