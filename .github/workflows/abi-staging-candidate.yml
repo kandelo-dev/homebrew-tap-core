@@ -168,14 +168,15 @@ jobs:
           /usr/bin/sudo -n -- /usr/sbin/useradd --system --user-group \
             --no-create-home --home-dir /nonexistent \
             --shell /usr/sbin/nologin "$recipe_user"
-          invoker_user="$(/usr/bin/id -un)"
           shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"
           /usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp"
           /usr/bin/sudo -n /usr/bin/chmod 1777 "$shared_temp"
-          mkdir "$shared_temp/cache" "$shared_temp/tmp"
-          /usr/bin/sudo -n /usr/bin/chown "$invoker_user:$build_user" "$shared_temp/cache"
-          /usr/bin/sudo -n /usr/bin/chmod 0770 "$shared_temp/cache"
-          test "$(/usr/bin/stat -c '%U:%G:%a' "$shared_temp/cache")" = "$invoker_user:$build_user:770"
+          # Dependency hydration runs as this workflow identity. The protected
+          # launcher verifies this ownership, then transfers the completed
+          # cache to the isolated build user immediately before Formula code.
+          mkdir -m 0700 "$shared_temp/cache"
+          mkdir "$shared_temp/tmp"
+          test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"
           test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/tmp")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):755"
 
           # The tap-owned browser runners recover this exact directory from
