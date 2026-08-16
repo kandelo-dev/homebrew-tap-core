@@ -194,6 +194,12 @@ class FormulaInventoryTests(unittest.TestCase):
         self.assertEqual(canonical_bytes(first), fixture.read_bytes())
         self.assertEqual(load_formula_inventory(fixture.read_bytes()), first)
 
+    def test_diffutils_waits_for_the_interactive_editor_boundary(self) -> None:
+        source = (TAP_ROOT / "Formula/diffutils.rb").read_text()
+        call = source.split("kandelo_run_pty_wasm(", 1)[1].split("\n    )", 1)[0]
+        self.assertRegex(call, r'input_ready_text:\s+"%"')
+        self.assertRegex(call, r"input_delay_ms:\s+1_000")
+
     def test_probe_path_graph_architecture_and_identity_drift_fail_closed(self) -> None:
         mutations = []
         duplicate = copy.deepcopy(self.probe)

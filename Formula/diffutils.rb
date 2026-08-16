@@ -130,6 +130,8 @@ class Diffutils < Formula
       env:                       editor_env,
       exec_programs:             diff_program.merge(GUEST_ED => ed),
       inputs:                    ["e l\n", "1c\n", "edited\n", ".\n", "w\n", "q\n"],
+      input_ready_text:          "%",
+      input_delay_ms:            1_000,
       writable_host_directories: mount,
       expected_status:           1
     )
