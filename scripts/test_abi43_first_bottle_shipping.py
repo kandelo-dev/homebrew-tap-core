@@ -11,8 +11,8 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
     def formula(self, name: str) -> str:
         return (ROOT / f"Formula/{name}.rb").read_text(encoding="utf-8")
 
-    def test_leaf_formulae_have_one_runtime_dependency_for_brew_deps(self) -> None:
-        for formula in ("ed", "findutils"):
+    def test_staged_formulae_expose_dash_to_the_runtime_dependency_cache(self) -> None:
+        for formula in ("ed", "findutils", "less", "nginx", "redis", "vim"):
             with self.subTest(formula=formula):
                 source = self.formula(formula)
                 self.assertIn(
@@ -23,6 +23,15 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
                     'depends_on "kandelo-dev/tap-core/dash" => :test',
                     source,
                 )
+                self.assertNotIn(
+                    'depends_on "kandelo-dev/tap-core/dash" => [:build, :test]',
+                    source,
+                )
+
+    def test_bash_bottle_does_not_gate_on_the_known_append_redirection_gap(self) -> None:
+        source = self.formula("bash")
+        self.assertIn("append redirection currently returns ENOTSUP", source)
+        self.assertNotIn("printf 'fc-replay\\n' >> fc.log", source)
 
     def test_libcurl_instruments_the_dynamic_loader_for_abi_43(self) -> None:
         source = self.formula("libcurl")

@@ -15,7 +15,8 @@ class Nginx < Formula
   sha256 "e5823dc6f45610993def93ebf6cfce68264af4958c77e874b7d20f3709001b8f"
   license "BSD-2-Clause"
 
-  depends_on "kandelo-dev/tap-core/dash" => [:build, :test]
+  # Exact staged builds hydrate a runtime-only local dependency map.
+  depends_on "kandelo-dev/tap-core/dash"
   depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
   depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
   depends_on "kandelo-dev/tap-core/pcre2"
