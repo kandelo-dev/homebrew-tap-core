@@ -46,6 +46,7 @@ from .contract import (
 )
 from .coordination import (
     CoordinationError,
+    canonical_coordination_bytes,
     coordinate_planned_request,
 )
 from .custody import CustodyError, load_source_custody_manifest
@@ -995,7 +996,7 @@ def _prepare_workflow(args: argparse.Namespace) -> None:
         reconciliation,
         activation_mode=product_mode,
     )
-    (output / "coordination.json").write_bytes(canonical_bytes(bundle))
+    (output / "coordination.json").write_bytes(canonical_coordination_bytes(bundle))
     (output / "tap-plan.json").write_bytes(canonical_bytes(bundle["tap_plan"]))
     (output / "workflow-plan.json").write_bytes(canonical_bytes(bundle["workflow"]))
     (output / "product-workflow-plan.json").write_bytes(

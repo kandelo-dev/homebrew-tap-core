@@ -20,6 +20,7 @@ from scripts.abi_staging.canonical import (
 )
 from scripts.abi_staging.coordination import (
     CoordinationError,
+    canonical_coordination_bytes,
     coordinate_planned_request,
     build_formula_contract,
     prepare_tap_plan_contracts,
@@ -64,6 +65,17 @@ def descriptor_capable(
 
 
 class ContractCoordinationTests(unittest.TestCase):
+    def test_coordination_serialization_uses_its_declared_large_item_bound(self) -> None:
+        value = {"records": [{"index": index} for index in range(50_001)]}
+
+        with self.assertRaisesRegex(ValueError, "too many values"):
+            canonical_bytes(value)
+
+        self.assertEqual(
+            json.loads(canonical_coordination_bytes(value)),
+            value,
+        )
+
     def test_coordination_bundle_accepts_frozen_canonical_request(self) -> None:
         request = json.loads(
             (TAP_ROOT / "Kandelo/staging/fixtures/request/current-request.json").read_bytes()

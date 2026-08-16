@@ -14,7 +14,12 @@ import tempfile
 from typing import Any
 
 from .canonical import CanonicalJsonError, canonical_bytes, canonical_sha256, parse_canonical_bytes
-from .coordination import CoordinationError, validate_coordination_bundle
+from .coordination import (
+    MAX_COORDINATION_BYTES,
+    MAX_COORDINATION_JSON_ITEMS,
+    CoordinationError,
+    validate_coordination_bundle,
+)
 from .handoff import HandoffError, load_build_run
 from .oci import UrllibOciTransportV1, fetch_public_record
 from .plan import exact_formula_subject
@@ -23,7 +28,6 @@ from .policy import TapStagingPolicyV1
 from .records import CANDIDATE_RECORD_MEDIA_TYPE, validate_candidate_record
 
 
-MAX_COORDINATION_BYTES = 64 * 1024 * 1024
 MAX_VFS_COMPOSITION_JSON_ITEMS = 4_000_000
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -62,7 +66,11 @@ def load_coordination_bundle(
         if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
             raise ExecutionError("coordination bundle must be a regular non-symlink file")
         body = path.read_bytes()
-        parsed = parse_canonical_bytes(body, maximum_bytes=MAX_COORDINATION_BYTES)
+        parsed = parse_canonical_bytes(
+            body,
+            maximum_bytes=MAX_COORDINATION_BYTES,
+            maximum_items=MAX_COORDINATION_JSON_ITEMS,
+        )
         bundle = dict(_mapping(_plain(parsed), "coordination bundle"))
         validate_coordination_bundle(
             bundle, max_ready_subjects=policy.max_ready_subjects_per_cycle

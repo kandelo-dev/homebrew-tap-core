@@ -34,10 +34,18 @@ from .verification import validate_verification_receipt_record
 
 
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+MAX_COORDINATION_BYTES = 64 * 1024 * 1024
+MAX_COORDINATION_JSON_ITEMS = 4_000_000
 
 
 class CoordinationError(ValueError):
     """Raised when exact build inputs cannot form one bottle contract."""
+
+
+def canonical_coordination_bytes(value: Any) -> bytes:
+    """Encode one coordination artifact within its declared structural bound."""
+
+    return canonical_bytes(value, maximum_items=MAX_COORDINATION_JSON_ITEMS)
 
 
 def _mapping(value: Any, field: str) -> Mapping[str, Any]:
@@ -556,7 +564,7 @@ def coordinate_planned_request(
         "verification_tests": definitions,
         "workflow": workflow,
     }
-    normalized = json.loads(canonical_bytes(bundle))
+    normalized = json.loads(canonical_coordination_bytes(bundle))
     validate_coordination_bundle(
         normalized, max_ready_subjects=policy.max_ready_subjects_per_cycle
     )
@@ -734,5 +742,5 @@ def validate_coordination_bundle(
         previous = checked["id"]
     if not definitions:
         raise CoordinationError("coordination bundle lacks verification tests")
-    if len(canonical_bytes(bundle)) > 64 * 1024 * 1024:
+    if len(canonical_coordination_bytes(bundle)) > MAX_COORDINATION_BYTES:
         raise CoordinationError("coordination bundle exceeds its byte bound")
