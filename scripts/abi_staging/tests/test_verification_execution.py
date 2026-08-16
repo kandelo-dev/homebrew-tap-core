@@ -438,25 +438,25 @@ class VerificationExecutionTests(unittest.TestCase):
         from scripts.abi_staging import execution
 
         digest = "a" * 64
-        root_url = (
+        package_url = (
             "https://ghcr.io/v2/kandelo-dev/"
-            "homebrew-tap-core-abi-8-candidates/asa"
+            "homebrew-tap-core-abi-8-candidates/unzip"
         )
-        metadata_root_url = root_url.rsplit("/", 1)[0]
+        bottle_root_url = package_url.rsplit("/", 1)[0]
         metadata = canonical_bytes(
             {
-                "kandelo-dev/tap-core/asa": {
+                "kandelo-dev/tap-core/unzip": {
                     "bottle": {
                         "cellar": "any_skip_relocation",
                         "rebuild": 1,
-                        "root_url": metadata_root_url,
+                        "root_url": bottle_root_url,
                         "tags": {
                             "wasm32_kandelo": {
-                                "all_files": ["bin/asa", "INSTALL_RECEIPT.json"],
-                                "filename": "asa-15.0.0.wasm32_kandelo.bottle.1.tar.gz",
+                                "all_files": ["bin/unzip", "INSTALL_RECEIPT.json"],
+                                "filename": "unzip-6.0.wasm32_kandelo.bottle.1.tar.gz",
                                 "installed_size": 1234,
-                                "local_filename": "asa--15.0.0.wasm32_kandelo.bottle.1.tar.gz",
-                                "path_exec_files": ["bin/asa"],
+                                "local_filename": "unzip--6.0.wasm32_kandelo.bottle.1.tar.gz",
+                                "path_exec_files": ["bin/unzip"],
                                 "sbom": {},
                                 "sha256": digest,
                                 "tab": {},
@@ -464,15 +464,15 @@ class VerificationExecutionTests(unittest.TestCase):
                         },
                     },
                     "formula": {
-                        "desc": "Miniature asa fixture",
-                        "homepage": "https://example.test/asa",
-                        "license": "MIT",
-                        "name": "asa",
+                        "desc": "Miniature unzip fixture",
+                        "homepage": "https://example.test/unzip",
+                        "license": "Info-ZIP",
+                        "name": "unzip",
                         "path": (
                             "Library/Taps/kandelo-dev/homebrew-tap-core/"
-                            "Formula/asa.rb"
+                            "Formula/unzip.rb"
                         ),
-                        "pkg_version": "15.0.0",
+                        "pkg_version": "6.0",
                     },
                 }
             }
@@ -491,21 +491,41 @@ class VerificationExecutionTests(unittest.TestCase):
                         "bottle_layer": {
                             "immutable_reference": (
                                 "ghcr.io/kandelo-dev/"
-                                "homebrew-tap-core-abi-8-candidates/asa@sha256:"
+                                "homebrew-tap-core-abi-8-candidates/unzip@sha256:"
                                 + digest
                             ),
                             "sha256": digest,
                         },
-                        "formula": "asa",
+                        "formula": "unzip",
                         "metadata": metadata_path,
                         "tap_repository": TAP_SOURCE["repository"],
                         "target_abi": TARGET_ABI,
                     }
                 ],
             )
-            formula = (composed / "Formula/asa.rb").read_text(encoding="utf-8")
-        self.assertIn(f'root_url "{root_url}"', formula)
-        self.assertIn(f'wasm32_kandelo: "{digest}"', formula)
+            resolved = subprocess.run(
+                [
+                    "ruby",
+                    str(KANDELO_ROOT / "scripts/homebrew-formula-runtime-closure.rb"),
+                    str(composed),
+                    "kandelo-dev/tap-core",
+                    "zip",
+                    "wasm32",
+                ],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        self.assertEqual(
+            resolved.returncode,
+            0,
+            resolved.stderr.decode("utf-8", errors="replace"),
+        )
+        closure = json.loads(resolved.stdout)
+        self.assertEqual(
+            closure["kandelo-dev/tap-core/unzip"]["url"],
+            f"{bottle_root_url}/unzip/blobs/sha256:{digest}",
+        )
 
     def test_candidate_tap_composition_rejects_foreign_raw_bottle_root(self) -> None:
         from scripts.abi_staging import execution

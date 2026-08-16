@@ -51,11 +51,29 @@ wave from the new tap revision, compare the generated Formula contract map with
 the preceding coordination artifact. Existing candidate records and bottle
 layers remain reusable when those maps are identical.
 
+## Reused dependency Formula projection
+
+The first live zip canary after reuse materialization installed the exact
+`unzip` candidate, then failed before compiling zip. The composed dependency
+Formula used the per-Formula OCI package URL as its Homebrew bottle root.
+Homebrew appends the Formula name when deriving a blob URL, producing
+`.../unzip/unzip/blobs/...` instead of the published
+`.../unzip/blobs/...` path.
+
+Keep the per-Formula repository as the immutable candidate publication
+authority. After the exact-head composer validates that authority, normalize
+only the ephemeral dependency Formula's `root_url` to the common ABI candidate
+parent. Exercise the real static Formula resolver in the regression so the
+test proves the URL Homebrew consumes rather than merely matching source text.
+This changes neither the reused bottle bytes nor their candidate record.
+
 ## Validation
 
 - A timing-aware unit regression proves independent Formula reads overlap.
 - Existing inventory tests prove exact validation, deterministic aggregation,
   and hostile-record rejection remain intact.
+- A composed zip/unzip regression runs the real static Formula resolver and
+  requires the exact candidate blob URL without a duplicated Formula segment.
 - The full tap Python suite must pass.
 - A real `prepare-workflow` run against the immutable ABI 43 request measures
   hosted wall time and compares its Formula contract map to the preceding

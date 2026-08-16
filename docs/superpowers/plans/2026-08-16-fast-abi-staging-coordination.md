@@ -94,7 +94,41 @@ git add scripts/abi_staging/inventory.py \
 git commit -m "[ABI] Parallelize immutable staging inventory"
 ```
 
-### Task 2: Hosted timing and compatibility proof
+### Task 2: Normalize reused dependency bottle URLs
+
+**Files:**
+- Modify: `scripts/abi_staging/execution.py`
+- Test: `scripts/abi_staging/tests/test_verification_execution.py`
+
+**Interfaces:**
+- Consumes: an exact candidate record, its normalized Homebrew bottle metadata,
+  and the exact-head Formula composer.
+- Produces: an ephemeral composed Formula whose Homebrew bottle URL resolves to
+  the exact per-Formula candidate OCI package.
+
+- [ ] **Step 1: Write the failing zip/unzip resolver regression**
+
+Compose an ABI candidate `unzip` bottle into a clean tap and invoke the real
+`homebrew-formula-runtime-closure.rb` resolver for zip. Require the derived URL
+to contain one, not two, `unzip` path segments.
+
+- [ ] **Step 2: Run the focused test and verify RED**
+
+Expected: the resolver returns
+`.../candidates/unzip/unzip/blobs/sha256:...`.
+
+- [ ] **Step 3: Implement the minimal protected normalization**
+
+After the exact-head composer validates the per-Formula candidate authority,
+replace exactly one composed `root_url` with its common ABI candidate parent.
+Reject a missing or repeated exact line.
+
+- [ ] **Step 4: Run the focused and full verification-execution tests**
+
+Expected: the resolver emits `.../candidates/unzip/blobs/sha256:...` and all
+verification execution tests pass.
+
+### Task 3: Hosted timing and compatibility proof
 
 **Files:**
 - No production files.
