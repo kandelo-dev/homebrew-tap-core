@@ -801,6 +801,22 @@ class VerificationExecutionTests(unittest.TestCase):
                 [candidate["formula"] for candidate in prepared["candidates"]],
                 ["mini-base", "mini-tool"],
             )
+            dependency_cache = prepared["dependency_cache"]
+            dependency_sha256 = bundle["candidates"]["records"]["2" * 64][
+                "candidate"
+            ]["bottle_layer"]["sha256"]
+            self.assertEqual(
+                sorted(path.name for path in dependency_cache.iterdir()),
+                [f"{dependency_sha256}.tar.gz"],
+            )
+            self.assertEqual(
+                (dependency_cache / f"{dependency_sha256}.tar.gz").read_bytes(),
+                fetched[
+                    bundle["candidates"]["locators"]["2" * 64][
+                        "immutable_reference"
+                    ]
+                ].layers[0].body,
+            )
             self.assertEqual(len(calls), 2)
             for candidate in prepared["candidates"]:
                 self.assertEqual(
@@ -928,6 +944,16 @@ class VerificationExecutionTests(unittest.TestCase):
             self.assertNotIn("PLAYWRIGHT_BROWSERS_PATH", kwargs["env"])
             self.assertNotIn(
                 "HOMEBREW_KANDELO_PLAYWRIGHT_BROWSERS_PATH", kwargs["env"]
+            )
+            dependency_cache = Path(
+                kwargs["env"]["KANDELO_HOMEBREW_LOCAL_DEPENDENCY_CACHE"]
+            )
+            dependency_sha256 = bundle["candidates"]["records"]["2" * 64][
+                "candidate"
+            ]["bottle_layer"]["sha256"]
+            self.assertEqual(
+                sorted(path.name for path in dependency_cache.iterdir()),
+                [f"{dependency_sha256}.tar.gz"],
             )
             self.assertEqual(
                 Path(command[command.index("--playwright-browsers-path") + 1]),

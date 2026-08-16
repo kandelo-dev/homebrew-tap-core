@@ -1376,6 +1376,28 @@ def prepare_verification_inputs(
         for candidate in prepared_candidates
         if candidate is not target
     ]
+    dependency_cache = root / "dependency-cache"
+    try:
+        dependency_cache.mkdir()
+        for candidate in prepared_candidates:
+            if candidate is target:
+                continue
+            dependency_sha256 = candidate["bottle_layer"]["sha256"]
+            dependency_archive = dependency_cache / f"{dependency_sha256}.tar.gz"
+            body = candidate["bottle"].read_bytes()
+            if dependency_archive.exists():
+                if dependency_archive.read_bytes() != body:
+                    raise ExecutionError(
+                        "dependency layer digest collision changed bytes"
+                    )
+                continue
+            dependency_archive.write_bytes(body)
+            dependency_archive.chmod(0o400)
+        dependency_cache.chmod(0o500)
+    except OSError as error:
+        raise ExecutionError(
+            f"cannot materialize local dependency cache: {error}"
+        ) from error
     dependency_contract = {
         "architecture": target["architecture"],
         "dependency_layers": dependencies,
@@ -1410,6 +1432,7 @@ def prepare_verification_inputs(
         "test_definition_sha256": selected["test_definition_sha256"],
         "run": root / "run.json",
         "dependency_provenance": root / "dependency-provenance.json",
+        "dependency_cache": dependency_cache,
         "sysroot": sysroot,
     }
 
@@ -1942,6 +1965,13 @@ def execute_verification_work(
         )
         child_environment["KANDELO_HOMEBREW_RESOLVED_TAPS_FILE"] = str(
             temporary_root / "resolved-taps.json"
+        )
+        # Reused candidates deliberately need no mutable Homebrew version tag.
+        # The exact verifier already validates and installs local dependency
+        # archives; expose only the public, digest-authenticated closure that
+        # preparation just materialized.
+        child_environment["KANDELO_HOMEBREW_LOCAL_DEPENDENCY_CACHE"] = str(
+            prepared["dependency_cache"].resolve(strict=True)
         )
         command = [
             str(adapter),
