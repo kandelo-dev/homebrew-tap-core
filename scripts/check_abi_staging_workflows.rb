@@ -1290,8 +1290,12 @@ module AbiStagingWorkflowCheck
                      source.include?(
                        'PYTHONPATH=$GITHUB_WORKSPACE/tap-authority'
                      ) &&
-                     (kind != :candidate || source.include?(
-                       '/usr/bin/sg "$KANDELO_HOMEBREW_BUILD_USER" -c "$candidate_entrypoint"'
+                     (kind != :candidate || (
+                       source.include?('invoker_user="$(/usr/bin/id -un)"') &&
+                       source.include?(
+                         '/usr/bin/sudo -n -E -u "$invoker_user" -- "$candidate_entrypoint"'
+                       ) &&
+                       !source.include?("/usr/bin/sg")
                      )) &&
                      (kind != :candidate || source.include?("umask 0007")) &&
                      %w[
