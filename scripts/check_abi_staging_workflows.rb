@@ -1173,10 +1173,19 @@ module AbiStagingWorkflowCheck
                          'shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"'
                        ) &&
                        realm.fetch("run").include?(
-                         'mkdir -m 0700 "$shared_temp/cache"'
+                         'invoker_gid="$(/usr/bin/id -g)"'
                        ) &&
                        realm.fetch("run").include?(
-                         'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"'
+                         '--gid "$invoker_gid"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'test "$(/usr/bin/id -g "$build_user")" = "$invoker_gid"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'mkdir -m 0770 "$shared_temp/cache"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$invoker_gid:770"'
                        ) &&
                        !realm.fetch("run").include?(
                          '/usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"'
