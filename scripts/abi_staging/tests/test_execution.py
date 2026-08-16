@@ -416,6 +416,29 @@ class WorkflowExecutionTests(unittest.TestCase):
 
         self.assertEqual(record, original)
         self.assertEqual(selected_locator, locator)
+        fetched = SimpleNamespace(
+            artifact_type=execution.CANDIDATE_RECORD_MEDIA_TYPE,
+            digest=locator["digest"],
+            immutable_reference=locator["immutable_reference"],
+            config=SimpleNamespace(body=canonical_bytes(original)),
+            layers=(
+                SimpleNamespace(
+                    body=bottle,
+                    digest=f"sha256:{bottle_sha256}",
+                    role="bottle-layer",
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            execution._fetched_layer(
+                fetched,
+                record=record,
+                locator=selected_locator,
+                dependency=dependency,
+            ),
+            bottle,
+        )
 
     def test_unknown_or_mutated_work_id_fails_closed(self) -> None:
         try:
