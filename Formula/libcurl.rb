@@ -9,7 +9,7 @@ class Libcurl < Formula
   url "https://curl.se/download/curl-8.11.1.tar.xz"
   sha256 "c7ca7db48b0909743eaef34250da02c19bc61d4f1dcedd6603f109409536ab56"
   license "curl"
-  revision 1
+  revision 2
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
@@ -474,6 +474,7 @@ class Libcurl < Formula
       ]
       system kandelo_cc(sdk_root), side_source, "-O2", "-fPIC", "-shared", "-I#{include}",
         *pic_whole_archive, "-o", side_module
+      kandelo_fork_instrument(side_module)
 
       nonpic_module = testpath/"libcurl-nonpic-negative.so"
       nonpic_command = [
