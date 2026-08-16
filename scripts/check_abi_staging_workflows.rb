@@ -1168,10 +1168,16 @@ module AbiStagingWorkflowCheck
                          '/usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"'
                        ) &&
                        realm.fetch("run").include?(
-                         '/usr/bin/sudo -n /usr/bin/chmod 0700 "$shared_temp/cache"'
+                         '/usr/bin/sudo -n /usr/bin/chmod 0770 "$shared_temp/cache"'
                        ) &&
                        realm.fetch("run").include?(
-                         'test "$(/usr/bin/stat -c \'%U:%G:%a\' "$shared_temp/cache")" ='
+                         'test "$(/usr/bin/stat -c \'%U:%G:%a\' "$shared_temp/cache")" = "$build_user:$build_user:770"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         '/usr/bin/sudo -n /usr/sbin/usermod --append --groups'
+                       ) &&
+                       realm.fetch("run").include?(
+                         '"$build_user" "$invoker_user"'
                        ) &&
                        realm.fetch("run").include?(
                          'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/tmp")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):755"'
@@ -1284,6 +1290,10 @@ module AbiStagingWorkflowCheck
                      source.include?(
                        'PYTHONPATH=$GITHUB_WORKSPACE/tap-authority'
                      ) &&
+                     (kind != :candidate || source.include?(
+                       '/usr/bin/sg "$KANDELO_HOMEBREW_BUILD_USER" -c "$candidate_entrypoint"'
+                     )) &&
+                     (kind != :candidate || source.include?("umask 0007")) &&
                      %w[
                        KANDELO_HOMEBREW_BUILD_USER
                        KANDELO_HOMEBREW_RECIPE_USER
