@@ -799,6 +799,11 @@ def execute_build_work(
         )
         child_environment.update(
             {
+                # The exact tap checkout is already selected, revalidated, and
+                # sealed by this protected executor. Homebrew canonicalizes its
+                # temporary file:// clone as a custom remote, so its mutable
+                # user trust store cannot identify the same reviewed tap.
+                "HOMEBREW_NO_REQUIRE_TAP_TRUST": "1",
                 "KANDELO_ABI_STAGING_CANDIDATE_ROOT": str(kandelo),
                 "KANDELO_ABI_STAGING_NORMAL_BUILDER": str(staging_builder),
                 "KANDELO_ABI_STAGING_PROTECTED_NORMAL_BUILDER": "1",
