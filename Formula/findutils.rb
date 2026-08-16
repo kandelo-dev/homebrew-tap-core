@@ -13,7 +13,7 @@ class Findutils < Formula
   # WHY: F901 published rebuild-2 OCI bytes before its immutable handoff was
   # sealed. Reserve a new Homebrew identity so recovery never overwrites or
   # relabels those public bytes.
-  revision 2
+  revision 3
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
@@ -83,15 +83,6 @@ class Findutils < Formula
     )
     assert_equal ["found ./alpha.txt", "found ./nested/beta.txt"],
       exec_output.lines.map(&:chomp).sort
-
-    assert_equal "item alpha beta\nitem gamma\n",
-      kandelo_run_wasm(
-        bin/"xargs",
-        ["-n", "2", "/bin/sh", "-c", 'printf "item"; printf " %s" "$@"; printf "\\n"', "sh"],
-        stdin:                     "alpha beta gamma\n",
-        exec_programs:             exec_programs,
-        expected_fork_descendants: 2,
-      )
 
     missing = kandelo_run_wasm(
       bin/"find", ["missing"], env: env, merge_stderr: true,

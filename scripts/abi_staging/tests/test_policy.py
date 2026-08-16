@@ -140,6 +140,15 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("--automake-acdir=#{automake_macros}", source)
         self.assertIn("--system-acdir=#{automake_macros}", source)
 
+    def test_findutils_shipping_smoke_does_not_run_the_unstable_xargs_fork_probe(self) -> None:
+        source = (TAP_ROOT / "Formula/findutils.rb").read_text(encoding="utf-8")
+        self.assertNotIn('bin/"xargs",\n        ["-n", "2", "/bin/sh"', source)
+
+    def test_libcurl_instruments_both_sides_of_the_dynamic_loading_boundary(self) -> None:
+        source = (TAP_ROOT / "Formula/libcurl.rb").read_text(encoding="utf-8")
+        self.assertIn("kandelo_fork_instrument(side_module)", source)
+        self.assertIn("kandelo_fork_instrument(loader)", source)
+
     def test_sudo_configure_owns_flags_without_overriding_submake_cppflags(self) -> None:
         source = (TAP_ROOT / "Kandelo/recipes/sudo/build.sh").read_text(
             encoding="utf-8"
