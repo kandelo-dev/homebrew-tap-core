@@ -41,6 +41,7 @@ from .custody import (
     validate_source_custody,
 )
 from .git_policy import protected_git_arguments
+from .formula_inventory import FormulaInventoryError, normalize_formula_source
 from .plan import exact_formula_subject
 from .policy import candidate_repository, load_tap_staging_policy
 from .records import load_tap_plan_record
@@ -1721,6 +1722,212 @@ def materialize_dependency_layers(*, context_path: Path, output: Path) -> None:
         destination.write_bytes(body)
 
 
+def _candidate_dependency_formula_source(
+    source: bytes, *, root_url: str, architecture: str, digest: str
+) -> bytes:
+    try:
+        text = source.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
+        raise HandoffError("dependency Formula is not UTF-8") from error
+    if not source or b"\r" in source or not source.endswith(b"\n"):
+        raise HandoffError("dependency Formula is not canonical LF text")
+    lines = text.splitlines(keepends=True)
+    starts = [index for index, line in enumerate(lines) if line == "  bottle do\n"]
+    if len(starts) != 1:
+        raise HandoffError("dependency Formula must contain one canonical bottle block")
+    start = starts[0]
+    end = next(
+        (index for index in range(start + 1, len(lines)) if lines[index] == "  end\n"),
+        None,
+    )
+    if end is None:
+        raise HandoffError("dependency Formula bottle block is unterminated")
+    root_pattern = re.compile(r'    root_url "https?://[^"\n]+"\n')
+    root_lines = [
+        index for index in range(start + 1, end) if root_pattern.fullmatch(lines[index])
+    ]
+    if root_lines != [start + 1]:
+        raise HandoffError("dependency Formula lacks one canonical bottle root")
+    selected_pattern = re.compile(
+        r'(    sha256 cellar: (?:"[^"\n]+"|:any(?:_skip_relocation)?), '
+        + re.escape(architecture)
+        + r'_kandelo: ")([0-9a-f]{64})("\n)'
+    )
+    selected = [
+        (index, selected_pattern.fullmatch(lines[index]))
+        for index in range(start + 1, end)
+        if selected_pattern.fullmatch(lines[index]) is not None
+    ]
+    if len(selected) != 1:
+        raise HandoffError(
+            "dependency Formula lacks one bottle digest for the selected architecture"
+        )
+    lines[root_lines[0]] = f'    root_url "{root_url}"\n'
+    selected_index, selected_match = selected[0]
+    if selected_match is None:
+        raise HandoffError("dependency Formula bottle digest match disappeared")
+    lines[selected_index] = (
+        selected_match.group(1) + digest + selected_match.group(3)
+    )
+    prepared = "".join(lines).encode("utf-8")
+    try:
+        if normalize_formula_source(prepared) != normalize_formula_source(source):
+            raise HandoffError(
+                "candidate dependency preparation changed Formula recipe bytes"
+            )
+    except FormulaInventoryError as error:
+        raise HandoffError(f"dependency Formula bottle block is invalid: {error}") from error
+    return prepared
+
+
+def prepare_dependency_tap(
+    *, context_path: Path, tap_root: Path, output: Path
+) -> Path:
+    """Create one clean deterministic checkout with exact dependency bottles."""
+
+    context = _canonical_mapping(
+        _read_regular(context_path, "build context"), "build context"
+    )
+    if (
+        context.get("schema") != 1
+        or context.get("kind") != "kandelo-abi-staging-build-context"
+    ):
+        raise HandoffError("build context protocol is unsupported")
+    source = _mapping(context.get("tap_source"), "tap source")
+    repository = _text(source.get("repository"), "tap repository", 256)
+    if REPOSITORY.fullmatch(repository) is None or repository != repository.lower():
+        raise HandoffError("tap repository is not a normalized repository identity")
+    source_commit = _text(source.get("commit"), "tap source commit", 40)
+    source_tree = _text(source.get("tree"), "tap source tree", 64)
+    if GIT_SHA.fullmatch(source_commit) is None:
+        raise HandoffError("tap source commit is invalid")
+    target_abi = _integer(context.get("target_abi"), "target ABI")
+    if target_abi <= 0:
+        raise HandoffError("target ABI must be positive")
+    root_url = f"https://ghcr.io/v2/{repository}-abi-{target_abi}-candidates"
+    tap_commit, tap_tree = _git_identity(tap_root, "tap")
+    if tap_commit != source_commit or tap_tree != source_tree:
+        raise HandoffError("tap checkout differs from the exact build context")
+    if output.exists() or output.is_symlink():
+        raise HandoffError("prepared dependency tap output must not already exist")
+    clone = subprocess.run(
+        [
+            "git",
+            "-c",
+            "protocol.file.allow=always",
+            "clone",
+            "--quiet",
+            "--no-hardlinks",
+            str(tap_root),
+            str(output),
+        ],
+        check=False,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if clone.returncode != 0:
+        detail = clone.stderr.decode("utf-8", errors="replace")[:4096]
+        raise HandoffError(f"cannot clone exact dependency tap: {detail}")
+    try:
+        dependencies = _sequence(
+            context.get("dependency_layers"), "dependency layers"
+        )
+        changed: list[str] = []
+        prior: tuple[str, str] | None = None
+        for raw in dependencies:
+            layer = _mapping(raw, "dependency layer")
+            formula = _text(layer.get("formula"), "dependency Formula", 128)
+            architecture = layer.get("architecture")
+            digest = _digest(layer.get("sha256"), "dependency layer digest")
+            key = (formula, str(architecture))
+            if (
+                STABLE_ID.fullmatch(formula) is None
+                or architecture not in {"wasm32", "wasm64"}
+                or (prior is not None and key <= prior)
+            ):
+                raise HandoffError(
+                    "dependency layers must be normalized, sorted, and unique"
+                )
+            prior = key
+            relative = f"Formula/{formula}.rb"
+            path = output / relative
+            try:
+                metadata = path.lstat()
+            except OSError as error:
+                raise HandoffError(
+                    f"cannot inspect dependency Formula {formula}: {error}"
+                ) from error
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                raise HandoffError(
+                    f"dependency Formula {formula} must be a regular non-symlink file"
+                )
+            prepared = _candidate_dependency_formula_source(
+                path.read_bytes(),
+                root_url=root_url,
+                architecture=str(architecture),
+                digest=digest,
+            )
+            path.write_bytes(prepared)
+            changed.append(relative)
+        if changed:
+            subprocess.run(
+                ["git", "-C", str(output), "add", "--", *changed], check=True
+            )
+            tree = subprocess.run(
+                ["git", "-C", str(output), "write-tree"],
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout.decode("ascii").strip()
+            commit_environment = {
+                **os.environ,
+                "GIT_CONFIG_GLOBAL": "/dev/null",
+                "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_AUTHOR_NAME": "Kandelo ABI staging",
+                "GIT_AUTHOR_EMAIL": "abi-staging@kandelo.invalid",
+                "GIT_COMMITTER_NAME": "Kandelo ABI staging",
+                "GIT_COMMITTER_EMAIL": "abi-staging@kandelo.invalid",
+                "GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z",
+                "GIT_COMMITTER_DATE": "2000-01-01T00:00:00Z",
+            }
+            prepared_commit = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(output),
+                    "commit-tree",
+                    tree,
+                    "-p",
+                    source_commit,
+                    "-m",
+                    "Prepare exact ABI candidate dependencies",
+                ],
+                check=True,
+                env=commit_environment,
+                stdout=subprocess.PIPE,
+            ).stdout.decode("ascii").strip()
+            subprocess.run(
+                ["git", "-C", str(output), "reset", "--hard", prepared_commit],
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+        status = subprocess.run(
+            ["git", "-C", str(output), "status", "--short", "--untracked-files=all"],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+        if status:
+            raise HandoffError("prepared dependency tap is not clean")
+        checkout_commit, _checkout_tree = _git_identity(output, "prepared dependency tap")
+        if changed and checkout_commit == source_commit:
+            raise HandoffError("prepared dependency tap commit did not change")
+        if not changed and checkout_commit != source_commit:
+            raise HandoffError("dependency-free tap checkout changed")
+        return output.resolve(strict=True)
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise HandoffError(f"cannot prepare exact dependency tap: {error}") from error
+
+
 def load_handoff_validation_expectations(
     *, request_path: Path, tap_plan_path: Path, formula_plan_path: Path
 ) -> dict[str, Any]:
@@ -1779,6 +1986,10 @@ def _parser() -> argparse.ArgumentParser:
     materialize = commands.add_parser("materialize-dependencies")
     materialize.add_argument("--context", required=True)
     materialize.add_argument("--out", required=True)
+    prepare_tap = commands.add_parser("prepare-dependency-tap")
+    prepare_tap.add_argument("--context", required=True)
+    prepare_tap.add_argument("--tap-root", required=True)
+    prepare_tap.add_argument("--out", required=True)
     validate = commands.add_parser("validate")
     validate.add_argument("--handoff", required=True)
     validate.add_argument("--request", required=True)
@@ -1845,6 +2056,12 @@ def main(arguments: list[str] | None = None) -> int:
         elif args.command == "materialize-dependencies":
             materialize_dependency_layers(
                 context_path=Path(args.context).resolve(strict=True),
+                output=Path(args.out).resolve(strict=False),
+            )
+        elif args.command == "prepare-dependency-tap":
+            prepare_dependency_tap(
+                context_path=Path(args.context).resolve(strict=True),
+                tap_root=Path(args.tap_root).resolve(strict=True),
                 output=Path(args.out).resolve(strict=False),
             )
         else:
