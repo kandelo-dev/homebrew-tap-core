@@ -191,12 +191,17 @@ module AbiStagingWorkflowCheck
                      "workflow must have only schedule and workflow_dispatch triggers")
     require_contract(event.fetch("schedule") == [{"cron" => "*/5 * * * *"}],
                      "workflow schedule must remain five minutes")
-    input = event.dig("workflow_dispatch", "inputs", "request_asset_url")
+    inputs = event.dig("workflow_dispatch", "inputs")
+    input = inputs.fetch("request_asset_url", nil)
     require_contract(input.is_a?(Hash) && input["required"] == false &&
                        input["type"] == "string",
                      "manual workflow must accept one optional request_asset_url")
-    require_contract(event.fetch("workflow_dispatch").fetch("inputs").keys ==
-                       ["request_asset_url"],
+    retry_input = inputs.fetch("retry_exhausted_builds", nil)
+    require_contract(retry_input.is_a?(Hash) && retry_input["required"] == false &&
+                       retry_input["default"] == false && retry_input["type"] == "boolean",
+                     "manual exhausted-build retry must be an explicit false-by-default boolean")
+    require_contract(inputs.keys ==
+                       %w[request_asset_url retry_exhausted_builds],
                      "manual workflow gained another coordinator input")
 
     jobs = workflow.fetch("jobs")
@@ -318,6 +323,9 @@ module AbiStagingWorkflowCheck
                          "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}"
                        } &&
                        coordinator_source.include?("python3 -m scripts.abi_staging.cli prepare-workflow") &&
+                       coordinator_source.include?('if [[ "${{ inputs.retry_exhausted_builds }}" == "true" ]]') &&
+                       coordinator_source.include?('retry_args+=(--retry-exhausted-builds)') &&
+                       coordinator_source.include?('"${retry_args[@]}"') &&
                        coordinator_source.include?('--kandelo-root "$GITHUB_WORKSPACE/kandelo-source"') &&
                        coordinator_source.include?('--discovery "$out/discovery.json"') &&
                        coordinator_source.include?('--formula-requirements "$RUNNER_TEMP/abi-staging-formula-requirements.json"'),

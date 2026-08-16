@@ -271,6 +271,7 @@ def _parser() -> argparse.ArgumentParser:
     prepare_workflow.add_argument("--request", required=True)
     prepare_workflow.add_argument("--formula-requirements", required=True)
     prepare_workflow.add_argument("--now", required=True)
+    prepare_workflow.add_argument("--retry-exhausted-builds", action="store_true")
     prepare_workflow.add_argument("--out", required=True)
     prepare_workflow.add_argument("--github-output", required=True)
     plan_products = subcommands.add_parser("plan-workflow-products")
@@ -960,6 +961,7 @@ def _prepare_workflow(args: argparse.Namespace) -> None:
         tap_plan,
         policy=staging_policy,
         verification_tests=verification_tests,
+        retry_exhausted_builds=args.retry_exhausted_builds,
     )
     reconciliation_mode = load_reconciliation_activation(
         tap_root / "Kandelo/staging/reconciliation-activation.toml"

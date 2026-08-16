@@ -770,6 +770,46 @@ class SchedulingTests(unittest.TestCase):
         self.assertEqual(blocker.next_action, "maintainer-action")
         self.assertTrue(blocker.exhausted)
 
+    def test_manual_dispatch_reopens_one_exhausted_build_ordinal(self) -> None:
+        plan = _plan()
+        subject = plan["required_subjects"][0]
+        formula = _formula(plan, subject)
+        exhausted = AttemptFactV1(
+            request_sha256=plan["request_digest"],
+            subject=subject,
+            contract_sha256=formula["contract_sha256"],
+            retry_ordinal=3,
+            outcome="failure",
+            guard_code="build_failed",
+            completed_at="2026-08-09T09:00:00.000Z",
+            record_sha256=_digest("manual-dispatch-exhausted"),
+        )
+
+        reopened = schedule_ready_batch(
+            plan,
+            _records(exhausted),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+            retry_exhausted_builds=True,
+        )
+        intent = next(item for item in reopened.ready if item.subject == subject)
+        self.assertEqual(intent.action, "build-candidate")
+        self.assertEqual(intent.attempt_ordinal, 3)
+
+        not_reopened = schedule_ready_batch(
+            plan,
+            _records(exhausted),
+            _decision(plan),
+            now=NOW,
+            policy=POLICY,
+            verification_tests=(DEFINITION,),
+        )
+        self.assertNotIn(subject, [item.subject for item in not_reopened.ready])
+        blocker = next(item for item in not_reopened.blocked if item.subject == subject)
+        self.assertTrue(blocker.exhausted)
+
     def test_at_least_once_candidate_publication_converges_by_exact_layer(self) -> None:
         plan = _plan()
         subject = plan["required_subjects"][0]
