@@ -344,6 +344,12 @@ def list_public_record_locators(
                     "record inventory contains a mutable or unknown tag",
                     guard_code="candidate_integrity_mismatch",
                 )
+            # Homebrew resolves bottles through a mutable version/rebuild
+            # index before fetching the immutable bottle digest. Those
+            # numeric aliases are distribution metadata, not staging records,
+            # so they are inert to the closed record inventory below.
+            if re.fullmatch(r"[0-9][0-9A-Za-z._-]{0,127}", tag) is not None:
+                continue
             record_tag = re.fullmatch(r"record-sha256-[0-9a-f]{64}", tag)
             verification_tag = re.fullmatch(
                 r"verification-[0-9a-f]{32}-"

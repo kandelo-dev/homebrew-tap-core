@@ -470,6 +470,27 @@ class OciPublicationTests(unittest.TestCase):
         with self.assertRaises(OciPublicationError):
             list_public_record_locators(REPOSITORY, transport=transport)
 
+    def test_homebrew_version_aliases_are_inert_to_record_inventory(self) -> None:
+        transport = FakeRegistryTransport()
+        published = publish_record(
+            _plan(), transport=transport, expected_source_repository=SOURCE_ASSOCIATION
+        )
+        transport.manifests[(REPOSITORY, "1.2.3_4-5")] = b"homebrew-index"
+        transport.manifests[
+            (REPOSITORY, "6.0.12-153-gcf5bc21_1")
+        ] = b"homebrew-index"
+
+        self.assertEqual(
+            list_public_record_locators(REPOSITORY, transport=transport),
+            (
+                {
+                    "repository": "ghcr.io/" + REPOSITORY,
+                    "digest": published.digest,
+                    "immutable_reference": published.immutable_reference,
+                },
+            ),
+        )
+
     def test_mixed_candidate_package_selects_each_closed_record_class(self) -> None:
         transport = FakeRegistryTransport()
         record_digest = "a" * 64
