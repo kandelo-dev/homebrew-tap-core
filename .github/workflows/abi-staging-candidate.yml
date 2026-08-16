@@ -169,16 +169,13 @@ jobs:
             --no-create-home --home-dir /nonexistent \
             --shell /usr/sbin/nologin "$recipe_user"
           invoker_user="$(/usr/bin/id -un)"
-          /usr/bin/sudo -n /usr/sbin/usermod --append --groups "$build_user" "$invoker_user"
-          /usr/bin/id -nG "$invoker_user" | /usr/bin/tr ' ' '\n' | \
-            /usr/bin/grep -Fx "$build_user"
           shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"
           /usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp"
           /usr/bin/sudo -n /usr/bin/chmod 1777 "$shared_temp"
           mkdir "$shared_temp/cache" "$shared_temp/tmp"
-          /usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"
+          /usr/bin/sudo -n /usr/bin/chown "$invoker_user:$build_user" "$shared_temp/cache"
           /usr/bin/sudo -n /usr/bin/chmod 0770 "$shared_temp/cache"
-          test "$(/usr/bin/stat -c '%U:%G:%a' "$shared_temp/cache")" = "$build_user:$build_user:770"
+          test "$(/usr/bin/stat -c '%U:%G:%a' "$shared_temp/cache")" = "$invoker_user:$build_user:770"
           test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/tmp")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):755"
 
           # The tap-owned browser runners recover this exact directory from
@@ -440,8 +437,7 @@ jobs:
           CANDIDATE_ENTRYPOINT
           chmod 0500 "$candidate_entrypoint"
           trap 'rm -f -- "$candidate_entrypoint"' EXIT
-          invoker_user="$(/usr/bin/id -un)"
-          /usr/bin/sudo -n -E -u "$invoker_user" -- "$candidate_entrypoint"
+          "$candidate_entrypoint"
 
       - name: Upload exact inert build handoff
         id: upload
