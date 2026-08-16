@@ -910,11 +910,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes realm_source, 'build_user="kandelo-homebrew-build"'
     assert_includes realm_source, 'recipe_user="kandelo-homebrew-recipe"'
     assert_includes realm_source, "/usr/sbin/useradd"
+    assert_includes realm_source, 'invoker_gid="$(/usr/bin/id -g)"'
+    assert_includes realm_source, '--gid "$invoker_gid"'
+    assert_includes realm_source,
+                    'test "$(/usr/bin/id -g "$build_user")" = "$invoker_gid"'
     assert_includes realm_source, 'shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"'
     assert_includes realm_source, 'chmod 1777 "$shared_temp"'
-    assert_includes realm_source, 'mkdir -m 0700 "$shared_temp/cache"'
+    assert_includes realm_source, 'mkdir -m 0770 "$shared_temp/cache"'
     assert_includes realm_source,
-                    'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"'
+                    'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$invoker_gid:770"'
     refute_includes realm_source,
                     '/usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"'
     refute_includes realm_source,
@@ -990,28 +994,26 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub(
-        'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"',
+        'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$invoker_gid:770"',
         ':'
       )
     end
-    assert_reusable_rejected(:candidate, "candidate Homebrew cache is pre-owned by build identity") do |workflow|
+    assert_reusable_rejected(:candidate, "candidate build user drops the shared cache gid") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub(
-        'mkdir -m 0700 "$shared_temp/cache"',
-        "mkdir -m 0700 \"$shared_temp/cache\"\n" \
-          '/usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"'
+        '--gid "$invoker_gid"',
+        '--user-group'
       )
     end
-    assert_reusable_rejected(:candidate, "candidate Homebrew cache uses mixed ownership") do |workflow|
+    assert_reusable_rejected(:candidate, "candidate Homebrew cache drops shared group write") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub(
-        'mkdir -m 0700 "$shared_temp/cache"',
-        "mkdir -m 0700 \"$shared_temp/cache\"\n" \
-          '/usr/bin/sudo -n /usr/bin/chown "$invoker_user:$build_user" "$shared_temp/cache"'
+        'mkdir -m 0770 "$shared_temp/cache"',
+        'mkdir -m 0700 "$shared_temp/cache"'
       )
     end
     assert_reusable_rejected(:candidate, "candidate handoff re-enters through sudo") do |workflow|
