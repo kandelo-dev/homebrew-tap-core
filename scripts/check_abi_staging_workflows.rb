@@ -1171,16 +1171,13 @@ module AbiStagingWorkflowCheck
                          '/usr/bin/sudo -n /usr/bin/chmod 0700 "$shared_temp/cache"'
                        ) &&
                        realm.fetch("run").include?(
-                         '/usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp/tmp"'
-                       ) &&
-                       realm.fetch("run").include?(
-                         '/usr/bin/sudo -n /usr/bin/chmod 1777 "$shared_temp/tmp"'
-                       ) &&
-                       realm.fetch("run").include?(
                          'test "$(/usr/bin/stat -c \'%U:%G:%a\' "$shared_temp/cache")" ='
                        ) &&
                        realm.fetch("run").include?(
-                         'test "$(/usr/bin/stat -c \'%U:%G:%a\' "$shared_temp/tmp")" ='
+                         'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/tmp")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):755"'
+                       ) &&
+                       !realm.fetch("run").include?(
+                         '/usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp/tmp"'
                        ) &&
                        realm.fetch("run").include?(
                          'echo "KANDELO_HOMEBREW_BUILD_USER=$build_user"'

@@ -174,10 +174,8 @@ jobs:
           mkdir "$shared_temp/cache" "$shared_temp/tmp"
           /usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"
           /usr/bin/sudo -n /usr/bin/chmod 0700 "$shared_temp/cache"
-          /usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp/tmp"
-          /usr/bin/sudo -n /usr/bin/chmod 1777 "$shared_temp/tmp"
           test "$(/usr/bin/stat -c '%U:%G:%a' "$shared_temp/cache")" = "$build_user:$build_user:700"
-          test "$(/usr/bin/stat -c '%U:%G:%a' "$shared_temp/tmp")" = "root:root:1777"
+          test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/tmp")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):755"
 
           # The tap-owned browser runners recover this exact directory from
           # dirname(HOMEBREW_CACHE)/ms-playwright after Homebrew isolates HOME
