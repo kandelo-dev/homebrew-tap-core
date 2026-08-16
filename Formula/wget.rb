@@ -112,13 +112,12 @@ class Wget < Formula
 
     test_wgetrc = testpath/"wgetrc"
     test_wgetrc.binwrite((etc/"wgetrc").binread + "\nquiet = on\n")
-    version_guest_files = { GUEST_WGETRC => test_wgetrc }
     guest_files = {
       GUEST_WGETRC    => etc/"wgetrc",
       GUEST_CA_BUNDLE => ca_bundle,
     }
     version_output = kandelo_run_wasm(
-      bin/"wget", ["--version"], guest_files: version_guest_files
+      bin/"wget", ["--version"]
     )
     assert_match(/^GNU Wget 1\.25\.0 /, version_output)
     assert_match(%r{(?:\A|\s)\+ssl/openssl(?:\s|\z)}, version_output)

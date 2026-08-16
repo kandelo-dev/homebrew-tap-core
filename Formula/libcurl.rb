@@ -488,6 +488,7 @@ class Libcurl < Formula
         *normal_whole_archive,
         openssl/"lib/libssl.a", openssl/"lib/libcrypto.a", zlib/"lib/libz.a",
         "-ldl", "-pthread", "-o", loader
+      kandelo_fork_instrument(loader)
     end
 
     side_info = Utils.safe_popen_read("wasm-objdump", "-x", side_module)

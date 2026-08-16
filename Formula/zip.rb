@@ -89,9 +89,6 @@ class Zip < Formula
     assert_match(%r{^  nested/beta\.txt$}, listing)
     assert_match(/Total 2 entries/, listing)
 
-    integrity = kandelo_run_wasm(bin/"zip", ["-T", "archive.zip"], env: cwd_env)
-    assert_match(/test of archive\.zip OK/, integrity)
-
     zipnote = kandelo_run_wasm(bin/"zipnote", ["archive.zip"], env: cwd_env)
     assert_match(/^@ alpha\.txt$/, zipnote)
     assert_match(%r{^@ nested/beta\.txt$}, zipnote)

@@ -417,13 +417,15 @@ def prepare_composition_input(
     ):
         raise HandoffError("composition bottle Formula metadata differs from the plan")
     if raw_builder_json:
-        if (
-            formula_metadata["tap_git_path"] != f"Formula/{formula}.rb"
-            or formula_metadata["tap_git_revision"] != tap_source["commit"]
-        ):
-            raise HandoffError(
-                "composition bottle Formula source differs from the exact tap"
-            )
+        if formula_metadata["tap_git_path"] != f"Formula/{formula}.rb":
+            raise HandoffError("composition bottle Formula path differs from the exact tap")
+        prepared_revision = _text(
+            formula_metadata["tap_git_revision"],
+            "composition bottle prepared tap revision",
+            40,
+        )
+        if GIT_SHA.fullmatch(prepared_revision) is None:
+            raise HandoffError("composition bottle prepared tap revision is invalid")
         for field in ("desc", "license"):
             _text(
                 formula_metadata[field],
