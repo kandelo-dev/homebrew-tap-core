@@ -448,26 +448,23 @@ async function main(): Promise<void> {
       }
       const canvas = page.locator("#framebuffer");
       const blankScreenshot = await canvas.screenshot();
+      const smokeRequest = {
+        argv: [guestProgram, ...config.argv],
+        minWrites: config.minWrites,
+        minNonBlankPixels: config.minNonBlankPixels,
+        timeoutMs: config.timeoutMs,
+        vfsUrl: `${urlBase}/formula.vfs`,
+      };
       const result = await page.evaluate(
-        async ({ argv, minWrites, timeoutMs, vfsUrl }) =>
+        async (request) =>
           (
             window as unknown as {
               __runKandeloFramebufferSmoke: (
                 request: unknown,
               ) => Promise<FramebufferSmokeResult>;
             }
-          ).__runKandeloFramebufferSmoke({
-            argv,
-            minWrites,
-            timeoutMs,
-            vfsUrl,
-          }),
-        {
-          argv: [guestProgram, ...config.argv],
-          minWrites: config.minWrites,
-          timeoutMs: config.timeoutMs,
-          vfsUrl: `${urlBase}/formula.vfs`,
-        },
+          ).__runKandeloFramebufferSmoke(request),
+        smokeRequest,
       );
       const renderedScreenshot = await canvas.screenshot();
 

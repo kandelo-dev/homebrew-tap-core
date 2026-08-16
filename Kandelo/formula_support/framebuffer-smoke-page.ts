@@ -4,9 +4,12 @@ import { attachCanvas } from "@host/framebuffer/canvas-renderer";
 import { MemoryFileSystem } from "@host/vfs/memory-fs";
 import kernelWasmUrl from "@kernel-wasm?url";
 
+import { waitForFramebufferEvidence } from "./framebuffer-evidence-readiness";
+
 interface FramebufferSmokeRequest {
   argv: string[];
   minWrites: number;
+  minNonBlankPixels: number;
   timeoutMs: number;
   vfsUrl: string;
 }
@@ -159,15 +162,19 @@ async function runFramebufferSmoke(
       exitCode = status;
     });
 
-    const deadline = performance.now() + request.timeoutMs;
-    while (performance.now() < deadline) {
-      if (binds >= 1 && writes >= request.minWrites) {
-        await delay(800);
-        break;
-      }
-      if (exited) break;
-      await delay(100);
-    }
+    const readiness = await waitForFramebufferEvidence({
+      minWrites: request.minWrites,
+      minNonBlankPixels: request.minNonBlankPixels,
+      deadline: performance.now() + request.timeoutMs,
+      now: () => performance.now(),
+      delay,
+      sample: () => ({
+        binds,
+        writes,
+        nonBlankPixels: countNonBlankPixels(),
+        exited,
+      }),
+    });
 
     const exitedBeforeCleanup = exited;
     const exitCodeBeforeCleanup = exitCode;
@@ -185,7 +192,7 @@ async function runFramebufferSmoke(
       width,
       height,
       format,
-      nonBlankPixels: countNonBlankPixels(),
+      nonBlankPixels: readiness.nonBlankPixels,
       exited: exitedBeforeCleanup,
       exitCode: exitCodeBeforeCleanup,
       stdout,
