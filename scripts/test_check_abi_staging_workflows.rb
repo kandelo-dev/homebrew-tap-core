@@ -339,6 +339,81 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     end
   end
 
+  def test_candidate_matrix_consumes_one_exact_prepared_homebrew_realm
+    prepare = @workflow.dig("jobs", "prepare-homebrew-realm")
+    refute_nil prepare
+    assert_equal "discover-plan", prepare["needs"]
+    assert_equal "needs.discover-plan.outputs.mode == 'active'", prepare["if"]
+    assert_equal({"contents" => "read"}, prepare["permissions"])
+    assert_equal({
+      "artifact-id" => "${{ steps.upload-realm.outputs.artifact-id }}",
+      "artifact-digest" => "${{ steps.upload-realm.outputs.artifact-digest }}",
+      "archive-sha256" => "${{ steps.realm-identity.outputs.archive_sha256 }}",
+      "source-tree" => "${{ steps.realm-identity.outputs.source_tree }}"
+    }, prepare["outputs"])
+    prepare_source = AbiStagingWorkflowCheck.run_steps(prepare).map do |step|
+      step.fetch("run")
+    end.join("\n")
+    assert_includes prepare_source,
+                    "abi-staging-prepare-shared-homebrew-realm.sh"
+    assert_includes prepare_source, "abi-staging-pack-homebrew-realm.sh"
+    assert_includes prepare_source, 'archive_sha256='
+    preparer = File.read(
+      File.join(ROOT, "scripts/abi-staging-prepare-shared-homebrew-realm.sh")
+    )
+    assert_includes preparer, '--arch wasm64posix'
+    upload = prepare.fetch("steps").find { |step| step["id"] == "upload-realm" }
+    refute_nil upload
+    assert_equal 0, upload.dig("with", "compression-level")
+
+    %w[candidate verification].each do |name|
+      caller = @workflow.dig("jobs", name)
+      assert_equal %w[discover-plan prepare-homebrew-realm], caller["needs"]
+      assert_equal "${{ needs.prepare-homebrew-realm.outputs.artifact-id }}",
+                   caller.dig("with", "realm-artifact-id")
+      assert_equal "${{ needs.prepare-homebrew-realm.outputs.artifact-digest }}",
+                   caller.dig("with", "realm-artifact-digest")
+      assert_equal "${{ needs.prepare-homebrew-realm.outputs.archive-sha256 }}",
+                   caller.dig("with", "realm-archive-sha256")
+      reusable = name == "candidate" ? @candidate : @verification
+      event = reusable.key?("on") ? reusable.fetch("on") : reusable.fetch(true)
+      inputs = event.dig("workflow_call", "inputs")
+      %w[
+        realm-artifact-id realm-artifact-digest realm-archive-sha256
+        realm-source-tree
+      ].each do |input|
+        assert_equal({"required" => true, "type" => "string"}, inputs[input])
+      end
+      producer = reusable.dig("jobs", name == "candidate" ? "build" : "verify")
+      refute(
+        producer.fetch("steps").any? do |step|
+          step.dig("with", "path") == "kandelo-source"
+        end
+      )
+      realm_download = producer.fetch("steps").find do |step|
+        step["name"] == "Download exact prepared Homebrew realm"
+      end
+      restore = producer.fetch("steps").find do |step|
+        step["name"] == "Restore exact prepared Homebrew realm"
+      end
+      refute_nil realm_download
+      refute_nil restore
+      assert_equal "${{ inputs.realm-artifact-id }}",
+                   realm_download.dig("with", "artifact-ids")
+      assert_equal "${{ inputs.realm-artifact-digest }}",
+                   restore.dig("env", "EXPECTED_REALM_ARTIFACT_DIGEST")
+      assert_equal "${{ inputs.realm-archive-sha256 }}",
+                   restore.dig("env", "EXPECTED_REALM_ARCHIVE_SHA256")
+      assert_includes restore.fetch("run"),
+                      "abi-staging-restore-homebrew-realm.sh"
+      realm = producer.fetch("steps").find do |step|
+        step["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      refute_includes realm.fetch("run"), "bash scripts/build-musl.sh"
+      refute_includes realm.fetch("run"), "npm ci"
+    end
+  end
+
   def test_only_protected_publishers_receive_the_dedicated_package_token
     event = @candidate.key?("on") ? @candidate.fetch("on") : @candidate.fetch(true)
     assert_equal({"required" => true},
@@ -871,15 +946,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     realm_source = realm.fetch("run")
     assert_includes realm_source, 'realm_root="$(mktemp -d /tmp/k.XXXXXX)"'
     assert_includes realm_source, "homebrew-prepare-host-prefix.sh"
-    assert_includes realm_source, "scripts/build-musl.sh"
-    assert_includes realm_source, "packages/registry/kernel/build-kernel.sh"
-    assert_includes realm_source, "scripts/build-fork-instrument-tool.sh"
-    assert_includes realm_source, "scripts/build-local-root-spill-tool.sh"
-    assert_includes realm_source, "MemoryFileSystem.create"
-    assert_includes realm_source, "host/wasm/rootfs.vfs"
-    assert_includes realm_source, "async function main(): Promise<void>"
-    refute_match(/^const memory = await import\(/, realm_source)
-    refute_match(/^const image = await fs\.saveImage\(/, realm_source)
+    refute_includes realm_source, "scripts/build-musl.sh"
+    refute_includes realm_source, "packages/registry/kernel/build-kernel.sh"
+    refute_includes realm_source, "npm ci"
+    assert_includes realm_source,
+                    'playwright_seed="$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/ms-playwright"'
+    assert_includes realm_source,
+                    'node_bin="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/node-bin")"'
+    assert_includes realm_source,
+                    'host_target="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/host-target")"'
     refute_includes realm_source, "formula_test_packages"
     refute_includes realm_source, "--fetch-only resolve"
     assert_includes realm_source,
@@ -889,7 +964,7 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes realm_source,
                     'package_cache="$GITHUB_WORKSPACE/kandelo-source/.ci-test-binary-cache"'
     assert_includes realm_source,
-                    'mkdir -m 0700 "$package_cache" "$package_cache/programs"'
+                    'test -d "$package_cache/programs" && test ! -L "$package_cache/programs"'
     assert_includes realm_source,
                     [
                       "formula_cache_paths=(",
@@ -904,9 +979,8 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
                     '/usr/bin/sudo -n /usr/bin/chmod 0555 -- "${formula_cache_paths[@]}"'
     assert_includes realm_source,
                     'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$directory")" = "0:0:555"'
-    assert_includes realm_source, 'mkdir -m 0700 "$GITHUB_WORKSPACE/kandelo-source/binaries"'
-    assert_includes realm_source, "build-deps program-index-selected"
-    assert_includes realm_source, "rootfs \"$formula_test_index\""
+    assert_includes realm_source, 'test -d "$GITHUB_WORKSPACE/kandelo-source/binaries"'
+    refute_includes realm_source, "build-deps program-index-selected"
     assert_includes realm_source, 'protected_recipe_formula=false'
     assert_includes realm_source, 'if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then'
     assert_includes realm_source, 'build_user="kandelo-homebrew-build"'
@@ -1083,14 +1157,11 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       end
       step["run"] = step.fetch("run").sub("candidate_platform_tools=(", "mutable_platform_tools=(")
     end
-    assert_reusable_rejected(:candidate, "candidate omits Formula test projection") do |workflow|
+    assert_reusable_rejected(:candidate, "candidate rebuilds the shared realm") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
-      step["run"] = step.fetch("run").sub(
-        "build-deps program-index-selected",
-        "build-deps program-index"
-      )
+      step["run"] += "\nbash scripts/build-musl.sh\n"
     end
     assert_reusable_rejected(:candidate, "candidate shadows protected Python") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|

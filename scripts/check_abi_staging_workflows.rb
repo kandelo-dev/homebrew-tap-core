@@ -122,11 +122,10 @@ module AbiStagingWorkflowCheck
 
   def require_candidate_checkouts(job, field, include_homebrew: false)
     checkouts = action_steps(job, CHECKOUT)
-    expected_count = include_homebrew ? 4 : 3
+    expected_count = include_homebrew ? 3 : 2
     require_contract(checkouts.length == expected_count,
                      "#{field} must check out its exact protected sources")
     tap = checkouts.find { |step| step.dig("with", "path") == "tap-authority" }
-    kandelo = checkouts.find { |step| step.dig("with", "path") == "kandelo-source" }
     policy = checkouts.find { |step| step.dig("with", "path") == "kandelo-authority" }
     require_contract(!tap.nil? && tap.fetch("with") == {
                        "repository" => "kandelo-dev/homebrew-tap-core",
@@ -135,14 +134,6 @@ module AbiStagingWorkflowCheck
                        "persist-credentials" => false,
                        "path" => "tap-authority"
                      }, "#{field} tap checkout is not the exact protected revision")
-    require_contract(!kandelo.nil? && kandelo.fetch("with") == {
-                       "repository" => "${{ inputs.kandelo-repository }}",
-                       "ref" => "${{ inputs.kandelo-head }}",
-                       "fetch-depth" => 1,
-                       "submodules" => "recursive",
-                       "persist-credentials" => false,
-                       "path" => "kandelo-source"
-                     }, "#{field} Kandelo checkout is not the exact request head")
     require_contract(!policy.nil? && policy.fetch("with") == {
                        "repository" => "${{ inputs.kandelo-repository }}",
                        "ref" => "${{ inputs.kandelo-policy-commit }}",
@@ -206,7 +197,7 @@ module AbiStagingWorkflowCheck
 
     jobs = workflow.fetch("jobs")
     expected_jobs = %w[
-      discover-plan candidate verification reuse prepare-runtime
+      discover-plan prepare-homebrew-realm candidate verification reuse prepare-runtime
       plan-products compose-product publish-product-candidate node-product-evidence
       browser-product-evidence publish-product-evidence plan-promotion
       publish-canonical update-tap-metadata publish-admission
@@ -358,6 +349,33 @@ module AbiStagingWorkflowCheck
                        uploads.fetch(0).dig("with", "compression-level") == 0,
                      "protected coordination artifact is not exact and bounded")
 
+    realm = jobs.fetch("prepare-homebrew-realm")
+    realm_source = run_steps(realm).map { |step| step.fetch("run") }.join("\n")
+    realm_uploads = action_steps(realm, UPLOAD_ARTIFACT)
+    require_contract(
+      realm.fetch("needs") == "discover-plan" &&
+        realm.fetch("if") == "needs.discover-plan.outputs.mode == 'active'" &&
+        realm.fetch("runs-on") == "ubuntu-latest" &&
+        realm.fetch("timeout-minutes").between?(1, 180) &&
+        realm.fetch("permissions") == {"contents" => "read"} &&
+        !realm.key?("environment") && !realm.key?("secrets") &&
+        realm.fetch("outputs") == {
+          "artifact-id" => "${{ steps.upload-realm.outputs.artifact-id }}",
+          "artifact-digest" => "${{ steps.upload-realm.outputs.artifact-digest }}",
+          "archive-sha256" => "${{ steps.realm-identity.outputs.archive_sha256 }}",
+          "source-tree" => "${{ steps.realm-identity.outputs.source_tree }}"
+        } && realm_source.include?("abi-staging-prepare-shared-homebrew-realm.sh") &&
+        realm_source.include?("abi-staging-pack-homebrew-realm.sh") &&
+        realm_source.include?("env -u GITHUB_TOKEN") &&
+        realm_source.include?("-u ACTIONS_RUNTIME_TOKEN") &&
+        realm_uploads.length == 1 &&
+        realm_uploads.fetch(0).fetch("id") == "upload-realm" &&
+        realm_uploads.fetch(0).dig("with", "compression-level") == 0 &&
+        realm_uploads.fetch(0).dig("with", "retention-days") == 1,
+      "shared Homebrew realm producer changed"
+    )
+    check_actions(realm)
+
     writer_permissions = {"actions" => "read", "contents" => "read", "packages" => "write"}
     candidate = jobs.fetch("candidate")
     verification = jobs.fetch("verification")
@@ -375,6 +393,10 @@ module AbiStagingWorkflowCheck
       "kandelo-policy-commit" => "${{ needs.discover-plan.outputs.kandelo-policy-commit }}",
       "kandelo-repository" => "${{ needs.discover-plan.outputs.kandelo-repository }}",
       "tap-commit" => "${{ needs.discover-plan.outputs.tap-commit }}",
+      "realm-artifact-id" => "${{ needs.prepare-homebrew-realm.outputs.artifact-id }}",
+      "realm-artifact-digest" => "${{ needs.prepare-homebrew-realm.outputs.artifact-digest }}",
+      "realm-archive-sha256" => "${{ needs.prepare-homebrew-realm.outputs.archive-sha256 }}",
+      "realm-source-tree" => "${{ needs.prepare-homebrew-realm.outputs['source-tree'] }}",
       "work-id" => "${{ matrix.work_id }}"
     }
     package_secret = {
@@ -383,8 +405,8 @@ module AbiStagingWorkflowCheck
     }
     [[candidate, "./.github/workflows/abi-staging-candidate.yml"],
      [verification, "./.github/workflows/abi-staging-verification.yml"]].each do |job, reusable|
-      require_contract(job.fetch("needs") == "discover-plan" &&
-                       job.fetch("if") == "needs.discover-plan.outputs.mode == 'active'" &&
+      require_contract(job.fetch("needs") == %w[discover-plan prepare-homebrew-realm] &&
+                       job.fetch("if") == "needs.discover-plan.outputs.mode == 'active' && needs.prepare-homebrew-realm.result == 'success'" &&
                        job.fetch("permissions") == writer_permissions &&
                        job.fetch("uses") == reusable &&
                        job.fetch("with") == common_inputs &&
@@ -1063,7 +1085,8 @@ module AbiStagingWorkflowCheck
                      "reusable ABI workflow must be workflow_call only")
     expected_inputs = %w[
       coordination-artifact-id coordination-artifact-digest kandelo-head
-      kandelo-policy-commit kandelo-repository tap-commit work-id
+      kandelo-policy-commit kandelo-repository tap-commit realm-artifact-id
+      realm-artifact-digest realm-archive-sha256 realm-source-tree work-id
     ]
     call = event.fetch("workflow_call")
     inputs = call.fetch("inputs")
@@ -1104,13 +1127,40 @@ module AbiStagingWorkflowCheck
                      }, "candidate producer authority or outputs changed")
     require_candidate_checkouts(producer, producer_name, include_homebrew: true)
     downloads = action_steps(producer, DOWNLOAD_ARTIFACT)
-    require_contract(downloads.length == 1 &&
-                     downloads.fetch(0).fetch("with") == {
+    coordination_download = downloads.find do |step|
+      step.dig("with", "path") == "${{ runner.temp }}/coordination"
+    end
+    realm_download = downloads.find do |step|
+      step.dig("with", "path") == "${{ runner.temp }}/shared-realm"
+    end
+    require_contract(downloads.length == 2 &&
+                     !coordination_download.nil? &&
+                     coordination_download.fetch("with") == {
                        "artifact-ids" => "${{ inputs.coordination-artifact-id }}",
                        "path" => "${{ runner.temp }}/coordination",
                        "merge-multiple" => true
-                     }, "candidate producer lacks exact coordination artifact")
+                     } && !realm_download.nil? &&
+                     realm_download.fetch("with") == {
+                       "artifact-ids" => "${{ inputs.realm-artifact-id }}",
+                       "path" => "${{ runner.temp }}/shared-realm",
+                       "merge-multiple" => true
+                     }, "candidate producer lacks exact coordination or realm artifact")
     commands = run_steps(producer)
+    restore = commands.find do |step|
+      step["name"] == "Restore exact prepared Homebrew realm"
+    end
+    require_contract(!restore.nil? &&
+                     restore.fetch("working-directory") == "kandelo-authority" &&
+                     restore.fetch("env") == {
+                       "EXPECTED_REALM_ARTIFACT_DIGEST" =>
+                         "${{ inputs.realm-artifact-digest }}",
+                       "EXPECTED_REALM_ARCHIVE_SHA256" =>
+                         "${{ inputs.realm-archive-sha256 }}",
+                       "EXPECTED_REALM_COMMIT" => "${{ inputs.kandelo-head }}",
+                       "EXPECTED_REALM_TREE" => "${{ inputs.realm-source-tree }}"
+                     } && restore.fetch("run").include?(
+                       "abi-staging-restore-homebrew-realm.sh"
+                     ), "candidate producer does not restore the exact shared realm")
     if kind == :candidate
       export = commands.find do |step|
         step["name"] == "Export exact candidate build identity"
@@ -1118,7 +1168,7 @@ module AbiStagingWorkflowCheck
       realm = commands.find do |step|
         step["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
-      require_contract(commands.length == 3 && !export.nil? && !realm.nil? &&
+      require_contract(commands.length == 4 && !export.nil? && !realm.nil? &&
                        export.fetch("working-directory") == "kandelo-authority" &&
                        export.fetch("env") == {"WORK_ID" => "${{ inputs.work-id }}"} &&
                        export.fetch("run").include?("export-build-realm") &&
@@ -1137,7 +1187,7 @@ module AbiStagingWorkflowCheck
                          'package_cache="$GITHUB_WORKSPACE/kandelo-source/.ci-test-binary-cache"'
                        ) &&
                        realm.fetch("run").include?(
-                         'mkdir -m 0700 "$package_cache" "$package_cache/programs"'
+                         'test -d "$package_cache/programs" && test ! -L "$package_cache/programs"'
                        ) &&
                        realm.fetch("run").include?(
                          [
@@ -1158,10 +1208,10 @@ module AbiStagingWorkflowCheck
                          'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$directory")" = "0:0:555"'
                        ) &&
                        realm.fetch("run").include?(
-                         'mkdir -m 0700 "$GITHUB_WORKSPACE/kandelo-source/binaries"'
+                         'test -d "$GITHUB_WORKSPACE/kandelo-source/binaries"'
                        ) &&
                        realm.fetch("run").include?(
-                         "build-deps program-index-selected"
+                         'playwright_seed="$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/ms-playwright"'
                        ) &&
                        realm.fetch("run").include?(
                          'shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"'
@@ -1206,7 +1256,7 @@ module AbiStagingWorkflowCheck
                        !realm.fetch("run").include?('"$realm_root/package-cache"') &&
                        realm.fetch("run").include?("homebrew-prepare-host-prefix.sh") &&
                        realm.fetch("run").include?(
-                         'printf \'%s\\n\' "$host" >"$RUNNER_TEMP/abi-staging-host-target"'
+                         'host_target="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/host-target")"'
                        ) &&
                        realm.fetch("run").include?(
                          'candidate_xtask="$GITHUB_WORKSPACE/kandelo-source/target/$host_target/release/xtask"'
@@ -1230,7 +1280,7 @@ module AbiStagingWorkflowCheck
                          '"tools/bin/wasm-fork-instrument"'
                        ) &&
                        realm.fetch("run").include?(
-                         "scripts/build-local-root-spill-tool.sh"
+                         'node_bin="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/node-bin")"'
                        ) &&
                        realm.fetch("run").include?(
                          '"tools/bin/wasm-local-root-spill"'
@@ -1241,6 +1291,8 @@ module AbiStagingWorkflowCheck
                        realm.fetch("run").include?(
                          '"$GITHUB_WORKSPACE/kandelo-source/tools/bin"'
                        ) &&
+                       !realm.fetch("run").include?("scripts/build-musl.sh") &&
+                       !realm.fetch("run").include?("npm ci") &&
                        realm.fetch("run").scan("env -u GITHUB_TOKEN").length == 2 &&
                        realm.fetch("run").scan("-u ACTIONS_RUNTIME_TOKEN").length == 2,
                        "candidate producer build realm changed")
@@ -1252,7 +1304,7 @@ module AbiStagingWorkflowCheck
         step["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       require_contract(
-        commands.length == 3 && !export.nil? && !realm.nil? &&
+        commands.length == 4 && !export.nil? && !realm.nil? &&
           export.fetch("working-directory") == "kandelo-authority" &&
           export.fetch("env") == {"WORK_ID" => "${{ inputs.work-id }}"} &&
           export.fetch("run").include?("export-verification-realm") &&
