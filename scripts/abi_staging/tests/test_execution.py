@@ -722,6 +722,10 @@ done <"$DEPENDENCY_POUR_LIST"
                 kwargs["env"]["KANDELO_ABI_STAGING_PROTECTED_NORMAL_BUILDER"],
                 "1",
             )
+            self.assertEqual(
+                kwargs["env"]["HOMEBREW_NO_REQUIRE_TAP_TRUST"],
+                "1",
+            )
             self.assertNotIn("KANDELO_ABI_STAGING_TESTING", kwargs["env"])
             protected_builder = Path(
                 kwargs["env"]["KANDELO_ABI_STAGING_NORMAL_BUILDER"]
