@@ -246,10 +246,9 @@ def _fetched_layer(
     locator: Mapping[str, Any],
     dependency: Mapping[str, Any],
 ) -> bytes:
-    record_digest = canonical_sha256(record)
     if (
         getattr(fetched, "artifact_type", None) != CANDIDATE_RECORD_MEDIA_TYPE
-        or getattr(fetched, "digest", None) != "sha256:" + record_digest
+        or getattr(fetched, "digest", None) != locator.get("digest")
         or getattr(fetched, "immutable_reference", None)
         != locator.get("immutable_reference")
     ):
