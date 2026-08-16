@@ -24,12 +24,11 @@ class Ruby < Formula
   version "4.0.5"
   sha256 "7d6149079a63f8ae1d326c9fa65c6019ba2dc3155eae7b39159817911c88958e"
   license any_of: ["Ruby", "BSD-2-Clause"]
-  revision 2
+  revision 3
 
   depends_on "gpatch" => :build
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
-  depends_on "llvm" => :build
   depends_on "make" => :build
   depends_on "perl" => :build
   depends_on "python@3.13" => :build

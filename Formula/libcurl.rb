@@ -9,7 +9,7 @@ class Libcurl < Formula
   url "https://curl.se/download/curl-8.11.1.tar.xz"
   sha256 "c7ca7db48b0909743eaef34250da02c19bc61d4f1dcedd6603f109409536ab56"
   license "curl"
-  revision 2
+  revision 3
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
@@ -474,6 +474,10 @@ class Libcurl < Formula
       ]
       system kandelo_cc(sdk_root), side_source, "-O2", "-fPIC", "-shared", "-I#{include}",
         *pic_whole_archive, "-o", side_module
+      side_info = Utils.safe_popen_read("wasm-objdump", "-x", side_module)
+      assert_match(/dylink\.0/, side_info)
+      assert_match(/memory.*<- env\.memory/, side_info)
+      refute_match(/<- env\.(?:Curl_|curl_|curlx_)/, side_info)
       kandelo_fork_instrument(side_module)
 
       nonpic_module = testpath/"libcurl-nonpic-negative.so"
@@ -491,11 +495,6 @@ class Libcurl < Formula
         "-ldl", "-pthread", "-o", loader
       kandelo_fork_instrument(loader)
     end
-
-    side_info = Utils.safe_popen_read("wasm-objdump", "-x", side_module)
-    assert_match(/dylink\.0/, side_info)
-    assert_match(/memory.*<- env\.memory/, side_info)
-    refute_match(/<- env\.(?:Curl_|curl_|curlx_)/, side_info)
 
     # Wasm64 side-module paths and lengths cross the JS import boundary as
     # BigInts. The host's current __wasm_dlopen adapter still constructs a

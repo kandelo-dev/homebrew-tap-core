@@ -9,7 +9,7 @@ class Ed < Formula
   mirror "https://ftp.gnu.org/gnu/ed/ed-1.22.5.tar.lz"
   sha256 "56e107ddc2f29dad6690376c15bf9751509e1ee3b8241710e44edbe5c3a158cc"
   license "GPL-2.0-or-later"
-  revision 2
+  revision 3
 
   depends_on "kandelo-dev/tap-core/dash"
   depends_on "lzip" => [:build, :test]
@@ -52,6 +52,8 @@ class Ed < Formula
 
     document = testpath/"document.txt"
     document.write("alpha\nbeta\ngamma\n")
+    env = { "KERNEL_CWD" => "/work" }
+    mount = { "/work" => testpath }
     commands = <<~ED
       ,s/beta/BETA/
       2a
@@ -62,8 +64,9 @@ class Ed < Formula
       q
     ED
     output = kandelo_run_wasm(
-      bin/"ed", ["-", "document.txt"], env: { "KERNEL_CWD" => testpath }, stdin: commands,
-      exec_programs: { "/bin/sh" => formula_opt_bin("kandelo-dev/tap-core/dash")/"dash" }
+      bin/"ed", ["-", "document.txt"], env: env, stdin: commands,
+      exec_programs: { "/bin/sh" => formula_opt_bin("kandelo-dev/tap-core/dash")/"dash" },
+      writable_host_directories: mount
     )
     assert_match(/ed-child/, output)
     assert_equal "alpha\nBETA\ninserted\ngamma\n", document.read
@@ -71,10 +74,11 @@ class Ed < Formula
     restricted = kandelo_run_wasm(
       bin/"ed",
       ["--restricted", "-", "document.txt"],
-      env:             { "KERNEL_CWD" => testpath },
+      env:             env,
       stdin:           "H\n!printf forbidden\nq\n",
       merge_stderr:    true,
       expected_status: 1,
+      writable_host_directories: mount,
     )
     refute_match(/forbidden/, restricted)
     assert_match(/Shell access restricted/, restricted)
