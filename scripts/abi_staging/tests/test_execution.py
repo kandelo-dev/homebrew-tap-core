@@ -94,6 +94,26 @@ def _active_bundle() -> dict[str, object]:
 
 
 class WorkflowExecutionTests(unittest.TestCase):
+    def test_coordination_loader_uses_the_declared_large_item_bound(self) -> None:
+        from scripts.abi_staging import execution
+
+        value = {
+            "mode": "active",
+            "records": [{"index": index} for index in range(50_001)],
+        }
+        body = canonical_bytes(value, maximum_items=200_010)
+        policy = load_tap_staging_policy(
+            TAP_ROOT / "Kandelo/staging/tap-policy.toml"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "coordination.json"
+            path.write_bytes(body)
+            with patch.object(execution, "validate_coordination_bundle"):
+                self.assertEqual(
+                    execution.load_coordination_bundle(path, policy=policy),
+                    value,
+                )
+
     def test_cli_binds_protected_github_run_to_build_execution(self) -> None:
         from scripts.abi_staging import cli
 
