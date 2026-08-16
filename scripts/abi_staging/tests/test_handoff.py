@@ -598,10 +598,20 @@ class BuildHandoffTests(unittest.TestCase):
             prepared,
         )
         foreign_inventory = copy.deepcopy(rich_metadata)
-        foreign_inventory["kandelo-dev/tap-core/mini-tool"]["bottle"]["tags"][
-            "wasm32_kandelo"
-        ]["all_files"].append("share/foreign")
-        rich_mutations.append(foreign_inventory)
+        foreign_tag = foreign_inventory["kandelo-dev/tap-core/mini-tool"]["bottle"][
+            "tags"
+        ]["wasm32_kandelo"]
+        foreign_tag["all_files"].append("share/foreign")
+        foreign_tag["path_exec_files"] = []
+        self.assertEqual(
+            prepare_composition_input(
+                context=context,
+                bottle_body=bottle,
+                metadata_body=json.dumps(foreign_inventory).encode(),
+                guest_layout_body=canonical_bytes(guest_layout),
+            ),
+            prepared,
+        )
         extra_field = copy.deepcopy(rich_metadata)
         extra_field["kandelo-dev/tap-core/mini-tool"]["bottle"]["tags"][
             "wasm32_kandelo"
