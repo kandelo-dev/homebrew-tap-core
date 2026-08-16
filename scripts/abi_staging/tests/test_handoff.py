@@ -17,6 +17,7 @@ import unittest
 from scripts.abi_staging.canonical import canonical_bytes
 from scripts.abi_staging.custody import create_source_custody
 from scripts.abi_staging import handoff as handoff_module
+from scripts.abi_staging.formula_inventory import normalize_formula_source
 from scripts.abi_staging.handoff import (
     HandoffError,
     assemble_handoff,
@@ -183,6 +184,95 @@ def _validate(
 
 
 class BuildHandoffTests(unittest.TestCase):
+    def test_prepares_exact_candidate_dependency_bottle_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tap = root / "tap"
+            tap.mkdir()
+            _git(tap, "init", "--initial-branch=main")
+            (tap / "Formula").mkdir()
+            formula_path = tap / "Formula/libcxx.rb"
+            formula_path.write_text(
+                'class Libcxx < Formula\n'
+                '  desc "fixture"\n'
+                '  url "https://example.test/libcxx.tar.gz"\n'
+                f'  sha256 "{"1" * 64}"\n'
+                "\n"
+                "  bottle do\n"
+                '    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"\n'
+                "    rebuild 2\n"
+                f'    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "{"2" * 64}"\n'
+                "  end\n"
+                "end\n",
+                encoding="utf-8",
+            )
+            _git(tap, "add", "Formula/libcxx.rb")
+            _git(tap, "commit", "-m", "fixture")
+            source_commit = _git(tap, "rev-parse", "HEAD", capture=True)
+            source_normalized = normalize_formula_source(formula_path.read_bytes())
+            candidate_digest = "3" * 64
+            context_path = root / "context.json"
+            context = {
+                "schema": 1,
+                "kind": "kandelo-abi-staging-build-context",
+                "tap_source": {
+                    "repository": "kandelo-dev/homebrew-tap-core",
+                    "commit": source_commit,
+                    "tree": _git(tap, "rev-parse", "HEAD^{tree}", capture=True),
+                },
+                "target_abi": 43,
+                "dependency_layers": [
+                    {
+                        "formula": "libcxx",
+                        "architecture": "wasm32",
+                        "sha256": candidate_digest,
+                        "bytes": 12,
+                        "source_path": str(root / "unused.tar.gz"),
+                    }
+                ],
+            }
+            context_path.write_bytes(canonical_bytes(context))
+
+            changed_context = dict(context)
+            changed_context["tap_source"] = {
+                **context["tap_source"],
+                "tree": "4" * 40,
+            }
+            changed_context_path = root / "changed-context.json"
+            changed_context_path.write_bytes(canonical_bytes(changed_context))
+            with self.assertRaisesRegex(
+                HandoffError, "tap checkout differs from the exact build context"
+            ):
+                handoff_module.prepare_dependency_tap(
+                    context_path=changed_context_path,
+                    tap_root=tap,
+                    output=root / "rejected",
+                )
+
+            prepared = handoff_module.prepare_dependency_tap(
+                context_path=context_path,
+                tap_root=tap,
+                output=root / "prepared",
+            )
+
+            prepared_formula = prepared / "Formula/libcxx.rb"
+            prepared_source = prepared_formula.read_bytes()
+            self.assertEqual(
+                normalize_formula_source(prepared_source),
+                source_normalized,
+            )
+            self.assertIn(
+                b'root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43-candidates"',
+                prepared_source,
+            )
+            self.assertIn(candidate_digest.encode("ascii"), prepared_source)
+            self.assertNotEqual(
+                _git(prepared, "rev-parse", "HEAD", capture=True), source_commit
+            )
+            self.assertEqual(
+                _git(prepared, "status", "--short", capture=True), ""
+            )
+
     def test_git_identity_accepts_an_exact_protected_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "source"
