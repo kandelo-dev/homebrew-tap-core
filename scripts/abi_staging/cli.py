@@ -961,7 +961,6 @@ def _prepare_workflow(args: argparse.Namespace) -> None:
         tap_plan,
         policy=staging_policy,
         verification_tests=verification_tests,
-        retry_exhausted_builds=args.retry_exhausted_builds,
     )
     reconciliation_mode = load_reconciliation_activation(
         tap_root / "Kandelo/staging/reconciliation-activation.toml"
@@ -986,6 +985,7 @@ def _prepare_workflow(args: argparse.Namespace) -> None:
         now=args.now,
         policy=staging_policy,
         verification_tests=verification_tests,
+        retry_exhausted_builds=args.retry_exhausted_builds,
     )
     product_mode = load_product_evidence_activation(
         tap_root / "Kandelo/staging/product-evidence-activation.toml"

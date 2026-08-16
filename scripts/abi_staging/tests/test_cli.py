@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import ast
 import copy
 from dataclasses import asdict
+import inspect
 import json
 from pathlib import Path
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -21,6 +24,35 @@ from scripts.abi_staging.tap_metadata import (
     load_promotion_policy,
     validate_formula_admission_projection,
 )
+
+
+class WorkflowRetryPlumbingTests(unittest.TestCase):
+    def test_exhausted_retry_flag_reaches_only_coordination(self) -> None:
+        tree = ast.parse(
+            textwrap.dedent(inspect.getsource(cli_module._prepare_workflow))
+        )
+        calls = {
+            node.func.id: node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id in {
+                "_scan_scheduling_inventory_with_retries",
+                "coordinate_planned_request",
+            }
+        }
+        scan_keywords = {
+            item.arg
+            for item in calls["_scan_scheduling_inventory_with_retries"].keywords
+        }
+        coordinate_keywords = {
+            item.arg: ast.unparse(item.value)
+            for item in calls["coordinate_planned_request"].keywords
+        }
+        self.assertNotIn("retry_exhausted_builds", scan_keywords)
+        self.assertEqual(
+            coordinate_keywords["retry_exhausted_builds"],
+            "args.retry_exhausted_builds",
+        )
 
 
 def _git(root: Path, *arguments: str) -> str:
