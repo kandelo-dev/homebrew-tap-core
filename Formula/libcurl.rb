@@ -9,7 +9,7 @@ class Libcurl < Formula
   url "https://curl.se/download/curl-8.11.1.tar.xz"
   sha256 "c7ca7db48b0909743eaef34250da02c19bc61d4f1dcedd6603f109409536ab56"
   license "curl"
-  revision 3
+  revision 4
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
@@ -428,6 +428,12 @@ class Libcurl < Formula
     loader = testpath/"libcurl-pic-loader.wasm"
     side_source.write <<~C
       #include <curl/curl.h>
+      #include "abi_constants.h"
+
+      __attribute__((export_name("__abi_version")))
+      unsigned __abi_version(void) {
+        return WASM_POSIX_ABI_VERSION;
+      }
 
       __attribute__((visibility("default")))
       const char *kandelo_libcurl_pic_version(void) {
@@ -472,7 +478,8 @@ class Libcurl < Formula
       normal_whole_archive = [
         "-Wl,--whole-archive", lib/"libcurl.a", "-Wl,--no-whole-archive"
       ]
-      system kandelo_cc(sdk_root), side_source, "-O2", "-fPIC", "-shared", "-I#{include}",
+      system kandelo_cc(sdk_root), side_source, "-O2", "-fPIC", "-shared",
+        "-I#{sdk_root}/libc/glue", "-I#{include}",
         *pic_whole_archive, "-o", side_module
       side_info = Utils.safe_popen_read("wasm-objdump", "-x", side_module)
       assert_match(/dylink\.0/, side_info)

@@ -57,6 +57,7 @@ class Abi43DynamicLoaderFormulaeTest(unittest.TestCase):
     def test_dynamic_loader_side_modules_export_the_exact_abi_identity(self) -> None:
         for name, linked_output in (
             ("bzip2", '"-o", plugin'),
+            ("libcurl", '"-o", side_module'),
             ("libcxx", '"-o", side_module'),
             ("xz", '"-o", plugin'),
             ("zlib", '"-o", plugin_so'),
@@ -67,7 +68,10 @@ class Abi43DynamicLoaderFormulaeTest(unittest.TestCase):
                 export = formula.index('export_name("__abi_version")', declaration)
                 value = formula.index("return WASM_POSIX_ABI_VERSION;", export)
                 link = formula.index(linked_output, value)
-                glue_root = "kandelo_require_root!" if name == "xz" else "root"
+                glue_root = {
+                    "libcurl": "sdk_root",
+                    "xz": "kandelo_require_root!",
+                }.get(name, "root")
                 glue_include = formula.index(
                     f'"-I#{{{glue_root}}}/libc/glue"', value, link
                 )
