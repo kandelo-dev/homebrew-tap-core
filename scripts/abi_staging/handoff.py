@@ -1718,7 +1718,7 @@ def materialize_dependency_layers(*, context_path: Path, output: Path) -> None:
         body = _read_regular(source, "dependency layer", 2**32)
         if len(body) != size or hashlib.sha256(body).hexdigest() != digest:
             raise HandoffError("dependency layer changed after build planning")
-        destination = output / f"sha256-{digest}.tar.gz"
+        destination = output / f"{digest}.tar.gz"
         destination.write_bytes(body)
 
 
