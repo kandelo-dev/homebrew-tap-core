@@ -899,9 +899,11 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes realm_source,
                     '/usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"'
     assert_includes realm_source,
-                    '/usr/bin/sudo -n /usr/bin/chmod 0700 "$shared_temp/cache"'
+                    '/usr/bin/sudo -n /usr/bin/chmod 0770 "$shared_temp/cache"'
     assert_includes realm_source,
-                    'test "$(/usr/bin/stat -c \'%U:%G:%a\' "$shared_temp/cache")" = "$build_user:$build_user:700"'
+                    'test "$(/usr/bin/stat -c \'%U:%G:%a\' "$shared_temp/cache")" = "$build_user:$build_user:770"'
+    assert_includes realm_source,
+                    '/usr/bin/sudo -n /usr/sbin/usermod --append --groups "$build_user" "$invoker_user"'
     assert_includes realm_source,
                     'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/tmp")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):755"'
     refute_includes realm_source,
@@ -946,6 +948,9 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     end
     assert_includes execute_source, '"PYTHONDONTWRITEBYTECODE=1"'
     assert_includes execute_source, '"PYTHONSAFEPATH=1"'
+    assert_includes execute_source, "umask 0007"
+    assert_includes execute_source,
+                    '/usr/bin/sg "$KANDELO_HOMEBREW_BUILD_USER" -c "$candidate_entrypoint"'
     assert_includes execute_source,
                     "python3 -P -m scripts.abi_staging.cli execute-build-work"
     assert_reusable_rejected(:candidate, "candidate Homebrew ref drift") do |workflow|
@@ -970,6 +975,24 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       step["run"] = step.fetch("run").sub(
         '/usr/bin/sudo -n /usr/bin/chown "$build_user:$build_user" "$shared_temp/cache"',
         ':'
+      )
+    end
+    assert_reusable_rejected(:candidate, "candidate Homebrew cache drops its shared build group") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub(
+        '/usr/bin/sudo -n /usr/sbin/usermod --append --groups "$build_user" "$invoker_user"',
+        ':'
+      )
+    end
+    assert_reusable_rejected(:candidate, "candidate handoff omits the shared build group") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Build one exact uncredentialed candidate handoff"
+      end
+      step["run"] = step.fetch("run").sub(
+        '/usr/bin/sg "$KANDELO_HOMEBREW_BUILD_USER" -c "$candidate_entrypoint"',
+        '"$candidate_entrypoint"'
       )
     end
     assert_reusable_rejected(:candidate, "candidate Homebrew temp loses invoker ownership") do |workflow|
