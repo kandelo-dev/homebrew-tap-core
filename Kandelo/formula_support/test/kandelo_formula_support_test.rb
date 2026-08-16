@@ -4361,6 +4361,15 @@ class KandeloFormulaSupportTest < Minitest::Test
     assert_includes harness.command, "1000"
   end
 
+  def test_framebuffer_runner_stages_its_readiness_module
+    runner = (Pathname(__dir__).parent/"run-framebuffer-wasm.ts").read
+
+    assert_match(
+      /copyFileSync\(\s*join\(supportDir, "framebuffer-evidence-readiness\.ts"\),\s*join\(pageDir, "framebuffer-evidence-readiness\.ts"\),\s*\)/m,
+      runner,
+    )
+  end
+
   def test_framebuffer_execution_expands_relative_formula_paths
     Dir.mktmpdir("kandelo-formula-support") do |dir|
       command = Pathname(dir)/"fbdoom"
