@@ -14,7 +14,7 @@ import tempfile
 from unittest import mock
 import unittest
 
-from scripts.abi_staging.canonical import canonical_bytes
+from scripts.abi_staging.canonical import canonical_bytes, canonical_sha256
 from scripts.abi_staging.custody import create_source_custody
 from scripts.abi_staging import handoff as handoff_module
 from scripts.abi_staging.formula_inventory import normalize_formula_source
@@ -184,6 +184,107 @@ def _validate(
 
 
 class BuildHandoffTests(unittest.TestCase):
+    def test_reconstructs_transitive_dependency_layers_from_exact_contracts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            contracts = root / "contracts"
+            layers = root / "layers"
+            contracts.mkdir()
+            layers.mkdir()
+            dash_body = b"dash candidate bottle\n"
+            ed_body = b"ed candidate bottle\n"
+            dash_digest = hashlib.sha256(dash_body).hexdigest()
+            ed_digest = hashlib.sha256(ed_body).hexdigest()
+            (layers / f"sha256-{dash_digest}.tar.gz").write_bytes(dash_body)
+            (layers / f"sha256-{ed_digest}.tar.gz").write_bytes(ed_body)
+            dash_contract = {
+                "direct_dependencies": [],
+                "formula": {"name": "dash"},
+                "target": {"architecture": "wasm32"},
+            }
+            ed_contract = {
+                "direct_dependencies": [
+                    {
+                        "architecture": "wasm32",
+                        "bottle_layer_bytes": len(dash_body),
+                        "bottle_layer_sha256": dash_digest,
+                        "formula": "dash",
+                        "materialization_policy_sha256": "d" * 64,
+                    }
+                ],
+                "formula": {"name": "ed"},
+                "target": {"architecture": "wasm32"},
+            }
+            dash_contract_sha256 = canonical_sha256(dash_contract)
+            ed_contract_sha256 = canonical_sha256(ed_contract)
+            (contracts / f"sha256-{dash_contract_sha256}.json").write_bytes(
+                canonical_bytes(dash_contract)
+            )
+            (contracts / f"sha256-{ed_contract_sha256}.json").write_bytes(
+                canonical_bytes(ed_contract)
+            )
+            formulae = [
+                {
+                    "contract_sha256": ed_contract_sha256,
+                    "direct_dependencies": [
+                        {
+                            "architecture": "wasm32",
+                            "formula": "dash",
+                            "materialization_policy_sha256": "d" * 64,
+                        }
+                    ],
+                    "identity": {"architecture": "wasm32", "name": "ed"},
+                },
+                {
+                    "contract_sha256": dash_contract_sha256,
+                    "direct_dependencies": [],
+                    "identity": {"architecture": "wasm32", "name": "dash"},
+                },
+            ]
+            root_plan = {
+                "direct_dependencies": [
+                    {
+                        "architecture": "wasm32",
+                        "formula": "ed",
+                        "materialization_policy_sha256": "e" * 64,
+                    }
+                ],
+                "identity": {"architecture": "wasm32", "name": "diffutils"},
+            }
+            root_contract = {
+                "direct_dependencies": [
+                    {
+                        "architecture": "wasm32",
+                        "bottle_layer_bytes": len(ed_body),
+                        "bottle_layer_sha256": ed_digest,
+                        "formula": "ed",
+                        "materialization_policy_sha256": "e" * 64,
+                    }
+                ],
+                "formula": {"name": "diffutils"},
+                "target": {"architecture": "wasm32"},
+            }
+
+            with mock.patch.object(
+                handoff_module,
+                "load_bottle_contract",
+                side_effect=lambda body: json.loads(body),
+            ):
+                observed = handoff_module._dependency_layer_closure(
+                    formulae=formulae,
+                    root_formula_plan=root_plan,
+                    root_contract=root_contract,
+                    dependency_root=root,
+                )
+
+        self.assertEqual(
+            [entry["formula"] for entry in observed], ["dash", "ed"]
+        )
+        self.assertEqual(
+            [entry["sha256"] for entry in observed],
+            [dash_digest, ed_digest],
+        )
+
     def test_materializes_dependency_layers_for_the_normal_builder_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

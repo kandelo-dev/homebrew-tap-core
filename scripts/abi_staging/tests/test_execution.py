@@ -94,6 +94,39 @@ def _active_bundle() -> dict[str, object]:
 
 
 class WorkflowExecutionTests(unittest.TestCase):
+    def test_staging_builder_overlay_uses_exact_local_dependency_archives(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        source = """#!/usr/bin/env bash
+set -euo pipefail
+KANDELO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+while IFS= read -r dependency; do
+  run_brew_logged run_brew_for_kandelo_bottles "$BREW_BIN" install \\
+    --force-bottle \\
+    --as-dependency \\
+    --ignore-dependencies \\
+    --formula "$dependency"
+done <"$DEPENDENCY_POUR_LIST"
+"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = root / "candidate-builder.sh"
+            destination = root / "protected-builder.sh"
+            candidate.write_text(source, encoding="utf-8")
+
+            execution._prepare_staging_normal_builder(
+                source=candidate,
+                destination=destination,
+            )
+
+            prepared = destination.read_text(encoding="utf-8")
+            self.assertIn(
+                'KANDELO_ROOT="${KANDELO_ABI_STAGING_CANDIDATE_ROOT:?}"',
+                prepared,
+            )
+            self.assertIn('"$dependency_archive"', prepared)
+            self.assertNotIn(execution._FORMULA_DEPENDENCY_INSTALL, prepared)
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o500)
+
     def test_coordination_loader_uses_the_declared_large_item_bound(self) -> None:
         from scripts.abi_staging import execution
 
@@ -363,6 +396,85 @@ class WorkflowExecutionTests(unittest.TestCase):
             )
             self.assertEqual(list((root / "inputs/layers").iterdir()), [])
 
+    def test_build_dependency_closure_includes_transitive_candidate_layers(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        dash_layer = {
+            "bytes": 17,
+            "immutable_reference": (
+                "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/"
+                "dash@sha256:" + "d" * 64
+            ),
+            "sha256": "d" * 64,
+        }
+        ed_layer = {
+            "bytes": 19,
+            "immutable_reference": (
+                "ghcr.io/kandelo-dev/homebrew-tap-core-abi-8-candidates/"
+                "ed@sha256:" + "e" * 64
+            ),
+            "sha256": "e" * 64,
+        }
+        dash = {
+            "candidate": {
+                "bottle_layer": dash_layer,
+                "direct_dependency_layers": [],
+                "formula": {"architecture": "wasm32", "formula": "dash"},
+            }
+        }
+        ed = {
+            "candidate": {
+                "bottle_layer": ed_layer,
+                "direct_dependency_layers": [
+                    {"artifact": dash_layer, "id": "dash-wasm32"}
+                ],
+                "formula": {"architecture": "wasm32", "formula": "ed"},
+            }
+        }
+        contract = {
+            "direct_dependencies": [
+                {
+                    "architecture": "wasm32",
+                    "bottle_layer_bytes": ed_layer["bytes"],
+                    "bottle_layer_sha256": ed_layer["sha256"],
+                    "formula": "ed",
+                    "materialization_policy_sha256": "f" * 64,
+                }
+            ]
+        }
+        bundle = {
+            "candidates": {
+                "locators": {
+                    "1" * 64: {"digest": "sha256:" + "1" * 64},
+                    "2" * 64: {"digest": "sha256:" + "2" * 64},
+                },
+                "records": {"1" * 64: ed, "2" * 64: dash},
+            }
+        }
+
+        with patch.object(
+            execution,
+            "_matching_dependency",
+            return_value=(ed, bundle["candidates"]["locators"]["1" * 64]),
+        ), patch.object(
+            execution,
+            "_dependency_candidate",
+            return_value=(
+                "2" * 64,
+                dash,
+                bundle["candidates"]["locators"]["2" * 64],
+            ),
+        ):
+            closure = execution._build_dependency_closure(bundle, contract)
+
+        self.assertEqual(
+            [entry["formula"] for entry, _record, _locator in closure],
+            ["dash", "ed"],
+        )
+        self.assertEqual(
+            [entry["bottle_layer_sha256"] for entry, _record, _locator in closure],
+            [dash_layer["sha256"], ed_layer["sha256"]],
+        )
+
     def test_reused_dependency_resolves_to_its_exact_original_candidate(self) -> None:
         execution = importlib.import_module("scripts.abi_staging.execution")
         bottle = b"reused dependency bottle\n"
@@ -513,6 +625,19 @@ class WorkflowExecutionTests(unittest.TestCase):
             self.assertNotIn("NIX_CONFIG", kwargs["env"])
             self.assertEqual(kwargs["env"]["CC"], "/declared/cc")
             self.assertEqual(kwargs["env"]["GITHUB_ACTIONS"], "true")
+            self.assertEqual(
+                kwargs["env"]["KANDELO_ABI_STAGING_CANDIDATE_ROOT"],
+                str(KANDELO_ROOT.resolve()),
+            )
+            self.assertEqual(kwargs["env"]["KANDELO_ABI_STAGING_TESTING"], "1")
+            protected_builder = Path(
+                kwargs["env"]["KANDELO_ABI_STAGING_NORMAL_BUILDER"]
+            )
+            self.assertTrue(protected_builder.is_file())
+            self.assertIn(
+                '"$dependency_archive"',
+                protected_builder.read_text(encoding="utf-8"),
+            )
             self.assertEqual(
                 kwargs["env"]["HOMEBREW_BREW_FILE"], "/reviewed/brew/bin/brew"
             )
