@@ -926,8 +926,28 @@ class VerificationExecutionTests(unittest.TestCase):
 
         def run_process(command, **kwargs):
             calls.append((command, kwargs))
+            protected_adapter = Path(command[0])
+            protected_normal_verifier = (
+                protected_adapter.parent / "protected-normal-verifier.sh"
+            )
             self.assertEqual(
-                command[0], str(KANDELO_ROOT / "scripts/abi-staging-verify-bottle.sh")
+                protected_adapter.name, "protected-verification-adapter.sh"
+            )
+            self.assertTrue(protected_adapter.is_file())
+            self.assertTrue(protected_normal_verifier.is_file())
+            self.assertIn(
+                'REPO_ROOT="${KANDELO_ABI_STAGING_CANDIDATE_ROOT:?}"',
+                protected_adapter.read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                'NORMAL_VERIFIER="${KANDELO_ABI_STAGING_PROTECTED_NORMAL_VERIFIER:?}"',
+                protected_adapter.read_text(encoding="utf-8"),
+            )
+            normal_verifier = protected_normal_verifier.read_text(encoding="utf-8")
+            self.assertIn('"$dependency_archive"', normal_verifier)
+            self.assertNotIn(
+                execution._VERIFIER_FORMULA_DEPENDENCY_INSTALL,
+                normal_verifier,
             )
             self.assertEqual(kwargs["cwd"], KANDELO_ROOT)
             self.assertNotIn("GITHUB_TOKEN", kwargs["env"])
@@ -937,6 +957,14 @@ class VerificationExecutionTests(unittest.TestCase):
             self.assertNotIn("RENAMED_WRITE_TOKEN", kwargs["env"])
             self.assertNotIn("NIX_CONFIG", kwargs["env"])
             self.assertEqual(kwargs["env"]["CC"], "/declared/cc")
+            self.assertEqual(
+                kwargs["env"]["KANDELO_ABI_STAGING_CANDIDATE_ROOT"],
+                str(KANDELO_ROOT),
+            )
+            self.assertEqual(
+                kwargs["env"]["KANDELO_ABI_STAGING_PROTECTED_NORMAL_VERIFIER"],
+                str(protected_normal_verifier),
+            )
             self.assertNotIn("GITHUB_ACTIONS", kwargs["env"])
             self.assertNotIn("KANDELO_HOMEBREW_BUILD_USER", kwargs["env"])
             self.assertNotIn("KANDELO_HOMEBREW_RECIPE_USER", kwargs["env"])

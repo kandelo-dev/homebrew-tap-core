@@ -35,11 +35,22 @@ TAP_NAME = re.compile(r"^[a-z0-9_.-]+/[a-z0-9_.-]+$")
 TAP_REPOSITORY = re.compile(r"^[a-z0-9_.-]+/homebrew-[a-z0-9_.-]+$")
 
 _CANDIDATE_ROOT_ASSIGNMENT = 'KANDELO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"'
+_CANDIDATE_VERIFIER_ROOT_ASSIGNMENT = (
+    'KANDELO_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"'
+)
+_VERIFICATION_ADAPTER_ROOT_ASSIGNMENT = (
+    'REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"'
+)
+_VERIFICATION_ADAPTER_NORMAL_ASSIGNMENT = (
+    'NORMAL_VERIFIER="$REPO_ROOT/scripts/homebrew-verify-poured-bottle.sh"'
+)
 _FORMULA_DEPENDENCY_INSTALL = """  run_brew_logged run_brew_for_kandelo_bottles "$BREW_BIN" install \\
     --force-bottle \\
     --as-dependency \\
     --ignore-dependencies \\
     --formula "$dependency"""
+_VERIFIER_FORMULA_DEPENDENCY_INSTALL = """  run_brew_logged run_brew_for_kandelo_bottles "$BREW_BIN" install \\
+    --force-bottle --as-dependency --ignore-dependencies --formula "$dependency"""
 _LOCAL_ARCHIVE_DEPENDENCY_INSTALL = """  dependency_sha="$(jq -er --arg dependency "$dependency" \\
     '.[$dependency].sha256' "$LOCAL_DEPENDENCIES_JSON")"
   dependency_archive="$(HOMEBREW_KANDELO_BOTTLE_TAG="$BOTTLE_TAG" \\
@@ -72,7 +83,13 @@ class ExecutionError(ValueError):
     """Raised when protected work cannot be tied to exact coordinated inputs."""
 
 
-def _prepare_staging_normal_builder(*, source: Path, destination: Path) -> Path:
+def _prepare_staging_normal_builder(
+    *,
+    source: Path,
+    destination: Path,
+    root_assignment: str = _CANDIDATE_ROOT_ASSIGNMENT,
+    dependency_install: str = _FORMULA_DEPENDENCY_INSTALL,
+) -> Path:
     """Derive the staging-only builder without changing Formula contracts."""
 
     try:
@@ -86,15 +103,15 @@ def _prepare_staging_normal_builder(*, source: Path, destination: Path) -> Path:
         raise ExecutionError(f"cannot read candidate normal builder: {error}") from error
     if "\r" in body or not body.endswith("\n"):
         raise ExecutionError("candidate normal builder is not canonical LF text")
-    if body.count(_CANDIDATE_ROOT_ASSIGNMENT) != 1:
+    if body.count(root_assignment) != 1:
         raise ExecutionError("candidate normal builder root boundary changed")
-    if body.count(_FORMULA_DEPENDENCY_INSTALL) != 1:
+    if body.count(dependency_install) != 1:
         raise ExecutionError("candidate dependency install boundary changed")
     prepared = body.replace(
-        _CANDIDATE_ROOT_ASSIGNMENT,
+        root_assignment,
         'KANDELO_ROOT="${KANDELO_ABI_STAGING_CANDIDATE_ROOT:?}"',
     ).replace(
-        _FORMULA_DEPENDENCY_INSTALL,
+        dependency_install,
         _LOCAL_ARCHIVE_DEPENDENCY_INSTALL,
     )
     if destination.exists() or destination.is_symlink():
@@ -104,6 +121,49 @@ def _prepare_staging_normal_builder(*, source: Path, destination: Path) -> Path:
         destination.chmod(0o500)
     except OSError as error:
         raise ExecutionError(f"cannot write protected staging builder: {error}") from error
+    return destination.resolve(strict=True)
+
+
+def _prepare_staging_verification_adapter(
+    *, source: Path, destination: Path
+) -> Path:
+    """Bind the exact verifier to the protected staging-only dependency path."""
+
+    try:
+        metadata = source.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise ExecutionError("candidate verification adapter must be a regular file")
+        if metadata.st_size < 1 or metadata.st_size > 2 * 1024 * 1024:
+            raise ExecutionError("candidate verification adapter is outside its byte bound")
+        body = source.read_text(encoding="utf-8", errors="strict")
+    except (OSError, UnicodeError) as error:
+        raise ExecutionError(
+            f"cannot read candidate verification adapter: {error}"
+        ) from error
+    if "\r" in body or not body.endswith("\n"):
+        raise ExecutionError("candidate verification adapter is not canonical LF text")
+    if body.count(_VERIFICATION_ADAPTER_ROOT_ASSIGNMENT) != 1:
+        raise ExecutionError("candidate verification adapter root boundary changed")
+    if body.count(_VERIFICATION_ADAPTER_NORMAL_ASSIGNMENT) != 1:
+        raise ExecutionError("candidate normal verifier selection boundary changed")
+    prepared = body.replace(
+        _VERIFICATION_ADAPTER_ROOT_ASSIGNMENT,
+        'REPO_ROOT="${KANDELO_ABI_STAGING_CANDIDATE_ROOT:?}"',
+    ).replace(
+        _VERIFICATION_ADAPTER_NORMAL_ASSIGNMENT,
+        'NORMAL_VERIFIER="${KANDELO_ABI_STAGING_PROTECTED_NORMAL_VERIFIER:?}"',
+    )
+    if destination.exists() or destination.is_symlink():
+        raise ExecutionError(
+            "protected staging verification adapter destination already exists"
+        )
+    try:
+        destination.write_text(prepared, encoding="utf-8", errors="strict")
+        destination.chmod(0o500)
+    except OSError as error:
+        raise ExecutionError(
+            f"cannot write protected staging verification adapter: {error}"
+        ) from error
     return destination.resolve(strict=True)
 
 
@@ -1914,8 +1974,8 @@ def execute_verification_work(
         raise ExecutionError("tap checkout differs from protected coordinated source")
     if dict(snapshot_source(kandelo, policy.kandelo_repository)) != bundle["request"]["build_source"]:
         raise ExecutionError("Kandelo checkout differs from exact requested source")
-    adapter = kandelo / "scripts/abi-staging-verify-bottle.sh"
-    if adapter.is_symlink() or not adapter.is_file():
+    candidate_adapter = kandelo / "scripts/abi-staging-verify-bottle.sh"
+    if candidate_adapter.is_symlink() or not candidate_adapter.is_file():
         raise ExecutionError("exact-head Kandelo verification adapter is unavailable")
     if fetch_candidate is None:
         transport = UrllibOciTransportV1(username="", token="")
@@ -1934,6 +1994,16 @@ def execute_verification_work(
 
     with tempfile.TemporaryDirectory(prefix="kandelo-abi-staging-verification-") as temporary:
         temporary_root = Path(temporary)
+        protected_normal_verifier = _prepare_staging_normal_builder(
+            source=kandelo / "scripts/homebrew-verify-poured-bottle.sh",
+            destination=temporary_root / "protected-normal-verifier.sh",
+            root_assignment=_CANDIDATE_VERIFIER_ROOT_ASSIGNMENT,
+            dependency_install=_VERIFIER_FORMULA_DEPENDENCY_INSTALL,
+        )
+        adapter = _prepare_staging_verification_adapter(
+            source=candidate_adapter,
+            destination=temporary_root / "protected-verification-adapter.sh",
+        )
         prepared = prepare_verification_inputs(
             bundle,
             work,
@@ -1972,6 +2042,10 @@ def execute_verification_work(
         # preparation just materialized.
         child_environment["KANDELO_HOMEBREW_LOCAL_DEPENDENCY_CACHE"] = str(
             prepared["dependency_cache"].resolve(strict=True)
+        )
+        child_environment["KANDELO_ABI_STAGING_CANDIDATE_ROOT"] = str(kandelo)
+        child_environment["KANDELO_ABI_STAGING_PROTECTED_NORMAL_VERIFIER"] = str(
+            protected_normal_verifier
         )
         command = [
             str(adapter),
