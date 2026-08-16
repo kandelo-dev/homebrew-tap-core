@@ -919,6 +919,10 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes realm_source,
                     'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"'
     assert_includes realm_source, 'if [ "$protected_recipe_formula" = true ]; then'
+    assert_includes realm_source,
+                    'mkdir -m 0770 "$shared_temp/cache/downloads"'
+    assert_includes realm_source,
+                    'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache/downloads")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):770"'
     assert_includes realm_source, 'echo "KANDELO_HOMEBREW_BUILD_USER=$build_user"'
     assert_includes realm_source, 'echo "KANDELO_HOMEBREW_RECIPE_USER=$recipe_user"'
     assert_includes realm_source, 'echo "KANDELO_HOMEBREW_SHARED_TEMP=$shared_temp"'
@@ -1002,6 +1006,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       step["run"] = step.fetch("run").sub(
         'mkdir -m 0700 "$shared_temp/cache" "$shared_temp/tmp"',
         'mkdir -m 0770 "$shared_temp/cache" "$shared_temp/tmp"'
+      )
+    end
+    assert_reusable_rejected(:candidate, "candidate protected recipe cache blocks manifest writes") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub(
+        'mkdir -m 0770 "$shared_temp/cache/downloads"',
+        ':'
       )
     end
     assert_reusable_rejected(:candidate, "candidate handoff re-enters through sudo") do |workflow|

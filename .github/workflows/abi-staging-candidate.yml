@@ -181,9 +181,15 @@ jobs:
             /usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp"
             /usr/bin/sudo -n /usr/bin/chmod 1777 "$shared_temp"
             mkdir -m 0770 "$shared_temp/cache"
+            # The exact adapter preloads candidate dependency bottle archives
+            # as the workflow user after switching to umask 077. Homebrew then
+            # downloads the adjacent manifest as the isolated build user, so
+            # create the one shared cache directory before that handoff.
+            mkdir -m 0770 "$shared_temp/cache/downloads"
             mkdir "$shared_temp/tmp"
             test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/cache")" = \
               "$(/usr/bin/id -u):$(/usr/bin/id -g):770"
+            test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/cache/downloads")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):770"
           else
             chmod 0700 "$shared_temp"
             mkdir -m 0700 "$shared_temp/cache" "$shared_temp/tmp"
