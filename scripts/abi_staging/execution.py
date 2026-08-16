@@ -24,6 +24,7 @@ from .records import CANDIDATE_RECORD_MEDIA_TYPE, validate_candidate_record
 
 
 MAX_COORDINATION_BYTES = 64 * 1024 * 1024
+MAX_VFS_COMPOSITION_JSON_ITEMS = 4_000_000
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -1056,7 +1057,11 @@ def _fetched_candidate_material(
             raise ExecutionError("fetched candidate layer differs from its record")
     try:
         parse_canonical_bytes(layers[1].body, maximum_bytes=4 * 1024 * 1024)
-        parse_canonical_bytes(layers[2].body, maximum_bytes=16 * 1024 * 1024)
+        parse_canonical_bytes(
+            layers[2].body,
+            maximum_bytes=16 * 1024 * 1024,
+            maximum_items=MAX_VFS_COMPOSITION_JSON_ITEMS,
+        )
     except CanonicalJsonError as error:
         raise ExecutionError(
             f"candidate metadata or VFS composition descriptor is not canonical: {error}"

@@ -434,6 +434,76 @@ def _fixture() -> tuple[dict[str, object], dict[str, FetchedOciRecordV1]]:
 
 
 class VerificationExecutionTests(unittest.TestCase):
+    def test_verification_accepts_bounded_large_vfs_composition_descriptor(self) -> None:
+        from scripts.abi_staging import execution
+
+        bundle, fetched = _fixture()
+        record_sha256 = "1" * 64
+        record = copy.deepcopy(bundle["candidates"]["records"][record_sha256])
+        locator = bundle["candidates"]["locators"][record_sha256]
+        original = fetched[locator["immutable_reference"]]
+        descriptor = json.loads(_composition("mini-tool", original.layers[0].body))
+        descriptor["tree"]["inventory"] = {
+            "entries": [
+                {
+                    "materialization": "archive",
+                    "mode": 0o755,
+                    "ownership": "layer",
+                    "path": f"opt/kandelo/homebrew/Cellar/mini-tool/1.0/share/{index}",
+                    "size": 0,
+                    "source_path": f"mini-tool/1.0/share/{index}",
+                    "type": "directory",
+                }
+                for index in range(7_000)
+            ]
+        }
+        descriptor_body = canonical_bytes(descriptor, maximum_items=200_000)
+        descriptor_identity = _artifact(
+            locator["repository"].removeprefix("ghcr.io/"), descriptor_body
+        )
+        component = next(
+            item
+            for item in record["candidate"]["normalized_components"]
+            if item["id"] == "vfs-composition-descriptor"
+        )
+        component["artifact"] = descriptor_identity
+        descriptor_layer = FetchedOciBlobV1(
+            role="vfs-composition-descriptor",
+            media_type=(
+                "application/vnd.kandelo.homebrew."
+                "vfs-composition-descriptor.v1+json"
+            ),
+            digest="sha256:" + descriptor_identity["sha256"],
+            size=descriptor_identity["bytes"],
+            title="vfs-composition-descriptor.json",
+            body=descriptor_body,
+        )
+        candidate = FetchedOciRecordV1(
+            repository=original.repository,
+            digest=original.digest,
+            immutable_reference=original.immutable_reference,
+            artifact_type=original.artifact_type,
+            manifest=original.manifest,
+            config=FetchedOciBlobV1(
+                role=original.config.role,
+                media_type=original.config.media_type,
+                digest="sha256:" + canonical_sha256(record),
+                size=len(canonical_bytes(record)),
+                title=original.config.title,
+                body=canonical_bytes(record),
+            ),
+            layers=(*original.layers[:2], descriptor_layer),
+        )
+
+        material = execution._fetched_candidate_material(
+            candidate,
+            record_sha256=record_sha256,
+            record=record,
+            locator=locator,
+        )
+
+        self.assertEqual(material[2], descriptor_body)
+
     def test_candidate_tap_composition_uses_the_exact_generic_namespace(self) -> None:
         from scripts.abi_staging import execution
 
