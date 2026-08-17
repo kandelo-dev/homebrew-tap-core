@@ -27,6 +27,21 @@ from scripts.abi_staging.tap_metadata import (
 
 
 class WorkflowRetryPlumbingTests(unittest.TestCase):
+    def test_required_formulae_are_ready_only_after_every_required_subject(self) -> None:
+        self.assertTrue(hasattr(cli_module, "_required_formulae_ready"))
+        readiness = cli_module._required_formulae_ready
+        bundle = {
+            "tap_plan": {
+                "required_subjects": ["required-a", "required-b"],
+                "background_subjects": ["background"],
+            },
+            "workflow": {"complete": ["required-a", "background"]},
+        }
+
+        self.assertFalse(readiness(bundle))
+        bundle["workflow"]["complete"].append("required-b")
+        self.assertTrue(readiness(bundle))
+
     def test_exhausted_retry_flag_reaches_only_coordination(self) -> None:
         tree = ast.parse(
             textwrap.dedent(inspect.getsource(cli_module._prepare_workflow))

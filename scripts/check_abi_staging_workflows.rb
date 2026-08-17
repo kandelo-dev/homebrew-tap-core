@@ -221,6 +221,11 @@ module AbiStagingWorkflowCheck
                      }, "discovery must remain contents and packages read only")
     require_contract(discover.fetch("timeout-minutes").between?(1, 30),
                      "discovery timeout is not bounded")
+    require_contract(
+      discover.dig("outputs", "required-formulae-ready") ==
+        "${{ steps.coordinate.outputs.required_formulae_ready || steps.discover.outputs.required_formulae_ready }}",
+      "discovery required Formula readiness output changed"
+    )
     discovery_checkouts = action_steps(discover, CHECKOUT)
     require_contract(discovery_checkouts.length == 3,
                      "discovery must check out tap, candidate, and policy sources")
@@ -388,6 +393,10 @@ module AbiStagingWorkflowCheck
       " && steps.realm-cache-key.outputs.legacy_cache_key != ''"
     realm_cache_miss = realm_primary_cache_miss +
       " && steps.restore-legacy-realm-cache.outputs.cache-hit != 'true'"
+    realm_consumer_guard =
+      "needs.discover-plan.outputs.mode == 'active' && " \
+      "(fromJSON(needs.discover-plan.outputs.build-matrix).include[0] != null || " \
+      "fromJSON(needs.discover-plan.outputs.verify-matrix).include[0] != null)"
     realm_cache_contract =
       realm_restores.length == 2 && !realm_key.nil? &&
       realm_key.fetch("env", {}) == {
@@ -429,7 +438,7 @@ module AbiStagingWorkflowCheck
       realm_steps.index(realm_save) < realm_steps.index(realm_upload)
     require_contract(
       realm.fetch("needs") == "discover-plan" &&
-        realm.fetch("if") == "needs.discover-plan.outputs.mode == 'active'" &&
+        realm.fetch("if") == realm_consumer_guard &&
         realm.fetch("runs-on") == "ubuntu-latest" &&
         realm.fetch("timeout-minutes").between?(1, 180) &&
         realm.fetch("permissions") == {"contents" => "read"} &&
@@ -648,10 +657,15 @@ module AbiStagingWorkflowCheck
                    "publish-product-evidence")
 
     prepare = jobs.fetch("prepare-runtime")
+    runtime_consumer_guard =
+      "needs.discover-plan.outputs.selected == 'true' && " \
+      "needs.discover-plan.outputs.required-formulae-ready == 'true' && " \
+      "(fromJSON(needs.discover-plan.outputs.product-matrix).include[0] != null || " \
+      "fromJSON(needs.discover-plan.outputs.node-evidence-matrix).include[0] != null || " \
+      "fromJSON(needs.discover-plan.outputs.browser-evidence-matrix).include[0] != null)"
     require_contract(prepare.fetch("needs") == "discover-plan" &&
-                     prepare.fetch("if") ==
-                       "needs.discover-plan.outputs.selected == 'true'",
-                     "runtime preparation is not exact-request scoped")
+                     prepare.fetch("if") == runtime_consumer_guard,
+                     "runtime preparation is not consumer scoped")
     prepare_job_steps = prepare.fetch("steps")
     prepare_checkouts = action_steps(prepare, CHECKOUT)
     prepare_taps = prepare_checkouts.select do |step|

@@ -343,7 +343,12 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     prepare = @workflow.dig("jobs", "prepare-homebrew-realm")
     refute_nil prepare
     assert_equal "discover-plan", prepare["needs"]
-    assert_equal "needs.discover-plan.outputs.mode == 'active'", prepare["if"]
+    assert_equal(
+      "needs.discover-plan.outputs.mode == 'active' && " \
+        "(fromJSON(needs.discover-plan.outputs.build-matrix).include[0] != null || " \
+        "fromJSON(needs.discover-plan.outputs.verify-matrix).include[0] != null)",
+      prepare["if"]
+    )
     assert_equal({"contents" => "read"}, prepare["permissions"])
     assert_equal({
       "artifact-id" => "${{ steps.upload-realm.outputs.artifact-id }}",
@@ -411,6 +416,41 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       end
       refute_includes realm.fetch("run"), "bash scripts/build-musl.sh"
       refute_includes realm.fetch("run"), "npm ci"
+    end
+  end
+
+  def test_shared_prerequisites_start_only_for_their_consumers
+    runtime = @workflow.dig("jobs", "prepare-runtime")
+    assert_equal(
+      "needs.discover-plan.outputs.selected == 'true' && " \
+        "needs.discover-plan.outputs.required-formulae-ready == 'true' && " \
+        "(fromJSON(needs.discover-plan.outputs.product-matrix).include[0] != null || " \
+        "fromJSON(needs.discover-plan.outputs.node-evidence-matrix).include[0] != null || " \
+        "fromJSON(needs.discover-plan.outputs.browser-evidence-matrix).include[0] != null)",
+      runtime["if"]
+    )
+
+    assert_rejected_matching(
+      "reuse-only wave prepares a Homebrew realm",
+      /shared Homebrew realm producer changed/
+    ) do |workflow|
+      workflow.dig("jobs", "prepare-homebrew-realm")["if"] =
+        "needs.discover-plan.outputs.mode == 'active'"
+    end
+    assert_rejected_matching(
+      "incomplete Formula graph prepares a runtime",
+      /runtime preparation is not consumer scoped/
+    ) do |workflow|
+      workflow.dig("jobs", "prepare-runtime")["if"] =
+        "needs.discover-plan.outputs.selected == 'true'"
+    end
+    assert_rejected_matching(
+      "required Formula readiness is detached from protected coordination",
+      /discovery required Formula readiness output changed/
+    ) do |workflow|
+      workflow.dig("jobs", "discover-plan", "outputs").delete(
+        "required-formulae-ready"
+      )
     end
   end
 
