@@ -416,6 +416,13 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
 
   def test_prepared_homebrew_realm_cache_is_exact_and_miss_only
     prepare = @workflow.dig("jobs", "prepare-homebrew-realm")
+    key_step = prepare.fetch("steps").find do |step|
+      step["id"] == "realm-cache-key"
+    end
+    refute_nil key_step
+    assert_includes key_step.fetch("run"),
+                    "abi-staging-homebrew-realm-cache-key.sh"
+
     restore = prepare.fetch("steps").find do |step|
       step["id"] == "restore-realm-cache"
     end
@@ -426,14 +433,25 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     )
     assert_equal "${{ runner.temp }}/shared-homebrew-realm.tar.zst",
                  restore.dig("with", "path")
-    exact_key = "abi-staging-homebrew-realm-" \
-                "${{ runner.os }}-${{ runner.arch }}-" \
-                "${{ needs.discover-plan.outputs.kandelo-head }}-" \
-                "${{ needs.discover-plan.outputs.tap-commit }}"
+    exact_key = "${{ steps.realm-cache-key.outputs.cache_key }}"
     assert_equal exact_key, restore.dig("with", "key")
     refute restore.fetch("with").key?("restore-keys")
 
-    miss_guard = "steps.restore-realm-cache.outputs.cache-hit != 'true'"
+    legacy_restore = prepare.fetch("steps").find do |step|
+      step["id"] == "restore-legacy-realm-cache"
+    end
+    refute_nil legacy_restore
+    assert_equal(
+      "steps.restore-realm-cache.outputs.cache-hit != 'true' && " \
+      "steps.realm-cache-key.outputs.legacy_cache_key != ''",
+      legacy_restore["if"]
+    )
+    assert_equal "${{ steps.realm-cache-key.outputs.legacy_cache_key }}",
+                 legacy_restore.dig("with", "key")
+    refute legacy_restore.fetch("with").key?("restore-keys")
+
+    miss_guard = "steps.restore-realm-cache.outputs.cache-hit != 'true' && " \
+                 "steps.restore-legacy-realm-cache.outputs.cache-hit != 'true'"
     setup = prepare.fetch("steps").find do |step|
       step["uses"] == "./kandelo-source/.github/actions/setup-nix"
     end
@@ -461,11 +479,11 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
       save["uses"]
     )
-    assert_equal miss_guard, save["if"]
+    assert_equal "steps.restore-realm-cache.outputs.cache-hit != 'true'",
+                 save["if"]
     assert_equal "${{ runner.temp }}/shared-homebrew-realm.tar.zst",
                  save.dig("with", "path")
-    assert_equal "${{ steps.restore-realm-cache.outputs.cache-primary-key }}",
-                 save.dig("with", "key")
+    assert_equal exact_key, save.dig("with", "key")
 
     upload = prepare.fetch("steps").find { |step| step["id"] == "upload-realm" }
     refute upload.key?("if")
@@ -474,17 +492,22 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
       steps = workflow.dig("jobs", "prepare-homebrew-realm", "steps")
       steps.reject! { |step| step["id"] == "restore-realm-cache" }
     end
-    assert_rejected("shared realm cache key lost exact tap identity") do |workflow|
+    assert_rejected("shared realm cache key reverted to whole tap identity") do |workflow|
       step = workflow.dig("jobs", "prepare-homebrew-realm", "steps").find do |candidate|
         candidate["id"] == "restore-realm-cache"
       end
-      step.fetch("with")["key"] = exact_key.sub(
-        "-${{ needs.discover-plan.outputs.tap-commit }}", ""
-      )
+      step.fetch("with")["key"] =
+        "${{ needs.discover-plan.outputs.tap-commit }}"
     end
     assert_rejected("shared realm cache restored by prefix") do |workflow|
       step = workflow.dig("jobs", "prepare-homebrew-realm", "steps").find do |candidate|
         candidate["id"] == "restore-realm-cache"
+      end
+      step.fetch("with")["restore-keys"] = "abi-staging-homebrew-realm-"
+    end
+    assert_rejected("shared realm legacy migration restored by prefix") do |workflow|
+      step = workflow.dig("jobs", "prepare-homebrew-realm", "steps").find do |candidate|
+        candidate["id"] == "restore-legacy-realm-cache"
       end
       step.fetch("with")["restore-keys"] = "abi-staging-homebrew-realm-"
     end

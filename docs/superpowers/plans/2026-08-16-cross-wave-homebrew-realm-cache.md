@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Reuse one exact packed Homebrew realm across reconciliation waves with identical Kandelo and tap revisions.
+**Goal:** Reuse one exact packed Homebrew realm across reconciliation waves with identical Kandelo sources and realm producer inputs.
 
-**Architecture:** The producer restores an immutable GitHub Actions cache entry keyed by runner platform, exact Kandelo commit, and exact tap commit. Cache misses run the existing prepare/pack path and save the archive; cache hits skip it. Every wave still uploads the archive through the existing run-scoped artifact interface, and downstream workflows retain their exact restore validation.
+**Architecture:** The producer restores an immutable GitHub Actions cache entry keyed by runner platform, exact Kandelo commit, and the protected realm producer-script digest. Cache misses run the existing prepare/pack path and save the archive; cache hits skip it. Formula-only tap changes preserve the key. Every wave still uploads the archive through the existing run-scoped artifact interface, and downstream workflows retain their exact restore validation.
 
 **Tech Stack:** GitHub Actions YAML, pinned `actions/cache` v6.1.0, Ruby workflow checker and Minitest mutation tests.
 
@@ -15,6 +15,8 @@
 - Cache miss behavior retains the existing preparer and packer.
 - The run-scoped artifact remains the only consumer handoff.
 - All third-party actions remain pinned to full 40-character commits.
+- Formula-only tap changes must not invalidate the prepared realm.
+- Changes to either protected realm producer script must invalidate it.
 
 ---
 
@@ -85,3 +87,24 @@ git add .github/workflows/abi-staging-reconcile.yml \
 git commit -m "[ABI] Reuse exact Homebrew realms across waves"
 git push -u origin optimize/cross-wave-homebrew-realm-cache
 ```
+
+---
+
+### Task 2: Remove whole-tap overbinding from the cache key
+
+**Files:**
+- Add: `scripts/abi-staging-homebrew-realm-cache-key.sh`
+- Add: `scripts/test-abi-staging-homebrew-realm-cache-key.sh`
+- Modify: `.github/workflows/abi-staging-reconcile.yml`
+- Modify: `scripts/check_abi_staging_workflows.rb`
+- Modify: `scripts/test_check_abi_staging_workflows.rb`
+
+- [x] **Step 1: Record RED for Formula-only reuse and producer invalidation**
+
+- [x] **Step 2: Derive a versioned key from the exact producer-script closure**
+
+- [x] **Step 3: Migrate only the exact compatible legacy cache**
+
+- [x] **Step 4: Run focused and full workflow gates**
+
+- [ ] **Step 5: Merge the tap fix before retrying ABI 43**
