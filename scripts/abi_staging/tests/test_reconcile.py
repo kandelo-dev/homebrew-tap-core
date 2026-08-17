@@ -188,7 +188,7 @@ class ReconciliationTests(unittest.TestCase):
             ],
         )
 
-    def test_promotion_history_selection_requires_one_exact_epoch(self) -> None:
+    def test_promotion_history_selection_recovers_the_unique_adjacent_epoch(self) -> None:
         record = json.loads(
             (TAP_ROOT / "Kandelo/staging/fixtures/abi-history-record.json").read_bytes()
         )
@@ -199,11 +199,6 @@ class ReconciliationTests(unittest.TestCase):
         selected = cli_module._select_exact_history_record(
             (fetched,),
             target_abi=8,
-            planned_tap_source={
-                "repository": "kandelo-dev/homebrew-tap-core",
-                "commit": "1" * 40,
-                "tree": "2" * 40,
-            },
         )
         self.assertIs(selected, fetched)
 
@@ -211,11 +206,6 @@ class ReconciliationTests(unittest.TestCase):
             cli_module._select_exact_history_record(
                 (fetched, fetched),
                 target_abi=8,
-                planned_tap_source={
-                    "repository": "kandelo-dev/homebrew-tap-core",
-                    "commit": "1" * 40,
-                    "tree": "2" * 40,
-                },
             )
 
     def test_activated_epoch_fetches_the_record_bound_by_abi_state(self) -> None:
@@ -230,11 +220,6 @@ class ReconciliationTests(unittest.TestCase):
             selected = cli_module._fetch_exact_history_record(
                 policy=policy,
                 target_abi=8,
-                planned_tap_source={
-                    "repository": policy.tap_repository,
-                    "commit": "9" * 40,
-                    "tree": "a" * 40,
-                },
                 expected_digest=digest,
                 transport=SimpleNamespace(),
             )

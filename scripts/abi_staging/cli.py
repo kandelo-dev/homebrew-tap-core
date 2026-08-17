@@ -1462,9 +1462,8 @@ def _select_exact_history_record(
     records: tuple[FetchedOciRecordV1, ...],
     *,
     target_abi: int,
-    planned_tap_source: Mapping[str, Any],
 ) -> FetchedOciRecordV1:
-    """Select one durable history record for the exact planned N -> N+1 epoch."""
+    """Select one durable history record for the exact adjacent ABI epoch."""
 
     matches: list[FetchedOciRecordV1] = []
     for fetched in records:
@@ -1479,8 +1478,6 @@ def _select_exact_history_record(
         if (
             plan["source_abi"] + 1 == target_abi
             and plan["successor_abi"] == target_abi
-            and plan["preactivation_tap_commit"] == planned_tap_source.get("commit")
-            and plan["preactivation_tap_tree"] == planned_tap_source.get("tree")
         ):
             matches.append(fetched)
     if len(matches) != 1:
@@ -1494,7 +1491,6 @@ def _fetch_exact_history_record(
     *,
     policy: Any,
     target_abi: int,
-    planned_tap_source: Mapping[str, Any],
     expected_digest: str | None = None,
     transport: UrllibOciTransportV1,
 ) -> FetchedOciRecordV1:
@@ -1543,7 +1539,6 @@ def _fetch_exact_history_record(
     return _select_exact_history_record(
         fetched,
         target_abi=target_abi,
-        planned_tap_source=planned_tap_source,
     )
 
 
@@ -2075,7 +2070,6 @@ def _collect_active_promotion_inputs(
     history = _fetch_exact_history_record(
         policy=promotion_policy,
         target_abi=target_abi,
-        planned_tap_source=tap_plan["tap_source"],
         expected_digest=(
             None
             if state.activation is None
