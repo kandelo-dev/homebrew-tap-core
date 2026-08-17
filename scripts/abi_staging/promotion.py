@@ -1118,6 +1118,7 @@ def prepare_successor_activation_patch(
     tap_root: Any,
     history: FetchedOciRecordV1 | None,
     history_protection_snapshot: Mapping[str, Any],
+    history_tap_source: Mapping[str, Any],
     current_tap_source: Mapping[str, Any],
     request_digest: str,
     merged_pull_request: Mapping[str, Any],
@@ -1129,9 +1130,12 @@ def prepare_successor_activation_patch(
 
     if not isinstance(policy, PromotionPolicyV1):
         raise PromotionError("successor activation policy is not protected schema 1")
-    source = _source(current_tap_source, "activation tap source")
+    source = _source(current_tap_source, "current activation tap source")
     if source["repository"].lower() != policy.tap_repository.lower():
         raise PromotionError("activation tap source names another repository")
+    history_source = _source(history_tap_source, "activation history tap source")
+    if history_source["repository"].lower() != policy.tap_repository.lower():
+        raise PromotionError("activation history names another repository")
     target = _nonnegative(target_abi, "activation target ABI")
     snapshot = _digest(target_snapshot_sha256, "activation target snapshot")
     request = _digest(request_digest, "activation request")
@@ -1154,7 +1158,7 @@ def prepare_successor_activation_patch(
         history,
         protection_snapshot=history_protection_snapshot,
         target_abi=target,
-        tap_source=source,
+        tap_source=history_source,
         policy=policy,
     )
     assert history is not None
