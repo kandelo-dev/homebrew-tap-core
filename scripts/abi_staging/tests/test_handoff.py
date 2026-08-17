@@ -412,6 +412,49 @@ class BuildHandoffTests(unittest.TestCase):
                 _git(prepared, "status", "--short", capture=True), ""
             )
 
+            wasm64_digest = "4" * 64
+            wasm64_context = {
+                **context,
+                "dependency_layers": [
+                    {
+                        **context["dependency_layers"][0],
+                        "architecture": "wasm64",
+                        "sha256": wasm64_digest,
+                    }
+                ],
+            }
+            wasm64_context_path = root / "wasm64-context.json"
+            wasm64_context_path.write_bytes(canonical_bytes(wasm64_context))
+
+            prepared_wasm64 = handoff_module.prepare_dependency_tap(
+                context_path=wasm64_context_path,
+                tap_root=tap,
+                output=root / "prepared-wasm64",
+            )
+
+            prepared_wasm64_source = (
+                prepared_wasm64 / "Formula/libcxx.rb"
+            ).read_bytes()
+            self.assertEqual(
+                normalize_formula_source(prepared_wasm64_source),
+                source_normalized,
+            )
+            self.assertIn(
+                f'wasm32_kandelo: "{"2" * 64}"'.encode("ascii"),
+                prepared_wasm64_source,
+            )
+            self.assertIn(
+                f'wasm64_kandelo: "{wasm64_digest}"'.encode("ascii"),
+                prepared_wasm64_source,
+            )
+            self.assertLess(
+                prepared_wasm64_source.index(b"wasm32_kandelo"),
+                prepared_wasm64_source.index(b"wasm64_kandelo"),
+            )
+            self.assertEqual(
+                _git(prepared_wasm64, "status", "--short", capture=True), ""
+            )
+
     def test_git_identity_accepts_an_exact_protected_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "source"

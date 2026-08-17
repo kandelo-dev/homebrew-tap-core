@@ -1842,6 +1842,12 @@ def _candidate_dependency_formula_source(
         raise HandoffError("dependency Formula is not UTF-8") from error
     if not source or b"\r" in source or not source.endswith(b"\n"):
         raise HandoffError("dependency Formula is not canonical LF text")
+    try:
+        source_normalized = normalize_formula_source(source)
+    except FormulaInventoryError as error:
+        raise HandoffError(
+            f"dependency Formula bottle block is invalid: {error}"
+        ) from error
     lines = text.splitlines(keepends=True)
     starts = [index for index, line in enumerate(lines) if line == "  bottle do\n"]
     if len(starts) != 1:
@@ -1859,30 +1865,43 @@ def _candidate_dependency_formula_source(
     ]
     if root_lines != [start + 1]:
         raise HandoffError("dependency Formula lacks one canonical bottle root")
-    selected_pattern = re.compile(
-        r'(    sha256 cellar: (?:"[^"\n]+"|:any(?:_skip_relocation)?), '
-        + re.escape(architecture)
-        + r'_kandelo: ")([0-9a-f]{64})("\n)'
+    sha_pattern = re.compile(
+        r'    sha256 cellar: (?P<cellar>"[^"\n]+"|:any(?:_skip_relocation)?), '
+        r'(?P<architecture>wasm(?:32|64))_kandelo: "(?P<digest>[0-9a-f]{64})"\n'
     )
-    selected = [
-        (index, selected_pattern.fullmatch(lines[index]))
+    sha_rows = [
+        (index, sha_pattern.fullmatch(lines[index]))
         for index in range(start + 1, end)
-        if selected_pattern.fullmatch(lines[index]) is not None
+        if sha_pattern.fullmatch(lines[index]) is not None
     ]
-    if len(selected) != 1:
-        raise HandoffError(
-            "dependency Formula lacks one bottle digest for the selected architecture"
-        )
     lines[root_lines[0]] = f'    root_url "{root_url}"\n'
-    selected_index, selected_match = selected[0]
-    if selected_match is None:
-        raise HandoffError("dependency Formula bottle digest match disappeared")
-    lines[selected_index] = (
-        selected_match.group(1) + digest + selected_match.group(3)
-    )
+    selected = [
+        (index, match)
+        for index, match in sha_rows
+        if match is not None and match.group("architecture") == architecture
+    ]
+    if len(selected) == 1:
+        selected_index, selected_match = selected[0]
+        lines[selected_index] = (
+            f'    sha256 cellar: {selected_match.group("cellar")}, '
+            f'{architecture}_kandelo: "{digest}"\n'
+        )
+    elif not selected and len(sha_rows) == 1 and sha_rows[0][1] is not None:
+        existing_index, existing_match = sha_rows[0]
+        insertion_index = existing_index + (1 if architecture == "wasm64" else 0)
+        lines.insert(
+            insertion_index,
+            f'    sha256 cellar: {existing_match.group("cellar")}, '
+            f'{architecture}_kandelo: "{digest}"\n',
+        )
+    else:
+        raise HandoffError(
+            "dependency Formula lacks one unambiguous bottle row for the selected "
+            "architecture"
+        )
     prepared = "".join(lines).encode("utf-8")
     try:
-        if normalize_formula_source(prepared) != normalize_formula_source(source):
+        if normalize_formula_source(prepared) != source_normalized:
             raise HandoffError(
                 "candidate dependency preparation changed Formula recipe bytes"
             )
