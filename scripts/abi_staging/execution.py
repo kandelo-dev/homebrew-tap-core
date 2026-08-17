@@ -1547,11 +1547,14 @@ def compose_candidate_tap(
         normalized, expected_root_url, expected_cellar = (
             _normalized_candidate_bottle_metadata(candidate, metadata_entries)
         )
+        composer_metadata = {
+            str(candidate["formula"]): next(iter(normalized.values()))
+        }
         try:
             with tempfile.NamedTemporaryFile(
                 prefix="kandelo-candidate-bottle-", suffix=".json"
             ) as normalized_file:
-                normalized_file.write(canonical_bytes(normalized))
+                normalized_file.write(canonical_bytes(composer_metadata))
                 normalized_file.flush()
                 command = [
                     str(merge),
