@@ -6,6 +6,7 @@ import importlib
 import json
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -125,6 +126,99 @@ done <"$DEPENDENCY_POUR_LIST"
             )
             self.assertIn('"$dependency_archive"', prepared)
             self.assertNotIn(execution._FORMULA_DEPENDENCY_INSTALL, prepared)
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o500)
+
+    def test_staging_verifier_augments_info_without_rewriting_the_formula(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        formula_info_capture = (
+            '"$BREW_BIN" info --json=v2 "$FORMULA_REF" >"$FORMULA_INFO"'
+        )
+        source = f'''#!/usr/bin/env bash
+set -euo pipefail
+KANDELO_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+while IFS= read -r dependency; do
+  run_brew_logged run_brew_for_kandelo_bottles "$BREW_BIN" install \\
+    --force-bottle --as-dependency --ignore-dependencies --formula "$dependency"
+done <"$DEPENDENCY_POUR_LIST"
+{formula_info_capture}
+'''
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = root / "candidate-verifier.sh"
+            destination = root / "protected-verifier.sh"
+            candidate.write_text(source, encoding="utf-8")
+
+            execution._prepare_staging_normal_builder(
+                source=candidate,
+                destination=destination,
+                root_assignment=execution._CANDIDATE_VERIFIER_ROOT_ASSIGNMENT,
+                dependency_install=execution._VERIFIER_FORMULA_DEPENDENCY_INSTALL,
+                formula_info_capture=formula_info_capture,
+            )
+
+            prepared = destination.read_text(encoding="utf-8")
+            self.assertIn('staging_formula_info="$FORMULA_INFO.staging"', prepared)
+            self.assertIn(".[0].value.bottle.rebuild", prepared)
+            self.assertIn('sha256: $sha256, url: $url', prepared)
+            self.assertIn('mv "$staging_formula_info" "$FORMULA_INFO"', prepared)
+            subprocess.run(["bash", "-n", str(destination)], check=True)
+            brew = root / "brew"
+            brew.write_text(
+                "#!/usr/bin/env bash\n"
+                "printf '%s\\n' "
+                "'{\"casks\":[],\"formulae\":[{\"bottle\":{},\"name\":\"mini-tool\"}]}'\n",
+                encoding="utf-8",
+            )
+            brew.chmod(0o500)
+            dependencies = root / "dependencies.txt"
+            dependencies.write_text("", encoding="utf-8")
+            bottle_json = root / "bottle.json"
+            bottle_json.write_text(
+                json.dumps(
+                    {
+                        "kandelo-dev/tap-core/mini-tool": {
+                            "bottle": {"rebuild": 7}
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            formula_info = root / "formula-info.json"
+            subprocess.run(
+                ["bash", str(destination)],
+                check=True,
+                env={
+                    **os.environ,
+                    "BOTTLE_JSON": str(bottle_json),
+                    "BOTTLE_SHA256": "a" * 64,
+                    "BOTTLE_TAG": "wasm32_kandelo",
+                    "BOTTLE_URL": (
+                        "https://example.invalid/mini-tool/blobs/sha256:" + "a" * 64
+                    ),
+                    "BREW_BIN": str(brew),
+                    "DEPENDENCY_POUR_LIST": str(dependencies),
+                    "FORMULA_INFO": str(formula_info),
+                    "FORMULA_REF": "kandelo-dev/tap-core/mini-tool",
+                    "KANDELO_ABI_STAGING_CANDIDATE_ROOT": str(root),
+                    "LOCAL_DEPENDENCIES_JSON": str(root / "unused.json"),
+                },
+            )
+            stable = json.loads(formula_info.read_bytes())["formulae"][0]["bottle"][
+                "stable"
+            ]
+            self.assertEqual(
+                stable,
+                {
+                    "files": {
+                        "wasm32_kandelo": {
+                            "sha256": "a" * 64,
+                            "url": "https://example.invalid/mini-tool/blobs/sha256:"
+                            + "a" * 64,
+                        }
+                    },
+                    "rebuild": 7,
+                },
+            )
             self.assertEqual(destination.stat().st_mode & 0o777, 0o500)
 
     def test_coordination_loader_uses_the_declared_large_item_bound(self) -> None:
