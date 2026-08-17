@@ -326,6 +326,19 @@ class TapMetadataTests(unittest.TestCase):
         self.assertEqual(projection["active_formulae"], ["bash"])
         self.assertEqual(projection["promotion_mode"], "disabled")
 
+    def test_active_promotion_accepts_the_exact_preactivation_state(self) -> None:
+        (self.root / "Kandelo/staging/promotion-activation.toml").write_text(
+            'schema = 1\n'
+            'kind = "kandelo-abi-staging-promotion-activation"\n'
+            'mode = "active"\n'
+        )
+
+        projection = check_tap_metadata(self.root)
+
+        self.assertEqual(projection["current_abi"], SOURCE_ABI)
+        self.assertEqual(projection["promotion_mode"], "active")
+        self.assertIsNone(load_abi_state(self.root / "Kandelo/abi-state.json").activation)
+
     def test_rejects_weakened_or_ambiguous_policy(self) -> None:
         path = self.root / "Kandelo/staging/promotion-policy.toml"
         invalid = (
