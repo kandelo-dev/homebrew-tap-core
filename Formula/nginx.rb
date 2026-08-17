@@ -226,6 +226,9 @@ class Nginx < Formula
         }
       }
     EOS
+    [testpath/"nginx.conf", testpath/"html/new/message.txt"].each do |path|
+      chmod 0644, path
+    end
 
     # A successful response can only come from a forked worker when
     # master_process is enabled. This covers the real master/worker lifecycle,
