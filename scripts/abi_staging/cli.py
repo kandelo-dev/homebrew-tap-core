@@ -739,6 +739,14 @@ def _write_github_outputs(path: Path, values: dict[str, str]) -> None:
         output.writelines(lines)
 
 
+def _required_formulae_ready(bundle: Mapping[str, Any]) -> bool:
+    # Products consume the required Formula closure. Background work must not
+    # make exact-runtime preparation repeat after that closure is durable.
+    required = set(bundle["tap_plan"]["required_subjects"])
+    complete = set(bundle["workflow"]["complete"])
+    return required.issubset(complete)
+
+
 def _discover_workflow_request(args: argparse.Namespace) -> None:
     tap_root = _protected_tap_root(args.tap_root)
     output = _output_directory(args.out)
@@ -780,6 +788,7 @@ def _discover_workflow_request(args: argparse.Namespace) -> None:
         "product_matrix": '{"include":[]}',
         "product_mode": "observe",
         "promotion_eligible": "false",
+        "required_formulae_ready": "false",
         "request_digest": "",
         "reuse_matrix": '{"include":[]}',
         "selected": "false",
@@ -1010,6 +1019,9 @@ def _prepare_workflow(args: argparse.Namespace) -> None:
             ),
             "mode": mode,
             "product_mode": product_mode,
+            "required_formulae_ready": (
+                "true" if _required_formulae_ready(bundle) else "false"
+            ),
             "request_digest": request_sha256,
             "product_matrix": json.dumps(
                 product_workflow["product_matrix"],

@@ -37,6 +37,7 @@ jobs:
       product-matrix: ${{ steps.coordinate.outputs.product_matrix || steps.discover.outputs.product_matrix }}
       node-evidence-matrix: ${{ steps.coordinate.outputs.node_evidence_matrix || steps.discover.outputs.node_evidence_matrix }}
       browser-evidence-matrix: ${{ steps.coordinate.outputs.browser_evidence_matrix || steps.discover.outputs.browser_evidence_matrix }}
+      required-formulae-ready: ${{ steps.coordinate.outputs.required_formulae_ready || steps.discover.outputs.required_formulae_ready }}
       request-digest: ${{ steps.coordinate.outputs.request_digest || steps.discover.outputs.request_digest }}
       selected: ${{ steps.discover.outputs.selected }}
       coordination-artifact-id: ${{ steps.upload.outputs.artifact-id }}
@@ -165,7 +166,10 @@ jobs:
 
   prepare-homebrew-realm:
     needs: discover-plan
-    if: needs.discover-plan.outputs.mode == 'active'
+    if: >-
+      needs.discover-plan.outputs.mode == 'active' &&
+      (fromJSON(needs.discover-plan.outputs.build-matrix).include[0] != null ||
+      fromJSON(needs.discover-plan.outputs.verify-matrix).include[0] != null)
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
@@ -373,7 +377,12 @@ jobs:
   prepare-runtime:
     name: prepare exact runtime
     needs: discover-plan
-    if: needs.discover-plan.outputs.selected == 'true'
+    if: >-
+      needs.discover-plan.outputs.selected == 'true' &&
+      needs.discover-plan.outputs.required-formulae-ready == 'true' &&
+      (fromJSON(needs.discover-plan.outputs.product-matrix).include[0] != null ||
+      fromJSON(needs.discover-plan.outputs.node-evidence-matrix).include[0] != null ||
+      fromJSON(needs.discover-plan.outputs.browser-evidence-matrix).include[0] != null)
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
