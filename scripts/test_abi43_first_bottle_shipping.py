@@ -74,6 +74,13 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         self.assertNotIn('["-C", "clone", "mergetool", "--tool-help"]', source)
         self.assertNotIn("mergetool_help_descendant_statuses", source)
 
+    def test_git_bottle_does_not_block_on_the_interactive_vim_editor(self) -> None:
+        source = self.formula("git")
+        self.assertIn('["-C", "repo", "commit", "-m", "initial"]', source)
+        self.assertNotIn('bin/"git", ["-C", "clone", "commit"]', source)
+        self.assertNotIn('input_ready_text:           "COMMIT_EDITMSG"', source)
+        self.assertNotIn("editor_runtime_files", source)
+
 
 if __name__ == "__main__":
     unittest.main()
