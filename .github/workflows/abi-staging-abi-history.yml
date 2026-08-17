@@ -170,8 +170,8 @@ jobs:
         working-directory: tap-authority
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
-          HOMEBREW_GITHUB_PACKAGES_USER: ${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
         run: |
           set -euo pipefail
           python3 -m scripts.abi_staging.cli verify-history \
