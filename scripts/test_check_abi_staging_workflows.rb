@@ -414,6 +414,88 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     end
   end
 
+  def test_prepared_homebrew_realm_cache_is_exact_and_miss_only
+    prepare = @workflow.dig("jobs", "prepare-homebrew-realm")
+    restore = prepare.fetch("steps").find do |step|
+      step["id"] == "restore-realm-cache"
+    end
+    refute_nil restore
+    assert_equal(
+      "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+      restore["uses"]
+    )
+    assert_equal "${{ runner.temp }}/shared-homebrew-realm.tar.zst",
+                 restore.dig("with", "path")
+    exact_key = "abi-staging-homebrew-realm-" \
+                "${{ runner.os }}-${{ runner.arch }}-" \
+                "${{ needs.discover-plan.outputs.kandelo-head }}-" \
+                "${{ needs.discover-plan.outputs.tap-commit }}"
+    assert_equal exact_key, restore.dig("with", "key")
+    refute restore.fetch("with").key?("restore-keys")
+
+    miss_guard = "steps.restore-realm-cache.outputs.cache-hit != 'true'"
+    setup = prepare.fetch("steps").find do |step|
+      step["uses"] == "./kandelo-source/.github/actions/setup-nix"
+    end
+    preparer = prepare.fetch("steps").find do |step|
+      step["name"] == "Prepare one shared uncredentialed Homebrew realm"
+    end
+    packer = prepare.fetch("steps").find do |step|
+      step["name"] == "Pack exact shared Homebrew realm"
+    end
+    [setup, preparer, packer].each do |step|
+      assert_equal miss_guard, step["if"]
+    end
+
+    identity = prepare.fetch("steps").find do |step|
+      step["id"] == "realm-identity"
+    end
+    refute_nil identity
+    refute identity.key?("if")
+
+    save = prepare.fetch("steps").find do |step|
+      step["id"] == "save-realm-cache"
+    end
+    refute_nil save
+    assert_equal(
+      "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+      save["uses"]
+    )
+    assert_equal miss_guard, save["if"]
+    assert_equal "${{ runner.temp }}/shared-homebrew-realm.tar.zst",
+                 save.dig("with", "path")
+    assert_equal "${{ steps.restore-realm-cache.outputs.cache-primary-key }}",
+                 save.dig("with", "key")
+
+    upload = prepare.fetch("steps").find { |step| step["id"] == "upload-realm" }
+    refute upload.key?("if")
+
+    assert_rejected("shared realm cache restore was removed") do |workflow|
+      steps = workflow.dig("jobs", "prepare-homebrew-realm", "steps")
+      steps.reject! { |step| step["id"] == "restore-realm-cache" }
+    end
+    assert_rejected("shared realm cache key lost exact tap identity") do |workflow|
+      step = workflow.dig("jobs", "prepare-homebrew-realm", "steps").find do |candidate|
+        candidate["id"] == "restore-realm-cache"
+      end
+      step.fetch("with")["key"] = exact_key.sub(
+        "-${{ needs.discover-plan.outputs.tap-commit }}", ""
+      )
+    end
+    assert_rejected("shared realm cache restored by prefix") do |workflow|
+      step = workflow.dig("jobs", "prepare-homebrew-realm", "steps").find do |candidate|
+        candidate["id"] == "restore-realm-cache"
+      end
+      step.fetch("with")["restore-keys"] = "abi-staging-homebrew-realm-"
+    end
+    assert_rejected("shared realm preparation ignored a cache hit") do |workflow|
+      step = workflow.dig("jobs", "prepare-homebrew-realm", "steps").find do |candidate|
+        candidate["name"] == "Prepare one shared uncredentialed Homebrew realm"
+      end
+      step.delete("if")
+    end
+  end
+
   def test_only_protected_publishers_receive_the_dedicated_package_token
     event = @candidate.key?("on") ? @candidate.fetch("on") : @candidate.fetch(true)
     assert_equal({"required" => true},

@@ -9,6 +9,8 @@ module AbiStagingWorkflowCheck
   SETUP_ORAS = "oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d"
   UPLOAD_ARTIFACT = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
   DOWNLOAD_ARTIFACT = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+  CACHE_RESTORE = "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
+  CACHE_SAVE = "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
   FULL_ACTION = %r{\A(?:\./[^@\n]+|[^@]+@[0-9a-f]{40})\z}
 
   class Violation < RuntimeError; end
@@ -350,8 +352,54 @@ module AbiStagingWorkflowCheck
                      "protected coordination artifact is not exact and bounded")
 
     realm = jobs.fetch("prepare-homebrew-realm")
+    realm_steps = realm.fetch("steps")
     realm_source = run_steps(realm).map { |step| step.fetch("run") }.join("\n")
     realm_uploads = action_steps(realm, UPLOAD_ARTIFACT)
+    realm_restores = action_steps(realm, CACHE_RESTORE)
+    realm_saves = action_steps(realm, CACHE_SAVE)
+    realm_restore = realm_restores.length == 1 ? realm_restores.fetch(0) : nil
+    realm_save = realm_saves.length == 1 ? realm_saves.fetch(0) : nil
+    realm_setup = realm_steps.find do |step|
+      step["uses"] == "./kandelo-source/.github/actions/setup-nix"
+    end
+    realm_prepare = run_steps(realm).find do |step|
+      step.fetch("run").include?("abi-staging-prepare-shared-homebrew-realm.sh")
+    end
+    realm_pack = run_steps(realm).find do |step|
+      step.fetch("run").include?("abi-staging-pack-homebrew-realm.sh")
+    end
+    realm_identity = realm_steps.find { |step| step["id"] == "realm-identity" }
+    realm_upload = realm_steps.find { |step| step["id"] == "upload-realm" }
+    realm_cache_path = "${{ runner.temp }}/shared-homebrew-realm.tar.zst"
+    realm_cache_key = "abi-staging-homebrew-realm-" \
+                      "${{ runner.os }}-${{ runner.arch }}-" \
+                      "${{ needs.discover-plan.outputs.kandelo-head }}-" \
+                      "${{ needs.discover-plan.outputs.tap-commit }}"
+    realm_cache_miss = "steps.restore-realm-cache.outputs.cache-hit != 'true'"
+    realm_cache_contract =
+      !realm_restore.nil? && realm_restore.fetch("id", nil) == "restore-realm-cache" &&
+      realm_restore.fetch("uses") == CACHE_RESTORE &&
+      realm_restore.fetch("with", {}) == {
+        "path" => realm_cache_path,
+        "key" => realm_cache_key
+      } && !realm_save.nil? && realm_save.fetch("id", nil) == "save-realm-cache" &&
+      realm_save.fetch("uses") == CACHE_SAVE &&
+      realm_save.fetch("if", nil) == realm_cache_miss &&
+      realm_save.fetch("with", {}) == {
+        "path" => realm_cache_path,
+        "key" => "${{ steps.restore-realm-cache.outputs.cache-primary-key }}"
+      } && !realm_setup.nil? && realm_setup.fetch("if", nil) == realm_cache_miss &&
+      !realm_prepare.nil? && realm_prepare.fetch("if", nil) == realm_cache_miss &&
+      !realm_pack.nil? && realm_pack.fetch("if", nil) == realm_cache_miss &&
+      !realm_identity.nil? && !realm_identity.key?("if") &&
+      realm_identity.fetch("run", "").include?('[[ -f "$archive" && ! -L "$archive" ]]') &&
+      !realm_upload.nil? && !realm_upload.key?("if") &&
+      realm_steps.index(realm_restore) < realm_steps.index(realm_setup) &&
+      realm_steps.index(realm_setup) < realm_steps.index(realm_prepare) &&
+      realm_steps.index(realm_prepare) < realm_steps.index(realm_pack) &&
+      realm_steps.index(realm_pack) < realm_steps.index(realm_identity) &&
+      realm_steps.index(realm_identity) < realm_steps.index(realm_save) &&
+      realm_steps.index(realm_save) < realm_steps.index(realm_upload)
     require_contract(
       realm.fetch("needs") == "discover-plan" &&
         realm.fetch("if") == "needs.discover-plan.outputs.mode == 'active'" &&
@@ -368,6 +416,7 @@ module AbiStagingWorkflowCheck
         realm_source.include?("abi-staging-pack-homebrew-realm.sh") &&
         realm_source.include?("env -u GITHUB_TOKEN") &&
         realm_source.include?("-u ACTIONS_RUNTIME_TOKEN") &&
+        realm_cache_contract &&
         realm_uploads.length == 1 &&
         realm_uploads.fetch(0).fetch("id") == "upload-realm" &&
         realm_uploads.fetch(0).dig("with", "compression-level") == 0 &&
