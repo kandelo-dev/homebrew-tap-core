@@ -210,10 +210,4 @@ class Getconf < Formula
     )
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "e7a9684780e8a7dd12efa7344be40fc541caffc0986065622bfdb498daa05902"
-  end
-
 end

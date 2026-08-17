@@ -83,9 +83,4 @@ class HomebrewBootstrap < Formula
       "Process.spawn"
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "5d754c57a3b8e8f5237b89db16046ede577e49a773d2eeb745d96bb98ace61d4"
-  end
-
 end

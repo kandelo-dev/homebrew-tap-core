@@ -114,12 +114,6 @@ class Make < Formula
     assert_match(/missing-kandelo-command.*No such file or directory/, failure)
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "7656f307e4ae8af169e7ae9f85607cadca4304e88abb4054a60550b37eb30288"
-  end
-
 end
 
 __END__

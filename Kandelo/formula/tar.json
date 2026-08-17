@@ -8,25 +8,20 @@
       "built_at": "2026-07-24T22:49:31Z",
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30130934306",
       "built_from": {
-        "formula_sha256": "f5939ff8c4bbdd900f619bad62a5198cf277c7e1567f1a49950b340d9d307777",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "formula_sha256": "168f4b6173fd066fded30c296ec9e46a3ff79860fed5074ff0e8e2750c1c2dc4",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "72ed849f8ea47eb26f355e8cb209e6c7b6c89f44",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 1089706,
-      "cache_key_sha": "057a97a7c9eccaa898ddb1f9abefd73767b893d458487b1424880b1c610f8548",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/tar-1.35-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "057a97a7c9eccaa898ddb1f9abefd73767b893d458487b1424880b1c610f8548",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/tar/blobs/sha256:057a97a7c9eccaa898ddb1f9abefd73767b893d458487b1424880b1c610f8548"
+      "status": "pending"
     }
   ],
   "dependencies": [
@@ -44,11 +39,11 @@
   "formula_path": "Formula/tar.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/tar",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "tar",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.35"

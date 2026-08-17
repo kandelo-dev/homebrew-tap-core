@@ -9,24 +9,19 @@
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30111122068",
       "built_from": {
         "formula_sha256": "e50bf2be21d2ced96da729716538f96331cc7cb03343d51e179935ce3b46a88d",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "0798e44cfa2fe21db31ead10a4708b8a7d824790",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 467539,
-      "cache_key_sha": "26d0358b99a8fac315257bf054718dbf5902322433a65440ae0ac0f287f56a84",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/m4-1.4.21-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "26d0358b99a8fac315257bf054718dbf5902322433a65440ae0ac0f287f56a84",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/m4/blobs/sha256:26d0358b99a8fac315257bf054718dbf5902322433a65440ae0ac0f287f56a84"
+      "status": "pending"
     }
   ],
   "dependencies": [
@@ -39,11 +34,11 @@
   "formula_path": "Formula/m4.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/m4",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "m4",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.4.21"

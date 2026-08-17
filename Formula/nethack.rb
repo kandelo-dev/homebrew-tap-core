@@ -16,12 +16,6 @@ class Nethack < Formula
   sha256 "98cf67df6debf9668a61745aa84c09bcab362e5d33f5b944ec5155d44d2aacb2"
   license :cannot_represent
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "c13bfbeebf44016f7eec36b618544eb64fc7f11175a9e4bbf0f021ac0e0b730d"
-  end
-
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => :build
   depends_on "kandelo-dev/tap-core/ncurses"

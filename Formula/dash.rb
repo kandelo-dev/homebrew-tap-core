@@ -92,12 +92,6 @@ class Dash < Formula
       kandelo_run_wasm(bin/"dash", ["-c", "kill -l 34; kill -l 35; kill -l 64"])
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "93ae2b1153a5f7073eb7d2ca4a86feca138e6e5130f2a7b5e15d7bb2b35c92b8"
-  end
-
 end
 
 __END__

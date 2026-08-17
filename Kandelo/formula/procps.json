@@ -8,36 +8,31 @@
       "built_at": "2026-07-24T15:48:17Z",
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30105138400",
       "built_from": {
-        "formula_sha256": "66f78c1fcbb1ebb9f6fda0be366c47f227a0c4250b70060bb38c113fdf858367",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "formula_sha256": "0261aefed5aa01966aace7d2683c97c6bea2ccd07ab055327e45fd17d32e8186",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "cc66d66d873dc655f892d0e1b14a6eec460c3cf2",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 145180,
-      "cache_key_sha": "dfec34eb67958aecb4194b2dd74964a33a5d1793d61902f95bd3c04858750208",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/procps-4.0.6-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "dfec34eb67958aecb4194b2dd74964a33a5d1793d61902f95bd3c04858750208",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/procps/blobs/sha256:dfec34eb67958aecb4194b2dd74964a33a5d1793d61902f95bd3c04858750208"
+      "status": "pending"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/procps.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/procps",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "procps",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "4.0.6"

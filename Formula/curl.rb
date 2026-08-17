@@ -115,10 +115,4 @@ class Curl < Formula
     assert_equal "curl-ok 200 0\n", output
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "f0dca680303d3ad87e4899e031d24bb538b99273d126ea37e43981d6a405ee1b"
-  end
-
 end

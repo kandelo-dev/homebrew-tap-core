@@ -8,25 +8,20 @@
       "built_at": "2026-07-24T18:11:54Z",
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30113976032",
       "built_from": {
-        "formula_sha256": "80198aed176505eb7a8e815629f74a5e4fd07a5aa3dd5eae0e57c4cf00882a7c",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "formula_sha256": "4e436533a946fb80b92125a19e7bd71eb615f5fccba5791fe1d7db0a8bf3f114",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "28ffdfa6261c82acb77cab8b1608267f9ba884c6",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 850734,
-      "cache_key_sha": "4dfb1d19a164cd33ead2f3f9991525965bce6be40054d5fa8c06502906f30a59",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/libcurl-8.11.1_1-rebuild3-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "4dfb1d19a164cd33ead2f3f9991525965bce6be40054d5fa8c06502906f30a59",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libcurl/blobs/sha256:4dfb1d19a164cd33ead2f3f9991525965bce6be40054d5fa8c06502906f30a59"
+      "status": "pending"
     },
     {
       "arch": "wasm64",
@@ -35,25 +30,20 @@
       "built_at": "2026-07-24T18:12:49Z",
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30113976032",
       "built_from": {
-        "formula_sha256": "80198aed176505eb7a8e815629f74a5e4fd07a5aa3dd5eae0e57c4cf00882a7c",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "formula_sha256": "4e436533a946fb80b92125a19e7bd71eb615f5fccba5791fe1d7db0a8bf3f114",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "28ffdfa6261c82acb77cab8b1608267f9ba884c6",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 877282,
-      "cache_key_sha": "4cab05c8581ceb66ab9532bc5fd2f4cf387f2732af29f37659b62edfbbb8d4bd",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/libcurl-8.11.1_1-rebuild3-wasm64.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "4cab05c8581ceb66ab9532bc5fd2f4cf387f2732af29f37659b62edfbbb8d4bd",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libcurl/blobs/sha256:4cab05c8581ceb66ab9532bc5fd2f4cf387f2732af29f37659b62edfbbb8d4bd"
+      "status": "pending"
     }
   ],
   "dependencies": [
@@ -71,11 +61,11 @@
   "formula_path": "Formula/libcurl.rb",
   "formula_revision": 1,
   "full_name": "kandelo-dev/tap-core/libcurl",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "libcurl",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "8.11.1_1"

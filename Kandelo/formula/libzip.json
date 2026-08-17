@@ -9,24 +9,19 @@
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30126697010",
       "built_from": {
         "formula_sha256": "ef9e50cde18d530f78bd5a5192a70c2fbfe047aabf4991b6f1a4f88926fa77ab",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "71b3004a43be103b315d8d298a89799c3895e98a",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 306264,
-      "cache_key_sha": "5f7deb2c960da48f40a375e3954f3ef73d48f04bc3e554b5df13fb9d9e11af5e",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/libzip-1.11.4-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "5f7deb2c960da48f40a375e3954f3ef73d48f04bc3e554b5df13fb9d9e11af5e",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libzip/blobs/sha256:5f7deb2c960da48f40a375e3954f3ef73d48f04bc3e554b5df13fb9d9e11af5e"
+      "status": "pending"
     }
   ],
   "dependencies": [
@@ -39,11 +34,11 @@
   "formula_path": "Formula/libzip.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/libzip",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "libzip",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.11.4"

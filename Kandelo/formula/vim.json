@@ -8,25 +8,20 @@
       "built_at": "2026-07-24T23:22:56Z",
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30132438635",
       "built_from": {
-        "formula_sha256": "31ba86e73964075018dffdaef77529469095799d45039940c2689a58b64d711e",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "formula_sha256": "6a78b6d756ed1a8edfc7ebd905bf9aa04475225642ae9026e6a50c8654860322",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "8c6e13c6f7f5d689121587c41811a9f061afc92a",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 11347096,
-      "cache_key_sha": "491e88d76446ffeb66be85e8afb5315666b1abdbf579d914b7ae9310d69e2ad0",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/vim-9.2.0750-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "491e88d76446ffeb66be85e8afb5315666b1abdbf579d914b7ae9310d69e2ad0",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/vim/blobs/sha256:491e88d76446ffeb66be85e8afb5315666b1abdbf579d914b7ae9310d69e2ad0"
+      "status": "pending"
     }
   ],
   "dependencies": [
@@ -39,11 +34,11 @@
   "formula_path": "Formula/vim.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/vim",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "vim",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "9.2.0750"

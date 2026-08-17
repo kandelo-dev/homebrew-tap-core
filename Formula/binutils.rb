@@ -434,12 +434,6 @@ class Binutils < Formula
     assert_path_exists info/"binutils.info"
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "950c9066c48df04b2b53aa7d9d56c7e149d90a71d453fd4df49b0c944762fa2a"
-  end
-
 end
 
 __END__

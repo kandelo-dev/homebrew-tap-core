@@ -8,36 +8,31 @@
       "built_at": "2026-07-24T14:24:40Z",
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30099282621",
       "built_from": {
-        "formula_sha256": "e0ed36a157b6267813280cb198a33e99b87ec133b3cab930d9ad233e00a11001",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "formula_sha256": "b61b8c2765f0aac39f400ce02ac038c2c14a3f88115d16b0536bf336a4e4fa09",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 104388,
-      "cache_key_sha": "3a7d19c8b266e35d67caf4e61946d4f3f042de72ffd5aa8cef70f824b7e11a73",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/ed-1.22.5_1-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "3a7d19c8b266e35d67caf4e61946d4f3f042de72ffd5aa8cef70f824b7e11a73",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ed/blobs/sha256:3a7d19c8b266e35d67caf4e61946d4f3f042de72ffd5aa8cef70f824b7e11a73"
+      "status": "pending"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/ed.rb",
   "formula_revision": 1,
   "full_name": "kandelo-dev/tap-core/ed",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "ed",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "1.22.5_1"

@@ -855,10 +855,4 @@ class Texlive < Formula
     TEX
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "0bf97934a6ecfe14909db68d79fb4b3dcc3a8d1afd3fa4752b4fe09b6e1b5716"
-  end
-
 end

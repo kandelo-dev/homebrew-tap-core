@@ -8,36 +8,31 @@
       "built_at": "2026-07-24T17:16:56Z",
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30110534301",
       "built_from": {
-        "formula_sha256": "2606ebe8b9cce24e21e1a5594286f8385ea3d2fb042cd6e73227ad49abc24128",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "formula_sha256": "c2b9f6dc325f2ef25a9e0ad3a947cb55461adbb6643008f4846f062bb6340ed4",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "5ac7e5e46be95fb78f9107d7e6bbf562cd027ec8",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 770421,
-      "cache_key_sha": "6b35b405280a50d10ac1f9dce5583aa4eda34c1b07e531f8174bc52b29085c44",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/findutils-4.10.0-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "6b35b405280a50d10ac1f9dce5583aa4eda34c1b07e531f8174bc52b29085c44",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/findutils/blobs/sha256:6b35b405280a50d10ac1f9dce5583aa4eda34c1b07e531f8174bc52b29085c44"
+      "status": "pending"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/findutils.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/findutils",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "findutils",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "4.10.0"

@@ -8,36 +8,31 @@
       "built_at": "2026-07-24T15:40:05Z",
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30104294173",
       "built_from": {
-        "formula_sha256": "639324e69487f38df6e68da620716e0b01d4a6dcd53e34e07b93ec6a00c1c01e",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "formula_sha256": "b82c47f956a86284f0623eef8c0b49564575838e98e6545206bf0896d6fffe35",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "eb78ddfa62254c0a98859d4fa1cb48bed87fcfe1",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 1884423,
-      "cache_key_sha": "db5bff1fca4e75ab3917121350b79849de398d8f79384c3745f27aa318a6469e",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/pcre2-10.44_1-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "db5bff1fca4e75ab3917121350b79849de398d8f79384c3745f27aa318a6469e",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/pcre2/blobs/sha256:db5bff1fca4e75ab3917121350b79849de398d8f79384c3745f27aa318a6469e"
+      "status": "pending"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/pcre2.rb",
   "formula_revision": 1,
   "full_name": "kandelo-dev/tap-core/pcre2",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "pcre2",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "10.44_1"

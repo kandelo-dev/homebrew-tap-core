@@ -83,9 +83,4 @@ class Libyaml < Formula
     assert_equal expected, kandelo_run_browser_wasm(smoke_wasm, [], allow_stderr: false)
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "a6100d3ed67a08ac04dce2366e430f62486a96570dc436dbc38c2a8a40f8b6ec"
-  end
-
 end

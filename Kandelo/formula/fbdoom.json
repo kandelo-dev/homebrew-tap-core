@@ -9,35 +9,30 @@
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30099553154",
       "built_from": {
         "formula_sha256": "bb0af3c903d71230a119acf6cc27f29db931d53e4e58cc3841ca69f2b86aabb7",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "2382ed1436d24bcd3dba3dee39c27cc6c9eec25d",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 186887,
-      "cache_key_sha": "acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/fbdoom-0.1.0-rebuild2-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/fbdoom/blobs/sha256:acde2bc27bfa90048e7960e8755604066de3ef33087f246b01318cde20e9b5ba"
+      "status": "pending"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/fbdoom.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/fbdoom",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "fbdoom",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "0.1.0"

@@ -9,24 +9,19 @@
       "built_by": "https://github.com/Kandelo-dev/homebrew-tap-core/actions/runs/30323151878",
       "built_from": {
         "formula_sha256": "121ce255f8476d5eb045b3db963735c7fd9272b94b63eab2a7eb6b914edbc1a4",
-        "kandelo_commit": "c647adda31d0918de944135543fb94039135cef1",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "dceb2978d29cbb4ac84e784470c3b23a4d8e773f",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 1111759,
-      "cache_key_sha": "7a52163f0c4bfec6b9a0fa6b47adecf5c69a7f286f7a304ccb0938562f1f6507",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/libmagic-5.45-rebuild2-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "7a52163f0c4bfec6b9a0fa6b47adecf5c69a7f286f7a304ccb0938562f1f6507",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libmagic/blobs/sha256:7a52163f0c4bfec6b9a0fa6b47adecf5c69a7f286f7a304ccb0938562f1f6507"
+      "status": "pending"
     }
   ],
   "dependencies": [
@@ -49,11 +44,11 @@
   "formula_path": "Formula/libmagic.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/libmagic",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "libmagic",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "5.45"

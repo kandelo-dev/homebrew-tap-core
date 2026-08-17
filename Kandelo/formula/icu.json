@@ -8,25 +8,20 @@
       "built_at": "2026-07-24T17:26:50Z",
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30110820262",
       "built_from": {
-        "formula_sha256": "472450f7eb27a8c9ca45f4b8d7d60da89a00fe6267f80a53feec914b2faca7b9",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "formula_sha256": "482aed09638406ff9b08e8d8f76b89248f03b370243a47ec319758638a837156",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "c0e32f29237361c3364e222df796da580fa04197",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 27403795,
-      "cache_key_sha": "6215d7bc3b3d2b796b915e8a4f34621a26a20a78468213ffc0df58087618bb73",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/icu-74.2-rebuild5-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "6215d7bc3b3d2b796b915e8a4f34621a26a20a78468213ffc0df58087618bb73",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/icu/blobs/sha256:6215d7bc3b3d2b796b915e8a4f34621a26a20a78468213ffc0df58087618bb73"
+      "status": "pending"
     }
   ],
   "dependencies": [
@@ -39,11 +34,11 @@
   "formula_path": "Formula/icu.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/icu",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "icu",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "74.2"

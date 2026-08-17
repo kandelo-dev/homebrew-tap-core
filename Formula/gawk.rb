@@ -83,10 +83,4 @@ class Gawk < Formula
     assert_match(/missing\.txt.*No such file or directory/, missing)
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "842c9d2eb0dba098af0e3ab288c03c9a7b148a1bb0d2c71911cb89adc0312bea"
-  end
-
 end

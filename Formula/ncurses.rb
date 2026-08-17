@@ -443,10 +443,4 @@ class Ncurses < Formula
     assert_includes cxx_output, "ncurses-cxx-ok\n"
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "410553a865db2cedb85e3e86cf99e13f5ce57dbdeab314e046651ba632668c67"
-  end
-
 end

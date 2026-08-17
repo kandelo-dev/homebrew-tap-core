@@ -172,10 +172,4 @@ class Bzip2 < Formula
     assert_equal input, kandelo_run_wasm(bin/"bzip2", ["-dc"], stdin: compressed).b
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 2
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "a2440f810e52b250951c323b43f6d55b40c3e68b28408929df53bdfe83044c85"
-  end
-
 end

@@ -138,10 +138,4 @@ class Zlib < Formula
     end
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 3
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "56156bebb6c58add889785458ed2a9ee78a8932bb3ed750b4f53ec3dbb13a792"
-  end
-
 end

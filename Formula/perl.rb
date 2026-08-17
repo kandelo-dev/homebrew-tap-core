@@ -388,10 +388,4 @@ class Perl < Formula
     )
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: "/home/linuxbrew/.linuxbrew/Cellar", wasm32_kandelo: "6dfd352a87b9ea8c2cb31f33b3cbc6b9feca9dc4747e6346f017838a59588c22"
-  end
-
 end

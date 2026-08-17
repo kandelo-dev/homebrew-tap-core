@@ -79,10 +79,4 @@ class Ncompress < Formula
     refute_path_exists workspace/"sample.txt.Z"
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "14a2431f669b102d09ea9597dd75b299fe440a7c018b98498f33c09b6765dcf2"
-  end
-
 end

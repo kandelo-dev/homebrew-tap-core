@@ -9,35 +9,30 @@
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30105411969",
       "built_from": {
         "formula_sha256": "e578404405dc97371903fe83c3373f745bef9a376d98814b3e432f72449de942",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "aecde46f2d627d2867d2c0ffd0f6ebed123f11ed",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 189318,
-      "cache_key_sha": "49217f1c99b44bb6ec11e0ca5416a1b6330106bfbdde32df40ee8bd2f61db41e",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/sed-4.9-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "49217f1c99b44bb6ec11e0ca5416a1b6330106bfbdde32df40ee8bd2f61db41e",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/sed/blobs/sha256:49217f1c99b44bb6ec11e0ca5416a1b6330106bfbdde32df40ee8bd2f61db41e"
+      "status": "pending"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/sed.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/sed",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "sed",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "4.9"

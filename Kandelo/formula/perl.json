@@ -8,36 +8,31 @@
       "built_at": "2026-07-24T15:46:41Z",
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30104575212",
       "built_from": {
-        "formula_sha256": "930ad0e1983de6a19b72f620a0ad6d8f142659e36e4003e56755e3602a1e86df",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "formula_sha256": "239a2936a3217670ff84d4cb1f66232e096812505eace50e3afabd90085d9358",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "eb78ddfa62254c0a98859d4fa1cb48bed87fcfe1",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 10476131,
-      "cache_key_sha": "6dfd352a87b9ea8c2cb31f33b3cbc6b9feca9dc4747e6346f017838a59588c22",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/perl-5.40.3-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "6dfd352a87b9ea8c2cb31f33b3cbc6b9feca9dc4747e6346f017838a59588c22",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/perl/blobs/sha256:6dfd352a87b9ea8c2cb31f33b3cbc6b9feca9dc4747e6346f017838a59588c22"
+      "status": "pending"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/perl.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/perl",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "perl",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "5.40.3"

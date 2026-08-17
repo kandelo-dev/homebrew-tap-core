@@ -8,26 +8,21 @@
       "built_at": "2026-07-28T05:17:09Z",
       "built_by": "https://github.com/Kandelo-dev/homebrew-tap-core/actions/runs/30329085073",
       "built_from": {
-        "formula_sha256": "cf6f804f12e3a4b051d72d5956893c6fc90231a41a8336b3beb96fdc9a41d1e9",
-        "kandelo_commit": "c647adda31d0918de944135543fb94039135cef1",
+        "formula_sha256": "1da369e625ddb11746c0fbfb31e450d9081d84d85ce568920901f24a75592d19",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 334753,
-      "cache_key_sha": "b4d928459d42d8d1b1c0f7d19c806f55f314fbd9219f2a55b41f2c04b13fef6a",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/file-formula-5.45-rebuild3-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node",
         "browser"
       ],
-      "sha256": "b4d928459d42d8d1b1c0f7d19c806f55f314fbd9219f2a55b41f2c04b13fef6a",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/file-formula/blobs/sha256:b4d928459d42d8d1b1c0f7d19c806f55f314fbd9219f2a55b41f2c04b13fef6a"
+      "status": "pending"
     }
   ],
   "dependencies": [
@@ -55,11 +50,11 @@
   "formula_path": "Formula/file-formula.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/file-formula",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "file-formula",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "5.45"

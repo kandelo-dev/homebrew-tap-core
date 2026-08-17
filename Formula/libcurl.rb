@@ -11,12 +11,6 @@ class Libcurl < Formula
   license "curl"
   revision 4
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 4
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "4dfb1d19a164cd33ead2f3f9991525965bce6be40054d5fa8c06502906f30a59"
-  end
-
   depends_on KandeloFormulaSupport::PkgconfRequirement => [:build, :test]
   depends_on KandeloFormulaSupport::BinaryenRequirement => [:build, :test]
   depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]

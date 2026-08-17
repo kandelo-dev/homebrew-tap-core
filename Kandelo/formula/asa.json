@@ -9,35 +9,30 @@
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30094542074",
       "built_from": {
         "formula_sha256": "44a51270db954dc77c63d411705a0128d978c9c96f02f0cebb0535eeb0f2d51c",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "edeebd60813fd8aceded35b93e4c36c211232b18",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 23977,
-      "cache_key_sha": "3ae1cc89f0e93a9ab7c23c1c4480849b28e39b58d68630426adc1a3180793d0c",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "not-required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/asa-15.0.0-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "3ae1cc89f0e93a9ab7c23c1c4480849b28e39b58d68630426adc1a3180793d0c",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/asa/blobs/sha256:3ae1cc89f0e93a9ab7c23c1c4480849b28e39b58d68630426adc1a3180793d0c"
+      "status": "pending"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/asa.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/asa",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "asa",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "15.0.0"

@@ -148,11 +148,4 @@ class MuslFts < Formula
       kandelo_run_wasm(wasm, [], env: { "KERNEL_CWD" => testpath })
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "13ff7fbad0db232639e5bc50cf866a68b14079ef4889877c60753d010087c4a8"
-    sha256 cellar: :any_skip_relocation, wasm64_kandelo: "36535a158a686dd547a359aa6953008f581f5f9b235adca624bccba985417168"
-  end
-
 end

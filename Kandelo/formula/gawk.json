@@ -8,36 +8,31 @@
       "built_at": "2026-07-24T14:36:03Z",
       "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30099900629",
       "built_from": {
-        "formula_sha256": "55967cb2c37b65ebc4b8d2ede2126cde59895f4df8cbce3eaec914017df1a12d",
-        "kandelo_commit": "d3805721b887a19382ef1c96b576fc27badc0951",
+        "formula_sha256": "b8c3eb4ff4220951342a5a737557d70597d2017078e8aab536cf9fc7191ba2fb",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "1c87074a9444919517b7c7b1b0f52e003069540b",
+        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "bytes": 650444,
-      "cache_key_sha": "d79b3af6327266ddb6521dfbcc6413b8ec3f041176f7db917606adab381e8b63",
       "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
       "fork_instrumentation": "required",
-      "kandelo_abi": 42,
-      "link_manifest": "Kandelo/link/gawk-5.3.0-rebuild1-wasm32.json",
+      "kandelo_abi": 43,
       "prefix": "/home/linuxbrew/.linuxbrew",
       "runtime_support": [
         "node"
       ],
-      "sha256": "d79b3af6327266ddb6521dfbcc6413b8ec3f041176f7db917606adab381e8b63",
-      "status": "success",
-      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/gawk/blobs/sha256:d79b3af6327266ddb6521dfbcc6413b8ec3f041176f7db917606adab381e8b63"
+      "status": "pending"
     }
   ],
   "dependencies": [],
   "formula_path": "Formula/gawk.rb",
   "formula_revision": 0,
   "full_name": "kandelo-dev/tap-core/gawk",
-  "kandelo_abi": 42,
+  "kandelo_abi": 43,
   "name": "gawk",
   "schema": 1,
   "source_metadata": "Kandelo/metadata.json",
-  "tap_commit": "b5ffda55d9b0e27efdfdec30ebb38d48a21518c4",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
   "version": "5.3.0"

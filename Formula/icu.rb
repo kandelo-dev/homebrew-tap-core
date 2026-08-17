@@ -340,12 +340,6 @@ class Icu < Formula
       kandelo_run_browser_wasm(wasm, [explicit_guest_data], guest_files: explicit_files, timeout_ms: 180_000)
   end
 
-  bottle do
-    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core"
-    rebuild 5
-    sha256 cellar: :any_skip_relocation, wasm32_kandelo: "6215d7bc3b3d2b796b915e8a4f34621a26a20a78468213ffc0df58087618bb73"
-  end
-
   private
 
   def reject_builder_paths!(formula_paths)
