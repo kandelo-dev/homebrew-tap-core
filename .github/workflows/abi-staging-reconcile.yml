@@ -194,19 +194,42 @@ jobs:
           persist-credentials: false
           path: kandelo-source
 
+      - name: Derive exact shared Homebrew realm cache identity
+        id: realm-cache-key
+        env:
+          KANDELO_COMMIT: ${{ needs.discover-plan.outputs.kandelo-head }}
+          RUNNER_OS_NAME: ${{ runner.os }}
+          RUNNER_ARCH_NAME: ${{ runner.arch }}
+        run: |
+          set -euo pipefail
+          tap-authority/scripts/abi-staging-homebrew-realm-cache-key.sh \
+            --tap-root "$GITHUB_WORKSPACE/tap-authority" \
+            --kandelo-commit "$KANDELO_COMMIT" \
+            --runner-os "$RUNNER_OS_NAME" \
+            --runner-arch "$RUNNER_ARCH_NAME" \
+            --github-output "$GITHUB_OUTPUT"
+
       - name: Restore exact shared Homebrew realm cache
         id: restore-realm-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/shared-homebrew-realm.tar.zst
-          key: abi-staging-homebrew-realm-${{ runner.os }}-${{ runner.arch }}-${{ needs.discover-plan.outputs.kandelo-head }}-${{ needs.discover-plan.outputs.tap-commit }}
+          key: ${{ steps.realm-cache-key.outputs.cache_key }}
+
+      - name: Migrate exact compatible Homebrew realm cache
+        id: restore-legacy-realm-cache
+        if: steps.restore-realm-cache.outputs.cache-hit != 'true' && steps.realm-cache-key.outputs.legacy_cache_key != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/shared-homebrew-realm.tar.zst
+          key: ${{ steps.realm-cache-key.outputs.legacy_cache_key }}
 
       - name: Set up exact Kandelo build tools
-        if: steps.restore-realm-cache.outputs.cache-hit != 'true'
+        if: steps.restore-realm-cache.outputs.cache-hit != 'true' && steps.restore-legacy-realm-cache.outputs.cache-hit != 'true'
         uses: ./kandelo-source/.github/actions/setup-nix
 
       - name: Prepare one shared uncredentialed Homebrew realm
-        if: steps.restore-realm-cache.outputs.cache-hit != 'true'
+        if: steps.restore-realm-cache.outputs.cache-hit != 'true' && steps.restore-legacy-realm-cache.outputs.cache-hit != 'true'
         working-directory: kandelo-source
         run: |
           set -euo pipefail
@@ -221,7 +244,7 @@ jobs:
                 --playwright-browsers "$playwright_browsers"
 
       - name: Pack exact shared Homebrew realm
-        if: steps.restore-realm-cache.outputs.cache-hit != 'true'
+        if: steps.restore-realm-cache.outputs.cache-hit != 'true' && steps.restore-legacy-realm-cache.outputs.cache-hit != 'true'
         working-directory: kandelo-source
         env:
           EXPECTED_COMMIT: ${{ needs.discover-plan.outputs.kandelo-head }}
@@ -257,7 +280,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/shared-homebrew-realm.tar.zst
-          key: ${{ steps.restore-realm-cache.outputs.cache-primary-key }}
+          key: ${{ steps.realm-cache-key.outputs.cache_key }}
 
       - name: Upload exact shared Homebrew realm
         id: upload-realm

@@ -357,7 +357,15 @@ module AbiStagingWorkflowCheck
     realm_uploads = action_steps(realm, UPLOAD_ARTIFACT)
     realm_restores = action_steps(realm, CACHE_RESTORE)
     realm_saves = action_steps(realm, CACHE_SAVE)
-    realm_restore = realm_restores.length == 1 ? realm_restores.fetch(0) : nil
+    realm_key = run_steps(realm).find do |step|
+      step["id"] == "realm-cache-key"
+    end
+    realm_restore = realm_restores.find do |step|
+      step["id"] == "restore-realm-cache"
+    end
+    realm_legacy_restore = realm_restores.find do |step|
+      step["id"] == "restore-legacy-realm-cache"
+    end
     realm_save = realm_saves.length == 1 ? realm_saves.fetch(0) : nil
     realm_setup = realm_steps.find do |step|
       step["uses"] == "./kandelo-source/.github/actions/setup-nix"
@@ -371,30 +379,49 @@ module AbiStagingWorkflowCheck
     realm_identity = realm_steps.find { |step| step["id"] == "realm-identity" }
     realm_upload = realm_steps.find { |step| step["id"] == "upload-realm" }
     realm_cache_path = "${{ runner.temp }}/shared-homebrew-realm.tar.zst"
-    realm_cache_key = "abi-staging-homebrew-realm-" \
-                      "${{ runner.os }}-${{ runner.arch }}-" \
-                      "${{ needs.discover-plan.outputs.kandelo-head }}-" \
-                      "${{ needs.discover-plan.outputs.tap-commit }}"
-    realm_cache_miss = "steps.restore-realm-cache.outputs.cache-hit != 'true'"
+    realm_cache_key = "${{ steps.realm-cache-key.outputs.cache_key }}"
+    realm_legacy_cache_key =
+      "${{ steps.realm-cache-key.outputs.legacy_cache_key }}"
+    realm_primary_cache_miss =
+      "steps.restore-realm-cache.outputs.cache-hit != 'true'"
+    realm_legacy_restore_guard = realm_primary_cache_miss +
+      " && steps.realm-cache-key.outputs.legacy_cache_key != ''"
+    realm_cache_miss = realm_primary_cache_miss +
+      " && steps.restore-legacy-realm-cache.outputs.cache-hit != 'true'"
     realm_cache_contract =
-      !realm_restore.nil? && realm_restore.fetch("id", nil) == "restore-realm-cache" &&
+      realm_restores.length == 2 && !realm_key.nil? &&
+      realm_key.fetch("env", {}) == {
+        "KANDELO_COMMIT" => "${{ needs.discover-plan.outputs.kandelo-head }}",
+        "RUNNER_OS_NAME" => "${{ runner.os }}",
+        "RUNNER_ARCH_NAME" => "${{ runner.arch }}"
+      } && realm_key.fetch("run", "").include?(
+        "abi-staging-homebrew-realm-cache-key.sh"
+      ) && !realm_restore.nil? &&
       realm_restore.fetch("uses") == CACHE_RESTORE &&
       realm_restore.fetch("with", {}) == {
         "path" => realm_cache_path,
         "key" => realm_cache_key
+      } && !realm_legacy_restore.nil? &&
+      realm_legacy_restore.fetch("uses") == CACHE_RESTORE &&
+      realm_legacy_restore.fetch("if", nil) == realm_legacy_restore_guard &&
+      realm_legacy_restore.fetch("with", {}) == {
+        "path" => realm_cache_path,
+        "key" => realm_legacy_cache_key
       } && !realm_save.nil? && realm_save.fetch("id", nil) == "save-realm-cache" &&
       realm_save.fetch("uses") == CACHE_SAVE &&
-      realm_save.fetch("if", nil) == realm_cache_miss &&
+      realm_save.fetch("if", nil) == realm_primary_cache_miss &&
       realm_save.fetch("with", {}) == {
         "path" => realm_cache_path,
-        "key" => "${{ steps.restore-realm-cache.outputs.cache-primary-key }}"
+        "key" => realm_cache_key
       } && !realm_setup.nil? && realm_setup.fetch("if", nil) == realm_cache_miss &&
       !realm_prepare.nil? && realm_prepare.fetch("if", nil) == realm_cache_miss &&
       !realm_pack.nil? && realm_pack.fetch("if", nil) == realm_cache_miss &&
       !realm_identity.nil? && !realm_identity.key?("if") &&
       realm_identity.fetch("run", "").include?('[[ -f "$archive" && ! -L "$archive" ]]') &&
       !realm_upload.nil? && !realm_upload.key?("if") &&
-      realm_steps.index(realm_restore) < realm_steps.index(realm_setup) &&
+      realm_steps.index(realm_key) < realm_steps.index(realm_restore) &&
+      realm_steps.index(realm_restore) < realm_steps.index(realm_legacy_restore) &&
+      realm_steps.index(realm_legacy_restore) < realm_steps.index(realm_setup) &&
       realm_steps.index(realm_setup) < realm_steps.index(realm_prepare) &&
       realm_steps.index(realm_prepare) < realm_steps.index(realm_pack) &&
       realm_steps.index(realm_pack) < realm_steps.index(realm_identity) &&
@@ -414,6 +441,7 @@ module AbiStagingWorkflowCheck
           "source-tree" => "${{ steps.realm-identity.outputs.source_tree }}"
         } && realm_source.include?("abi-staging-prepare-shared-homebrew-realm.sh") &&
         realm_source.include?("abi-staging-pack-homebrew-realm.sh") &&
+        realm_source.include?("abi-staging-homebrew-realm-cache-key.sh") &&
         realm_source.include?("env -u GITHUB_TOKEN") &&
         realm_source.include?("-u ACTIONS_RUNTIME_TOKEN") &&
         realm_cache_contract &&
