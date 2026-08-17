@@ -140,6 +140,15 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("--automake-acdir=#{automake_macros}", source)
         self.assertIn("--system-acdir=#{automake_macros}", source)
 
+    def test_musl_fts_installed_bottle_test_does_not_require_build_only_automake(self) -> None:
+        source = (TAP_ROOT / "Formula/musl-fts.rb").read_text(encoding="utf-8")
+        test_block = source[source.index("  test do\n") : source.index("  bottle do\n")]
+
+        self.assertNotIn("kandelo_wasm_build", test_block)
+        self.assertIn("sdk_root = kandelo_activate_sdk!", test_block)
+        self.assertIn("kandelo_activate_sysroot!(sdk_root)", test_block)
+        self.assertIn("system kandelo_cc(sdk_root)", test_block)
+
     def test_findutils_shipping_smoke_does_not_run_the_unstable_xargs_fork_probe(self) -> None:
         source = (TAP_ROOT / "Formula/findutils.rb").read_text(encoding="utf-8")
         self.assertNotIn('bin/"xargs",\n        ["-n", "2", "/bin/sh"', source)
