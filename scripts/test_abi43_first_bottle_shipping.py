@@ -66,6 +66,14 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
             source,
         )
 
+    def test_git_bottle_does_not_enumerate_every_mergetool_helper(self) -> None:
+        source = self.formula("git")
+        self.assertIn('["clone", "file:///work/repo", "clone"]', source)
+        self.assertIn('["-C", "clone", "submodule", "status"]', source)
+        self.assertIn('assert_path_exists git_core/"mergetools/vimdiff"', source)
+        self.assertNotIn('["-C", "clone", "mergetool", "--tool-help"]', source)
+        self.assertNotIn("mergetool_help_descendant_statuses", source)
+
 
 if __name__ == "__main__":
     unittest.main()

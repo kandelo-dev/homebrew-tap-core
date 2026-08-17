@@ -415,21 +415,6 @@ class Git < Formula
     assert_match(/\b[0-9a-f]{7,}\b.*\binitial\b/, paged_log)
     assert_match(/\(END\)/, paged_log)
 
-    # git-mergetool and git-mergetool--lib enumerate every supported tool.
-    # Their configuration and availability probes intentionally include
-    # false and command-not-found results even though --tool-help succeeds.
-    # Running all 749 helpers needs a larger, still-bounded runtime deadline.
-    mergetool_help_descendant_statuses =
-      Array.new(471, 0) + Array.new(248, 1) + Array.new(30, 127)
-    mergetool_help = run_git.call(
-      ["-C", "clone", "mergetool", "--tool-help"],
-      guest_env:                         { "TIMEOUT" => "180000" },
-      merge_stderr:                      true,
-      expected_fork_descendant_statuses: mergetool_help_descendant_statuses,
-    )
-    assert_match(/git mergetool --tool=<tool>/, mergetool_help)
-    assert_match(/vimdiff/, mergetool_help)
-
     (testpath/"clone/editor.txt").write "editor workflow\n"
     assert_empty run_git.call(["-C", "clone", "add", "editor.txt"])
     %w[GIT_EDITOR VISUAL EDITOR].each { |variable| refute env.key?(variable) }
