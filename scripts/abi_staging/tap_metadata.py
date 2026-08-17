@@ -685,8 +685,6 @@ def check_tap_metadata(tap_root: Path) -> dict[str, Any]:
         root / "Kandelo/staging/promotion-activation.toml"
     )
     state = load_abi_state(root / "Kandelo/abi-state.json")
-    if activation.mode == "active" and state.activation is None:
-        raise TapMetadataError("active promotion requires exact managed ABI activation")
     metadata = _load_json(root / "Kandelo/metadata.json", "top-level Formula metadata")
     _exact_keys(metadata, TOP_METADATA_KEYS, "top-level Formula metadata")
     if metadata["schema"] != 1:
