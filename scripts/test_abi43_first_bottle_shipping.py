@@ -66,6 +66,21 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
             source,
         )
 
+    def test_nginx_guest_can_read_its_mounted_http_fixture(self) -> None:
+        source = self.formula("nginx")
+        test_block = source[source.index("  test do\n") :]
+
+        fixture_write = test_block.index('(testpath/"nginx.conf").write')
+        expected_permissions = (
+            'chmod 0644, testpath/"nginx.conf", '
+            'testpath/"html/new/message.txt"'
+        )
+        self.assertIn(expected_permissions, test_block)
+        guest_permissions = test_block.index(expected_permissions)
+        service_start = test_block.index("responses = kandelo_run_http_service(")
+        self.assertLess(fixture_write, guest_permissions)
+        self.assertLess(guest_permissions, service_start)
+
     def test_git_bottle_does_not_enumerate_every_mergetool_helper(self) -> None:
         source = self.formula("git")
         self.assertIn('["clone", "file:///work/repo", "clone"]', source)
