@@ -81,6 +81,17 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         self.assertLess(fixture_write, guest_permissions)
         self.assertLess(guest_permissions, service_start)
 
+    def test_redis_accepts_the_current_abi_dynamic_loader_contract(self) -> None:
+        source = self.formula("redis")
+
+        for loader_import in (
+            "__wasm_dlopen_main",
+            "__wasm_dlopen_prepare",
+            "__wasm_dlopen_next",
+        ):
+            with self.subTest(loader_import=loader_import):
+                self.assertIn(loader_import, source)
+
     def test_git_bottle_does_not_enumerate_every_mergetool_helper(self) -> None:
         source = self.formula("git")
         self.assertIn('["clone", "file:///work/repo", "clone"]', source)

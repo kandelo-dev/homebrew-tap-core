@@ -121,7 +121,7 @@ class Redis < Formula
         for artifact in #{server.to_s.shellescape} #{cli.to_s.shellescape}; do
           unexpected_env_imports=$(wasm-objdump -x "$artifact" |
             awk '/<- env[.]/ { sub(/^.*<- env[.]/, ""); print $1 }' |
-            grep -Ev '^(__channel_base|memory|__wasm_dlclose|__wasm_dlerror|__wasm_dlopen|__wasm_dlsym)$' || true)
+            grep -Ev '^(__channel_base|memory|__wasm_dlclose|__wasm_dlerror|__wasm_dlopen|__wasm_dlopen_main|__wasm_dlopen_prepare|__wasm_dlopen_next|__wasm_dlsym)$' || true)
           if [ -n "$unexpected_env_imports" ]; then
             echo "ERROR: Redis contains unresolved non-ABI env imports: $artifact" >&2
             echo "$unexpected_env_imports" >&2
