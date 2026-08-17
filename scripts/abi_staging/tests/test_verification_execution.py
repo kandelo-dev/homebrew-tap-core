@@ -885,7 +885,7 @@ class VerificationExecutionTests(unittest.TestCase):
         def compose(**kwargs):
             self.assertEqual(
                 [candidate["formula"] for candidate in kwargs["candidates"]],
-                ["mini-base", "mini-tool"],
+                ["mini-base"],
             )
             composed = kwargs["destination"]
             subprocess.run(

@@ -2015,7 +2015,17 @@ def execute_verification_work(
             tap_root=tap,
             kandelo_root=kandelo,
             destination=temporary_root / "tap",
-            candidates=prepared["candidates"],
+            # The target archive is already selected, fetched, and poured by
+            # exact digest.  Composing its candidate bottle block would replace
+            # the protected Formula's existing bottle block before the archived
+            # Formula receipt is compared, manufacturing a source mismatch.
+            # Only dependency Formulae need candidate bottle blocks so Homebrew
+            # can resolve the locally authenticated closure.
+            candidates=[
+                candidate
+                for candidate in prepared["candidates"]
+                if candidate is not prepared["target"]
+            ],
         )
         child_environment = _uncredentialed_environment(
             os.environ if environment is None else environment,
