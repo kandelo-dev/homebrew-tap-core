@@ -322,9 +322,6 @@ jobs:
       realm-archive-sha256: ${{ needs.prepare-homebrew-realm.outputs.archive-sha256 }}
       realm-source-tree: ${{ needs.prepare-homebrew-realm.outputs['source-tree'] }}
       work-id: ${{ matrix.work_id }}
-    secrets:
-      HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
-
   verification:
     name: verification ${{ matrix.work_id }}
     needs: [discover-plan, prepare-homebrew-realm]
@@ -350,9 +347,6 @@ jobs:
       realm-archive-sha256: ${{ needs.prepare-homebrew-realm.outputs.archive-sha256 }}
       realm-source-tree: ${{ needs.prepare-homebrew-realm.outputs['source-tree'] }}
       work-id: ${{ matrix.work_id }}
-    secrets:
-      HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
-
   reuse:
     name: reuse ${{ matrix.work_id }}
     needs: discover-plan
@@ -371,9 +365,6 @@ jobs:
       coordination-artifact-digest: ${{ needs.discover-plan.outputs.coordination-artifact-digest }}
       tap-commit: ${{ needs.discover-plan.outputs.tap-commit }}
       work-id: ${{ matrix.work_id }}
-    secrets:
-      HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
-
   prepare-runtime:
     name: prepare exact runtime
     needs: discover-plan
@@ -709,8 +700,8 @@ jobs:
         working-directory: tap-authority
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
-          HOMEBREW_GITHUB_PACKAGES_USER: ${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
           PRODUCT_ID: ${{ matrix.product_id }}
           WORK_ID: ${{ matrix.work_id }}
         run: |
@@ -1012,8 +1003,8 @@ jobs:
         working-directory: tap-authority
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
-          HOMEBREW_GITHUB_PACKAGES_USER: ${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
           PRODUCT_ID: ${{ matrix.product_id }}
           PRODUCT_WORK_ID: ${{ matrix.work_id }}
           WORK_ID: ${{ matrix.publication_work_id }}
@@ -1152,8 +1143,8 @@ jobs:
         working-directory: tap-authority
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
-          HOMEBREW_GITHUB_PACKAGES_USER: ${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
           WORK_ID: ${{ matrix.work_id }}
         run: |
           set -euo pipefail
@@ -1287,8 +1278,8 @@ jobs:
         working-directory: tap-authority
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
-          HOMEBREW_GITHUB_PACKAGES_USER: ${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
           WORK_ID: ${{ matrix.work_id }}
         run: |
           set -euo pipefail

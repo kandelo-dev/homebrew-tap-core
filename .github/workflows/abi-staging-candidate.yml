@@ -36,10 +36,6 @@ on:
       work-id:
         required: true
         type: string
-    secrets:
-      HOMEBREW_GITHUB_PACKAGES_TOKEN:
-        required: true
-
 permissions: {}
 
 jobs:
@@ -484,8 +480,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           HANDOFF_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact-digest }}
           HANDOFF_ARTIFACT_ID: ${{ needs.build.outputs.artifact-id }}
-          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ secrets.HOMEBREW_GITHUB_PACKAGES_TOKEN }}
-          HOMEBREW_GITHUB_PACKAGES_USER: ${{ vars.HOMEBREW_GITHUB_PACKAGES_USER }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
           PRODUCER_CONCLUSION: ${{ needs.build.result }}
           TAP_COMMIT: ${{ inputs.tap-commit }}
           WORK_ID: ${{ inputs.work-id }}
