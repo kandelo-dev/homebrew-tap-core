@@ -140,10 +140,10 @@ class MuslFts < Formula
       }
     C
 
-    kandelo_wasm_build do
-      system kandelo_cc, source, "-I#{include}", lib/"libfts.a", "-o", wasm
-      kandelo_validate_wasm_artifact(wasm, fork: :forbidden)
-    end
+    sdk_root = kandelo_activate_sdk!
+    kandelo_activate_sysroot!(sdk_root)
+    system kandelo_cc(sdk_root), source, "-I#{include}", lib/"libfts.a", "-o", wasm
+    kandelo_validate_wasm_artifact(wasm, fork: :forbidden)
     assert_equal "directories=2 files=2 links=1\n",
       kandelo_run_wasm(wasm, [], env: { "KERNEL_CWD" => testpath })
   end
