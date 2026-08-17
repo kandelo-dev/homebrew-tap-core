@@ -113,23 +113,6 @@ class Redis < Formula
       system "wasm-opt", "-O2", "--strip-debug", buildpath/"src/redis-server", "-o", server
       system "wasm-opt", "-O2", "--strip-debug", buildpath/"src/redis-cli", "-o", cli
 
-      # WHY: reject unresolved build inputs before fork instrumentation. The
-      # instrumenter adds imports from Kandelo's generated fork contract; a
-      # Formula-local list of those names would duplicate the ABI and drift.
-      system "bash", "-c", <<~SH
-        set -euo pipefail
-        for artifact in #{server.to_s.shellescape} #{cli.to_s.shellescape}; do
-          unexpected_env_imports=$(wasm-objdump -x "$artifact" |
-            awk '/<- env[.]/ { sub(/^.*<- env[.]/, ""); print $1 }' |
-            grep -Ev '^(__channel_base|memory|__wasm_dlclose|__wasm_dlerror|__wasm_dlopen|__wasm_dlsym)$' || true)
-          if [ -n "$unexpected_env_imports" ]; then
-            echo "ERROR: Redis contains unresolved non-ABI env imports: $artifact" >&2
-            echo "$unexpected_env_imports" >&2
-            exit 1
-          fi
-        done
-      SH
-
       kandelo_fork_instrument(server)
       kandelo_validate_wasm_artifact(server, fork: :required)
       kandelo_validate_wasm_artifact(cli, fork: :forbidden)

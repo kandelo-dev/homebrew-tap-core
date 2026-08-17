@@ -28,6 +28,48 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
                     source,
                 )
 
+    def test_nginx_service_mounts_are_readable_by_the_non_root_guest(self) -> None:
+        source = self.formula("nginx")
+        self.assertIn(
+            '[testpath/"nginx.conf", testpath/"html/new/message.txt"].each do |path|',
+            source,
+        )
+        self.assertIn("chmod 0644, path", source)
+
+    def test_redis_uses_the_shared_abi_import_validator(self) -> None:
+        source = self.formula("redis")
+        self.assertNotIn("unexpected_env_imports", source)
+        self.assertIn(
+            "kandelo_validate_wasm_artifact(server, fork: :required)",
+            source,
+        )
+        self.assertIn(
+            "kandelo_validate_wasm_artifact(cli, fork: :forbidden)",
+            source,
+        )
+
+    def test_tcl_instruments_its_runtime_side_module(self) -> None:
+        source = self.formula("tcl")
+        compile_side_module = source.index(
+            'system kandelo_cc, "-shared", "-fPIC", "-O2", "-I#{include}/tcl"'
+        )
+        instrument_side_module = source.index(
+            "kandelo_fork_instrument(extension)", compile_side_module
+        )
+        load_side_module = source.index(
+            "load /work/kandelo-extension.so Kandelo", instrument_side_module
+        )
+        self.assertLess(compile_side_module, instrument_side_module)
+        self.assertLess(instrument_side_module, load_side_module)
+
+    def test_texlive_uses_the_responsive_immutable_archive_origin(self) -> None:
+        source = self.formula("texlive")
+        self.assertNotIn("https://pi.kwarc.info/", source)
+        self.assertEqual(
+            source.count("https://texlive.info/historic/systems/texlive/2025/"),
+            4,
+        )
+
     def test_bash_bottle_does_not_gate_on_the_known_append_redirection_gap(self) -> None:
         source = self.formula("bash")
         self.assertIn("append redirection currently returns ENOTSUP", source)

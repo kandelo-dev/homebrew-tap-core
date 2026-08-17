@@ -291,6 +291,7 @@ class Tcl < Formula
       system kandelo_cc, "-shared", "-fPIC", "-O2", "-I#{include}/tcl",
         extension_source, "-L#{lib}", "-ltclstub", "-o", extension
     end
+    kandelo_fork_instrument(extension)
 
     zlib = formula_opt_prefix("kandelo-dev/tap-core/zlib")
     thread_source = testpath/"tcl-thread.c"

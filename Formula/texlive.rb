@@ -97,8 +97,7 @@ class Texlive < Formula
   ].freeze
   desc "Typesetting engine and selected TeX Live runtime for Kandelo"
   homepage "https://www.tug.org/texlive/"
-  url "https://pi.kwarc.info/historic/systems/texlive/2025/texlive-20250308-source.tar.xz"
-  mirror "https://texlive.info/historic/systems/texlive/2025/texlive-20250308-source.tar.xz"
+  url "https://texlive.info/historic/systems/texlive/2025/texlive-20250308-source.tar.xz"
   mirror "https://ftp.tu-chemnitz.de/pub/tug/historic/systems/texlive/2025/texlive-20250308-source.tar.xz"
   sha256 "fffdb1a3d143c177a4398a2229a40d6a88f18098e5f6dcfd57648c9f2417490f"
   license :cannot_represent
@@ -116,24 +115,21 @@ class Texlive < Formula
   # 20250308 snapshot. The mutable tlnet repository and install-tl transaction
   # used by the registry recipe are intentionally not part of this formula.
   resource "texlive-extra" do
-    url "https://pi.kwarc.info/historic/systems/texlive/2025/texlive-20250308-extra.tar.xz"
-    mirror "https://texlive.info/historic/systems/texlive/2025/texlive-20250308-extra.tar.xz"
+    url "https://texlive.info/historic/systems/texlive/2025/texlive-20250308-extra.tar.xz"
     mirror "https://ftp.tu-chemnitz.de/pub/tug/historic/systems/texlive/2025/texlive-20250308-extra.tar.xz"
     version TEXLIVE_SNAPSHOT
     sha256 "ea69cfecbc9b138acbc45476e8cb4d9357f5e4e45fd12b3bf9ceabbebd7669d2"
   end
 
   resource "texlive-texmf" do
-    url "https://pi.kwarc.info/historic/systems/texlive/2025/texlive-20250308-texmf.tar.xz"
-    mirror "https://texlive.info/historic/systems/texlive/2025/texlive-20250308-texmf.tar.xz"
+    url "https://texlive.info/historic/systems/texlive/2025/texlive-20250308-texmf.tar.xz"
     mirror "https://ftp.tu-chemnitz.de/pub/tug/historic/systems/texlive/2025/texlive-20250308-texmf.tar.xz"
     version TEXLIVE_SNAPSHOT
     sha256 "08dcda7430bf0d2f6ebb326f1e197e1473d3f7cc0984a2adb7236df45316c7cf"
   end
 
   resource "texlive-installer" do
-    url "https://pi.kwarc.info/historic/systems/texlive/2025/install-tl-unx.tar.gz"
-    mirror "https://texlive.info/historic/systems/texlive/2025/install-tl-unx.tar.gz"
+    url "https://texlive.info/historic/systems/texlive/2025/install-tl-unx.tar.gz"
     mirror "https://ftp.tu-chemnitz.de/pub/tug/historic/systems/texlive/2025/install-tl-unx.tar.gz"
     version TEXLIVE_SNAPSHOT
     sha256 "9938f192af75f792e84282580cce6eedac32969e0e07b33cb39ca1b699e948b6"
