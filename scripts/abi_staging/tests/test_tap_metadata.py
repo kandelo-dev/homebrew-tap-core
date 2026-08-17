@@ -532,6 +532,7 @@ class TapMetadataTests(unittest.TestCase):
             tap_root=self.root,
             history=history,
             history_protection_snapshot=snapshot,
+            history_tap_source=source,
             current_tap_source=source,
             request_digest=REQUEST_DIGEST,
             merged_pull_request={

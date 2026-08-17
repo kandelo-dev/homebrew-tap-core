@@ -1539,6 +1539,44 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(decision.eligibility, "eligible")
         self.assertEqual(decision.tap_source_state, "exact")
 
+    def test_activation_lands_on_current_main_from_the_history_epoch(self) -> None:
+        history_plan, history_snapshot = self._history()
+        history = _fetched_from_plan(history_plan)
+        current_source = {
+            "repository": self.promotion_policy.tap_repository,
+            "commit": "8" * 40,
+            "tree": "9" * 40,
+        }
+        planned = object()
+
+        with patch.object(
+            promotion_module,
+            "plan_successor_activation_patch",
+            return_value=planned,
+        ) as planner:
+            result = promotion_module.prepare_successor_activation_patch(
+                tap_root=self.root,
+                history=history,
+                history_protection_snapshot=history_snapshot,
+                history_tap_source=self.tap_plan["tap_source"],
+                current_tap_source=current_source,
+                request_digest=self.request_digest,
+                merged_pull_request={
+                    "repository": self.promotion_policy.kandelo_repository,
+                    "number": 19,
+                    "head": self.request["build_source"]["commit"],
+                    "merge_commit": MERGE_COMMIT,
+                },
+                target_abi=TARGET_ABI,
+                target_snapshot_sha256=self.request["target_abi"]["snapshot_sha256"],
+                policy=self.promotion_policy,
+            )
+
+        self.assertIs(result, planned)
+        self.assertEqual(
+            planner.call_args.kwargs["current_tap_source"], current_source
+        )
+
     def test_each_writer_rechecks_the_exact_history_ref_and_protection(self) -> None:
         locator = {
             "repository": self.history.repository,

@@ -2102,6 +2102,7 @@ def _collect_active_promotion_inputs(
             tap_root=tap_root,
             history=history,
             history_protection_snapshot=history_snapshot,
+            history_tap_source=history_tap_source,
             current_tap_source=tap_source,
             request_digest=request_sha256,
             merged_pull_request=merge,
