@@ -72,8 +72,8 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
 
         fixture_write = test_block.index('(testpath/"nginx.conf").write')
         expected_permissions = (
-            'chmod 0644, testpath/"nginx.conf", '
-            'testpath/"html/new/message.txt"'
+            'chmod 0644, [testpath/"nginx.conf", '
+            'testpath/"html/new/message.txt"]'
         )
         self.assertIn(expected_permissions, test_block)
         guest_permissions = test_block.index(expected_permissions)
