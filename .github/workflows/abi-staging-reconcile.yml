@@ -194,10 +194,19 @@ jobs:
           persist-credentials: false
           path: kandelo-source
 
+      - name: Restore exact shared Homebrew realm cache
+        id: restore-realm-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/shared-homebrew-realm.tar.zst
+          key: abi-staging-homebrew-realm-${{ runner.os }}-${{ runner.arch }}-${{ needs.discover-plan.outputs.kandelo-head }}-${{ needs.discover-plan.outputs.tap-commit }}
+
       - name: Set up exact Kandelo build tools
+        if: steps.restore-realm-cache.outputs.cache-hit != 'true'
         uses: ./kandelo-source/.github/actions/setup-nix
 
       - name: Prepare one shared uncredentialed Homebrew realm
+        if: steps.restore-realm-cache.outputs.cache-hit != 'true'
         working-directory: kandelo-source
         run: |
           set -euo pipefail
@@ -212,7 +221,7 @@ jobs:
                 --playwright-browsers "$playwright_browsers"
 
       - name: Pack exact shared Homebrew realm
-        id: realm-identity
+        if: steps.restore-realm-cache.outputs.cache-hit != 'true'
         working-directory: kandelo-source
         env:
           EXPECTED_COMMIT: ${{ needs.discover-plan.outputs.kandelo-head }}
@@ -226,12 +235,29 @@ jobs:
               --expected-commit "$EXPECTED_COMMIT" \
               --expected-tree "$source_tree" \
               --archive "$archive"
+
+      - name: Derive exact shared Homebrew realm identity
+        id: realm-identity
+        working-directory: kandelo-source
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/shared-homebrew-realm.tar.zst"
+          [[ -f "$archive" && ! -L "$archive" ]]
+          source_tree="$(git rev-parse 'HEAD^{tree}')"
           archive_sha256="$(sha256sum "$archive" | awk '{print $1}')"
           [[ "$archive_sha256" =~ ^[0-9a-f]{64}$ ]]
           {
             echo "archive_sha256=$archive_sha256"
             echo "source_tree=$source_tree"
           } >>"$GITHUB_OUTPUT"
+
+      - name: Save exact shared Homebrew realm cache
+        id: save-realm-cache
+        if: steps.restore-realm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/shared-homebrew-realm.tar.zst
+          key: ${{ steps.restore-realm-cache.outputs.cache-primary-key }}
 
       - name: Upload exact shared Homebrew realm
         id: upload-realm
