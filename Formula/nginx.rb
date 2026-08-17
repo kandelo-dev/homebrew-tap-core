@@ -161,6 +161,16 @@ class Nginx < Formula
       bin.install optimized => "nginx"
       chmod 0755, bin/"nginx"
       prefix.install "conf", "html"
+      # The installed keg is mounted read-only into a guest that does not use
+      # the native Homebrew build identity. Publish nginx's runtime data with
+      # ordinary directory traversal and file-read permissions.
+      [prefix/"conf", prefix/"html"].each do |tree|
+        tree.find do |path|
+          next if path.symlink?
+
+          path.chmod(path.directory? ? 0755 : 0644)
+        end
+      end
       man8.install "objs/nginx.8"
       pkgshare.install "LICENSE"
     end
@@ -181,6 +191,8 @@ class Nginx < Formula
     assert_path_exists man8/"nginx.8"
     assert_path_exists pkgshare/"LICENSE"
     assert_path_exists prefix/"html/index.html"
+    assert_equal 0755, (prefix/"conf").stat.mode & 0777
+    assert_equal 0644, (prefix/"conf/mime.types").stat.mode & 0777
 
     version_output = kandelo_run_wasm(artifact, ["-V"], merge_stderr: true)
     assert_match "nginx version: nginx/1.30.3", version_output

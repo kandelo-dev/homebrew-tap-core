@@ -92,6 +92,25 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
             with self.subTest(loader_import=loader_import):
                 self.assertIn(loader_import, source)
 
+    def test_nginx_installs_a_guest_readable_runtime_tree(self) -> None:
+        source = self.formula("nginx")
+        install_block = source[source.index("  def install\n") : source.index("  test do\n")]
+        test_block = source[source.index("  test do\n") :]
+
+        self.assertIn('[prefix/"conf", prefix/"html"].each do |tree|', install_block)
+        self.assertIn(
+            "path.chmod(path.directory? ? 0755 : 0644)",
+            install_block,
+        )
+        self.assertIn(
+            'assert_equal 0755, (prefix/"conf").stat.mode & 0777',
+            test_block,
+        )
+        self.assertIn(
+            'assert_equal 0644, (prefix/"conf/mime.types").stat.mode & 0777',
+            test_block,
+        )
+
     def test_git_bottle_does_not_enumerate_every_mergetool_helper(self) -> None:
         source = self.formula("git")
         self.assertIn('["clone", "file:///work/repo", "clone"]', source)
