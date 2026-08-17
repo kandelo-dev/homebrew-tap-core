@@ -1956,6 +1956,12 @@ class PromotionTests(unittest.TestCase):
         with self.assertRaises(PromotionError):
             load_metadata_patch_document(canonical_bytes(changed))
 
+    def test_workflow_metadata_writer_imports_canonical_patch_loader(self) -> None:
+        self.assertIs(
+            cli_module.load_metadata_patch_document,
+            load_metadata_patch_document,
+        )
+
     def test_tap_metadata_only_or_unrelated_drift_retains_eligibility(self) -> None:
         drifted_source = {
             "repository": "kandelo-dev/homebrew-tap-core",

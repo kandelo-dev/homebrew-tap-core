@@ -815,6 +815,8 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     assert_includes export.fetch("run"), "export-runtime-realm"
     assert_includes export.fetch("run"), '--github-env "$GITHUB_ENV"'
     source = build.fetch("run")
+    assert_includes source,
+                    'npm --prefix apps/browser-demos install --prefer-offline'
     assert_includes source, '"$KANDELO_ABI_STAGING_BUILD_POLICY_SHA256"'
     assert_includes source, '"$KANDELO_ABI_STAGING_SNAPSHOT_SHA256"'
     assert_includes source, '"$KANDELO_ABI_STAGING_SOURCE_TREE"'
@@ -824,6 +826,19 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     refute_includes source, "snapshot=\"$("
     refute_includes source, "build_policy=\"$("
     refute_includes source, ".requirements.digest"
+
+    assert_rejected_matching(
+      "runtime omits protected browser bundler",
+      /runtime protected browser bundler is not installed/
+    ) do |workflow|
+      step = workflow.dig("jobs", "prepare-runtime", "steps").find do |candidate|
+        candidate["name"] == "Build one exact uncredentialed runtime"
+      end
+      step["run"] = step.fetch("run").sub(
+        /^.*npm --prefix apps\/browser-demos install --prefer-offline\n/,
+        ""
+      )
+    end
 
     assert_rejected_matching(
       "runtime omits protected tap checkout",

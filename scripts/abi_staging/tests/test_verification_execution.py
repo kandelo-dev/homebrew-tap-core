@@ -949,6 +949,14 @@ class VerificationExecutionTests(unittest.TestCase):
                 execution._VERIFIER_FORMULA_DEPENDENCY_INSTALL,
                 normal_verifier,
             )
+            self.assertNotIn(
+                execution._VERIFIER_FORMULA_INFO_CAPTURE,
+                normal_verifier,
+            )
+            self.assertIn(
+                execution._STAGING_VERIFIER_FORMULA_INFO_CAPTURE,
+                normal_verifier,
+            )
             self.assertEqual(kwargs["cwd"], KANDELO_ROOT)
             self.assertNotIn("GITHUB_TOKEN", kwargs["env"])
             self.assertNotIn("HOMEBREW_GITHUB_PACKAGES_TOKEN", kwargs["env"])

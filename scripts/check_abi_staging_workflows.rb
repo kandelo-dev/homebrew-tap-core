@@ -726,6 +726,12 @@ module AbiStagingWorkflowCheck
       ),
       "runtime package cache is not exact across the protected build"
     )
+    require_contract(
+      build_source.include?(
+        'scripts/dev-shell.sh npm --prefix apps/browser-demos install --prefer-offline'
+      ),
+      "runtime protected browser bundler is not installed"
+    )
     prepare_source = prepare_steps.map { |step| step.fetch("run") }.join("\n")
     require_contract(prepare_source.include?("abi-staging-prepare-runtime.sh") &&
                      prepare_source.include?('--source-commit "${{ needs.discover-plan.outputs.kandelo-head }}"') &&

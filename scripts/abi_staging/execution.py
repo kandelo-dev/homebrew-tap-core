@@ -44,6 +44,38 @@ _VERIFICATION_ADAPTER_ROOT_ASSIGNMENT = (
 _VERIFICATION_ADAPTER_NORMAL_ASSIGNMENT = (
     'NORMAL_VERIFIER="$REPO_ROOT/scripts/homebrew-verify-poured-bottle.sh"'
 )
+_VERIFIER_FORMULA_INFO_CAPTURE = (
+    '"$BREW_BIN" info --json=v2 "$FORMULA_REF" >"$FORMULA_INFO"'
+)
+_STAGING_VERIFIER_FORMULA_INFO_CAPTURE = r'''staging_formula_info="$FORMULA_INFO.staging"
+staging_formula_info_raw="$FORMULA_INFO.raw"
+"$BREW_BIN" info --json=v2 "$FORMULA_REF" >"$staging_formula_info_raw"
+staging_rebuild="$(jq -er '
+  to_entries |
+  if length == 1 and (.[0].value.bottle.rebuild | type) == "number" then
+    .[0].value.bottle.rebuild
+  else
+    error("candidate bottle metadata lacks one rebuild")
+  end
+' "$BOTTLE_JSON")"
+jq -cer \
+  --arg tag "$BOTTLE_TAG" \
+  --arg sha256 "$BOTTLE_SHA256" \
+  --arg url "$BOTTLE_URL" \
+  --argjson rebuild "$staging_rebuild" '
+  if (.formulae | type) == "array" and (.formulae | length) == 1 and .casks == [] then
+    .formulae[0].bottle = {
+      stable: {
+        files: {($tag): {sha256: $sha256, url: $url}},
+        rebuild: $rebuild
+      }
+    }
+  else
+    error("Homebrew Formula info has an unexpected shape")
+  end
+' "$staging_formula_info_raw" >"$staging_formula_info"
+rm -f "$staging_formula_info_raw"
+mv "$staging_formula_info" "$FORMULA_INFO"'''
 _FORMULA_DEPENDENCY_INSTALL = """  run_brew_logged run_brew_for_kandelo_bottles "$BREW_BIN" install \\
     --force-bottle \\
     --as-dependency \\
@@ -89,6 +121,7 @@ def _prepare_staging_normal_builder(
     destination: Path,
     root_assignment: str = _CANDIDATE_ROOT_ASSIGNMENT,
     dependency_install: str = _FORMULA_DEPENDENCY_INSTALL,
+    formula_info_capture: str | None = None,
 ) -> Path:
     """Derive the staging-only builder without changing Formula contracts."""
 
@@ -107,6 +140,8 @@ def _prepare_staging_normal_builder(
         raise ExecutionError("candidate normal builder root boundary changed")
     if body.count(dependency_install) != 1:
         raise ExecutionError("candidate dependency install boundary changed")
+    if formula_info_capture is not None and body.count(formula_info_capture) != 1:
+        raise ExecutionError("candidate Formula info capture boundary changed")
     prepared = body.replace(
         root_assignment,
         'KANDELO_ROOT="${KANDELO_ABI_STAGING_CANDIDATE_ROOT:?}"',
@@ -114,6 +149,11 @@ def _prepare_staging_normal_builder(
         dependency_install,
         _LOCAL_ARCHIVE_DEPENDENCY_INSTALL,
     )
+    if formula_info_capture is not None:
+        prepared = prepared.replace(
+            formula_info_capture,
+            _STAGING_VERIFIER_FORMULA_INFO_CAPTURE,
+        )
     if destination.exists() or destination.is_symlink():
         raise ExecutionError("protected staging builder destination already exists")
     try:
@@ -1999,6 +2039,7 @@ def execute_verification_work(
             destination=temporary_root / "protected-normal-verifier.sh",
             root_assignment=_CANDIDATE_VERIFIER_ROOT_ASSIGNMENT,
             dependency_install=_VERIFIER_FORMULA_DEPENDENCY_INSTALL,
+            formula_info_capture=_VERIFIER_FORMULA_INFO_CAPTURE,
         )
         adapter = _prepare_staging_verification_adapter(
             source=candidate_adapter,

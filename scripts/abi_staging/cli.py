@@ -113,6 +113,7 @@ from .promotion import (
     evaluate_promotion,
     expected_canonical_publication,
     finalize_admission_record,
+    load_metadata_patch_document,
     metadata_patch_document,
     prepare_admission,
     prepare_formula_metadata_patch,
