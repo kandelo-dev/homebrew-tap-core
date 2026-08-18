@@ -13,7 +13,13 @@ import subprocess
 import tempfile
 from typing import Any
 
-from .canonical import CanonicalJsonError, canonical_bytes, canonical_sha256, parse_canonical_bytes
+from .canonical import (
+    MAX_VFS_COMPOSITION_JSON_ITEMS,
+    CanonicalJsonError,
+    canonical_bytes,
+    canonical_sha256,
+    parse_canonical_bytes,
+)
 from .coordination import (
     MAX_COORDINATION_BYTES,
     MAX_COORDINATION_JSON_ITEMS,
@@ -28,7 +34,6 @@ from .policy import TapStagingPolicyV1
 from .records import CANDIDATE_RECORD_MEDIA_TYPE, validate_candidate_record
 
 
-MAX_VFS_COMPOSITION_JSON_ITEMS = 4_000_000
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TAP_NAME = re.compile(r"^[a-z0-9_.-]+/[a-z0-9_.-]+$")

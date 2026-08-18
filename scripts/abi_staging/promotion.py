@@ -17,7 +17,13 @@ from .abi_history import (
     history_record_repository,
     validate_protection_snapshot,
 )
-from .canonical import CanonicalJsonError, canonical_bytes, canonical_sha256, parse_canonical_bytes
+from .canonical import (
+    MAX_VFS_COMPOSITION_JSON_ITEMS,
+    CanonicalJsonError,
+    canonical_bytes,
+    canonical_sha256,
+    parse_canonical_bytes,
+)
 from .bottle_link import (
     BottleLinkError,
     build_link_manifest,
@@ -237,9 +243,18 @@ def _artifact(value: Any, field: str) -> dict[str, object]:
     return {"sha256": digest, "bytes": size, "immutable_reference": reference}
 
 
-def _canonical_mapping(body: bytes, field: str) -> dict[str, Any]:
+def _canonical_mapping(
+    body: bytes,
+    field: str,
+    *,
+    maximum_items: int = 100_000,
+) -> dict[str, Any]:
     try:
-        value = parse_canonical_bytes(body, maximum_bytes=64 * 1024 * 1024)
+        value = parse_canonical_bytes(
+            body,
+            maximum_bytes=64 * 1024 * 1024,
+            maximum_items=maximum_items,
+        )
     except CanonicalJsonError as error:
         raise PromotionError(f"{field} is not canonical: {error}") from error
     if not isinstance(value, Mapping):
@@ -1627,7 +1642,11 @@ def _candidate_vfs_composition_descriptor(
         )
     return (
         record,
-        _canonical_mapping(layer.body, "candidate VFS composition descriptor"),
+        _canonical_mapping(
+            layer.body,
+            "candidate VFS composition descriptor",
+            maximum_items=MAX_VFS_COMPOSITION_JSON_ITEMS,
+        ),
         layer,
     )
 
@@ -1754,7 +1773,10 @@ def _canonical_vfs_composition_descriptor(
     canonical["tree"]["transports"] = [
         {"kind": "external-https", "url": canonical_url}
     ]
-    body = canonical_bytes(canonical)
+    body = canonical_bytes(
+        canonical,
+        maximum_items=MAX_VFS_COMPOSITION_JSON_ITEMS,
+    )
     if b"-candidates/" in body:
         raise PromotionError(
             "canonical VFS composition descriptor retains candidate authority"
