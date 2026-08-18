@@ -132,6 +132,13 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
   def test_pages_canonical_writers_keep_package_and_contents_permissions_separate
     AbiStagingWorkflowCheck.check_pages_canonical(@pages_canonical)
 
+    assert_equal(
+      "${{ github.workspace }}/tap-authority",
+      @pages_canonical.dig(
+        "jobs", "publish", "steps", 3, "env", "PYTHONPATH"
+      )
+    )
+
     changed = copy(@pages_canonical)
     changed.dig("jobs", "publish", "permissions")["contents"] = "write"
     assert_raises(AbiStagingWorkflowCheck::Violation) do
