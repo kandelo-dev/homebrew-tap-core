@@ -1219,7 +1219,7 @@ def _formula_contract_changed(
 
 def _dependency_layers_changed(
     candidate_record: Mapping[str, Any],
-    current_dependency_layers: Mapping[str, Mapping[str, Any]],
+    current_dependency_layers: Mapping[str, Mapping[str, Any]] | None,
     formula_plan: Mapping[str, Any],
 ) -> bool:
     if not isinstance(current_dependency_layers, Mapping):
@@ -1401,8 +1401,12 @@ def evaluate_promotion(
     if current_source["repository"].lower() != policy.tap_repository.lower():
         raise PromotionError("current tap source names another repository")
     formula_changed = _formula_contract_changed(formula_plan, current_formula)
-    dependency_changed = _dependency_layers_changed(
-        candidate_record, current_dependency_layers, formula_plan
+    dependency_changed = (
+        False
+        if current_dependency_layers is None
+        else _dependency_layers_changed(
+            candidate_record, current_dependency_layers, formula_plan
+        )
     )
     if formula_changed or dependency_changed:
         tap_source_state = "rebuild-required"

@@ -898,6 +898,12 @@ class PromotionTests(unittest.TestCase):
         arguments.update(changes)
         return evaluate_promotion(**arguments)
 
+    def test_dependency_layer_selection_is_not_a_promotion_gate(self) -> None:
+        decision = self._evaluate(current_dependency_layers=None)
+
+        self.assertEqual(decision.eligibility, "eligible")
+        self.assertEqual(decision.tap_source_state, "exact")
+
     def _new_request_reuse(self):
         request = copy.deepcopy(self.request)
         request["build_source"] = {

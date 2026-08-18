@@ -5,13 +5,16 @@
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Promote each ready dependency level with one inventory plan and one
-atomic tap metadata commit, without rebuilding bottle candidates.
+**Goal:** Promote the ready verified bottle graph with one inventory plan and
+one atomic tap metadata commit, without rebuilding bottle candidates or
+requiring dependencies to appear in current tap metadata first.
 
 **Architecture:** Keep per-Formula candidate, verification, canonical, and
-admission validation. Treat missing dependency metadata as local deferral, then
-compose the ready members' four-path patches into one batch whose shared top
-index is generated once and committed by one compare-and-swap writer.
+admission validation. Do not use current dependency selections as promotion
+inputs; exact candidate construction and verification already bind the inputs
+that were tested. Compose the ready members' four-path patches into one batch
+whose shared top index is generated once and committed by one compare-and-swap
+writer.
 
 **Tech Stack:** Python 3.13 dataclasses and `unittest`, GitHub Actions matrices,
 Git contents commits, OCI/GHCR immutable records.
@@ -21,43 +24,43 @@ Git contents commits, OCI/GHCR immutable records.
 - Do not rebuild or rewrite candidate bottle layers.
 - Keep exact ABI, Formula contract, bottle digest/bytes, current verification,
   actual producer custody, history barrier, and anonymous readback checks.
-- A missing dependency defers only its dependants.
+- A missing dependency sidecar or admission does not gate an otherwise exact
+  candidate.
 - One batch may contain at most `MAX_PROMOTION_WAVE` members.
 - Duplicate or conflicting output paths fail before a Git mutation.
 
 ---
 
-### Task 1: Defer unavailable dependency metadata
+### Task 1: Remove current dependency selection from promotion
 
 **Files:**
 - Modify: `scripts/abi_staging/cli.py`
 - Test: `scripts/abi_staging/tests/test_promotion.py`
 
 **Interfaces:**
-- Consumes: `_current_dependency_layers(tap_root, formula_plan)`.
-- Produces: `None` for a Formula whose direct dependency has no selected
-  canonical bottle; exact layer mapping otherwise.
+- `evaluate_promotion` accepts no current dependency-layer inventory.
+- Candidate construction and current-request verification remain the
+  authoritative dependency bindings.
 
 - [ ] **Step 1: Write the failing regression**
 
-Add a planner test with one ready root and one dependant whose dependency
-sidecar is not yet successful. Assert planning retains the root and omits the
-dependant instead of raising `promotion dependency has no exact selected
-bottle`.
+Add a promotion test with an exact candidate and no current dependency-layer
+inventory. Assert the candidate remains eligible instead of requiring a
+selected dependency sidecar.
 
 - [ ] **Step 2: Verify RED**
 
 Run:
 `python3 -m unittest scripts.abi_staging.tests.test_promotion -v`
 
-Expected: the new test errors with the current global dependency failure.
+Expected: the new test errors because current dependency-layer inventory is
+required.
 
 - [ ] **Step 3: Implement local deferral**
 
-Return `None` for absent dependency selection and make
-`_collect_active_promotion_inputs` skip only that Formula before calling
-`evaluate_promotion`. Keep malformed sidecars and conflicting selections as
-errors.
+Stop loading current dependency sidecars in the production planner. Pass no
+current dependency-layer inventory to `evaluate_promotion`; when it is absent,
+do not classify the Formula as rebuild-required.
 
 - [ ] **Step 4: Verify GREEN**
 
@@ -65,7 +68,7 @@ Run the Task 1 command and require zero failures.
 
 - [ ] **Step 5: Commit**
 
-Commit as `[ABI] Defer promotion until dependencies are admitted`.
+Commit as `[ABI] Stop gating promotion on selected dependencies`.
 
 ### Task 2: Compose one exact metadata batch
 
@@ -128,7 +131,7 @@ Commit as `[ABI] Compose Formula metadata by dependency level`.
 
 - [ ] **Step 1: Write planner, writer, and workflow RED tests**
 
-Assert all ready roots enter one batch; dependants remain blocked; the writer
+Assert all ready verified Formulae enter one batch; the writer
 requires all canonical handoffs; one push occurs; admissions accept only their
 exact member; workflow permissions and artifact identities remain bounded.
 
