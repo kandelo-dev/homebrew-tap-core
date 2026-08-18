@@ -902,7 +902,13 @@ def build_promotion_workflow_plan(
     admission_work: list[MappingProxyType[str, Any]] = []
     complete: list[str] = []
     scheduled = 0
-    metadata_owner: str | None = None
+    metadata_members: list[
+        tuple[
+            PromotionSubjectV1,
+            dict[str, Any],
+            bool,
+        ]
+    ] = []
     for subject in ordered:
         name = subject.decision.formula_subject
         state = progress[name]
@@ -953,92 +959,28 @@ def build_promotion_workflow_plan(
                 },
             )
             canonical_work.append(canonical_item)
-            if metadata_owner is None:
-                metadata_owner = name
-                metadata_item = MappingProxyType(
+            metadata_members.append(
+                (
+                    subject,
                     {
-                        **dict(
-                            _promotion_item(
-                                stage="update-tap-metadata",
-                                subject=subject,
-                                epoch=epoch,
-                                extra={
-                                    "canonical_work_id": canonical_item["work_id"],
-                                    "activation_record_sha256": (
-                                        epoch.activation_record_sha256
-                                    ),
-                                },
-                            )
-                        ),
-                        "operation": "formula-metadata",
-                    }
+                        "canonical_work_id": canonical_item["work_id"],
+                        "activation_record_sha256": epoch.activation_record_sha256,
+                    },
+                    True,
                 )
-                metadata_work.append(metadata_item)
-                admission_work.append(
-                    _promotion_item(
-                        stage="publish-admission",
-                        subject=subject,
-                        epoch=epoch,
-                        extra={
-                            "canonical_work_id": canonical_item["work_id"],
-                            "metadata_work_id": metadata_item["work_id"],
-                        },
-                    )
-                )
-            else:
-                blocked.append(
-                    MappingProxyType(
-                        {
-                            "formula_subject": name,
-                            "guard_code": "dependency_unavailable",
-                            "blocked_by": metadata_owner,
-                        }
-                    )
-                )
+            )
         elif state.metadata_commit is None:
-            if metadata_owner is None:
-                metadata_owner = name
-                metadata_item = MappingProxyType(
+            metadata_members.append(
+                (
+                    subject,
                     {
-                        **dict(
-                            _promotion_item(
-                                stage="update-tap-metadata",
-                                subject=subject,
-                                epoch=epoch,
-                                extra={
-                                    "canonical_manifest_sha256": state.canonical_manifest_sha256,
-                                    "canonical_readback_sha256": state.canonical_readback_sha256,
-                                    "activation_record_sha256": epoch.activation_record_sha256,
-                                },
-                            )
-                        ),
-                        "operation": "formula-metadata",
-                    }
+                        "canonical_manifest_sha256": state.canonical_manifest_sha256,
+                        "canonical_readback_sha256": state.canonical_readback_sha256,
+                        "activation_record_sha256": epoch.activation_record_sha256,
+                    },
+                    state.stale_admission_record_sha256 is None,
                 )
-                metadata_work.append(metadata_item)
-                if state.stale_admission_record_sha256 is None:
-                    admission_work.append(
-                        _promotion_item(
-                            stage="publish-admission",
-                            subject=subject,
-                            epoch=epoch,
-                            extra={
-                                "canonical_manifest_sha256": state.canonical_manifest_sha256,
-                                "canonical_readback_sha256": state.canonical_readback_sha256,
-                                "metadata_work_id": metadata_item["work_id"],
-                            },
-                        )
-                    )
-            else:
-                blocked.append(
-                    MappingProxyType(
-                        {
-                            "formula_subject": name,
-                            "guard_code": "dependency_unavailable",
-                            "blocked_by": metadata_owner,
-                        }
-                    )
-                )
+            )
         else:
             admission_work.append(
                 _promotion_item(
@@ -1056,6 +998,54 @@ def build_promotion_workflow_plan(
                 )
             )
         scheduled += 1
+
+    if metadata_members:
+        member_identities = [
+            {
+                "formula_subject": subject.decision.formula_subject,
+                **extra,
+            }
+            for subject, extra, _schedule_admission in metadata_members
+        ]
+        batch_identity = {
+            "stage": "update-tap-metadata-batch",
+            "request_digest": epoch.request_digest,
+            "current_tap_commit": epoch.current_tap_commit,
+            "current_tap_tree": epoch.current_tap_tree,
+            "members": member_identities,
+        }
+        metadata_item = MappingProxyType(
+            {
+                "operation": "formula-metadata-batch",
+                "work_id": canonical_sha256(batch_identity),
+                "work_class": (
+                    "required"
+                    if any(
+                        subject.work_class == "required"
+                        for subject, _extra, _schedule in metadata_members
+                    )
+                    else "background"
+                ),
+                "member_formula_subjects": [
+                    subject.decision.formula_subject
+                    for subject, _extra, _schedule in metadata_members
+                ],
+            }
+        )
+        metadata_work.append(metadata_item)
+        for subject, extra, schedule_admission in metadata_members:
+            if schedule_admission:
+                admission_work.append(
+                    _promotion_item(
+                        stage="publish-admission",
+                        subject=subject,
+                        epoch=epoch,
+                        extra={
+                            **extra,
+                            "metadata_work_id": metadata_item["work_id"],
+                        },
+                    )
+                )
 
     return _promotion_plan_result(
         mode=activation_mode,
