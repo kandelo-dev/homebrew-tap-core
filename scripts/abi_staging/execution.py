@@ -335,6 +335,17 @@ def _create_output_directory(path: Path) -> Path:
 def _matching_dependency(
     bundle: Mapping[str, Any], dependency: Mapping[str, Any]
 ) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+    subject = exact_formula_subject(
+        str(dependency.get("formula")), str(dependency.get("architecture"))
+    )
+    dependency_plan = _formula_for_subject(bundle, subject)
+    expected_contract_sha256 = _digest(
+        dependency_plan.get("contract_sha256"),
+        "dependency Formula contract",
+    )
+    # A request can retain an older same-layer reuse record after the exact
+    # current candidate is published. Only the current Formula contract may
+    # supply build inputs for this coordinated plan.
     candidates = _mapping(bundle["candidates"], "coordination candidates")
     records = _mapping(candidates["records"], "coordination candidate records")
     locators = _mapping(candidates["locators"], "coordination candidate locators")
@@ -351,6 +362,8 @@ def _matching_dependency(
             and formula.get("formula") == dependency["formula"]
             and formula.get("architecture") == dependency["architecture"]
             and formula.get("target_abi") == bundle["tap_plan"]["target_abi"]["version"]
+            and formula.get("bottle_contract_sha256")
+            == expected_contract_sha256
             and layer.get("sha256") == dependency["bottle_layer_sha256"]
             and layer.get("bytes") == dependency["bottle_layer_bytes"]
         ):
@@ -376,6 +389,8 @@ def _matching_dependency(
             or formula.get("formula") != dependency["formula"]
             or formula.get("architecture") != dependency["architecture"]
             or formula.get("target_abi") != bundle["tap_plan"]["target_abi"]["version"]
+            or formula.get("bottle_contract_sha256")
+            != expected_contract_sha256
             or layer.get("sha256") != dependency["bottle_layer_sha256"]
             or layer.get("bytes") != dependency["bottle_layer_bytes"]
         ):
