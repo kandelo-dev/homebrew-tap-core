@@ -134,4 +134,9 @@ class Less < Formula
       refute_includes File.binread(command), prefix.to_s
     end
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/less"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "0ef111ee9de0712d602aa94cd75f19db4f516e44b32be00ded1975de4eebff65"
+  end
 end

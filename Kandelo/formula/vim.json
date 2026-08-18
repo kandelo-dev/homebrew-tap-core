@@ -1,27 +1,31 @@
 {
-  "bottle_rebuild": 1,
+  "bottle_rebuild": 0,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-24T23:22:56Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30132438635",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/32100482096",
       "built_from": {
         "formula_sha256": "6a78b6d756ed1a8edfc7ebd905bf9aa04475225642ae9026e6a50c8654860322",
-        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
+        "kandelo_commit": "a8d466b506af1883cdc82c179dc9ad42c4b77dc9",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
+        "tap_commit": "96d41e39bb4f7693c517155a6d66736c048634d1",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+      "bytes": 11453511,
+      "cache_key_sha": "02ab448796a0b0de9c7f64d6fd50791b2a8aaaa47c38dea7b9245e88b4ccb3c4",
+      "cellar": "/opt/kandelo/homebrew/Cellar",
       "fork_instrumentation": "required",
       "kandelo_abi": 43,
-      "prefix": "/home/linuxbrew/.linuxbrew",
+      "link_manifest": "Kandelo/link/vim-9.2.0750_1-rebuild0-wasm32.json",
+      "prefix": "/opt/kandelo/homebrew",
       "runtime_support": [
         "node"
       ],
-      "status": "pending"
+      "sha256": "02ab448796a0b0de9c7f64d6fd50791b2a8aaaa47c38dea7b9245e88b4ccb3c4",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/vim/blobs/sha256:02ab448796a0b0de9c7f64d6fd50791b2a8aaaa47c38dea7b9245e88b4ccb3c4"
     }
   ],
   "dependencies": [
@@ -32,7 +36,7 @@
     }
   ],
   "formula_path": "Formula/vim.rb",
-  "formula_revision": 0,
+  "formula_revision": 1,
   "full_name": "kandelo-dev/tap-core/vim",
   "kandelo_abi": 43,
   "name": "vim",
@@ -41,5 +45,5 @@
   "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
-  "version": "9.2.0750"
+  "version": "9.2.0750_1"
 }

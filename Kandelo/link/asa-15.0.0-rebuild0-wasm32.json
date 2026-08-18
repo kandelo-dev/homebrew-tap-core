@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 23967,
-    "cache_key_sha": "8dc6dea5229d1b01b06ce66059c235ec0b552f1e3ccda12cd526aa92a42a3634",
+    "bytes": 24973,
+    "cache_key_sha": "537d1d2425aa03cb360ade884b26de9f3e68438df0583c1f7e57954c03a20d8b",
     "payload_root": "asa/15.0.0",
-    "sha256": "8dc6dea5229d1b01b06ce66059c235ec0b552f1e3ccda12cd526aa92a42a3634",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/asa/blobs/sha256:8dc6dea5229d1b01b06ce66059c235ec0b552f1e3ccda12cd526aa92a42a3634"
+    "sha256": "537d1d2425aa03cb360ade884b26de9f3e68438df0583c1f7e57954c03a20d8b",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/asa/blobs/sha256:537d1d2425aa03cb360ade884b26de9f3e68438df0583c1f7e57954c03a20d8b"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/asa/15.0.0",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/asa/15.0.0",
   "links": [
     {
       "source": "bin/asa",
@@ -28,7 +28,7 @@
     }
   ],
   "package": "asa",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/asa.rb",
     "INSTALL_RECEIPT.json"

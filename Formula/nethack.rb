@@ -67,4 +67,9 @@ class Nethack < Formula
     )
     refute_match(/Cannot (?:chdir|open record file)/i, scores)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/nethack"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "8fd5374d32cb9fe81ac1c4c45088464ec550f07db5aaef75b0984e21c56924ad"
+  end
 end

@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 60665,
-    "cache_key_sha": "484d182ae361f26b54b52b546cead7ac58ebdf1b0b6d5b7730c8c83da0bff979",
+    "bytes": 61856,
+    "cache_key_sha": "7628e736a16ecf2a1f2c350fbbc222e03eaa8079751a753a990ac06c1b39ee5c",
     "payload_root": "bc/1.07.1",
-    "sha256": "484d182ae361f26b54b52b546cead7ac58ebdf1b0b6d5b7730c8c83da0bff979",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/bc/blobs/sha256:484d182ae361f26b54b52b546cead7ac58ebdf1b0b6d5b7730c8c83da0bff979"
+    "sha256": "7628e736a16ecf2a1f2c350fbbc222e03eaa8079751a753a990ac06c1b39ee5c",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/bc/blobs/sha256:7628e736a16ecf2a1f2c350fbbc222e03eaa8079751a753a990ac06c1b39ee5c"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/bc/1.07.1",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/bc/1.07.1",
   "links": [
     {
       "source": "bin/bc",
@@ -23,7 +23,7 @@
     }
   ],
   "package": "bc",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/bc.rb",
     "INSTALL_RECEIPT.json"

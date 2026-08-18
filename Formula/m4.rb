@@ -59,6 +59,11 @@ class M4 < Formula
       )
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/m4"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "dc0f15743627356c6507f1eaae291469e846634143db5cc1d2c940b4d2b02d94"
+  end
 end
 
 __END__

@@ -32,4 +32,9 @@ class Modeset < Formula
     kandelo_run_kms_browser_wasm(bin/"modeset", min_page_flips: 2)
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/modeset"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "da437fbad8365f35407c7ae3837e82ab808937106581359d91b2bdf3773548c1"
+  end
 end

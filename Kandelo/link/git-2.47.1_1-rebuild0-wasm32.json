@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 6815615,
-    "cache_key_sha": "1dafd6efd4d75570518fad71a5801ce9a570a8f96a70bbee2f5a5979d8a96e1f",
+    "bytes": 7595436,
+    "cache_key_sha": "ba6c4706a545b7959855a9629f6f96a21810e6910afe83a8c1de73809d22793c",
     "payload_root": "git/2.47.1_1",
-    "sha256": "1dafd6efd4d75570518fad71a5801ce9a570a8f96a70bbee2f5a5979d8a96e1f",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/git/blobs/sha256:1dafd6efd4d75570518fad71a5801ce9a570a8f96a70bbee2f5a5979d8a96e1f"
+    "sha256": "ba6c4706a545b7959855a9629f6f96a21810e6910afe83a8c1de73809d22793c",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/git/blobs/sha256:ba6c4706a545b7959855a9629f6f96a21810e6910afe83a8c1de73809d22793c"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/git/2.47.1_1",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/git/2.47.1_1",
   "links": [
     {
       "source": "bin/git",
@@ -1093,7 +1093,7 @@
     }
   ],
   "package": "git",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/git.rb",
     "INSTALL_RECEIPT.json"

@@ -138,4 +138,9 @@ class Zstd < Formula
     assert_equal "libzstd #{version} threaded-ok\n", kandelo_run_wasm(wasm, [])
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/zstd"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "b39446629deb990741f937af780617a83b2ee2d3441f80dceeb76098783ef120"
+  end
 end

@@ -1,0 +1,38 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 352428,
+    "cache_key_sha": "2cb623bd6571ce8f5102d92f22911ed90b6cbbf385da5244f86e4508f8c239c7",
+    "payload_root": "file-formula/5.45_1",
+    "sha256": "2cb623bd6571ce8f5102d92f22911ed90b6cbbf385da5244f86e4508f8c239c7",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/file-formula/blobs/sha256:2cb623bd6571ce8f5102d92f22911ed90b6cbbf385da5244f86e4508f8c239c7"
+  },
+  "cellar": "/opt/kandelo/homebrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/file-formula/5.45_1",
+  "links": [
+    {
+      "source": "bin/file",
+      "target": "bin/file",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/file.1",
+      "target": "share/man/man1/file.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "file-formula",
+  "prefix": "/opt/kandelo/homebrew",
+  "receipts": [
+    ".brew/file-formula.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "5.45_1"
+}

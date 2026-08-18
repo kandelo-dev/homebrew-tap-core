@@ -185,4 +185,9 @@ class Ctags < Formula
     assert_match(/^lower_case_symbol\tcase\.cpp\t/, case_tags)
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/ctags"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "7efc15193f1d61c7475929d5c413701c309ddc58c1cbe3d22f23e83b880ca5d7"
+  end
 end

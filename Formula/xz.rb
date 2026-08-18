@@ -181,4 +181,9 @@ class Xz < Formula
     assert_equal input, kandelo_run_wasm(bin/"xzdec", [], stdin: compressed).b
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/xz"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "4c9a75d9c41412d6ba556534b80edba1a0e31f1a3d612f511f57438a5cef4ddd"
+  end
 end

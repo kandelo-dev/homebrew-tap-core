@@ -141,4 +141,9 @@ class FileFormula < Formula
       assert_match(/^ASCII text \(#{Regexp.escape(compression)}/, output)
     end
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/file-formula"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "2cb623bd6571ce8f5102d92f22911ed90b6cbbf385da5244f86e4508f8c239c7"
+  end
 end

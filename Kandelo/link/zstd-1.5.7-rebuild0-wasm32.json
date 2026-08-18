@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 1087314,
-    "cache_key_sha": "db3d6e0d92799b39afce67376f773f26338395ef2fd992ba2f49431252863063",
+    "bytes": 1093642,
+    "cache_key_sha": "b39446629deb990741f937af780617a83b2ee2d3441f80dceeb76098783ef120",
     "payload_root": "zstd/1.5.7",
-    "sha256": "db3d6e0d92799b39afce67376f773f26338395ef2fd992ba2f49431252863063",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/zstd/blobs/sha256:db3d6e0d92799b39afce67376f773f26338395ef2fd992ba2f49431252863063"
+    "sha256": "b39446629deb990741f937af780617a83b2ee2d3441f80dceeb76098783ef120",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/zstd/blobs/sha256:b39446629deb990741f937af780617a83b2ee2d3441f80dceeb76098783ef120"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/zstd/1.5.7",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/zstd/1.5.7",
   "links": [
     {
       "source": "bin/unzstd",
@@ -78,7 +78,7 @@
     }
   ],
   "package": "zstd",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/zstd.rb",
     "INSTALL_RECEIPT.json"

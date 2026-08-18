@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 10322668,
-    "cache_key_sha": "741bc6d332982ab299c3b4c68e5523c8d181f9ca19349cd0b3915c91ce58af4b",
+    "bytes": 10507209,
+    "cache_key_sha": "6ada827db9886ca90a27f47de22dcae86623a37dbb2d9252f41dd435857d3d3c",
     "payload_root": "perl/5.40.3",
-    "sha256": "741bc6d332982ab299c3b4c68e5523c8d181f9ca19349cd0b3915c91ce58af4b",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/perl/blobs/sha256:741bc6d332982ab299c3b4c68e5523c8d181f9ca19349cd0b3915c91ce58af4b"
+    "sha256": "6ada827db9886ca90a27f47de22dcae86623a37dbb2d9252f41dd435857d3d3c",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/perl/blobs/sha256:6ada827db9886ca90a27f47de22dcae86623a37dbb2d9252f41dd435857d3d3c"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/perl/5.40.3",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/perl/5.40.3",
   "links": [
     {
       "source": "bin/perl",
@@ -8623,7 +8623,7 @@
     }
   ],
   "package": "perl",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/perl.rb",
     "INSTALL_RECEIPT.json"

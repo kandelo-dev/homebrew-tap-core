@@ -94,4 +94,9 @@ class Procps < Formula
     refute_includes contents, "/nix/store/"
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/procps"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "ae6d65f23cbbf628b1cebf9d5c38c634690e99bf5db7ad385e0f8c4a076fc0e3"
+  end
 end

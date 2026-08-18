@@ -52,4 +52,9 @@ class Sed < Formula
     assert_equal "XYZ\nplXin\n", transformed
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/sed"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "098cb767f12909b6bbaba8a7f8a88527b822c1bf768804ff1a7f473fe8e83b12"
+  end
 end

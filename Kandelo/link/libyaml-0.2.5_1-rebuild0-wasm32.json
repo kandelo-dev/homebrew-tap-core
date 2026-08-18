@@ -1,0 +1,39 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 62234,
+    "cache_key_sha": "03b03a8dad7cdb6e94955e7f1dedd197341078a05f9314cef1057b5afbaeee28",
+    "payload_root": "libyaml/0.2.5_1",
+    "sha256": "03b03a8dad7cdb6e94955e7f1dedd197341078a05f9314cef1057b5afbaeee28",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/libyaml/blobs/sha256:03b03a8dad7cdb6e94955e7f1dedd197341078a05f9314cef1057b5afbaeee28"
+  },
+  "cellar": "/opt/kandelo/homebrew/Cellar",
+  "env": {},
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/libyaml/0.2.5_1",
+  "links": [
+    {
+      "source": "include/yaml.h",
+      "target": "include/yaml.h",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/libyaml.a",
+      "target": "lib/libyaml.a",
+      "type": "symlink"
+    },
+    {
+      "source": "lib/pkgconfig/yaml-0.1.pc",
+      "target": "lib/pkgconfig/yaml-0.1.pc",
+      "type": "symlink"
+    }
+  ],
+  "package": "libyaml",
+  "prefix": "/opt/kandelo/homebrew",
+  "receipts": [
+    ".brew/libyaml.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "0.2.5_1"
+}

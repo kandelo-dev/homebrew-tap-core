@@ -31,4 +31,9 @@ class Bc < Formula
     assert_equal "3.50\n", kandelo_run_wasm(bin/"bc", [], stdin: "scale=2; 7/2\n")
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/bc"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "7628e736a16ecf2a1f2c350fbbc222e03eaa8079751a753a990ac06c1b39ee5c"
+  end
 end

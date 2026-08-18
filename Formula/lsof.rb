@@ -32,4 +32,9 @@ class Lsof < Formula
       kandelo_run_wasm(bin/"lsof", ["--help"])
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/lsof"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "be4680c74cd8e934b442f85f614bba539b1fcf46904cdef54850728fc974c3e1"
+  end
 end

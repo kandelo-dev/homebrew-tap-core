@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 3497364,
-    "cache_key_sha": "f5fe23515865c3733ebc72b51468669f63a78041d4caabdef2d2f7bc32b81bc2",
+    "bytes": 3504695,
+    "cache_key_sha": "390bb1ac0ebb351db74ff474ce94efa3933d4aa36fd8d781004a7be33a54666d",
     "payload_root": "ncurses/6.5",
-    "sha256": "f5fe23515865c3733ebc72b51468669f63a78041d4caabdef2d2f7bc32b81bc2",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ncurses/blobs/sha256:f5fe23515865c3733ebc72b51468669f63a78041d4caabdef2d2f7bc32b81bc2"
+    "sha256": "390bb1ac0ebb351db74ff474ce94efa3933d4aa36fd8d781004a7be33a54666d",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/ncurses/blobs/sha256:390bb1ac0ebb351db74ff474ce94efa3933d4aa36fd8d781004a7be33a54666d"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/ncurses/6.5",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/ncurses/6.5",
   "links": [
     {
       "source": "bin/captoinfo",
@@ -19458,7 +19458,7 @@
     }
   ],
   "package": "ncurses",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/ncurses.rb",
     "INSTALL_RECEIPT.json"

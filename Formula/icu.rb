@@ -360,4 +360,9 @@ class Icu < Formula
       odie "#{archive.basename} contains a builder home path" if bytes.match?(%r{/Users/[^/]+/})
     end
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/icu"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "10d0dd8c9de904c592fe37eaafd55644c5e6d82bb0518b02ec4a6c3d220bc8d5"
+  end
 end

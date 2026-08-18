@@ -1,16 +1,16 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 107537,
-    "cache_key_sha": "d09d1dc04593ba968045f95d4a3fb61150373e9624b9a61840a31a5f7fd5fbb9",
+    "bytes": 107733,
+    "cache_key_sha": "482e33d1f17d3633cce3f47ae2507709327288ec57e361681a829f4b773394fe",
     "payload_root": "zlib/1.3.1_4",
-    "sha256": "d09d1dc04593ba968045f95d4a3fb61150373e9624b9a61840a31a5f7fd5fbb9",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/zlib/blobs/sha256:d09d1dc04593ba968045f95d4a3fb61150373e9624b9a61840a31a5f7fd5fbb9"
+    "sha256": "482e33d1f17d3633cce3f47ae2507709327288ec57e361681a829f4b773394fe",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/zlib/blobs/sha256:482e33d1f17d3633cce3f47ae2507709327288ec57e361681a829f4b773394fe"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {},
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/zlib/1.3.1_4",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/zlib/1.3.1_4",
   "links": [
     {
       "source": "include/zconf.h",
@@ -39,7 +39,7 @@
     }
   ],
   "package": "zlib",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/zlib.rb",
     "INSTALL_RECEIPT.json"

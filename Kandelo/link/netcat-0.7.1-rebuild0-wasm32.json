@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 71560,
-    "cache_key_sha": "c91ab7e7944a79927cc609fe78dffe789e77172f777852f964cb36242370ec9d",
+    "bytes": 57360,
+    "cache_key_sha": "e9ef81e35f4c5e691b1cf49eee97cdd768e589c31dfa02e0fb1819b492a996ba",
     "payload_root": "netcat/0.7.1",
-    "sha256": "c91ab7e7944a79927cc609fe78dffe789e77172f777852f964cb36242370ec9d",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/netcat/blobs/sha256:c91ab7e7944a79927cc609fe78dffe789e77172f777852f964cb36242370ec9d"
+    "sha256": "e9ef81e35f4c5e691b1cf49eee97cdd768e589c31dfa02e0fb1819b492a996ba",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/netcat/blobs/sha256:e9ef81e35f4c5e691b1cf49eee97cdd768e589c31dfa02e0fb1819b492a996ba"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/netcat/0.7.1",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/netcat/0.7.1",
   "links": [
     {
       "source": "bin/nc",
@@ -23,7 +23,7 @@
     }
   ],
   "package": "netcat",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/netcat.rb",
     "INSTALL_RECEIPT.json"

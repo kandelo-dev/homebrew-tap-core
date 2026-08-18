@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 154651,
-    "cache_key_sha": "bb77f31106485ba7e67b5532eb38cb31efae65cb215a0ecdf8a99916e452d6fe",
+    "bytes": 156039,
+    "cache_key_sha": "ae77092635c055602e663c37bfd575c083dd0364cbf791afcf0b89700529e120",
     "payload_root": "gzip/1.14",
-    "sha256": "bb77f31106485ba7e67b5532eb38cb31efae65cb215a0ecdf8a99916e452d6fe",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/gzip/blobs/sha256:bb77f31106485ba7e67b5532eb38cb31efae65cb215a0ecdf8a99916e452d6fe"
+    "sha256": "ae77092635c055602e663c37bfd575c083dd0364cbf791afcf0b89700529e120",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/gzip/blobs/sha256:ae77092635c055602e663c37bfd575c083dd0364cbf791afcf0b89700529e120"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/gzip/1.14",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/gzip/1.14",
   "links": [
     {
       "source": "bin/gunzip",
@@ -33,7 +33,7 @@
     }
   ],
   "package": "gzip",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/gzip.rb",
     "INSTALL_RECEIPT.json"

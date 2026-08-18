@@ -109,4 +109,9 @@ class Libiconv < Formula
     assert_equal "libiconv c3a9 ok\n", kandelo_run_wasm(smoke_wasm, [])
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/libiconv"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "a82a1649ceaf2bcf2f4f085a2f6310405071274f4245f95ebe9f6f35bdae52d7"
+  end
 end

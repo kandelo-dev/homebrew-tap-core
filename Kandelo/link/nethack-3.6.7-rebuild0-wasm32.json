@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 1982626,
-    "cache_key_sha": "fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051",
+    "bytes": 2173529,
+    "cache_key_sha": "8fd5374d32cb9fe81ac1c4c45088464ec550f07db5aaef75b0984e21c56924ad",
     "payload_root": "nethack/3.6.7",
-    "sha256": "fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/nethack/blobs/sha256:fa913b3e31adf063da869a32bc13f9820875ee7b897fe377df835147a6cfd051"
+    "sha256": "8fd5374d32cb9fe81ac1c4c45088464ec550f07db5aaef75b0984e21c56924ad",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/nethack/blobs/sha256:8fd5374d32cb9fe81ac1c4c45088464ec550f07db5aaef75b0984e21c56924ad"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/nethack/3.6.7",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/nethack/3.6.7",
   "links": [
     {
       "source": "bin/nethack",
@@ -38,7 +38,7 @@
     }
   ],
   "package": "nethack",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/nethack.rb",
     "INSTALL_RECEIPT.json"

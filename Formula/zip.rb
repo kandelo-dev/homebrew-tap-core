@@ -108,4 +108,9 @@ class Zip < Formula
     refute_path_exists inputs/"empty.zip"
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/zip"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "f966cc85e10ac94fb8d1fa2b532065fe0c60113bf0d699f3a6ce8dd741b829df"
+  end
 end

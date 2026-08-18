@@ -363,6 +363,12 @@ class Libcxx < Formula
     end
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/libcxx"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "a42c3146aa22befec2ab15e2607c36e17477ef45af27a644a8efe4727e600702"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm64_kandelo: "930d9b2a4939b49ca20df46fcb708ec4540340da2f15af35b7b55e7d270c365d"
+  end
 end
 
 __END__

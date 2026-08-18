@@ -34,4 +34,9 @@ class Netcat < Formula
     assert_match(/netcat \(The GNU Netcat\) 0\.7\.1/i, output)
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/netcat"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "e9ef81e35f4c5e691b1cf49eee97cdd768e589c31dfa02e0fb1819b492a996ba"
+  end
 end

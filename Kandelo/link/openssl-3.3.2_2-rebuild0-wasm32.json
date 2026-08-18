@@ -1,16 +1,16 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 3028000,
-    "cache_key_sha": "6b524162bd3c28edb4ced9b9456793200fa7c9918a73cebda5a1e0cfcc546579",
+    "bytes": 3028110,
+    "cache_key_sha": "382ce976a0e13e0eb4cb943cfbd54a9d1ceef4518999f3299db8bf6b88260c45",
     "payload_root": "openssl/3.3.2_2",
-    "sha256": "6b524162bd3c28edb4ced9b9456793200fa7c9918a73cebda5a1e0cfcc546579",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/openssl/blobs/sha256:6b524162bd3c28edb4ced9b9456793200fa7c9918a73cebda5a1e0cfcc546579"
+    "sha256": "382ce976a0e13e0eb4cb943cfbd54a9d1ceef4518999f3299db8bf6b88260c45",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/openssl/blobs/sha256:382ce976a0e13e0eb4cb943cfbd54a9d1ceef4518999f3299db8bf6b88260c45"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {},
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/openssl/3.3.2_2",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/openssl/3.3.2_2",
   "links": [
     {
       "source": "include/openssl/aes.h",
@@ -744,7 +744,7 @@
     }
   ],
   "package": "openssl",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/openssl.rb",
     "INSTALL_RECEIPT.json"

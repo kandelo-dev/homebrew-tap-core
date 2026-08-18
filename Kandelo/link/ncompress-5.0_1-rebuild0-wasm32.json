@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 34984,
-    "cache_key_sha": "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c",
+    "bytes": 36073,
+    "cache_key_sha": "c0ceba820c3c4ff313f5b044013b6fbf90fcc05499338dcd6c6b9fb1c18cc247",
     "payload_root": "ncompress/5.0_1",
-    "sha256": "7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/ncompress/blobs/sha256:7305d6c1a1202e45d0628ccb2fde30329c64d96f47d55f2b5309b6fef497d62c"
+    "sha256": "c0ceba820c3c4ff313f5b044013b6fbf90fcc05499338dcd6c6b9fb1c18cc247",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/ncompress/blobs/sha256:c0ceba820c3c4ff313f5b044013b6fbf90fcc05499338dcd6c6b9fb1c18cc247"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/ncompress/5.0_1",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/ncompress/5.0_1",
   "links": [
     {
       "source": "bin/compress",
@@ -38,7 +38,7 @@
     }
   ],
   "package": "ncompress",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/ncompress.rb",
     "INSTALL_RECEIPT.json"

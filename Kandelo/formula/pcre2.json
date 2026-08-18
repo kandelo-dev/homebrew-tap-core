@@ -1,27 +1,31 @@
 {
-  "bottle_rebuild": 1,
+  "bottle_rebuild": 0,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-24T15:40:05Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30104294173",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/32089150810",
       "built_from": {
         "formula_sha256": "b82c47f956a86284f0623eef8c0b49564575838e98e6545206bf0896d6fffe35",
-        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
+        "kandelo_commit": "a8d466b506af1883cdc82c179dc9ad42c4b77dc9",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
+        "tap_commit": "96d41e39bb4f7693c517155a6d66736c048634d1",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+      "bytes": 1891721,
+      "cache_key_sha": "eb8b10ae709e6ecbdea6b90c96c6ea159635dadf9f985331defef5b63856d0c0",
+      "cellar": "/opt/kandelo/homebrew/Cellar",
       "fork_instrumentation": "required",
       "kandelo_abi": 43,
-      "prefix": "/home/linuxbrew/.linuxbrew",
+      "link_manifest": "Kandelo/link/pcre2-10.44_1-rebuild0-wasm32.json",
+      "prefix": "/opt/kandelo/homebrew",
       "runtime_support": [
         "node"
       ],
-      "status": "pending"
+      "sha256": "eb8b10ae709e6ecbdea6b90c96c6ea159635dadf9f985331defef5b63856d0c0",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/pcre2/blobs/sha256:eb8b10ae709e6ecbdea6b90c96c6ea159635dadf9f985331defef5b63856d0c0"
     }
   ],
   "dependencies": [],

@@ -75,4 +75,9 @@ class Asa < Formula
     assert_equal "left\n\nright", output
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/asa"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "537d1d2425aa03cb360ade884b26de9f3e68438df0583c1f7e57954c03a20d8b"
+  end
 end

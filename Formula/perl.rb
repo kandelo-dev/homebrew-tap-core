@@ -388,4 +388,9 @@ class Perl < Formula
     )
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/perl"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "6ada827db9886ca90a27f47de22dcae86623a37dbb2d9252f41dd435857d3d3c"
+  end
 end

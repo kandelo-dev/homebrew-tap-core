@@ -140,4 +140,10 @@ class Openssl < Formula
     assert_equal "openssl-ok\n", kandelo_run_wasm(wasm, [])
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/openssl"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "382ce976a0e13e0eb4cb943cfbd54a9d1ceef4518999f3299db8bf6b88260c45"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm64_kandelo: "8e79883f0133a8ecace4693795bab1494800164331f9c3dc82759ac56147abc5"
+  end
 end

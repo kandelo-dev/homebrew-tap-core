@@ -48,4 +48,9 @@ class Gzip < Formula
       kandelo_run_wasm(bin/"zcat", [], stdin: first_gzip, preserve_argv0: true).b
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/gzip"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "ae77092635c055602e663c37bfd575c083dd0364cbf791afcf0b89700529e120"
+  end
 end

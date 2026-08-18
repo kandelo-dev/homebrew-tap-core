@@ -333,4 +333,9 @@ class Libzip < Formula
     end
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/libzip"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "b3c3c2bef2790f091edc1494bb04324d08e066c4ec18686702777dfe4aaeec90"
+  end
 end

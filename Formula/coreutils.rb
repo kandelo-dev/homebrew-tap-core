@@ -131,4 +131,9 @@ class Coreutils < Formula
     )
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/coreutils"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "cdf3ff73cba2437c5ad4ec63a5bf0372feea5e82b88053fe2e1c9fccff53015f"
+  end
 end

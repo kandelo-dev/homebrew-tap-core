@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 1880963,
-    "cache_key_sha": "ed4db7b6a3ab57b837e545d910deeb841f908333b20f49cdafe30430cc9651de",
+    "bytes": 1891721,
+    "cache_key_sha": "eb8b10ae709e6ecbdea6b90c96c6ea159635dadf9f985331defef5b63856d0c0",
     "payload_root": "pcre2/10.44_1",
-    "sha256": "ed4db7b6a3ab57b837e545d910deeb841f908333b20f49cdafe30430cc9651de",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/pcre2/blobs/sha256:ed4db7b6a3ab57b837e545d910deeb841f908333b20f49cdafe30430cc9651de"
+    "sha256": "eb8b10ae709e6ecbdea6b90c96c6ea159635dadf9f985331defef5b63856d0c0",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/pcre2/blobs/sha256:eb8b10ae709e6ecbdea6b90c96c6ea159635dadf9f985331defef5b63856d0c0"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/pcre2/10.44_1",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/pcre2/10.44_1",
   "links": [
     {
       "source": "bin/pcre2-config",
@@ -1118,7 +1118,7 @@
     }
   ],
   "package": "pcre2",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/pcre2.rb",
     "INSTALL_RECEIPT.json"

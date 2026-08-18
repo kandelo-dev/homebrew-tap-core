@@ -1,27 +1,31 @@
 {
-  "bottle_rebuild": 3,
+  "bottle_rebuild": 0,
   "bottles": [
     {
       "arch": "wasm32",
       "bottle_tag": "wasm32_kandelo",
       "browser_compatible": false,
-      "built_at": "2026-07-24T18:11:54Z",
-      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/30113976032",
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/32095729346",
       "built_from": {
         "formula_sha256": "4e436533a946fb80b92125a19e7bd71eb615f5fccba5791fe1d7db0a8bf3f114",
-        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
+        "kandelo_commit": "a8d466b506af1883cdc82c179dc9ad42c4b77dc9",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
+        "tap_commit": "96d41e39bb4f7693c517155a6d66736c048634d1",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
-      "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+      "bytes": 850809,
+      "cache_key_sha": "a3f9649ab9782274d85dcc2d603abd7f64ae1c425c8d3a07aca6e14401021bb1",
+      "cellar": "/opt/kandelo/homebrew/Cellar",
       "fork_instrumentation": "not-required",
       "kandelo_abi": 43,
-      "prefix": "/home/linuxbrew/.linuxbrew",
+      "link_manifest": "Kandelo/link/libcurl-8.11.1_4-rebuild0-wasm32.json",
+      "prefix": "/opt/kandelo/homebrew",
       "runtime_support": [
         "node"
       ],
-      "status": "pending"
+      "sha256": "a3f9649ab9782274d85dcc2d603abd7f64ae1c425c8d3a07aca6e14401021bb1",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/libcurl/blobs/sha256:a3f9649ab9782274d85dcc2d603abd7f64ae1c425c8d3a07aca6e14401021bb1"
     },
     {
       "arch": "wasm64",
@@ -59,7 +63,7 @@
     }
   ],
   "formula_path": "Formula/libcurl.rb",
-  "formula_revision": 1,
+  "formula_revision": 4,
   "full_name": "kandelo-dev/tap-core/libcurl",
   "kandelo_abi": 43,
   "name": "libcurl",
@@ -68,5 +72,5 @@
   "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
   "tap_name": "kandelo-dev/tap-core",
   "tap_repository": "kandelo-dev/homebrew-tap-core",
-  "version": "8.11.1_1"
+  "version": "8.11.1_4"
 }

@@ -78,4 +78,9 @@ class Fbdoom < Formula
     )
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/fbdoom"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "51424ffe3c680b57cca4b56f8c1fef768cacde90d2cfd96927f9fecc673609bc"
+  end
 end

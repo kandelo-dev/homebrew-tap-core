@@ -1,16 +1,16 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 1111744,
-    "cache_key_sha": "6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e",
+    "bytes": 1111761,
+    "cache_key_sha": "68084d922730e751f9236b23086986ca3c9ffd608813eeff3c2fc56f4f8cc174",
     "payload_root": "libmagic/5.45",
-    "sha256": "6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libmagic/blobs/sha256:6ddb4a4bba8fbe68e457d1abc8baa7b0567e2d6c583ee7578693426fd017018e"
+    "sha256": "68084d922730e751f9236b23086986ca3c9ffd608813eeff3c2fc56f4f8cc174",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/libmagic/blobs/sha256:68084d922730e751f9236b23086986ca3c9ffd608813eeff3c2fc56f4f8cc174"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {},
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/libmagic/5.45",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/libmagic/5.45",
   "links": [
     {
       "source": "include/magic.h",
@@ -1754,7 +1754,7 @@
     }
   ],
   "package": "libmagic",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/libmagic.rb",
     "INSTALL_RECEIPT.json"

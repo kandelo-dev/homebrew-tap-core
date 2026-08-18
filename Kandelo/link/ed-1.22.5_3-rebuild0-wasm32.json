@@ -1,0 +1,53 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 105916,
+    "cache_key_sha": "0defaedf3a724b03ea552ac59f3b64d9fda91ef3d85ab7bd3680f60054cf4d60",
+    "payload_root": "ed/1.22.5_3",
+    "sha256": "0defaedf3a724b03ea552ac59f3b64d9fda91ef3d85ab7bd3680f60054cf4d60",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/ed/blobs/sha256:0defaedf3a724b03ea552ac59f3b64d9fda91ef3d85ab7bd3680f60054cf4d60"
+  },
+  "cellar": "/opt/kandelo/homebrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/ed/1.22.5_3",
+  "links": [
+    {
+      "source": "bin/ed",
+      "target": "bin/ed",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/red",
+      "target": "bin/red",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/ed.info",
+      "target": "share/info/ed.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/ed.1",
+      "target": "share/man/man1/ed.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/red.1",
+      "target": "share/man/man1/red.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "ed",
+  "prefix": "/opt/kandelo/homebrew",
+  "receipts": [
+    ".brew/ed.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.22.5_3"
+}

@@ -91,4 +91,9 @@ class Findutils < Formula
     assert_match(/missing.*No such file or directory/, missing)
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/findutils"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "ee86ffe7ae04255be5034a5a7f67e2e063bc661e095ea5d6cb5e6755eb15c5ba"
+  end
 end

@@ -204,4 +204,9 @@ class Libmagic < Formula
     %w[zlib bzip2 xz].each { |format| assert_match(/^#{format}=ASCII text/, output) }
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/libmagic"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "68084d922730e751f9236b23086986ca3c9ffd608813eeff3c2fc56f4f8cc174"
+  end
 end

@@ -1,0 +1,103 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1872746,
+    "cache_key_sha": "dfde169471227fe55f62c4aaac8c02cdcdb063b63becbeb9b8f9e5d74c2e13d5",
+    "payload_root": "bash/5.2.37_2",
+    "sha256": "dfde169471227fe55f62c4aaac8c02cdcdb063b63becbeb9b8f9e5d74c2e13d5",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/bash/blobs/sha256:dfde169471227fe55f62c4aaac8c02cdcdb063b63becbeb9b8f9e5d74c2e13d5"
+  },
+  "cellar": "/opt/kandelo/homebrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/bash/5.2.37_2",
+  "links": [
+    {
+      "source": "bin/bash",
+      "target": "bin/bash",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/bashbug",
+      "target": "bin/bashbug",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/bash/CHANGES",
+      "target": "share/doc/bash/CHANGES",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/bash/COMPAT",
+      "target": "share/doc/bash/COMPAT",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/bash/FAQ",
+      "target": "share/doc/bash/FAQ",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/bash/INTRO",
+      "target": "share/doc/bash/INTRO",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/bash/NEWS",
+      "target": "share/doc/bash/NEWS",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/bash/POSIX",
+      "target": "share/doc/bash/POSIX",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/bash/RBASH",
+      "target": "share/doc/bash/RBASH",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/bash/README",
+      "target": "share/doc/bash/README",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/bash/bash.html",
+      "target": "share/doc/bash/bash.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/doc/bash/bashref.html",
+      "target": "share/doc/bash/bashref.html",
+      "type": "symlink"
+    },
+    {
+      "source": "share/info/bash.info",
+      "target": "share/info/bash.info",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/bash.1",
+      "target": "share/man/man1/bash.1",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/bashbug.1",
+      "target": "share/man/man1/bashbug.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "bash",
+  "prefix": "/opt/kandelo/homebrew",
+  "receipts": [
+    ".brew/bash.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "5.2.37_2"
+}

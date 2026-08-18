@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 27577,
-    "cache_key_sha": "5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536",
+    "bytes": 28206,
+    "cache_key_sha": "da437fbad8365f35407c7ae3837e82ab808937106581359d91b2bdf3773548c1",
     "payload_root": "modeset/0.1.0",
-    "sha256": "5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/modeset/blobs/sha256:5b1f2aac6f7cfba6a4817b313958502a0b381126d904c090b61bdd6dfa84f536"
+    "sha256": "da437fbad8365f35407c7ae3837e82ab808937106581359d91b2bdf3773548c1",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/modeset/blobs/sha256:da437fbad8365f35407c7ae3837e82ab808937106581359d91b2bdf3773548c1"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/modeset/0.1.0",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/modeset/0.1.0",
   "links": [
     {
       "source": "bin/modeset",
@@ -23,7 +23,7 @@
     }
   ],
   "package": "modeset",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/modeset.rb",
     "INSTALL_RECEIPT.json"

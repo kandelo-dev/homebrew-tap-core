@@ -45,4 +45,9 @@ class PosixUtilsLite < Formula
       kandelo_run_wasm(bin/"locale", ["-a"], preserve_argv0: true)
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/posix-utils-lite"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "58386197e0ef265d6280fe554e255d5b4832d3efd19d02b0598045c4308693fa"
+  end
 end

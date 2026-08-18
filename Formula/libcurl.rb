@@ -514,4 +514,9 @@ class Libcurl < Formula
       assert_match(/^#{Regexp.escape(expected_prefix)}/, browser_output)
     end
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/libcurl"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "a3f9649ab9782274d85dcc2d603abd7f64ae1c425c8d3a07aca6e14401021bb1"
+  end
 end

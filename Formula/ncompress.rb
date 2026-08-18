@@ -79,4 +79,9 @@ class Ncompress < Formula
     refute_path_exists workspace/"sample.txt.Z"
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/ncompress"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "c0ceba820c3c4ff313f5b044013b6fbf90fcc05499338dcd6c6b9fb1c18cc247"
+  end
 end

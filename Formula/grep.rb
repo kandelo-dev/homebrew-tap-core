@@ -55,4 +55,9 @@ class Grep < Formula
     assert_match(/missing\.txt.*No such file or directory/, missing_output)
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/grep"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "9bccd6537c8db8cbd1f03fb2c828d1b11d0246b5ce9133435f4b9e9d01b231b2"
+  end
 end

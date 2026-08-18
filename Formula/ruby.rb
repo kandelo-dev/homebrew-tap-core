@@ -263,4 +263,9 @@ class Ruby < Formula
       assert_equal expected, output, command
     end
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/ruby"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "c3fceb2aee1a31b1d138f2e7aabcc015c483afef2384085998964b23799e0087"
+  end
 end

@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 2724999,
-    "cache_key_sha": "2604854305b794d476c1fc7f1ad8964e74ce2e4ee08cbcd443253baebeb0fc16",
+    "bytes": 2732951,
+    "cache_key_sha": "e601f6cc7d1c5ffe480a18e72278de9bec571cd16b6393e9027c7f250a04e786",
     "payload_root": "binutils/2.46.1",
-    "sha256": "2604854305b794d476c1fc7f1ad8964e74ce2e4ee08cbcd443253baebeb0fc16",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/binutils/blobs/sha256:2604854305b794d476c1fc7f1ad8964e74ce2e4ee08cbcd443253baebeb0fc16"
+    "sha256": "e601f6cc7d1c5ffe480a18e72278de9bec571cd16b6393e9027c7f250a04e786",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/binutils/blobs/sha256:e601f6cc7d1c5ffe480a18e72278de9bec571cd16b6393e9027c7f250a04e786"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/binutils/2.46.1",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/binutils/2.46.1",
   "links": [
     {
       "source": "bin/addr2line",
@@ -143,7 +143,7 @@
     }
   ],
   "package": "binutils",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/binutils.rb",
     "INSTALL_RECEIPT.json"

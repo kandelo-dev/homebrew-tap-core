@@ -1,16 +1,16 @@
 {
   "arch": "wasm64",
   "bottle": {
-    "bytes": 2699093,
-    "cache_key_sha": "57992ef202791d64763875310d2704151525d7190aa4db2404fa96837b13fdd3",
+    "bytes": 2701161,
+    "cache_key_sha": "930d9b2a4939b49ca20df46fcb708ec4540340da2f15af35b7b55e7d270c365d",
     "payload_root": "libcxx/21.1.7_1",
-    "sha256": "57992ef202791d64763875310d2704151525d7190aa4db2404fa96837b13fdd3",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/libcxx/blobs/sha256:57992ef202791d64763875310d2704151525d7190aa4db2404fa96837b13fdd3"
+    "sha256": "930d9b2a4939b49ca20df46fcb708ec4540340da2f15af35b7b55e7d270c365d",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/libcxx/blobs/sha256:930d9b2a4939b49ca20df46fcb708ec4540340da2f15af35b7b55e7d270c365d"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {},
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/libcxx/21.1.7_1",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/libcxx/21.1.7_1",
   "links": [
     {
       "source": "include/__libunwind_config.h",
@@ -9144,7 +9144,7 @@
     }
   ],
   "package": "libcxx",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/libcxx.rb",
     "INSTALL_RECEIPT.json"

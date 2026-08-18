@@ -117,4 +117,9 @@ class Tar < Formula
     assert_equal "beta\n", (gzip_extracted/"source/nested/beta.txt").read
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/tar"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "3e21f47e14cacfb3faa6aa615447707fe15eb6508252d8b12422fda681ccfd45"
+  end
 end

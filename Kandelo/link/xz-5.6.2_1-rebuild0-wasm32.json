@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 632681,
-    "cache_key_sha": "f466797981b45e298a413e26ea13d7fed6a0ccf797ac0b98c4c8ec2bdb47819b",
+    "bytes": 634001,
+    "cache_key_sha": "4c9a75d9c41412d6ba556534b80edba1a0e31f1a3d612f511f57438a5cef4ddd",
     "payload_root": "xz/5.6.2_1",
-    "sha256": "f466797981b45e298a413e26ea13d7fed6a0ccf797ac0b98c4c8ec2bdb47819b",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/xz/blobs/sha256:f466797981b45e298a413e26ea13d7fed6a0ccf797ac0b98c4c8ec2bdb47819b"
+    "sha256": "4c9a75d9c41412d6ba556534b80edba1a0e31f1a3d612f511f57438a5cef4ddd",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/xz/blobs/sha256:4c9a75d9c41412d6ba556534b80edba1a0e31f1a3d612f511f57438a5cef4ddd"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/xz/5.6.2_1",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/xz/5.6.2_1",
   "links": [
     {
       "source": "bin/lzcat",
@@ -173,7 +173,7 @@
     }
   ],
   "package": "xz",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/xz.rb",
     "INSTALL_RECEIPT.json"

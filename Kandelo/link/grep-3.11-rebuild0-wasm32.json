@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 343669,
-    "cache_key_sha": "329d5c8cb98668b8040e67fcfa5d767eb14b8627c6ee8431ede338e1e12ca540",
+    "bytes": 344905,
+    "cache_key_sha": "9bccd6537c8db8cbd1f03fb2c828d1b11d0246b5ce9133435f4b9e9d01b231b2",
     "payload_root": "grep/3.11",
-    "sha256": "329d5c8cb98668b8040e67fcfa5d767eb14b8627c6ee8431ede338e1e12ca540",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/grep/blobs/sha256:329d5c8cb98668b8040e67fcfa5d767eb14b8627c6ee8431ede338e1e12ca540"
+    "sha256": "9bccd6537c8db8cbd1f03fb2c828d1b11d0246b5ce9133435f4b9e9d01b231b2",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/grep/blobs/sha256:9bccd6537c8db8cbd1f03fb2c828d1b11d0246b5ce9133435f4b9e9d01b231b2"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "bin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/grep/3.11",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/grep/3.11",
   "links": [
     {
       "source": "bin/grep",
@@ -23,7 +23,7 @@
     }
   ],
   "package": "grep",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/grep.rb",
     "INSTALL_RECEIPT.json"

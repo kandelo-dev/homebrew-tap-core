@@ -202,4 +202,9 @@ class Unzip < Formula
     assert_match(/cannot find or open missing\.zip/, missing)
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/unzip"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "0cb3c5c6c9b208bfe019b430ee085d8cf0a1e95ca6c52cb0a8e55630e0bef557"
+  end
 end

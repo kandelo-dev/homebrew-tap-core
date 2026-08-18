@@ -455,4 +455,9 @@ class Bash < Formula
       }
     C
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/bash"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "dfde169471227fe55f62c4aaac8c02cdcdb063b63becbeb9b8f9e5d74c2e13d5"
+  end
 end
