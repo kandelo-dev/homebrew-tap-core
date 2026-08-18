@@ -1669,7 +1669,7 @@ def plan_formula_metadata_batch(
     """Compose independently validated Formula updates against one tap base."""
 
     root = tap_root.resolve(strict=True)
-    if not 2 <= len(members) <= 64:
+    if not 1 <= len(members) <= 64:
         raise TapMetadataError("Formula metadata batch membership is outside its bound")
     checked_members: list[tuple[TapMetadataPatchV1, FormulaMetadataUpdateV1]] = []
     identities: set[tuple[str, str]] = set()
@@ -1790,6 +1790,66 @@ def plan_formula_metadata_batch(
         updates=tuple(update for _patch, update in checked_members),
         patch=batch_patch,
     )
+
+
+def validate_formula_metadata_batch(
+    tap_root: Path,
+    batch: FormulaMetadataBatchV1,
+) -> tuple[FormulaMetadataUpdateV1, ...]:
+    root = tap_root.resolve(strict=True)
+    if not isinstance(batch, FormulaMetadataBatchV1):
+        raise TapMetadataError("Formula metadata batch protocol is unsupported")
+    patch = batch.patch
+    if (
+        not isinstance(patch, TapMetadataPatchV1)
+        or patch.operation != "formula-metadata-batch"
+        or not 1 <= len(batch.updates) <= 64
+    ):
+        raise TapMetadataError("Formula metadata batch protocol is unsupported")
+    updates = tuple(_checked_formula_update(update) for update in batch.updates)
+    identities = [(update.formula, update.architecture) for update in updates]
+    if identities != sorted(set(identities)):
+        raise TapMetadataError("Formula metadata batch members are not exact")
+    if any(update.expected_main_commit != patch.expected_main_commit for update in updates):
+        raise TapMetadataError("Formula metadata batch member base changed")
+    allowed_paths = {
+        path for update in updates for path in update.allowed_paths
+    }
+    if (
+        allowed_paths != set(patch.allowed_paths)
+        or set(patch.expected_files_sha256) != allowed_paths
+        or not set(patch.files).issubset(allowed_paths)
+    ):
+        raise TapMetadataError("Formula metadata batch path set changed")
+
+    with tempfile.TemporaryDirectory() as temporary:
+        simulated = Path(temporary)
+        _copy_metadata_projection(root, simulated)
+        for path, body in patch.files.items():
+            output = simulated / path
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(body)
+        check_tap_metadata(simulated)
+        for update in updates:
+            sidecar = _load_json(
+                simulated / f"Kandelo/formula/{update.formula}.json",
+                f"batched sidecar for {update.formula}",
+            )
+            selected = [
+                bottle
+                for bottle in sidecar["bottles"]
+                if bottle.get("arch") == update.architecture
+            ]
+            if (
+                len(selected) != 1
+                or selected[0].get("status") != "success"
+                or selected[0].get("sha256") != update.bottle_layer_sha256
+                or selected[0].get("bytes") != update.bottle_layer_bytes
+            ):
+                raise TapMetadataError(
+                    "Formula metadata batch does not select an exact member layer"
+                )
+    return updates
 
 
 def validate_formula_metadata_patch(
@@ -2416,6 +2476,7 @@ def apply_metadata_patch(
     patch: TapMetadataPatchV1,
     *,
     formula_update: FormulaMetadataUpdateV1 | None = None,
+    formula_batch: FormulaMetadataBatchV1 | None = None,
     commit_message: str,
     store: GitTapMetadataStore | None = None,
 ) -> TapMetadataWriteResultV1:
@@ -2427,17 +2488,25 @@ def apply_metadata_patch(
         )
     try:
         if patch.operation == "successor-activation":
-            if formula_update is not None:
+            if formula_update is not None or formula_batch is not None:
                 raise TapMetadataError(
                     "successor activation cannot carry a Formula update"
                 )
             validate_successor_activation_patch(root, patch)
         elif patch.operation == "formula-metadata":
-            if formula_update is None:
+            if formula_update is None or formula_batch is not None:
                 raise TapMetadataError(
                     "Formula metadata writer requires its exact update"
                 )
             validate_formula_metadata_patch(root, patch, formula_update)
+        elif patch.operation == "formula-metadata-batch":
+            if formula_update is not None or formula_batch is None:
+                raise TapMetadataError(
+                    "Formula metadata batch writer requires its exact batch"
+                )
+            if formula_batch.patch != patch:
+                raise TapMetadataError("Formula metadata batch patch changed")
+            validate_formula_metadata_batch(root, formula_batch)
         else:
             raise TapMetadataError("metadata patch operation is unsupported")
     except TapMetadataError as error:
@@ -2482,9 +2551,16 @@ def apply_metadata_patch(
         destination = root / path
         expected_digest = patch.expected_files_sha256[path]
         if expected_digest is None:
+            link_paths = (
+                {formula_update.link_manifest_path}
+                if formula_update is not None
+                else {
+                    update.link_manifest_path
+                    for update in (() if formula_batch is None else formula_batch.updates)
+                }
+            )
             if (
-                formula_update is None
-                or path != formula_update.link_manifest_path
+                path not in link_paths
                 or destination.exists()
                 or destination.is_symlink()
             ):
