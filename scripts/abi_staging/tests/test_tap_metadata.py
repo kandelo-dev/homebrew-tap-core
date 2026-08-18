@@ -1138,6 +1138,104 @@ class TapMetadataTests(unittest.TestCase):
             self.fail("per-Formula metadata patch validation is absent")
         validate(self.root, patch, update)
 
+    def test_composes_two_formula_updates_into_one_atomic_patch(self) -> None:
+        history, snapshot, preactivation, _current = self._activate_fixture()
+        self._add_dash()
+        dash_formula = self.root / "Formula/dash.rb"
+        dash_formula.write_text("class Dash < Formula\nend\n")
+        dash_sidecar_path = self.root / "Kandelo/formula/dash.json"
+        dash_sidecar = json.loads(dash_sidecar_path.read_bytes())
+        dash_bottle = dash_sidecar["bottles"][0]
+        for key in tap_metadata_module._BOTTLE_SELECTION_FIELDS:
+            dash_bottle.pop(key, None)
+        dash_bottle["status"] = "pending"
+        dash_bottle["kandelo_abi"] = SUCCESSOR_ABI
+        dash_sidecar["kandelo_abi"] = SUCCESSOR_ABI
+        dash_sidecar_path.write_bytes(
+            json.dumps(dash_sidecar, indent=2, sort_keys=True).encode() + b"\n"
+        )
+        metadata_path = self.root / "Kandelo/metadata.json"
+        metadata = json.loads(metadata_path.read_bytes())
+        dash_projection = {
+            key: dash_sidecar[key]
+            for key in tap_metadata_module.PACKAGE_KEYS
+            if key != "formula_metadata"
+        }
+        dash_projection["formula_metadata"] = "Kandelo/formula/dash.json"
+        dash_index = next(
+            index
+            for index, package in enumerate(metadata["packages"])
+            if package["name"] == "dash"
+        )
+        metadata["packages"][dash_index] = dash_projection
+        metadata_path.write_bytes(
+            json.dumps(metadata, indent=2, sort_keys=True).encode() + b"\n"
+        )
+        (self.root / "Kandelo/link/dash-1.0-rebuild1-wasm32.json").unlink()
+        _git(self.root, "add", "--", "Formula", "Kandelo")
+        _git(self.root, "commit", "-m", "add second Formula fixture")
+        current = {
+            "repository": "kandelo-dev/homebrew-tap-core",
+            "commit": _git(self.root, "rev-parse", "HEAD"),
+            "tree": _git(self.root, "rev-parse", "HEAD^{tree}"),
+        }
+        prepared = [
+            self._prepare_formula(
+                prepared=self._prepared_admission(
+                    preactivation=preactivation,
+                    formula=formula,
+                    canonical_digest=marker * 64,
+                ),
+                history=history,
+                snapshot=snapshot,
+                current=current,
+            )
+            for formula, marker in (("bash", "5"), ("dash", "6"))
+        ]
+        compose = getattr(
+            tap_metadata_module,
+            "plan_formula_metadata_batch",
+            None,
+        )
+        if compose is None:
+            self.fail("atomic Formula metadata batch planning is absent")
+
+        batch = compose(
+            self.root,
+            members=tuple((item.patch, item.update) for item in prepared),
+        )
+
+        self.assertEqual(batch.patch.operation, "formula-metadata-batch")
+        self.assertEqual(
+            [item.formula for item in batch.updates],
+            ["bash", "dash"],
+        )
+        self.assertEqual(
+            set(batch.patch.files),
+            {
+                "Formula/bash.rb",
+                "Formula/dash.rb",
+                "Kandelo/formula/bash.json",
+                "Kandelo/formula/dash.json",
+                "Kandelo/link/bash-1.0-rebuild1-wasm32.json",
+                "Kandelo/link/dash-1.0-rebuild1-wasm32.json",
+                "Kandelo/metadata.json",
+            },
+        )
+        metadata = json.loads(batch.patch.files["Kandelo/metadata.json"])
+        selected = {
+            item["name"]: item["bottles"][0]["sha256"]
+            for item in metadata["packages"]
+            if item["name"] in {"bash", "dash"}
+        }
+        self.assertEqual(
+            selected,
+            {
+                item.update.formula: item.update.bottle_layer_sha256
+                for item in prepared
+            },
+        )
+
     def test_formula_update_rejects_canonical_or_candidate_layer_drift(self) -> None:
         history, snapshot, preactivation, current = self._activate_fixture()
         prepared = self._prepared_admission(preactivation=preactivation)
