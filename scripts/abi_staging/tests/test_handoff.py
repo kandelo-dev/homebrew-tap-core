@@ -479,6 +479,49 @@ class BuildHandoffTests(unittest.TestCase):
         self.assertIn(b"  bottle do\n", prepared)
         self.assertIn(digest.encode("ascii"), prepared)
 
+    def test_prepares_candidate_dependency_at_the_formula_class_boundary(self) -> None:
+        sources = {
+            "preserved-blank": (
+                'class Dash < Formula\n'
+                '  desc "fixture"\n'
+                '\n'
+                'end\n'
+            ),
+            "embedded-patch": (
+                'class Libcxx < Formula\n'
+                '  desc "fixture"\n'
+                '\n'
+                '  test do\n'
+                '    assert true\n'
+                '  end\n'
+                '\n'
+                'end\n'
+                '\n'
+                '__END__\n'
+                'diff --git a/source b/source\n'
+            ),
+        }
+        for name, text in sources.items():
+            with self.subTest(name=name):
+                source = text.encode("utf-8")
+                prepared = handoff_module._candidate_dependency_formula_source(
+                    source,
+                    root_url=(
+                        "https://ghcr.io/v2/"
+                        "kandelo-dev/homebrew-tap-core-abi-43-candidates"
+                    ),
+                    architecture="wasm32",
+                    digest="2" * 64,
+                )
+
+                self.assertEqual(normalize_formula_source(prepared), source)
+                self.assertLess(
+                    prepared.index(b"  bottle do\n"),
+                    prepared.index(b"\n__END__\n")
+                    if b"\n__END__\n" in prepared
+                    else len(prepared),
+                )
+
     def test_git_identity_accepts_an_exact_protected_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "source"

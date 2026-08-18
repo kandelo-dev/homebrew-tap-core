@@ -1857,11 +1857,27 @@ def _candidate_dependency_formula_source(
             architecture not in {"wasm32", "wasm64"}
             or re.fullmatch(r"[0-9a-f]{64}", digest) is None
             or not lines
-            or lines[-1] != "end\n"
         ):
             raise HandoffError("dependency Formula cannot accept a candidate bottle block")
-        insertion = len(lines) - 1
-        block = [] if insertion == 0 or lines[insertion - 1] == "\n" else ["\n"]
+        data_markers = [
+            index for index, line in enumerate(lines) if line == "__END__\n"
+        ]
+        if len(data_markers) > 1:
+            raise HandoffError("dependency Formula cannot accept a candidate bottle block")
+        recipe_end = data_markers[0] if data_markers else len(lines)
+        class_ends = [
+            index
+            for index, line in enumerate(lines[:recipe_end])
+            if line == "end\n"
+        ]
+        if not class_ends:
+            raise HandoffError("dependency Formula cannot accept a candidate bottle block")
+        insertion = class_ends[-1]
+        if any(line != "\n" for line in lines[insertion + 1 : recipe_end]):
+            raise HandoffError("dependency Formula cannot accept a candidate bottle block")
+        # Normalization removes the blank immediately before a bottle block.
+        # Always add a fresh one so an existing recipe-owned blank survives.
+        block = ["\n"]
         block.extend(
             [
                 "  bottle do\n",
