@@ -926,15 +926,65 @@ class ReconciliationTests(unittest.TestCase):
             self.assertEqual(plan["matrices"]["canonical"], {"include": []})
             self.assertFalse(plan["authoritative"])
 
-    def test_promotion_converges_independently_and_retries_exact_stage(self) -> None:
+    def test_verified_dependant_does_not_wait_for_dependency_admission(self) -> None:
         reconciliation = self.merged_promotion_reconciliation()
         root = PromotionSubjectV1(
             self.promotion_decision("root", marker="a"), "required", ()
         )
-        dependent = PromotionSubjectV1(
-            self.promotion_decision("dependent", marker="f"),
+        dependant = PromotionSubjectV1(
+            self.promotion_decision("dependant", marker="f"),
             "required",
             (root.decision.formula_subject,),
+        )
+        plan = build_promotion_workflow_plan(
+            reconciliation,
+            (dependant, root),
+            epoch=self.promotion_epoch(activated=True),
+            progress={
+                root.decision.formula_subject: PromotionProgressV1(),
+                dependant.decision.formula_subject: PromotionProgressV1(),
+            },
+            activation_mode="active",
+        )
+
+        self.assertEqual(
+            [item["formula_subject"] for item in plan.canonical_work],
+            [dependant.decision.formula_subject, root.decision.formula_subject],
+        )
+
+    def test_complete_required_graph_fits_one_promotion_wave(self) -> None:
+        reconciliation = self.merged_promotion_reconciliation()
+        subjects = tuple(
+            PromotionSubjectV1(
+                self.promotion_decision(
+                    f"formula-{index:02d}", marker=f"formula-{index:02d}"
+                ),
+                "required",
+                (),
+            )
+            for index in range(43)
+        )
+        plan = build_promotion_workflow_plan(
+            reconciliation,
+            subjects,
+            epoch=self.promotion_epoch(activated=True),
+            progress={
+                subject.decision.formula_subject: PromotionProgressV1()
+                for subject in subjects
+            },
+            activation_mode="active",
+        )
+
+        self.assertEqual(len(plan.canonical_work), 43)
+        self.assertNotIn(
+            "promotion_wave_deferred",
+            {item["guard_code"] for item in plan.blocked},
+        )
+
+    def test_promotion_converges_independently_and_retries_exact_stage(self) -> None:
+        reconciliation = self.merged_promotion_reconciliation()
+        root = PromotionSubjectV1(
+            self.promotion_decision("root", marker="a"), "required", ()
         )
         background = PromotionSubjectV1(
             self.promotion_decision("background", marker="k"), "background", ()
@@ -949,7 +999,7 @@ class ReconciliationTests(unittest.TestCase):
             "background",
             (),
         )
-        subjects = (background, dependent, drifted, root)
+        subjects = (background, drifted, root)
         empty = {
             item.decision.formula_subject: PromotionProgressV1()
             for item in subjects
@@ -985,13 +1035,12 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(
             [(item["formula_subject"], item["guard_code"]) for item in first.blocked],
             [
-                (dependent.decision.formula_subject, "dependency_unavailable"),
                 (background.decision.formula_subject, "dependency_unavailable"),
                 (drifted.decision.formula_subject, "tap_source_drift"),
             ],
         )
         self.assertEqual(
-            first.blocked[1]["blocked_by"], root.decision.formula_subject
+            first.blocked[0]["blocked_by"], root.decision.formula_subject
         )
         self.assertEqual(
             first,
@@ -1115,10 +1164,6 @@ class ReconciliationTests(unittest.TestCase):
             activation_mode="active",
         )
         self.assertIn(root.decision.formula_subject, resumed.complete)
-        self.assertEqual(
-            [item["formula_subject"] for item in resumed.canonical_work],
-            [dependent.decision.formula_subject],
-        )
 
     def test_cli_routes_post_formula_product_wave_planning(self) -> None:
         from scripts.abi_staging import cli
