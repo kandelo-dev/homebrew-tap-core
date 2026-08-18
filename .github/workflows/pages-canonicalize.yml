@@ -1,0 +1,149 @@
+name: Publish Pages canonical bottles
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidates:
+        description: "Bounded JSON array of Formula and immutable candidate reference"
+        required: true
+        type: string
+      kandelo_commit:
+        description: "Exact Kandelo commit supplying the guest layout"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: pages-canonicalize-abi-43
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      matrix: ${{ steps.validate.outputs.matrix }}
+    steps:
+      - name: Validate the bounded candidate set
+        id: validate
+        env:
+          CANDIDATES: ${{ inputs.candidates }}
+          KANDELO_COMMIT: ${{ inputs.kandelo_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$KANDELO_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          candidates="$({
+            jq -ce '
+              if type != "array" or length < 1 or length > 32 then error("candidate count")
+              elif any(.[]; type != "object" or keys != ["formula", "reference"]) then error("candidate shape")
+              elif any(.[]; (.formula | test("^[a-z0-9][a-z0-9+._-]{0,127}$") | not)) then error("formula")
+              elif any(.[]; (.reference | test("^ghcr\\.io/kandelo-dev/homebrew-tap-core-abi-43-candidates/[a-z0-9][a-z0-9+._-]{0,127}@sha256:[0-9a-f]{64}$") | not)) then error("reference")
+              elif (map(.formula) | unique | length) != length then error("duplicate formula")
+              else . end
+            ' <<<"$CANDIDATES"
+          })"
+          echo "matrix={\"include\":$candidates}" >>"$GITHUB_OUTPUT"
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.validate.outputs.matrix) }}
+    steps:
+      - name: Check out protected tap source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: tap-authority
+
+      - name: Set up declared Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Set up pinned ORAS
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+        with:
+          version: "1.3.3"
+
+      - name: Publish unchanged candidate bytes canonically
+        working-directory: tap-authority
+        env:
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          python3 -P -m scripts.abi_staging.cli publish-pages-canonical \
+            --tap-root "$PWD" \
+            --candidate-reference '${{ matrix.reference }}' \
+            --formula '${{ matrix.formula }}' \
+            --target-abi 43 \
+            --anonymous-readback \
+            --out "$RUNNER_TEMP/pages-canonical-${{ matrix.formula }}.json"
+
+  update-metadata:
+    needs:
+      - validate
+      - publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Check out current tap main for contents-only writes
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: refs/heads/main
+          fetch-depth: 1
+          persist-credentials: true
+          path: tap-authority
+
+      - name: Check out the exact Kandelo guest layout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: Automattic/kandelo
+          ref: ${{ inputs.kandelo_commit }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: kandelo-authority
+
+      - name: Set up declared Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Set up pinned ORAS
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+        with:
+          version: "1.3.3"
+
+      - name: Apply canonical Formula metadata sequentially
+        working-directory: tap-authority
+        env:
+          CANDIDATES: ${{ inputs.candidates }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r candidate; do
+            formula="$(jq -er '.formula' <<<"$candidate")"
+            reference="$(jq -er '.reference' <<<"$candidate")"
+            python3 -P -m scripts.abi_staging.cli apply-pages-canonical-metadata \
+              --tap-root "$PWD" \
+              --candidate-reference "$reference" \
+              --formula "$formula" \
+              --target-abi 43 \
+              --guest-layout "$GITHUB_WORKSPACE/kandelo-authority/homebrew/kandelo-guest-layout.json" \
+              --anonymous-readback \
+              --contents-only \
+              --normal-push \
+              --out "$RUNNER_TEMP/pages-metadata-$formula.json"
+          done < <(jq -ce '.[]' <<<"$CANDIDATES")

@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import selectors
 import signal
 import shutil
@@ -89,6 +90,14 @@ from .plan import (
     plan_exact_tap_request,
     snapshot_tap_source,
     write_canonical_plan,
+)
+from .pages_canonical import (
+    PagesCanonicalError,
+    pages_canonical_metadata_facts,
+    prepare_pages_formula_metadata_patch,
+    publish_pages_canonical_bottle,
+    read_pages_canonical_bottle,
+    select_pages_canonical_candidate,
 )
 from .records import (
     CANDIDATE_RECORD_MEDIA_TYPE,
@@ -310,6 +319,39 @@ def _parser() -> argparse.ArgumentParser:
     publish_canonical.add_argument("--anonymous-readback", action="store_true")
     publish_canonical.add_argument("--immutable", action="store_true")
     publish_canonical.add_argument("--out", required=True)
+    publish_pages_canonical = subcommands.add_parser(
+        "publish-pages-canonical"
+    )
+    publish_pages_canonical.add_argument("--tap-root", required=True)
+    publish_pages_canonical.add_argument(
+        "--candidate-reference",
+        required=True,
+    )
+    publish_pages_canonical.add_argument("--formula", required=True)
+    publish_pages_canonical.add_argument("--target-abi", required=True, type=int)
+    publish_pages_canonical.add_argument(
+        "--anonymous-readback",
+        action="store_true",
+    )
+    publish_pages_canonical.add_argument("--out", required=True)
+    apply_pages_metadata = subcommands.add_parser(
+        "apply-pages-canonical-metadata"
+    )
+    apply_pages_metadata.add_argument("--tap-root", required=True)
+    apply_pages_metadata.add_argument(
+        "--candidate-reference",
+        required=True,
+    )
+    apply_pages_metadata.add_argument("--formula", required=True)
+    apply_pages_metadata.add_argument("--target-abi", required=True, type=int)
+    apply_pages_metadata.add_argument("--guest-layout", required=True)
+    apply_pages_metadata.add_argument(
+        "--anonymous-readback",
+        action="store_true",
+    )
+    apply_pages_metadata.add_argument("--contents-only", action="store_true")
+    apply_pages_metadata.add_argument("--normal-push", action="store_true")
+    apply_pages_metadata.add_argument("--out", required=True)
     update_tap_metadata = subcommands.add_parser("update-workflow-tap-metadata")
     update_tap_metadata.add_argument("--run-id", required=True, type=int)
     update_tap_metadata.add_argument("--run-attempt", required=True, type=int)
@@ -1599,6 +1641,166 @@ def _public_locator(fetched: FetchedOciRecordV1) -> dict[str, str]:
         "digest": fetched.digest,
         "immutable_reference": fetched.immutable_reference,
     }
+
+
+def _immutable_reference_locator(reference: str) -> dict[str, str]:
+    match = re.fullmatch(
+        r"(ghcr\.io/[a-z0-9._/-]+)@(sha256:[0-9a-f]{64})",
+        reference,
+    )
+    if match is None:
+        raise PagesCanonicalError(
+            "Pages candidate reference is not an immutable GHCR digest"
+        )
+    return {
+        "repository": match.group(1),
+        "digest": match.group(2),
+        "immutable_reference": reference,
+    }
+
+
+def _publish_pages_canonical(args: argparse.Namespace) -> None:
+    if not args.anonymous_readback:
+        raise PagesCanonicalError(
+            "Pages canonical publication requires anonymous readback"
+        )
+    tap_root = Path(args.tap_root).resolve(strict=True)
+    if tap_root != TAP_ROOT.resolve(strict=True):
+        raise PagesCanonicalError(
+            "--tap-root must name this protected tap checkout"
+        )
+    username = os.environ.get("HOMEBREW_GITHUB_PACKAGES_USER", "")
+    token = os.environ.get("HOMEBREW_GITHUB_PACKAGES_TOKEN", "")
+    with isolated_oras_transport(username=username, token=token) as transport:
+        candidate = _fetch_candidate_record(
+            _immutable_reference_locator(args.candidate_reference),
+            transport=transport,
+        )
+        selected = select_pages_canonical_candidate(
+            candidate,
+            tap_root=tap_root,
+            target_abi=args.target_abi,
+        )
+        if selected.formula != args.formula:
+            raise PagesCanonicalError(
+                "Pages candidate differs from the requested Formula"
+            )
+        publication = publish_pages_canonical_bottle(
+            candidate,
+            tap_root=tap_root,
+            target_abi=args.target_abi,
+            transport=transport,
+        )
+    output = {
+        "schema": 1,
+        "kind": "kandelo-pages-canonical-publication",
+        "formula": selected.formula,
+        "architecture": selected.architecture,
+        "target_abi": selected.target_abi,
+        "candidate": {
+            "record_sha256": selected.candidate_record_sha256,
+            "immutable_reference": candidate.immutable_reference,
+            "bottle_sha256": selected.bottle_sha256,
+            "bottle_bytes": selected.bottle_bytes,
+        },
+        "canonical": {
+            "repository": publication.locator.repository,
+            "digest": publication.locator.digest,
+            "immutable_reference": publication.locator.immutable_reference,
+            "anonymous_readback_sha256": (
+                publication.locator.anonymous_readback_sha256
+            ),
+            "artifact": dict(publication.artifact),
+        },
+    }
+    Path(args.out).write_bytes(canonical_bytes(output))
+
+
+def _apply_pages_canonical_metadata(args: argparse.Namespace) -> None:
+    if not (args.anonymous_readback and args.contents_only and args.normal_push):
+        raise PagesCanonicalError(
+            "Pages metadata requires anonymous readback and a contents-only push"
+        )
+    if any(
+        os.environ.get(name)
+        for name in (
+            "HOMEBREW_GITHUB_PACKAGES_TOKEN",
+            "HOMEBREW_GITHUB_PACKAGES_USER",
+        )
+    ):
+        raise PagesCanonicalError(
+            "Pages metadata writer must not receive package credentials"
+        )
+    tap_root = Path(args.tap_root).resolve(strict=True)
+    if tap_root != TAP_ROOT.resolve(strict=True):
+        raise PagesCanonicalError(
+            "--tap-root must name this protected tap checkout"
+        )
+    guest_layout_path = Path(args.guest_layout).resolve(strict=True)
+    guest_layout_bytes = guest_layout_path.read_bytes()
+    policy = load_promotion_policy(
+        tap_root / "Kandelo/staging/promotion-policy.toml"
+    )
+    with isolated_oras_transport(username="", token="") as transport:
+        candidate = _fetch_candidate_record(
+            _immutable_reference_locator(args.candidate_reference),
+            transport=transport,
+        )
+        selected = select_pages_canonical_candidate(
+            candidate,
+            tap_root=tap_root,
+            target_abi=args.target_abi,
+        )
+        if selected.formula != args.formula:
+            raise PagesCanonicalError(
+                "Pages candidate differs from the requested Formula"
+            )
+        publication = read_pages_canonical_bottle(
+            candidate,
+            tap_root=tap_root,
+            target_abi=args.target_abi,
+            transport=transport,
+        )
+    prepared = prepare_pages_formula_metadata_patch(
+        tap_root=tap_root,
+        current_tap_source=snapshot_tap_source(
+            tap_root,
+            policy.tap_repository,
+        ),
+        expected_generated_metadata_sha256=(
+            formula_generated_metadata_sha256(tap_root, selected.formula)
+        ),
+        guest_layout_bytes=guest_layout_bytes,
+        policy=policy,
+        facts=pages_canonical_metadata_facts(candidate, publication),
+    )
+    _configure_metadata_committer(tap_root)
+    result = apply_metadata_patch(
+        tap_root,
+        prepared.patch,
+        formula_update=prepared.update,
+        commit_message="[Homebrew] Publish canonical " + selected.formula,
+        store=GitTapMetadataStore(tap_root, remote="origin"),
+    )
+    check_tap_metadata(tap_root)
+    Path(args.out).write_bytes(
+        canonical_bytes(
+            {
+                "schema": 1,
+                "kind": "kandelo-pages-metadata-write",
+                "formula": selected.formula,
+                "architecture": selected.architecture,
+                "target_abi": selected.target_abi,
+                "status": result.status,
+                "source": dict(result.source),
+                "changed_paths": list(result.changed_paths),
+                "candidate_record_sha256": selected.candidate_record_sha256,
+                "canonical_manifest_sha256": publication.artifact["sha256"],
+                "bottle_sha256": selected.bottle_sha256,
+                "bottle_bytes": selected.bottle_bytes,
+            }
+        )
+    )
 
 
 def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -6933,6 +7135,12 @@ def main(arguments: list[str] | None = None) -> int:
         if args.command == "publish-workflow-canonical":
             _publish_workflow_canonical(args)
             return 0
+        if args.command == "publish-pages-canonical":
+            _publish_pages_canonical(args)
+            return 0
+        if args.command == "apply-pages-canonical-metadata":
+            _apply_pages_canonical_metadata(args)
+            return 0
         if args.command == "update-workflow-tap-metadata":
             _update_workflow_tap_metadata(args)
             return 0
@@ -7164,6 +7372,7 @@ def main(arguments: list[str] | None = None) -> int:
         ProductEvidenceError,
         AbiHistoryError,
         PromotionError,
+        PagesCanonicalError,
     ) as error:
         print(f"abi-staging {args.command}: {error}", file=sys.stderr)
         return 1
