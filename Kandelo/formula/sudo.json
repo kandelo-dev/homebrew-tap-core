@@ -1,0 +1,38 @@
+{
+  "bottle_rebuild": 0,
+  "bottles": [
+    {
+      "arch": "wasm32",
+      "bottle_tag": "wasm32_kandelo",
+      "browser_compatible": false,
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/31874247071",
+      "built_from": {
+        "formula_sha256": "26dcd002b38de82c98dd6e5728d259c120eaf809273101e72255dc219357e61a",
+        "kandelo_commit": "6ead491ca478aac108111a331664064ce1add211",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "3565b1c967901753158fca50ce6e4c809cd62bdd",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "cellar": "/opt/kandelo/homebrew/Cellar",
+      "fork_instrumentation": "required",
+      "kandelo_abi": 43,
+      "prefix": "/opt/kandelo/homebrew",
+      "runtime_support": [
+        "node"
+      ],
+      "status": "pending"
+    }
+  ],
+  "dependencies": [],
+  "formula_path": "Formula/sudo.rb",
+  "formula_revision": 0,
+  "full_name": "kandelo-dev/tap-core/sudo",
+  "kandelo_abi": 43,
+  "name": "sudo",
+  "schema": 1,
+  "source_metadata": "Kandelo/metadata.json",
+  "tap_commit": "7fd976c60986191daeb18f8c5c40dd705d71398f",
+  "tap_name": "kandelo-dev/tap-core",
+  "tap_repository": "kandelo-dev/homebrew-tap-core",
+  "version": "1.9.17p2"
+}
