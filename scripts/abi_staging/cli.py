@@ -139,6 +139,7 @@ from .tap_metadata import (
     load_promotion_activation,
     load_promotion_policy,
     managed_abi_activation_document,
+    plan_formula_metadata_batch,
     require_current_abi_authority,
     recover_landed_formula_metadata_commit,
     validate_formula_admission_projection,
@@ -186,6 +187,7 @@ from .reconcile import (
     ProductSelectionV1,
     PromotionEpochV1,
     PromotionProgressV1,
+    PromotionReconciliationPlanV1,
     PromotionSubjectV1,
     PullRequestLifecycleV1,
     ReconciliationDecisionV1,
@@ -316,7 +318,11 @@ def _parser() -> argparse.ArgumentParser:
     update_tap_metadata.add_argument(
         "--operation",
         required=True,
-        choices=("successor-activation", "formula-metadata"),
+        choices=(
+            "successor-activation",
+            "formula-metadata",
+            "formula-metadata-batch",
+        ),
     )
     update_tap_metadata.add_argument("--plan-artifact-id", required=True)
     update_tap_metadata.add_argument("--plan-artifact-digest", required=True)
@@ -2168,6 +2174,14 @@ def _collect_active_promotion_inputs(
     contexts: dict[str, dict[str, Any]] = {}
     for subject in tap_plan["required_subjects"] + tap_plan["background_subjects"]:
         formula_plan = original_formulae[subject]
+        formula, architecture = parse_formula_subject(subject, "promotion subject")
+        generated_metadata_sha256 = _formula_generated_metadata_identity(
+            tap_root,
+            formula=formula,
+            work_class=formula_plan["work_class"],
+        )
+        if generated_metadata_sha256 is None:
+            continue
         contract_sha256 = formula_plan["contract_sha256"]
         if not isinstance(contract_sha256, str):
             continue
@@ -2236,7 +2250,6 @@ def _collect_active_promotion_inputs(
             verification_tests=verification_tests,
             history_tap_source=history_tap_source,
         )
-        formula, architecture = parse_formula_subject(subject, "promotion subject")
         dependencies = tuple(
             sorted(
                 exact_formula_subject(item["formula"], item["architecture"])
@@ -2277,7 +2290,7 @@ def _collect_active_promotion_inputs(
             history_protection_snapshot=history_snapshot,
             current_tap_source=tap_source,
             expected_generated_metadata_sha256=(
-                formula_generated_metadata_sha256(tap_root, formula)
+                generated_metadata_sha256
             ),
             guest_layout_bytes=(
                 exact_kandelo_root / "homebrew/kandelo-guest-layout.json"
@@ -2367,47 +2380,88 @@ def _collect_active_promotion_inputs(
         progress=progress,
         activation_mode=activation_mode,
     )
-    details = {
+    details = _promotion_work_details(planned, contexts)
+    return planned, details
+
+
+def _formula_generated_metadata_identity(
+    tap_root: Path,
+    *,
+    formula: str,
+    work_class: str,
+) -> str | None:
+    try:
+        return formula_generated_metadata_sha256(tap_root, formula)
+    except TapMetadataError as error:
+        if work_class == "background":
+            return None
+        raise ReconciliationError(
+            f"required Formula {formula} has no exact generated metadata: {error}"
+        ) from error
+
+
+def _promotion_context_detail(context: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "decision": asdict(context["subject"].decision),
+        "candidate_locator": context["candidate_locator"],
+        "candidate_reuse_locator": context["candidate_reuse_locator"],
+        "canonical": {
+            "locator": asdict(context["canonical"].locator),
+            "artifact": dict(context["canonical"].artifact),
+        },
+        "history_locator": context["history_locator"],
+        "history_protection_snapshot": context["history_snapshot"],
+        "formula_metadata_base_source": context[
+            "formula_metadata_base_source"
+        ],
+    }
+
+
+def _promotion_work_details(
+    planned: PromotionReconciliationPlanV1,
+    contexts: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Mapping[str, Any]]]:
+    details: dict[str, dict[str, Mapping[str, Any]]] = {
         "activation": {},
         "canonical": {},
         "metadata": {},
         "admission": {},
     }
-    for stage, work_items in (
-        ("canonical", planned.canonical_work),
-        ("metadata", planned.metadata_work),
-        ("admission", planned.admission_work),
-    ):
-        for work in work_items:
-            context = contexts[work["formula_subject"]]
-            detail = {
-                "decision": asdict(context["subject"].decision),
-                "candidate_locator": context["candidate_locator"],
-                "candidate_reuse_locator": context[
-                    "candidate_reuse_locator"
-                ],
-                "canonical": {
-                    "locator": asdict(context["canonical"].locator),
-                    "artifact": dict(context["canonical"].artifact),
-                },
-                "history_locator": context["history_locator"],
-                "history_protection_snapshot": context["history_snapshot"],
-                "formula_metadata_base_source": context[
-                    "formula_metadata_base_source"
-                ],
+    canonical_work_ids = {
+        work["formula_subject"]: work["work_id"]
+        for work in planned.canonical_work
+    }
+    for work in planned.canonical_work:
+        context = contexts[work["formula_subject"]]
+        details["canonical"][work["work_id"]] = _promotion_context_detail(
+            context
+        )
+    for work in planned.metadata_work:
+        members = []
+        for subject in work["member_formula_subjects"]:
+            context = contexts[subject]
+            member = {
+                "formula_subject": subject,
+                **_promotion_context_detail(context),
+                "metadata_patch": context["metadata_patch"],
             }
-            if stage == "metadata":
-                detail["metadata_patch"] = context["metadata_patch"]
-                if "canonical_work_id" in work:
-                    detail["canonical_work_id"] = work["canonical_work_id"]
-            if stage == "admission":
-                detail["metadata_patch"] = context["metadata_patch"]
-                if "canonical_work_id" in work:
-                    detail["canonical_work_id"] = work["canonical_work_id"]
-                if "metadata_work_id" in work:
-                    detail["metadata_work_id"] = work["metadata_work_id"]
-            details[stage][work["work_id"]] = detail
-    return planned, details
+            canonical_work_id = canonical_work_ids.get(subject)
+            if canonical_work_id is not None:
+                member["canonical_work_id"] = canonical_work_id
+            members.append(member)
+        details["metadata"][work["work_id"]] = {"members": members}
+    for work in planned.admission_work:
+        context = contexts[work["formula_subject"]]
+        detail = {
+            **_promotion_context_detail(context),
+            "metadata_patch": context["metadata_patch"],
+        }
+        if "canonical_work_id" in work:
+            detail["canonical_work_id"] = work["canonical_work_id"]
+        if "metadata_work_id" in work:
+            detail["metadata_work_id"] = work["metadata_work_id"]
+        details["admission"][work["work_id"]] = detail
+    return details
 
 
 def _local_locator(repository: str, manifest: bytes) -> dict[str, str]:
@@ -5081,6 +5135,70 @@ def _metadata_readback_document(
     }
 
 
+def _metadata_batch_readback_document(
+    *,
+    work_id: str,
+    request_digest: str,
+    result: Any,
+    members: tuple[
+        tuple[str, Mapping[str, Any], FormulaMetadataUpdateV1], ...
+    ],
+    tap_root: Path,
+) -> dict[str, Any]:
+    if not 1 <= len(members) <= 64:
+        raise WorkflowPublicationError(
+            "metadata batch readback membership is outside its bound"
+        )
+    identities = [subject for subject, _patch, _update in members]
+    if len(set(identities)) != len(identities):
+        raise WorkflowPublicationError(
+            "metadata batch readback repeats a member"
+        )
+    files = []
+    for relative in result.changed_paths:
+        body = (tap_root / relative).read_bytes()
+        files.append(
+            {
+                "path": relative,
+                "sha256": hashlib.sha256(body).hexdigest(),
+                "bytes": len(body),
+            }
+        )
+    readbacks = []
+    for subject, patch_document, formula_update in members:
+        if subject != exact_formula_subject(
+            formula_update.formula, formula_update.architecture
+        ):
+            raise WorkflowPublicationError(
+                "metadata batch readback member identity changed"
+            )
+        update = asdict(formula_update)
+        post_write = {
+            "source": dict(result.source),
+            "formula_metadata_update": update,
+        }
+        readbacks.append(
+            {
+                "formula_subject": subject,
+                "metadata_patch_sha256": canonical_sha256(patch_document),
+                "formula_metadata_update": update,
+                "post_write_readback": post_write,
+                "post_write_readback_sha256": canonical_sha256(post_write),
+            }
+        )
+    return {
+        "schema": 1,
+        "kind": "kandelo-abi-staging-metadata-readback",
+        "request_sha256": request_digest,
+        "work_id": work_id,
+        "operation": "formula-metadata-batch",
+        "status": result.status,
+        "source": dict(result.source),
+        "members": readbacks,
+        "changed_files": files,
+    }
+
+
 def _configure_metadata_committer(tap_root: Path) -> None:
     actor = os.environ.get("GITHUB_ACTOR", "github-actions[bot]")
     if not actor or any(character in actor for character in "\n\r\0"):
@@ -5100,6 +5218,56 @@ def _configure_metadata_committer(tap_root: Path) -> None:
             raise WorkflowPublicationError(
                 "metadata writer cannot configure its protected committer"
             )
+
+
+def _load_metadata_batch_members(
+    detail: Mapping[str, Any],
+) -> tuple[
+    tuple[
+        str,
+        Mapping[str, Any],
+        Any,
+        FormulaMetadataUpdateV1,
+    ],
+    ...,
+]:
+    members = detail.get("members")
+    if (
+        not isinstance(members, list)
+        or not 1 <= len(members) <= 64
+        or any(not isinstance(member, Mapping) for member in members)
+    ):
+        raise WorkflowPublicationError(
+            "metadata batch work has no exact member set"
+        )
+    parsed = []
+    for member in members:
+        subject = member.get("formula_subject")
+        patch_value = member.get("metadata_patch")
+        if not isinstance(subject, str) or not isinstance(patch_value, Mapping):
+            raise WorkflowPublicationError(
+                "metadata batch member has no exact Formula patch"
+            )
+        patch, formula_update = load_metadata_patch_document(
+            canonical_bytes(patch_value)
+        )
+        if (
+            formula_update is None
+            or subject
+            != exact_formula_subject(
+                formula_update.formula, formula_update.architecture
+            )
+        ):
+            raise WorkflowPublicationError(
+                "metadata batch member identity differs from its patch"
+            )
+        parsed.append((subject, patch_value, patch, formula_update))
+    identities = [subject for subject, _value, _patch, _update in parsed]
+    if len(set(identities)) != len(identities):
+        raise WorkflowPublicationError(
+            "metadata batch repeats a member"
+        )
+    return tuple(parsed)
 
 
 def _update_workflow_tap_metadata(args: argparse.Namespace) -> None:
@@ -5131,6 +5299,84 @@ def _update_workflow_tap_metadata(args: argparse.Namespace) -> None:
             work_id=args.work_id,
         )
         detail = work["detail"]
+        if args.operation == "formula-metadata-batch":
+            parsed_members = _load_metadata_batch_members(detail)
+            anonymous = UrllibOciTransportV1(username="", token="")
+            detail_members = {
+                member["formula_subject"]: member
+                for member in detail["members"]
+            }
+            for subject, _patch_value, _patch, formula_update in parsed_members:
+                member = detail_members[subject]
+                decision, candidate, _candidate_reuse, expected = (
+                    _promotion_candidate_and_canonical(
+                        member,
+                        policy=policy,
+                        transport=anonymous,
+                    )
+                )
+                readback = read_canonical_publication(
+                    decision,
+                    candidate=candidate,
+                    policy=policy,
+                    transport=anonymous,
+                )
+                if readback != expected:
+                    raise WorkflowPublicationError(
+                        "metadata batch writer lacks exact canonical public readback"
+                    )
+                canonical_work_id = member.get("canonical_work_id")
+                if canonical_work_id is not None:
+                    publication = _load_named_workflow_document(
+                        client,
+                        root=root,
+                        name=(
+                            f"abi-staging-canonical-{canonical_work_id}-"
+                            f"{args.run_id}-{args.run_attempt}"
+                        ),
+                        filename="canonical-publication.json",
+                        field="canonical publication handoff",
+                    )
+                    _published_canonical_from_document(
+                        publication,
+                        work_id=canonical_work_id,
+                        request_digest=args.request_digest,
+                        expected=expected,
+                    )
+                _require_promotion_history_barrier(
+                    member,
+                    policy=policy,
+                    expected_target_abi=formula_update.target_abi,
+                    transport=anonymous,
+                )
+            batch = plan_formula_metadata_batch(
+                tap_root,
+                members=tuple(
+                    (patch, update)
+                    for _subject, _value, patch, update in parsed_members
+                ),
+            )
+            _configure_metadata_committer(tap_root)
+            result = apply_metadata_patch(
+                tap_root,
+                batch.patch,
+                formula_batch=batch,
+                commit_message="[Homebrew] Admit canonical Formula batch",
+                store=GitTapMetadataStore(tap_root, remote="origin"),
+            )
+            check_tap_metadata(tap_root)
+            output = _metadata_batch_readback_document(
+                work_id=args.work_id,
+                request_digest=args.request_digest,
+                result=result,
+                members=tuple(
+                    (subject, patch_value, update)
+                    for subject, patch_value, _patch, update in parsed_members
+                ),
+                tap_root=tap_root,
+            )
+            Path(args.out).write_bytes(canonical_bytes(output))
+            return
         patch_value = detail.get("metadata_patch")
         if not isinstance(patch_value, Mapping):
             raise WorkflowPublicationError("metadata work has no exact patch")
@@ -5218,6 +5464,7 @@ def _load_metadata_handoff(
     run_id: int,
     run_attempt: int,
     request_digest: str,
+    formula_subject: str | None = None,
 ) -> dict[str, Any]:
     document = _load_named_workflow_document(
         client,
@@ -5226,7 +5473,7 @@ def _load_metadata_handoff(
         filename="metadata-readback.json",
         field="metadata readback handoff",
     )
-    expected_keys = {
+    legacy_keys = {
         "schema",
         "kind",
         "request_sha256",
@@ -5240,8 +5487,66 @@ def _load_metadata_handoff(
         "post_write_readback_sha256",
         "changed_files",
     }
+    if document.get("operation") == "formula-metadata-batch":
+        expected_keys = {
+            "schema",
+            "kind",
+            "request_sha256",
+            "work_id",
+            "operation",
+            "status",
+            "source",
+            "members",
+            "changed_files",
+        }
+        members = document.get("members")
+        if (
+            set(document) != expected_keys
+            or document.get("schema") != 1
+            or document.get("kind")
+            != "kandelo-abi-staging-metadata-readback"
+            or document.get("request_sha256") != request_digest
+            or document.get("work_id") != work_id
+            or document.get("status") not in {"committed", "already-landed"}
+            or not isinstance(members, list)
+            or not 1 <= len(members) <= 64
+            or formula_subject is None
+        ):
+            raise WorkflowPublicationError(
+                "metadata readback handoff differs from exact promotion work"
+            )
+        selected = [
+            member
+            for member in members
+            if isinstance(member, Mapping)
+            and member.get("formula_subject") == formula_subject
+        ]
+        member_keys = {
+            "formula_subject",
+            "metadata_patch_sha256",
+            "formula_metadata_update",
+            "post_write_readback",
+            "post_write_readback_sha256",
+        }
+        if (
+            len(selected) != 1
+            or set(selected[0]) != member_keys
+            or canonical_sha256(selected[0]["post_write_readback"])
+            != selected[0]["post_write_readback_sha256"]
+            or selected[0]["post_write_readback"].get("source")
+            != document["source"]
+        ):
+            raise WorkflowPublicationError(
+                "metadata readback handoff differs from exact promotion work"
+            )
+        return {
+            **selected[0],
+            "source": document["source"],
+            "status": document["status"],
+            "changed_files": document["changed_files"],
+        }
     if (
-        set(document) != expected_keys
+        set(document) != legacy_keys
         or document["schema"] != 1
         or document["kind"] != "kandelo-abi-staging-metadata-readback"
         or document["request_sha256"] != request_digest
@@ -5405,6 +5710,7 @@ def _publish_workflow_admission(args: argparse.Namespace) -> None:
                     run_id=args.run_id,
                     run_attempt=args.run_attempt,
                     request_digest=args.request_digest,
+                    formula_subject=decision.formula_subject,
                 )
                 if (
                     metadata["metadata_patch_sha256"]

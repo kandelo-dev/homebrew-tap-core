@@ -41,8 +41,13 @@ from scripts.abi_staging.reconcile import (
     select_reconciliation_cycle,
 )
 from scripts.abi_staging.plan import build_miniature_tap_plan_fixture, exact_formula_subject
+from scripts.abi_staging.oci import PublishedRecordLocatorV1
 from scripts.abi_staging.promotion import PromotionDecisionV1
 from scripts.abi_staging.request import load_request_issuer_policy, validate_request
+from scripts.abi_staging.tap_metadata import (
+    FormulaMetadataUpdateV1,
+    TapMetadataPatchV1,
+)
 
 
 FIXTURES = TAP_ROOT / "Kandelo/staging/fixtures/request"
@@ -605,6 +610,82 @@ class ReconciliationTests(unittest.TestCase):
                 },
             )
 
+    def test_batch_metadata_detail_carries_each_member_authority(self) -> None:
+        reconciliation = self.merged_promotion_reconciliation()
+        root = PromotionSubjectV1(
+            self.promotion_decision("root", marker="a"), "required", ()
+        )
+        dependant = PromotionSubjectV1(
+            self.promotion_decision("dependant", marker="f"),
+            "required",
+            (root.decision.formula_subject,),
+        )
+        planned = build_promotion_workflow_plan(
+            reconciliation,
+            (dependant, root),
+            epoch=self.promotion_epoch(activated=True),
+            progress={
+                root.decision.formula_subject: PromotionProgressV1(),
+                dependant.decision.formula_subject: PromotionProgressV1(),
+            },
+            activation_mode="active",
+        )
+
+        def context(subject: PromotionSubjectV1, digit: str) -> dict[str, object]:
+            return {
+                "subject": subject,
+                "candidate_locator": {"digest": "sha256:" + digit * 64},
+                "candidate_reuse_locator": None,
+                "canonical": SimpleNamespace(
+                    locator=PublishedRecordLocatorV1(
+                        repository="ghcr.io/kandelo-dev/homebrew-tap-core-abi-43",
+                        digest="sha256:" + digit * 64,
+                        immutable_reference=(
+                            "ghcr.io/kandelo-dev/homebrew-tap-core-abi-43@sha256:"
+                            + digit * 64
+                        ),
+                        anonymous_readback_sha256=digit * 64,
+                    ),
+                    artifact={"formula_subject": subject.decision.formula_subject},
+                ),
+                "history_locator": {"digest": "sha256:" + "1" * 64},
+                "history_snapshot": {"ref": "abi/43"},
+                "formula_metadata_base_source": {
+                    "repository": "kandelo-dev/homebrew-tap-core",
+                    "commit": "2" * 40,
+                    "tree": "3" * 40,
+                },
+                "metadata_patch": {
+                    "operation": "formula-metadata",
+                    "formula_update": {
+                        "formula_subject": subject.decision.formula_subject
+                    },
+                },
+            }
+
+        contexts = {
+            root.decision.formula_subject: context(root, "4"),
+            dependant.decision.formula_subject: context(dependant, "5"),
+        }
+        details = cli_module._promotion_work_details(planned, contexts)
+        batch = details["metadata"][planned.metadata_work[0]["work_id"]]
+
+        self.assertEqual(
+            [member["formula_subject"] for member in batch["members"]],
+            planned.metadata_work[0]["member_formula_subjects"],
+        )
+        self.assertEqual(
+            [member["canonical_work_id"] for member in batch["members"]],
+            [item["work_id"] for item in planned.canonical_work],
+        )
+        self.assertEqual(
+            {
+                item["metadata_work_id"]
+                for item in details["admission"].values()
+            },
+            {planned.metadata_work[0]["work_id"]},
+        )
+
     def test_writer_loads_only_the_exact_current_run_promotion_plan(self) -> None:
         reconciliation = self.merged_promotion_reconciliation()
         subject = PromotionSubjectV1(
@@ -751,6 +832,254 @@ class ReconciliationTests(unittest.TestCase):
                         "bytes": 6,
                     }
                 ],
+            )
+
+    def test_batch_metadata_readback_selects_one_exact_formula_member(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "Kandelo").mkdir()
+            (root / "Kandelo/metadata.json").write_bytes(b"batch\n")
+            source = {
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": "a" * 40,
+                "tree": "b" * 40,
+            }
+            result = SimpleNamespace(
+                status="committed",
+                source=source,
+                changed_paths=("Kandelo/metadata.json",),
+            )
+            members = tuple(
+                (
+                    exact_formula_subject(formula, "wasm32"),
+                    {"operation": "formula-metadata", "marker": marker},
+                    FormulaMetadataUpdateV1(
+                        formula=formula,
+                        architecture="wasm32",
+                        expected_main_commit="5" * 40,
+                        expected_normalized_formula_sha256="6" * 64,
+                        expected_generated_metadata_sha256="7" * 64,
+                        allowed_paths=(f"Formula/{formula}.rb",),
+                        link_manifest_path=(
+                            f"Kandelo/link/{formula}-1.0-wasm32.json"
+                        ),
+                        link_manifest_sha256="8" * 64,
+                        canonical_manifest_digest="9" * 64,
+                        bottle_layer_sha256=marker * 64,
+                        bottle_layer_bytes=4096,
+                        target_abi=43,
+                    ),
+                )
+                for formula, marker in (("dash", "2"), ("bash", "1"))
+            )
+            document = cli_module._metadata_batch_readback_document(
+                work_id="3" * 64,
+                request_digest="4" * 64,
+                result=result,
+                members=members,
+                tap_root=root,
+            )
+
+            class ArtifactClient:
+                def artifact_by_name(self, **_kwargs):
+                    return object()
+
+                def extract_artifact(self, _artifact, destination, **_kwargs):
+                    destination.mkdir(parents=True, exist_ok=True)
+                    (destination / "metadata-readback.json").write_bytes(
+                        canonical_bytes(document)
+                    )
+
+            selected = cli_module._load_metadata_handoff(
+                ArtifactClient(),
+                root=root / "artifact",
+                work_id="3" * 64,
+                run_id=91,
+                run_attempt=2,
+                request_digest="4" * 64,
+                formula_subject=exact_formula_subject("dash", "wasm32"),
+            )
+
+            self.assertEqual(selected["source"], source)
+            self.assertEqual(selected["formula_metadata_update"]["formula"], "dash")
+            self.assertEqual(
+                selected["metadata_patch_sha256"],
+                canonical_sha256(members[0][1]),
+            )
+            with self.assertRaises(cli_module.WorkflowPublicationError):
+                cli_module._load_metadata_handoff(
+                    ArtifactClient(),
+                    root=root / "missing",
+                    work_id="3" * 64,
+                    run_id=91,
+                    run_attempt=2,
+                    request_digest="4" * 64,
+                    formula_subject=exact_formula_subject("zlib", "wasm32"),
+                )
+
+    def test_batch_metadata_writer_parses_each_exact_member_patch(self) -> None:
+        members = []
+        for formula, marker in (("dash", "2"), ("bash", "1")):
+            update = FormulaMetadataUpdateV1(
+                formula=formula,
+                architecture="wasm32",
+                expected_main_commit="3" * 40,
+                expected_normalized_formula_sha256="4" * 64,
+                expected_generated_metadata_sha256="5" * 64,
+                allowed_paths=(f"Formula/{formula}.rb",),
+                link_manifest_path=f"Kandelo/link/{formula}-1.0-wasm32.json",
+                link_manifest_sha256="6" * 64,
+                canonical_manifest_digest="7" * 64,
+                bottle_layer_sha256=marker * 64,
+                bottle_layer_bytes=4096,
+                target_abi=43,
+            )
+            patch_value = cli_module.metadata_patch_document(
+                TapMetadataPatchV1(
+                    operation="formula-metadata",
+                    expected_main_commit="3" * 40,
+                    expected_main_tree="8" * 40,
+                    allowed_paths=update.allowed_paths,
+                    expected_files_sha256={
+                        f"Formula/{formula}.rb": "9" * 64
+                    },
+                    files={f"Formula/{formula}.rb": formula.encode("utf-8")},
+                ),
+                formula_update=update,
+            )
+            members.append(
+                {
+                    "formula_subject": exact_formula_subject(formula, "wasm32"),
+                    "metadata_patch": patch_value,
+                }
+            )
+
+        parsed = cli_module._load_metadata_batch_members({"members": members})
+
+        self.assertEqual(
+            [subject for subject, _patch_value, _patch, _update in parsed],
+            [member["formula_subject"] for member in members],
+        )
+        duplicate = {"members": [members[0], members[0]]}
+        with self.assertRaises(cli_module.WorkflowPublicationError):
+            cli_module._load_metadata_batch_members(duplicate)
+
+    def test_batch_metadata_writer_makes_one_atomic_commit(self) -> None:
+        formula = "bash"
+        subject = exact_formula_subject(formula, "wasm32")
+        update = FormulaMetadataUpdateV1(
+            formula=formula,
+            architecture="wasm32",
+            expected_main_commit="1" * 40,
+            expected_normalized_formula_sha256="2" * 64,
+            expected_generated_metadata_sha256="3" * 64,
+            allowed_paths=(f"Formula/{formula}.rb",),
+            link_manifest_path=f"Kandelo/link/{formula}-1.0-wasm32.json",
+            link_manifest_sha256="4" * 64,
+            canonical_manifest_digest="5" * 64,
+            bottle_layer_sha256="6" * 64,
+            bottle_layer_bytes=4096,
+            target_abi=43,
+        )
+        member_patch = TapMetadataPatchV1(
+            operation="formula-metadata",
+            expected_main_commit="1" * 40,
+            expected_main_tree="7" * 40,
+            allowed_paths=update.allowed_paths,
+            expected_files_sha256={f"Formula/{formula}.rb": "8" * 64},
+            files={f"Formula/{formula}.rb": b"bash"},
+        )
+        patch_value = cli_module.metadata_patch_document(
+            member_patch,
+            formula_update=update,
+        )
+        detail = {
+            "members": [
+                {
+                    "formula_subject": subject,
+                    "metadata_patch": patch_value,
+                }
+            ]
+        }
+        batch_patch = SimpleNamespace(operation="formula-metadata-batch")
+        batch = SimpleNamespace(patch=batch_patch, updates=(update,))
+        source = {
+            "repository": "kandelo-dev/homebrew-tap-core",
+            "commit": "9" * 40,
+            "tree": "a" * 40,
+        }
+        result = SimpleNamespace(
+            status="committed",
+            source=source,
+            changed_paths=(),
+        )
+        args = SimpleNamespace(
+            contents_only=True,
+            normal_push=True,
+            post_write_readback=True,
+            require_history_barrier=True,
+            operation="formula-metadata-batch",
+            run_id=91,
+            run_attempt=2,
+            request_digest="b" * 64,
+            work_id="c" * 64,
+            plan_artifact_id="17",
+            plan_artifact_digest="d" * 64,
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            tap_root = Path(temporary)
+            args.out = str(tap_root / "metadata-readback.json")
+            policy = SimpleNamespace(
+                tap_repository="kandelo-dev/homebrew-tap-core"
+            )
+            decision = SimpleNamespace(formula_subject=subject)
+            expected = object()
+            with (
+                patch.object(
+                    cli_module,
+                    "_promotion_writer_authority",
+                    return_value=(tap_root, policy, source, object()),
+                ),
+                patch.object(
+                    cli_module,
+                    "_load_workflow_promotion_work",
+                    return_value={"detail": detail},
+                ),
+                patch.object(
+                    cli_module,
+                    "_promotion_candidate_and_canonical",
+                    return_value=(decision, object(), None, expected),
+                ),
+                patch.object(
+                    cli_module,
+                    "read_canonical_publication",
+                    return_value=expected,
+                ),
+                patch.object(cli_module, "_require_promotion_history_barrier"),
+                patch.object(
+                    cli_module,
+                    "plan_formula_metadata_batch",
+                    return_value=batch,
+                ) as planner,
+                patch.object(cli_module, "_configure_metadata_committer"),
+                patch.object(
+                    cli_module,
+                    "apply_metadata_patch",
+                    return_value=result,
+                ) as apply,
+                patch.object(cli_module, "check_tap_metadata"),
+                patch.object(cli_module, "GitTapMetadataStore", return_value=object()),
+            ):
+                cli_module._update_workflow_tap_metadata(args)
+
+            planner.assert_called_once()
+            apply.assert_called_once()
+            self.assertIs(apply.call_args.kwargs["formula_batch"], batch)
+            readback = json.loads(Path(args.out).read_bytes())
+            self.assertEqual(readback["operation"], "formula-metadata-batch")
+            self.assertEqual(
+                [member["formula_subject"] for member in readback["members"]],
+                [subject],
             )
 
     def test_disabled_workflow_planner_emits_exact_empty_artifact(self) -> None:
@@ -996,6 +1325,26 @@ class ReconciliationTests(unittest.TestCase):
             {item["guard_code"] for item in plan.blocked},
         )
 
+    def test_missing_generated_metadata_is_formula_local_for_background(self) -> None:
+        with patch.object(
+            cli_module,
+            "formula_generated_metadata_sha256",
+            side_effect=cli_module.TapMetadataError("missing generated row"),
+        ):
+            self.assertIsNone(
+                cli_module._formula_generated_metadata_identity(
+                    Path("/tmp/tap"),
+                    formula="nginx",
+                    work_class="background",
+                )
+            )
+            with self.assertRaises(ReconciliationError):
+                cli_module._formula_generated_metadata_identity(
+                    Path("/tmp/tap"),
+                    formula="bash",
+                    work_class="required",
+                )
+
     def test_promotion_converges_independently_and_retries_exact_stage(self) -> None:
         reconciliation = self.merged_promotion_reconciliation()
         root = PromotionSubjectV1(
@@ -1206,6 +1555,44 @@ class ReconciliationTests(unittest.TestCase):
         args = planner.call_args.args[0]
         self.assertEqual(args.coordination_root, "/tmp/coordination")
         self.assertEqual(args.runtime_root, "/tmp/runtime")
+
+    def test_cli_accepts_formula_metadata_batch_writer_operation(self) -> None:
+        with patch.object(
+            cli_module,
+            "_update_workflow_tap_metadata",
+            return_value=None,
+        ) as writer:
+            status = cli_main(
+                [
+                    "update-workflow-tap-metadata",
+                    "--run-id",
+                    "91",
+                    "--run-attempt",
+                    "2",
+                    "--head-sha",
+                    "a" * 40,
+                    "--request-digest",
+                    "b" * 64,
+                    "--work-id",
+                    "c" * 64,
+                    "--operation",
+                    "formula-metadata-batch",
+                    "--plan-artifact-id",
+                    "17",
+                    "--plan-artifact-digest",
+                    "d" * 64,
+                    "--contents-only",
+                    "--normal-push",
+                    "--post-write-readback",
+                    "--require-history-barrier",
+                    "--out",
+                    "/tmp/metadata-readback.json",
+                ]
+            )
+
+        self.assertEqual(status, 0)
+        writer.assert_called_once()
+        self.assertEqual(writer.call_args.args[0].operation, "formula-metadata-batch")
 
     def test_product_workflow_wave_schedules_only_ready_whole_products(self) -> None:
         selected = discovered()

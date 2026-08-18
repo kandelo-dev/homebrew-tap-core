@@ -1200,6 +1200,16 @@ class TapMetadataTests(unittest.TestCase):
         if compose is None:
             self.fail("atomic Formula metadata batch planning is absent")
 
+        singleton = compose(
+            self.root,
+            members=((prepared[0].patch, prepared[0].update),),
+        )
+        self.assertEqual(singleton.patch.operation, "formula-metadata-batch")
+        self.assertEqual(
+            [item.formula for item in singleton.updates],
+            ["bash"],
+        )
+
         batch = compose(
             self.root,
             members=tuple((item.patch, item.update) for item in prepared),
@@ -1235,6 +1245,34 @@ class TapMetadataTests(unittest.TestCase):
                 for item in prepared
             },
         )
+
+        apply, _write_error, _store = self._metadata_writer()
+        landed = apply(
+            self.root,
+            batch.patch,
+            formula_batch=batch,
+            commit_message="promote exact Formula batch",
+        )
+
+        self.assertEqual(landed.status, "committed")
+        self.assertEqual(
+            set(landed.changed_paths),
+            set(batch.patch.files),
+        )
+        for item in prepared:
+            observed = json.loads(
+                (self.root / f"Kandelo/formula/{item.update.formula}.json").read_bytes()
+            )
+            selected = [
+                bottle
+                for bottle in observed["bottles"]
+                if bottle["arch"] == item.update.architecture
+            ]
+            self.assertEqual(len(selected), 1)
+            self.assertEqual(
+                selected[0]["sha256"],
+                item.update.bottle_layer_sha256,
+            )
 
     def test_formula_update_rejects_canonical_or_candidate_layer_drift(self) -> None:
         history, snapshot, preactivation, current = self._activate_fixture()
