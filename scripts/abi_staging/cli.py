@@ -138,6 +138,7 @@ from .tap_metadata import (
     load_abi_state,
     load_promotion_activation,
     load_promotion_policy,
+    managed_abi_activation_document,
     require_current_abi_authority,
     recover_landed_formula_metadata_commit,
     validate_formula_admission_projection,
@@ -2153,7 +2154,7 @@ def _collect_active_promotion_inputs(
         )
     except TapMetadataError as error:
         raise ReconciliationError(str(error)) from error
-    activation_identity = asdict(activation)
+    activation_identity = managed_abi_activation_document(activation)
     epoch = PromotionEpochV1(
         request_digest=request_sha256,
         history_record_sha256=history_digest,

@@ -137,6 +137,23 @@ class AbiStateV1:
     activation: ManagedAbiActivationV1 | None
 
 
+def managed_abi_activation_document(
+    activation: ManagedAbiActivationV1,
+) -> dict[str, object]:
+    """Return the canonical plain-data identity for one managed activation."""
+
+    if not isinstance(activation, ManagedAbiActivationV1):
+        raise TapMetadataError("managed ABI activation is not protected schema 1")
+    return {
+        "abi_history_record_digest": activation.abi_history_record_digest,
+        "merge_commit": activation.merge_commit,
+        "merged_pull_request": dict(activation.merged_pull_request),
+        "prior_abi": activation.prior_abi,
+        "prior_branch": activation.prior_branch,
+        "request_digest": activation.request_digest,
+    }
+
+
 @dataclass(frozen=True)
 class TapMetadataPatchV1:
     operation: Literal["successor-activation", "formula-metadata"]
@@ -910,14 +927,7 @@ def plan_successor_activation_patch(
     files["Kandelo/metadata.json"] = _pretty_json_bytes(metadata)
     files["Kandelo/abi-state.json"] = canonical_bytes(
         {
-            "activation": {
-                "abi_history_record_digest": managed.abi_history_record_digest,
-                "merge_commit": managed.merge_commit,
-                "merged_pull_request": dict(managed.merged_pull_request),
-                "prior_abi": managed.prior_abi,
-                "prior_branch": managed.prior_branch,
-                "request_digest": managed.request_digest,
-            },
+            "activation": managed_abi_activation_document(managed),
             "current_abi": target,
             "current_snapshot_sha256": snapshot,
             "kind": "kandelo-homebrew-abi-state",
