@@ -863,7 +863,7 @@ def _public_inventory_transport() -> UrllibOciTransportV1:
     return UrllibOciTransportV1(
         username=username,
         token=token,
-        authenticated_public_reads=bool(token),
+        authenticated_public_reads=False,
     )
 
 
