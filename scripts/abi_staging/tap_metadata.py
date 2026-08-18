@@ -791,7 +791,9 @@ def check_tap_metadata(tap_root: Path) -> dict[str, Any]:
     if not set(active).issubset(formula_by_name):
         raise TapMetadataError("active metadata names a missing Formula source")
 
-    sidecar_paths = sorted((root / "Kandelo/formula").glob("*.json"), key=lambda item: item.name)
+    sidecar_paths = sorted(
+        (root / "Kandelo/formula").glob("*.json"), key=lambda item: item.stem
+    )
     sidecar_names = [_stable_id(path.stem, f"sidecar name {path.name}") for path in sidecar_paths]
     if sidecar_names != sorted(set(sidecar_names)):
         raise TapMetadataError("sidecar names are not sorted and duplicate-free")

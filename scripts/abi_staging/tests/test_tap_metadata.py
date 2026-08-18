@@ -484,6 +484,23 @@ class TapMetadataTests(unittest.TestCase):
             len(projection["formula_projection_sha256"]), hashlib.sha256().digest_size * 2
         )
 
+    def test_sidecar_inventory_orders_formula_names_not_json_filenames(self) -> None:
+        for name in ("sudo", "sudo-lite"):
+            sidecar = _sidecar(name=name, abi=PRIOR_ABI)
+            (self.root / f"Kandelo/formula/{name}.json").write_text(
+                json.dumps(sidecar)
+            )
+            (self.root / f"Formula/{name}.rb").write_text(
+                f"class {name.title().replace('-', '')} < Formula\nend\n"
+            )
+
+        projection = check_tap_metadata(self.root)
+
+        self.assertEqual(
+            projection["legacy_unselected_sidecars"],
+            ["sudo", "sudo-lite"],
+        )
+
     def _commit_fixture(self) -> dict[str, str]:
         _git(self.root, "init", "--initial-branch=main")
         _git(self.root, "config", "user.name", "ABI metadata test")
