@@ -156,7 +156,11 @@ def managed_abi_activation_document(
 
 @dataclass(frozen=True)
 class TapMetadataPatchV1:
-    operation: Literal["successor-activation", "formula-metadata"]
+    operation: Literal[
+        "successor-activation",
+        "formula-metadata",
+        "formula-metadata-batch",
+    ]
     expected_main_commit: str
     expected_main_tree: str
     allowed_paths: tuple[str, ...]
@@ -192,6 +196,12 @@ class PromotedBottleMetadataV1:
     built_by: str
     built_from: Mapping[str, str]
     link_manifest: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class FormulaMetadataBatchV1:
+    updates: tuple[FormulaMetadataUpdateV1, ...]
+    patch: TapMetadataPatchV1
 
 
 @dataclass(frozen=True)
@@ -1649,6 +1659,137 @@ def plan_formula_metadata_patch(
     )
     validate_formula_metadata_patch(root, patch, checked_update)
     return patch
+
+
+def plan_formula_metadata_batch(
+    tap_root: Path,
+    *,
+    members: Sequence[tuple[TapMetadataPatchV1, FormulaMetadataUpdateV1]],
+) -> FormulaMetadataBatchV1:
+    """Compose independently validated Formula updates against one tap base."""
+
+    root = tap_root.resolve(strict=True)
+    if not 2 <= len(members) <= 64:
+        raise TapMetadataError("Formula metadata batch membership is outside its bound")
+    checked_members: list[tuple[TapMetadataPatchV1, FormulaMetadataUpdateV1]] = []
+    identities: set[tuple[str, str]] = set()
+    for patch, update in members:
+        checked = _checked_formula_update(update)
+        identity = (checked.formula, checked.architecture)
+        if identity in identities:
+            raise TapMetadataError("Formula metadata batch repeats a member")
+        identities.add(identity)
+        validate_formula_metadata_patch(root, patch, checked)
+        checked_members.append((patch, checked))
+    checked_members.sort(key=lambda item: (item[1].formula, item[1].architecture))
+
+    expected_commit = checked_members[0][0].expected_main_commit
+    expected_tree = checked_members[0][0].expected_main_tree
+    if any(
+        patch.expected_main_commit != expected_commit
+        or patch.expected_main_tree != expected_tree
+        for patch, _update in checked_members
+    ):
+        raise TapMetadataError("Formula metadata batch members use different tap bases")
+
+    metadata_path = "Kandelo/metadata.json"
+    metadata = dict(_load_json(root / metadata_path, "metadata batch top index"))
+    packages = [
+        dict(_mapping(item, "metadata batch package"))
+        for item in metadata["packages"]
+    ]
+    package_indexes = {item["name"]: index for index, item in enumerate(packages)}
+    if len(package_indexes) != len(packages):
+        raise TapMetadataError("Formula metadata batch top index repeats a Formula")
+
+    allowed_paths: set[str] = set()
+    expected_files: dict[str, str | None] = {}
+    files: dict[str, bytes] = {}
+    for patch, update in checked_members:
+        member_metadata = patch.files.get(metadata_path)
+        if not isinstance(member_metadata, bytes):
+            raise TapMetadataError("Formula metadata batch member has no top index")
+        try:
+            member_value = json.loads(
+                member_metadata.decode("utf-8", errors="strict"),
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            raise TapMetadataError(
+                f"Formula metadata batch member top index is invalid: {error}"
+            ) from error
+        member_packages = [
+            _mapping(item, "Formula metadata batch member package")
+            for item in _sequence(
+                _mapping(member_value, "Formula metadata batch member top index").get(
+                    "packages"
+                ),
+                "Formula metadata batch member packages",
+            )
+            if _mapping(item, "Formula metadata batch member package").get("name")
+            == update.formula
+        ]
+        if len(member_packages) != 1 or update.formula not in package_indexes:
+            raise TapMetadataError(
+                "Formula metadata batch member top-index row is absent or duplicated"
+            )
+        packages[package_indexes[update.formula]] = dict(member_packages[0])
+
+        for path in patch.allowed_paths:
+            allowed_paths.add(path)
+            expected = patch.expected_files_sha256[path]
+            if path in expected_files and expected_files[path] != expected:
+                raise TapMetadataError("Formula metadata batch CAS inputs conflict")
+            expected_files[path] = expected
+        for path, body in patch.files.items():
+            if path == metadata_path:
+                continue
+            if path in files:
+                raise TapMetadataError("Formula metadata batch output paths conflict")
+            files[path] = body
+
+    metadata["packages"] = packages
+    files[metadata_path] = _pretty_json_bytes(metadata)
+    batch_patch = TapMetadataPatchV1(
+        operation="formula-metadata-batch",
+        expected_main_commit=expected_commit,
+        expected_main_tree=expected_tree,
+        allowed_paths=tuple(sorted(allowed_paths)),
+        expected_files_sha256=MappingProxyType(expected_files),
+        files=MappingProxyType(files),
+    )
+
+    with tempfile.TemporaryDirectory() as temporary:
+        simulated = Path(temporary)
+        _copy_metadata_projection(root, simulated)
+        for path, body in batch_patch.files.items():
+            output = simulated / path
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(body)
+        check_tap_metadata(simulated)
+        for _patch, update in checked_members:
+            sidecar = _load_json(
+                simulated / f"Kandelo/formula/{update.formula}.json",
+                f"batched sidecar for {update.formula}",
+            )
+            selected = [
+                bottle
+                for bottle in sidecar["bottles"]
+                if bottle.get("arch") == update.architecture
+            ]
+            if (
+                len(selected) != 1
+                or selected[0].get("status") != "success"
+                or selected[0].get("sha256") != update.bottle_layer_sha256
+                or selected[0].get("bytes") != update.bottle_layer_bytes
+            ):
+                raise TapMetadataError(
+                    "Formula metadata batch does not select an exact member layer"
+                )
+
+    return FormulaMetadataBatchV1(
+        updates=tuple(update for _patch, update in checked_members),
+        patch=batch_patch,
+    )
 
 
 def validate_formula_metadata_patch(
