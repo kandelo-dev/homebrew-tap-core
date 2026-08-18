@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from scripts.abi_staging.canonical import canonical_bytes
 from scripts.abi_staging.oci import (
+    CANONICAL_TAG_PREFIX,
     HttpResponseV1,
     OciPublicationError,
     PublishedRecordLocatorV1,
@@ -487,6 +488,30 @@ class OciPublicationTests(unittest.TestCase):
                     "repository": "ghcr.io/" + REPOSITORY,
                     "digest": published.digest,
                     "immutable_reference": published.immutable_reference,
+                },
+            ),
+        )
+
+    def test_canonical_tags_enumerate_as_immutable_digest_locators(self) -> None:
+        transport = FakeRegistryTransport()
+        digest = "a" * 64
+        transport.manifests[(REPOSITORY, CANONICAL_TAG_PREFIX + digest)] = (
+            b"canonical bottle"
+        )
+
+        self.assertEqual(
+            list_public_record_locators(
+                REPOSITORY,
+                transport=transport,
+                tag_prefix=CANONICAL_TAG_PREFIX,
+            ),
+            (
+                {
+                    "repository": "ghcr.io/" + REPOSITORY,
+                    "digest": "sha256:" + digest,
+                    "immutable_reference": (
+                        "ghcr.io/" + REPOSITORY + "@sha256:" + digest
+                    ),
                 },
             ),
         )

@@ -36,6 +36,7 @@ from .records import (
 MANIFEST_ACCEPT = OCI_MANIFEST_MEDIA_TYPE
 REGISTRY_HOST = "ghcr.io"
 GITHUB_API_HOST = "api.github.com"
+CANONICAL_TAG_PREFIX = "canonical-sha256-"
 RECORD_TAG_PREFIX = "record-sha256-"
 REUSE_TAG_PREFIX = "reuse-sha256-"
 VERIFICATION_TAG_PREFIX = re.compile(
@@ -45,7 +46,7 @@ VERIFICATION_TAG_PREFIX = re.compile(
 
 def _immutable_tag_prefix(value: str) -> str:
     if (
-        value not in {RECORD_TAG_PREFIX, REUSE_TAG_PREFIX}
+        value not in {CANONICAL_TAG_PREFIX, RECORD_TAG_PREFIX, REUSE_TAG_PREFIX}
         and VERIFICATION_TAG_PREFIX.fullmatch(value) is None
     ):
         raise OciPublicationError(
@@ -351,19 +352,32 @@ def list_public_record_locators(
             if re.fullmatch(r"[0-9][0-9A-Za-z._-]{0,127}", tag) is not None:
                 continue
             record_tag = re.fullmatch(r"record-sha256-[0-9a-f]{64}", tag)
+            canonical_tag = re.fullmatch(
+                r"canonical-sha256-[0-9a-f]{64}", tag
+            )
             verification_tag = re.fullmatch(
                 r"verification-[0-9a-f]{32}-"
                 r"(?:build|node|browser)-sha256-[0-9a-f]{64}",
                 tag,
             )
             reuse_tag = re.fullmatch(r"reuse-sha256-[0-9a-f]{64}", tag)
-            if record_tag is None and verification_tag is None and reuse_tag is None:
+            if (
+                record_tag is None
+                and canonical_tag is None
+                and verification_tag is None
+                and reuse_tag is None
+            ):
                 raise OciPublicationError(
                     "record inventory contains a mutable or unknown tag",
                     guard_code="candidate_integrity_mismatch",
                 )
             if tag.startswith(checked_prefix):
                 tags.add(tag)
+            elif canonical_tag is not None:
+                raise OciPublicationError(
+                    "record inventory contains another immutable record class",
+                    guard_code="candidate_integrity_mismatch",
+                )
             elif reuse_tag is not None and not allow_reuse_tags:
                 raise OciPublicationError(
                     "record inventory contains another immutable record class",
@@ -1042,10 +1056,7 @@ def publish_immutable_oci_plan(
 ) -> PublishedRecordLocatorV1:
     """Publish one digest-tagged plan and anonymously re-read every exact byte."""
 
-    if tag_prefix == "canonical-sha256-":
-        pass
-    else:
-        _immutable_tag_prefix(tag_prefix)
+    _immutable_tag_prefix(tag_prefix)
 
     # An anonymous authentication challenge cannot distinguish a missing
     # namespace from a private package. Resolve that ambiguity with protected

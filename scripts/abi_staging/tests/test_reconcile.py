@@ -119,6 +119,59 @@ def discovered(name: str = "current-request.json") -> DiscoveredRequestV1:
 
 
 class ReconciliationTests(unittest.TestCase):
+    def test_canonical_progress_requests_the_canonical_tag_inventory(self) -> None:
+        digest = "a" * 64
+        repository = "ghcr.io/kandelo-dev/homebrew-tap-core-abi-43/mini"
+        expected = SimpleNamespace(
+            locator=SimpleNamespace(
+                repository=repository,
+                digest="sha256:" + digest,
+            )
+        )
+        readback = SimpleNamespace(
+            artifact={"sha256": digest},
+            locator=SimpleNamespace(anonymous_readback_sha256="b" * 64),
+        )
+        transport = object()
+        with (
+            patch.object(
+                cli_module,
+                "expected_canonical_publication",
+                return_value=expected,
+            ),
+            patch.object(
+                cli_module,
+                "list_public_record_locators",
+                return_value=(
+                    {
+                        "repository": repository,
+                        "digest": "sha256:" + digest,
+                        "immutable_reference": repository + "@sha256:" + digest,
+                    },
+                ),
+            ) as inventory,
+            patch.object(
+                cli_module,
+                "read_canonical_publication",
+                return_value=readback,
+            ),
+        ):
+            canonical, progress = cli_module._canonical_progress(
+                object(),
+                candidate=object(),
+                policy=object(),
+                transport=transport,
+            )
+
+        self.assertIs(canonical, readback)
+        self.assertEqual(progress.canonical_manifest_sha256, digest)
+        inventory.assert_called_once_with(
+            repository.removeprefix("ghcr.io/"),
+            transport=transport,
+            tag_prefix="canonical-sha256-",
+            max_records=4096,
+        )
+
     def test_historical_maintenance_reuses_normal_lane_without_gating_successor(self) -> None:
         plan = historical_repair_plan()
         scope = historical_maintenance_work_scope(plan)
