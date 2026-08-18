@@ -724,7 +724,17 @@ def validate_legacy_sidecar(parsed: Mapping[str, Any], sidecar: Mapping[str, Any
         if architecture not in parsed["architectures"]:
             raise FormulaInventoryError(f"legacy bottle architecture drifted for {name}")
         link_manifest = bottle.get("link_manifest")
-        if not isinstance(link_manifest, str) or f"-rebuild{rebuild}-{architecture}.json" not in link_manifest:
+        status = bottle.get("status")
+        if status == "pending":
+            if link_manifest is not None:
+                raise FormulaInventoryError(
+                    f"legacy pending bottle link drifted for {name}"
+                )
+        elif (
+            status != "success"
+            or not isinstance(link_manifest, str)
+            or f"-rebuild{rebuild}-{architecture}.json" not in link_manifest
+        ):
             raise FormulaInventoryError(f"legacy bottle rebuild drifted for {name}")
         bottle_architectures.append(architecture)
     if bottle_architectures != sorted(set(bottle_architectures)):
