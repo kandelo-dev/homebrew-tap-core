@@ -964,7 +964,7 @@ def _candidate_repository_name(
     return f"ghcr.io/{tap_repository}-abi-{target_abi}-candidates/{formula}"
 
 
-def _normalized_candidate_bottle_metadata(
+def normalize_candidate_bottle_metadata(
     candidate: Mapping[str, Any], metadata: Mapping[str, Any]
 ) -> tuple[dict[str, Any], str, str]:
     """Reduce authenticated Homebrew output to the strict Formula composer input."""
@@ -1589,7 +1589,7 @@ def compose_candidate_tap(
         except (OSError, CanonicalJsonError) as error:
             raise ExecutionError(f"cannot read candidate bottle metadata: {error}") from error
         normalized, expected_root_url, expected_cellar = (
-            _normalized_candidate_bottle_metadata(candidate, metadata_entries)
+            normalize_candidate_bottle_metadata(candidate, metadata_entries)
         )
         try:
             with tempfile.NamedTemporaryFile(
