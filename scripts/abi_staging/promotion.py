@@ -126,6 +126,18 @@ class PromotionDecisionV1:
 
 
 @dataclass(frozen=True)
+class CanonicalBottleIdentityV1:
+    request_digest: str
+    formula_subject: str
+    candidate_record_digest: str
+    bottle_layer_sha256: str
+    bottle_layer_bytes: int
+    classification: Literal["canonical-pending-admission", "canonical-direct"]
+    merged_pull_request: Mapping[str, object] | None = None
+    source: Mapping[str, object] | None = None
+
+
+@dataclass(frozen=True)
 class CanonicalBottlePublicationV1:
     locator: PublishedRecordLocatorV1
     artifact: Mapping[str, object]
@@ -1784,16 +1796,46 @@ def _canonical_vfs_composition_descriptor(
     return body
 
 
-def build_canonical_bottle_plan(
-    decision: PromotionDecisionV1,
+def build_canonical_bottle_plan_from_identity(
+    identity: CanonicalBottleIdentityV1,
     *,
     candidate: FetchedOciRecordV1,
     policy: PromotionPolicyV1,
     destination_repository: str | None = None,
 ) -> OciRecordPlanV1:
-    validate_promotion_decision(asdict(decision))
-    if decision.eligibility != "eligible":
-        raise PromotionError("ineligible candidate cannot receive a canonical manifest")
+    if not isinstance(identity, CanonicalBottleIdentityV1):
+        raise PromotionError("canonical bottle identity is missing")
+    _digest(identity.request_digest, "canonical request")
+    if identity.classification == "canonical-direct":
+        if identity.merged_pull_request is not None:
+            raise PromotionError("direct canonical identity retains a merged PR")
+        source = _source(identity.source, "direct canonical source")
+        merged = None
+    else:
+        if identity.source is not None:
+            raise PromotionError("admission canonical identity carries direct source")
+        merged = _exact(
+            identity.merged_pull_request,
+            frozenset({"repository", "number", "head", "merge_commit"}),
+            "canonical merged PR",
+        )
+        _repository(merged["repository"], "canonical merged PR repository")
+        _positive(merged["number"], "canonical merged PR number")
+        _git_sha(merged["head"], "canonical merged PR head")
+        _git_sha(merged["merge_commit"], "canonical merged PR commit")
+        source = None
+    try:
+        parse_formula_subject(identity.formula_subject, "canonical Formula subject")
+    except PlanError as error:
+        raise PromotionError(f"canonical Formula subject is invalid: {error}") from error
+    _digest(identity.candidate_record_digest, "canonical candidate")
+    _digest(identity.bottle_layer_sha256, "canonical bottle layer")
+    _positive(identity.bottle_layer_bytes, "canonical bottle bytes")
+    if identity.classification not in {
+        "canonical-pending-admission",
+        "canonical-direct",
+    }:
+        raise PromotionError("canonical bottle classification is unsupported")
     record, layer = _candidate_layer(candidate)
     metadata_record, _bottle_metadata, metadata_layer = _candidate_bottle_metadata(candidate)
     (
@@ -1807,18 +1849,18 @@ def build_canonical_bottle_plan(
     ):
         raise PromotionError("candidate metadata changed its record identity")
     formula = record["candidate"]["formula"]
-    if decision.formula_subject != exact_formula_subject(
+    if identity.formula_subject != exact_formula_subject(
         formula["formula"], formula["architecture"]
     ):
-        raise PromotionError("canonical plan Formula differs from promotion decision")
+        raise PromotionError("canonical plan Formula differs from its exact identity")
     expected = canonical_repository(policy, formula["target_abi"], formula["formula"])
     destination = expected if destination_repository is None else destination_repository
     if destination != expected or destination == candidate.repository.removeprefix("ghcr.io/"):
         raise PromotionError("canonical destination is not the exact endorsed ABI namespace")
     if (
-        candidate.digest.removeprefix("sha256:") != decision.candidate_record_digest
-        or layer.digest.removeprefix("sha256:") != decision.bottle_layer_sha256
-        or layer.size != decision.bottle_layer_bytes
+        candidate.digest.removeprefix("sha256:") != identity.candidate_record_digest
+        or layer.digest.removeprefix("sha256:") != identity.bottle_layer_sha256
+        or layer.size != identity.bottle_layer_bytes
     ):
         raise PromotionError("canonical plan candidate/layer differs from promotion decision")
     canonical_descriptor_body = _canonical_vfs_composition_descriptor(
@@ -1831,10 +1873,9 @@ def build_canonical_bottle_plan(
     metadata = {
         "schema": 1,
         "kind": "kandelo-homebrew-canonical-bottle",
-        "classification": "canonical-pending-admission",
-        "request_sha256": decision.request_digest,
-        "candidate_record_sha256": decision.candidate_record_digest,
-        "merged_pull_request": _plain(decision.merged_pull_request),
+        "classification": identity.classification,
+        "request_sha256": identity.request_digest,
+        "candidate_record_sha256": identity.candidate_record_digest,
         "formula": {
             "tap": formula["tap"],
             "name": formula["formula"],
@@ -1842,8 +1883,8 @@ def build_canonical_bottle_plan(
             "target_abi": formula["target_abi"],
         },
         "bottle_layer": {
-            "sha256": decision.bottle_layer_sha256,
-            "bytes": decision.bottle_layer_bytes,
+            "sha256": identity.bottle_layer_sha256,
+            "bytes": identity.bottle_layer_bytes,
         },
         "bottle_metadata": {
             "sha256": metadata_layer.digest.removeprefix("sha256:"),
@@ -1854,6 +1895,10 @@ def build_canonical_bottle_plan(
             "bytes": len(canonical_descriptor_body),
         },
     }
+    if merged is None:
+        metadata["source"] = _plain(source)
+    else:
+        metadata["merged_pull_request"] = _plain(merged)
     return OciRecordPlanV1(
         repository=destination,
         artifact_type=CANONICAL_BOTTLE_MANIFEST_MEDIA_TYPE,
@@ -1887,14 +1932,40 @@ def build_canonical_bottle_plan(
         ),
         annotations={
             "dev.kandelo.abi-staging.candidate-record-sha256": (
-                decision.candidate_record_digest
+                identity.candidate_record_digest
             ),
-            "dev.kandelo.abi-staging.classification": "canonical-pending-admission",
+            "dev.kandelo.abi-staging.classification": identity.classification,
             "dev.kandelo.abi-staging.formula": formula["formula"],
             "dev.kandelo.abi-staging.kind": "canonical-bottle",
             "dev.kandelo.abi-staging.target-abi": str(formula["target_abi"]),
             "org.opencontainers.image.source": "https://github.com/" + policy.tap_repository,
         },
+    )
+
+
+def build_canonical_bottle_plan(
+    decision: PromotionDecisionV1,
+    *,
+    candidate: FetchedOciRecordV1,
+    policy: PromotionPolicyV1,
+    destination_repository: str | None = None,
+) -> OciRecordPlanV1:
+    validate_promotion_decision(asdict(decision))
+    if decision.eligibility != "eligible":
+        raise PromotionError("ineligible candidate cannot receive a canonical manifest")
+    return build_canonical_bottle_plan_from_identity(
+        CanonicalBottleIdentityV1(
+            request_digest=decision.request_digest,
+            formula_subject=decision.formula_subject,
+            candidate_record_digest=decision.candidate_record_digest,
+            bottle_layer_sha256=decision.bottle_layer_sha256,
+            bottle_layer_bytes=decision.bottle_layer_bytes,
+            classification="canonical-pending-admission",
+            merged_pull_request=decision.merged_pull_request,
+        ),
+        candidate=candidate,
+        policy=policy,
+        destination_repository=destination_repository,
     )
 
 

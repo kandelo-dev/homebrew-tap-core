@@ -27,6 +27,7 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     @maintenance = load_workflow("abi-staging-maintenance.yml")
     @history = load_workflow("abi-staging-abi-history.yml")
     @cleanup = load_workflow("abi-staging-candidate-cleanup.yml")
+    @pages_canonical = load_workflow("pages-canonicalize.yml")
     @public_discovery = File.read(
       File.join(ROOT, "scripts/abi_staging/github_public.py")
     )
@@ -125,6 +126,30 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     AbiStagingWorkflowCheck.check_maintenance(@maintenance)
     AbiStagingWorkflowCheck.check_history(@history)
     AbiStagingWorkflowCheck.check_cleanup(@cleanup)
+    AbiStagingWorkflowCheck.check_pages_canonical(@pages_canonical)
+  end
+
+  def test_pages_canonical_writers_keep_package_and_contents_permissions_separate
+    AbiStagingWorkflowCheck.check_pages_canonical(@pages_canonical)
+
+    changed = copy(@pages_canonical)
+    changed.dig("jobs", "publish", "permissions")["contents"] = "write"
+    assert_raises(AbiStagingWorkflowCheck::Violation) do
+      AbiStagingWorkflowCheck.check_pages_canonical(changed)
+    end
+
+    changed = copy(@pages_canonical)
+    changed.dig("jobs", "update-metadata", "permissions")["packages"] = "write"
+    assert_raises(AbiStagingWorkflowCheck::Violation) do
+      AbiStagingWorkflowCheck.check_pages_canonical(changed)
+    end
+  end
+
+  def test_pages_canonical_path_omits_legacy_promotion_prerequisites
+    text = AbiStagingWorkflowCheck.flatten(@pages_canonical).join("\n")
+    %w[admission receipt signature product-evidence publisher-policy].each do |term|
+      refute_includes text, term
+    end
   end
 
   def test_exhausted_build_retry_is_manual_and_false_by_default

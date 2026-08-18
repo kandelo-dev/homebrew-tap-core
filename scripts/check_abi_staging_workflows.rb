@@ -1893,6 +1893,72 @@ module AbiStagingWorkflowCheck
   rescue KeyError, NoMethodError => error
     raise Violation, "history workflow structure is incomplete: #{error.message}"
   end
+
+  def check_pages_canonical(workflow)
+    require_contract(workflow.fetch("permissions") == {},
+                     "Pages canonical workflow permissions must be empty")
+    event = triggers(workflow)
+    inputs = event.dig("workflow_dispatch", "inputs")
+    require_contract(event.keys == ["workflow_dispatch"] &&
+                     inputs.is_a?(Hash) &&
+                     inputs.keys.sort == %w[candidates kandelo_commit],
+                     "Pages canonical trigger or inputs changed")
+    jobs = workflow.fetch("jobs")
+    require_contract(jobs.keys.sort == %w[publish update-metadata validate],
+                     "Pages canonical job set changed")
+    validate = jobs.fetch("validate")
+    publisher = jobs.fetch("publish")
+    metadata = jobs.fetch("update-metadata")
+    require_contract(validate.fetch("permissions") == {},
+                     "Pages candidate validator gained authority")
+    require_contract(publisher.fetch("permissions") == {
+                       "contents" => "read", "packages" => "write"
+                     }, "Pages canonical publisher permissions changed")
+    require_contract(metadata.fetch("permissions") == {"contents" => "write"},
+                     "Pages metadata writer permissions changed")
+    require_contract(publisher.fetch("needs") == "validate" &&
+                     metadata.fetch("needs") == %w[validate publish],
+                     "Pages canonical job ordering changed")
+    require_contract(publisher.dig("strategy", "fail-fast") == false &&
+                     publisher.dig("strategy", "max-parallel").between?(1, 16) &&
+                     publisher.dig("strategy", "matrix") ==
+                       "${{ fromJSON(needs.validate.outputs.matrix) }}",
+                     "Pages canonical publication matrix changed")
+    jobs.each_value { |job| check_actions(job) }
+    publish_steps = run_steps(publisher)
+    metadata_steps = run_steps(metadata)
+    require_contract(publish_steps.length == 1 && metadata_steps.length == 1,
+                     "Pages canonical writers gained executable steps")
+    publish = publish_steps.fetch(0)
+    update = metadata_steps.fetch(0)
+    require_contract(publish.fetch("working-directory") == "tap-authority" &&
+                     publish.fetch("env") == {
+                       "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
+                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}"
+                     } &&
+                     publish.fetch("run").include?("publish-pages-canonical") &&
+                     publish.fetch("run").include?("--anonymous-readback"),
+                     "Pages canonical package writer changed")
+    update_text = update.fetch("run")
+    require_contract(update.fetch("working-directory") == "tap-authority" &&
+                     update.fetch("env") == {"CANDIDATES" => "${{ inputs.candidates }}"} &&
+                     update_text.include?("apply-pages-canonical-metadata") &&
+                     update_text.include?("--anonymous-readback") &&
+                     update_text.include?("--contents-only") &&
+                     update_text.include?("--normal-push") &&
+                     !update_text.include?("HOMEBREW_GITHUB_PACKAGES"),
+                     "Pages contents-only metadata writer changed")
+    text = flatten(workflow).join("\n")
+    %w[admission receipt signature product-evidence publisher-policy].each do |term|
+      require_contract(!text.include?(term),
+                       "Pages direct path restored #{term}")
+    end
+    require_no_automattic_ghcr(workflow)
+    require_no_package_secret_references(workflow, "Pages canonical workflow")
+    true
+  rescue KeyError, NoMethodError => error
+    raise Violation, "Pages canonical workflow structure is incomplete: #{error.message}"
+  end
 end
 
 if $PROGRAM_NAME == __FILE__
@@ -1909,7 +1975,8 @@ if $PROGRAM_NAME == __FILE__
         [File.join(root, ".github/workflows/abi-staging-verification.yml"), :verification],
         [File.join(root, ".github/workflows/abi-staging-maintenance.yml"), :check_maintenance],
         [File.join(root, ".github/workflows/abi-staging-abi-history.yml"), :check_history],
-        [File.join(root, ".github/workflows/abi-staging-candidate-cleanup.yml"), :check_cleanup]
+        [File.join(root, ".github/workflows/abi-staging-candidate-cleanup.yml"), :check_cleanup],
+        [File.join(root, ".github/workflows/pages-canonicalize.yml"), :check_pages_canonical]
       ]
     else
       ARGV.map do |path|
@@ -1920,6 +1987,7 @@ if $PROGRAM_NAME == __FILE__
         when "abi-staging-candidate.yml" then :candidate
         when "abi-staging-reuse.yml" then :check_reuse
         when "abi-staging-verification.yml" then :verification
+        when "pages-canonicalize.yml" then :check_pages_canonical
         else :check
         end
         [path, method]
