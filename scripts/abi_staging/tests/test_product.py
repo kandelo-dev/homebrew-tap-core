@@ -767,6 +767,18 @@ class ProductInputResolverTests(unittest.TestCase):
             {"alpha-shell": False, "beta-tools": True},
         )
 
+    def test_metadata_only_tap_movement_preserves_exact_candidates(self) -> None:
+        moved_tap_plan = copy.deepcopy(self.tap_plan)
+        moved_tap_plan["tap_source"]["commit"] = "e" * 40
+        moved_tap_plan["tap_source"]["tree"] = "d" * 40
+
+        resolved = self.resolve(tap_plan=moved_tap_plan)
+
+        self.assertEqual(
+            [item.plan.product_id for item in resolved],
+            ["beta-tools", "alpha-shell"],
+        )
+
     def test_resolves_every_input_kind_from_exact_selected_authority(self) -> None:
         resolutions = self.resolve()
         self.assertEqual([item.plan.product_id for item in resolutions], ["beta-tools", "alpha-shell"])
