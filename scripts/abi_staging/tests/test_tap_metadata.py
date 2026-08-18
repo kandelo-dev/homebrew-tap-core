@@ -873,7 +873,14 @@ class TapMetadataTests(unittest.TestCase):
                 "id": "kandelo-0000",
                 "kind": "file",
                 "path": "homebrew/kandelo-guest-layout.json",
-                "sha256": hashlib.sha256(guest_layout).hexdigest(),
+                "sha256": canonical_sha256(
+                    {
+                        "bytes": len(guest_layout),
+                        "kind": "file",
+                        "mode": "regular",
+                        "sha256": hashlib.sha256(guest_layout).hexdigest(),
+                    }
+                ),
             }
         ]
         contract_sha256 = hashlib.sha256(canonical_bytes(contract)).hexdigest()

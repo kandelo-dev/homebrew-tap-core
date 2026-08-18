@@ -28,6 +28,7 @@ from .bottle_link import (
 )
 from .contract import (
     ContractError,
+    captured_file_sha256,
     load_bottle_contract,
     validate_candidate_reuse_record,
 )
@@ -2593,7 +2594,7 @@ def prepare_formula_metadata_patch(
         len(guest_layout_inputs) != 1
         or guest_layout_inputs[0]["kind"] != "file"
         or not isinstance(guest_layout_bytes, bytes)
-        or hashlib.sha256(guest_layout_bytes).hexdigest()
+        or captured_file_sha256(guest_layout_bytes, executable=False)
         != guest_layout_inputs[0]["sha256"]
     ):
         raise PromotionError("guest layout differs from the captured build input")

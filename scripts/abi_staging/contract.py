@@ -423,13 +423,9 @@ def _path_descriptor(root: Path, relative: str) -> tuple[str, str]:
         raise ContractError("symlink-not-authorized")
     if stat.S_ISREG(metadata.st_mode):
         body = path.read_bytes()
-        descriptor = {
-            "bytes": len(body),
-            "kind": "file",
-            "mode": "executable" if metadata.st_mode & 0o111 else "regular",
-            "sha256": hashlib.sha256(body).hexdigest(),
-        }
-        return "file", canonical_sha256(descriptor)
+        return "file", captured_file_sha256(
+            body, executable=bool(metadata.st_mode & 0o111)
+        )
     if not stat.S_ISDIR(metadata.st_mode):
         raise ContractError("unsupported-file-kind")
     entries = []
@@ -458,6 +454,21 @@ def _path_descriptor(root: Path, relative: str) -> tuple[str, str]:
             }
         )
     return "tree", canonical_sha256({"entries": entries})
+
+
+def captured_file_sha256(body: bytes, *, executable: bool) -> str:
+    """Return the capture identity used for one regular repository file."""
+
+    if not isinstance(body, bytes):
+        raise ContractError("captured file body must be bytes")
+    return canonical_sha256(
+        {
+            "bytes": len(body),
+            "kind": "file",
+            "mode": "executable" if executable else "regular",
+            "sha256": hashlib.sha256(body).hexdigest(),
+        }
+    )
 
 
 def _captured_path(
