@@ -22,7 +22,7 @@ GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 REPOSITORY = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
-MAX_PROMOTION_WAVE = 16
+MAX_PROMOTION_WAVE = 64
 MAX_PROMOTION_PLAN_BYTES = 256 * 1024 * 1024
 PROMOTION_PLAN_STAGES = ("activation", "canonical", "metadata", "admission")
 
@@ -903,35 +903,11 @@ def build_promotion_workflow_plan(
     complete: list[str] = []
     scheduled = 0
     metadata_owner: str | None = None
-    completed_subjects = {
-        name
-        for name, state in progress.items()
-        if state.admission_record_sha256 is not None
-    }
     for subject in ordered:
         name = subject.decision.formula_subject
         state = progress[name]
         if state.admission_record_sha256 is not None:
             complete.append(name)
-            continue
-        unavailable = next(
-            (
-                dependency
-                for dependency in subject.dependency_subjects
-                if dependency not in completed_subjects
-            ),
-            None,
-        )
-        if unavailable is not None:
-            blocked.append(
-                MappingProxyType(
-                    {
-                        "formula_subject": name,
-                        "guard_code": "dependency_unavailable",
-                        "blocked_by": unavailable,
-                    }
-                )
-            )
             continue
         if subject.decision.eligibility == "rebuild-required":
             blocked.append(
