@@ -664,6 +664,9 @@ module AbiStagingWorkflowCheck
       step.dig("with", "path") == "tap-authority"
     end
     prepare_tap = prepare_taps.fetch(0, nil)
+    prepare_runtime_uploads = action_steps(prepare, UPLOAD_ARTIFACT).select do |step|
+      step["name"] == "Upload exact inert runtime"
+    end
     require_contract(
       prepare_checkouts.length == 3 && prepare_taps.length == 1 &&
         !prepare_tap.nil? && prepare_tap.fetch("uses") == CHECKOUT &&
@@ -674,6 +677,11 @@ module AbiStagingWorkflowCheck
           "path" => "tap-authority"
         },
       "runtime lacks its exact protected tap checkout"
+    )
+    require_contract(
+      prepare_runtime_uploads.length == 1 &&
+        prepare_runtime_uploads.fetch(0).dig("with", "include-hidden-files") == true,
+      "runtime upload does not preserve its exact inventory"
     )
     prepare_steps = run_steps(prepare)
     export_index = prepare_steps.index do |step|

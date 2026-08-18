@@ -468,7 +468,7 @@ jobs:
           name: abi-staging-runtime-${{ needs.discover-plan.outputs.request-digest }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/exact-runtime
           if-no-files-found: error
-          include-hidden-files: false
+          include-hidden-files: true
           retention-days: 7
           compression-level: 0
 

@@ -891,6 +891,24 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     end
   end
 
+  def test_runtime_upload_preserves_inventory_hidden_files
+    upload = @workflow.dig("jobs", "prepare-runtime", "steps").find do |step|
+      step["name"] == "Upload exact inert runtime"
+    end
+
+    refute_nil upload
+    assert_equal true, upload.dig("with", "include-hidden-files")
+    assert_rejected_matching(
+      "runtime upload drops inventory hidden files",
+      /runtime upload does not preserve its exact inventory/
+    ) do |workflow|
+      step = workflow.dig("jobs", "prepare-runtime", "steps").find do |candidate|
+        candidate["name"] == "Upload exact inert runtime"
+      end
+      step["with"]["include-hidden-files"] = false
+    end
+  end
+
   def test_package_publishers_install_one_pinned_oras_before_writing
     expected = "oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d"
     publishers = [
