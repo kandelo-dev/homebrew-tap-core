@@ -33,6 +33,7 @@ from .contract import (
     validate_candidate_reuse_record,
 )
 from .custody import CustodyError, load_source_custody_manifest
+from .execution import ExecutionError, normalize_candidate_bottle_metadata
 from .github_public import GitHubPublicClient, PublicGitHubError
 from .oci import (
     FetchedOciBlobV1,
@@ -2631,9 +2632,24 @@ def prepare_formula_metadata_patch(
     ):
         raise PromotionError("Formula metadata layer escaped its candidate namespace")
 
+    try:
+        normalized_metadata, _, _ = normalize_candidate_bottle_metadata(
+            {
+                "formula": name,
+                "tap_repository": policy.tap_repository,
+                "target_abi": target_abi,
+                "architecture": architecture,
+                "bottle_layer": layer,
+            },
+            prepared.candidate_bottle_metadata,
+        )
+    except ExecutionError as error:
+        raise PromotionError(
+            f"candidate Homebrew bottle metadata is invalid: {error}"
+        ) from error
     metadata_key = bottle_metadata_formula_key(policy.tap_repository, name)
     metadata = _exact(
-        prepared.candidate_bottle_metadata,
+        normalized_metadata,
         frozenset({metadata_key}),
         "candidate Homebrew bottle metadata",
     )

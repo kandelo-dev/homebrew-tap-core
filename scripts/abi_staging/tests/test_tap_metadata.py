@@ -911,15 +911,21 @@ class TapMetadataTests(unittest.TestCase):
         candidate_metadata = {
             f"kandelo-dev/tap-core/{formula}": {
                 "formula": {
+                    "desc": f"{formula} fixture",
+                    "homepage": "https://example.test/",
+                    "license": "MIT",
                     "name": formula,
                     "path": (
                         "Library/Taps/kandelo-dev/homebrew-tap-core/Formula/"
                         f"{formula}.rb"
                     ),
                     "pkg_version": pkg_version,
+                    "tap_git_path": f"Formula/{formula}.rb",
+                    "tap_git_remote": "file:///tmp/prepared-tap",
+                    "tap_git_revision": preactivation["commit"],
                 },
                 "bottle": {
-                    "root_url": candidate_root,
+                    "root_url": candidate_root.rsplit("/", 1)[0],
                     "cellar": "any_skip_relocation",
                     "rebuild": rebuild,
                     "tags": {
