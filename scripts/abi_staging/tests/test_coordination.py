@@ -20,6 +20,7 @@ from scripts.abi_staging.canonical import (
 )
 from scripts.abi_staging.coordination import (
     CoordinationError,
+    _formula_contract_tap_inputs,
     canonical_coordination_bytes,
     coordinate_planned_request,
     build_formula_contract,
@@ -27,6 +28,7 @@ from scripts.abi_staging.coordination import (
     validate_coordination_bundle,
 )
 from scripts.abi_staging.inventory import PublicSchedulingInventoryV1
+from scripts.abi_staging.formula_inventory import normalize_formula_source
 from scripts.abi_staging.policy import (
     load_tap_staging_policy,
     load_verification_tests,
@@ -65,6 +67,40 @@ def descriptor_capable(
 
 
 class ContractCoordinationTests(unittest.TestCase):
+    def test_formula_contract_ignores_generated_bottle_block_bytes(self) -> None:
+        generated = (TAP_ROOT / "Formula/bc.rb").read_bytes()
+        captured = [
+            {
+                "id": "tap:Formula/demo.rb",
+                "kind": "file",
+                "path": "Formula/demo.rb",
+                "repository": "tap",
+                "sha256": "1" * 64,
+            },
+            {
+                "id": "tap:Kandelo/formula_support/support.rb",
+                "kind": "file",
+                "path": "Kandelo/formula_support/support.rb",
+                "repository": "tap",
+                "sha256": "2" * 64,
+            },
+        ]
+        before = _formula_contract_tap_inputs(
+            captured,
+            formula_path="Formula/demo.rb",
+            formula_body=normalize_formula_source(generated),
+            executable=False,
+        )
+        after = _formula_contract_tap_inputs(
+            [{**captured[0], "sha256": "4" * 64}, captured[1]],
+            formula_path="Formula/demo.rb",
+            formula_body=generated,
+            executable=False,
+        )
+
+        self.assertEqual(before, after)
+        self.assertNotEqual(before[0]["sha256"], captured[0]["sha256"])
+
     def test_coordination_serialization_uses_its_declared_large_item_bound(self) -> None:
         value = {"records": [{"index": index} for index in range(50_001)]}
 

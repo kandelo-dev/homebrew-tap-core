@@ -14,9 +14,11 @@ from .canonical import canonical_bytes, canonical_sha256
 from .contract import (
     assess_capture,
     build_bottle_contract,
+    captured_file_sha256,
     validate_capture_assessment,
     validate_candidate_reuse_record,
 )
+from .formula_inventory import normalize_formula_source
 from .inventory import PublicSchedulingInventoryV1
 from .oci import OciPublicationError, parse_public_record_locator
 from .plan import exact_formula_subject, validate_tap_plan
@@ -91,6 +93,25 @@ def _repository_inputs(
         if entry["repository"] == repository
     ]
     result.sort(key=lambda item: item["id"])
+    return result
+
+
+def _formula_contract_tap_inputs(
+    captured: Sequence[Mapping[str, Any]],
+    *,
+    formula_path: str,
+    formula_body: bytes,
+    executable: bool,
+) -> list[dict[str, str]]:
+    """Bind Formula semantics without binding generated bottle metadata."""
+
+    result = _repository_inputs(captured, "tap")
+    matches = [item for item in result if item["path"] == formula_path]
+    if len(matches) != 1 or matches[0]["kind"] != "file":
+        raise CoordinationError("Formula capture lacks its exact source file")
+    matches[0]["sha256"] = captured_file_sha256(
+        normalize_formula_source(formula_body), executable=executable
+    )
     return result
 
 
@@ -213,7 +234,19 @@ def build_formula_contract(
         observed_tap_paths=declared_tap,
     )
     kandelo_inputs = _repository_inputs(assessment["captured"], "kandelo")
-    tap_inputs = _repository_inputs(assessment["captured"], "tap")
+    formula_source = root / identity["formula_path"]
+    formula_body = formula_source.read_bytes()
+    normalized_formula = normalize_formula_source(formula_body)
+    if hashlib.sha256(normalized_formula).hexdigest() != _digest(
+        identity["normalized_formula_sha256"], "normalized Formula"
+    ):
+        raise CoordinationError("Formula normalized source changed")
+    tap_inputs = _formula_contract_tap_inputs(
+        assessment["captured"],
+        formula_path=identity["formula_path"],
+        formula_body=formula_body,
+        executable=bool(formula_source.stat().st_mode & 0o111),
+    )
 
     formula_components = [
         {
