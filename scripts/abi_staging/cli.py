@@ -2978,8 +2978,24 @@ export TMPDIR="$private_root/tmp"
 export KANDELO_VFS_PRODUCT_PACKAGE="$package"
 export KANDELO_VFS_PRODUCT_OUTPUTS="$outputs"
 export KANDELO_VFS_PRODUCT_SOURCE_ROLES="$source_roles"
+if [ ! -d "$sysroot" ] || [ -L "$sysroot" ]; then
+  echo "exact runtime sysroot is not one real directory" >&2
+  exit 2
+fi
+source_sysroot="$PWD/sysroot"
+if [ -e "$source_sysroot" ] || [ -L "$source_sysroot" ]; then
+  echo "candidate source already contains a sysroot projection" >&2
+  exit 2
+fi
+cleanup_source_sysroot() {
+  if [ -L "$source_sysroot" ] && [ "$(readlink "$source_sysroot")" = "$sysroot" ]; then
+    rm "$source_sysroot"
+  fi
+}
+trap cleanup_source_sysroot EXIT
+ln -s "$sysroot" "$source_sysroot"
 host_target="$(rustc -vV | awk '/^host/ {print $2}')"
-exec cargo run -p xtask --target "$host_target" --quiet -- \
+cargo run -p xtask --target "$host_target" --quiet -- \
   build-deps "--arch=$architecture" --force-source-build resolve "$package"
 '''
     return [

@@ -6,6 +6,7 @@ from dataclasses import replace
 import hashlib
 import inspect
 import json
+import os
 from pathlib import Path
 import stat
 import subprocess
@@ -2065,6 +2066,60 @@ class ProductBuildHandoffTests(unittest.TestCase):
         self.assertIn("WASM_POSIX_BINARY_CACHE_ROOT", command[3])
         self.assertIn("KANDELO_VFS_PRODUCT_OUTPUTS", command[3])
         self.assertNotIn("GITHUB_TOKEN", " ".join(str(value) for value in command))
+
+    def test_candidate_package_command_projects_the_exact_runtime_sysroot(self) -> None:
+        from scripts.abi_staging.cli import _candidate_package_resolve_arguments
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = root / "candidate"
+            scripts = candidate / "scripts"
+            tools = root / "tools"
+            cache = root / "cache"
+            cargo_target = root / "cargo-target"
+            sysroot = root / "runtime/toolchain/wasm32-sysroot"
+            scripts.mkdir(parents=True)
+            tools.mkdir()
+            sysroot.mkdir(parents=True)
+            (sysroot / "libc.a").write_bytes(b"exact runtime sysroot\n")
+            (scripts / "dev-shell.sh").write_text(
+                "#!/usr/bin/env bash\nset -euo pipefail\nexec \"$@\"\n"
+            )
+            (scripts / "dev-shell.sh").chmod(0o755)
+            (tools / "rustc").write_text(
+                "#!/usr/bin/env bash\nprintf 'host: fixture-host\\n'\n"
+            )
+            (tools / "rustc").chmod(0o755)
+            (tools / "cargo").write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "test -L \"$PWD/sysroot\"\n"
+                "test \"$(readlink \"$PWD/sysroot\")\" = \"$WASM_POSIX_SYSROOT\"\n"
+                "mkdir -p \"$WASM_POSIX_BINARY_CACHE_ROOT/result\"\n"
+                "printf '%s\\n' \"$WASM_POSIX_BINARY_CACHE_ROOT/result\"\n"
+            )
+            (tools / "cargo").chmod(0o755)
+
+            command = _candidate_package_resolve_arguments(
+                kandelo_root=candidate,
+                cache_root=cache,
+                cargo_target=cargo_target,
+                sysroot=sysroot,
+                architecture="wasm32",
+                package={"name": "mini", "outputs": ["runtime"], "source_roles": []},
+            )
+            completed = subprocess.run(
+                [str(value) for value in command],
+                cwd=candidate,
+                env={**dict(os.environ), "PATH": f"{tools}:{os.environ['PATH']}"},
+                check=False,
+                capture_output=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr.decode())
+            self.assertEqual(completed.stdout.decode().strip(), str(cache / "result"))
+            self.assertFalse((candidate / "sysroot").exists())
+            self.assertFalse((candidate / "sysroot").is_symlink())
 
     def test_product_collection_and_builder_commands_keep_protected_argv_authority(
         self,
