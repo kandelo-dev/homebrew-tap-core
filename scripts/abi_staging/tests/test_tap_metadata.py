@@ -1260,6 +1260,13 @@ class TapMetadataTests(unittest.TestCase):
             set(batch.patch.files),
         )
         for item in prepared:
+            tap_metadata_module.validate_landed_formula_metadata_commit(
+                self.root,
+                base_source=current,
+                landed_source=landed.source,
+                patch=item.patch,
+                allow_formula_batch=True,
+            )
             observed = json.loads(
                 (self.root / f"Kandelo/formula/{item.update.formula}.json").read_bytes()
             )
@@ -1273,6 +1280,32 @@ class TapMetadataTests(unittest.TestCase):
                 selected[0]["sha256"],
                 item.update.bottle_layer_sha256,
             )
+        (self.root / "later-change.txt").write_text("later metadata wave\n")
+        _git(self.root, "add", "--", "later-change.txt")
+        _git(self.root, "commit", "-m", "later metadata wave")
+        later = {
+            "repository": "kandelo-dev/homebrew-tap-core",
+            "commit": _git(self.root, "rev-parse", "HEAD"),
+            "tree": _git(self.root, "rev-parse", "HEAD^{tree}"),
+        }
+        for formula, marker in (("bash", "5"), ("dash", "6")):
+            repeated = self._prepare_formula(
+                prepared=self._prepared_admission(
+                    preactivation=preactivation,
+                    formula=formula,
+                    canonical_digest=marker * 64,
+                ),
+                history=history,
+                snapshot=snapshot,
+                current=later,
+            )
+            self.assertEqual(dict(repeated.patch.files), {})
+            recovered = (
+                tap_metadata_module.recover_landed_formula_metadata_commit(
+                    self.root, current_update=repeated.update
+                )
+            )
+            self.assertEqual(recovered.landed_source["commit"], landed.source["commit"])
 
     def test_composes_two_architectures_of_one_formula_into_one_atomic_patch(
         self,
@@ -1316,6 +1349,24 @@ class TapMetadataTests(unittest.TestCase):
         self.assertIn("wasm32_kandelo", formula)
         self.assertIn("wasm64_kandelo", formula)
         tap_metadata_module.validate_formula_metadata_batch(self.root, batch)
+        apply, _write_error, _store = self._metadata_writer()
+        landed = apply(
+            self.root,
+            batch.patch,
+            formula_batch=batch,
+            commit_message="promote exact multi-architecture Formula batch",
+        )
+        for item in prepared:
+            tap_metadata_module.validate_landed_formula_metadata_commit(
+                self.root,
+                base_source=current,
+                landed_source=landed.source,
+                patch=item.patch,
+                allow_formula_batch=True,
+            )
+            tap_metadata_module.validate_formula_admission_projection(
+                self.root, item.update
+            )
 
     def test_formula_update_rejects_canonical_or_candidate_layer_drift(self) -> None:
         history, snapshot, preactivation, current = self._activate_fixture()

@@ -5761,6 +5761,7 @@ def _publish_workflow_admission(args: argparse.Namespace) -> None:
                     base_source=metadata_base_source,
                     landed_source=metadata_source,
                     patch=_patch,
+                    allow_formula_batch=True,
                 )
                 validate_formula_admission_projection(
                     metadata_root, formula_update
