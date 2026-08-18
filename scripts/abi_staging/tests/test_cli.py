@@ -17,7 +17,7 @@ from scripts.abi_staging.tests import test_tap_metadata as tap_metadata_tests
 from scripts.abi_staging.canonical import canonical_bytes, canonical_sha256
 from scripts.abi_staging.cli import main as cli_main
 from scripts.abi_staging.inventory import InventoryError
-from scripts.abi_staging.oci import OciPublicationError
+from scripts.abi_staging.oci import HttpResponseV1, OciPublicationError
 from scripts.abi_staging.plan import snapshot_tap_source
 from scripts.abi_staging.tap_metadata import (
     load_abi_state,
@@ -91,7 +91,7 @@ def _source(root: Path, revision: str) -> dict[str, str]:
 
 
 class PublicInventoryRetryTests(unittest.TestCase):
-    def test_protected_inventory_transport_uses_explicit_read_credentials(self) -> None:
+    def test_public_inventory_transport_does_not_send_workflow_credentials(self) -> None:
         with patch.dict(
             cli_module.os.environ,
             {
@@ -101,8 +101,47 @@ class PublicInventoryRetryTests(unittest.TestCase):
             clear=False,
         ):
             transport = cli_module._public_inventory_transport()
+
+        inventory_url = "https://ghcr.io/v2/kandelo-dev/example/tags/list?n=100"
+        challenge = (
+            'Bearer realm="https://ghcr.io/token",service="ghcr.io",'
+            'scope="repository:kandelo-dev/example:pull"'
+        )
+        calls: list[tuple[str, str, dict[str, str]]] = []
+
+        def perform(method, url, *, headers, body, maximum_bytes):
+            del body, maximum_bytes
+            calls.append((method, url, dict(headers)))
+            if url == inventory_url and len(calls) == 1:
+                return HttpResponseV1(
+                    401,
+                    {"www-authenticate": challenge},
+                    b"",
+                    inventory_url,
+                )
+            if url.startswith("https://ghcr.io/token?"):
+                return HttpResponseV1(
+                    200,
+                    {},
+                    b'{"token":"fixture-bearer"}',
+                    url,
+                )
+            return HttpResponseV1(200, {}, b"{}", inventory_url)
+
+        transport._perform = perform
+        response = transport.request(
+            "GET",
+            inventory_url,
+            authenticated=False,
+            maximum_bytes=1024,
+        )
+
+        self.assertEqual(response.status, 200)
         self.assertTrue(transport._authenticated)
-        self.assertTrue(transport._authenticated_public_reads)
+        self.assertEqual(len(calls), 3)
+        self.assertNotIn("authorization", calls[0][2])
+        self.assertNotIn("authorization", calls[1][2])
+        self.assertEqual(calls[2][2]["authorization"], "Bearer fixture-bearer")
 
     def test_retries_only_retryable_oci_failures_with_fresh_transports(self) -> None:
         transports: list[object] = []
