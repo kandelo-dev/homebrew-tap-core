@@ -81,6 +81,15 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         self.assertLess(fixture_write, guest_permissions)
         self.assertLess(guest_permissions, service_start)
 
+    def test_nginx_browser_guest_has_the_configured_runtime_accounts(self) -> None:
+        source = self.formula("nginx")
+        test_block = source[source.index("  test do\n") :]
+
+        self.assertIn('browser_passwd.write "nobody:x:65534:65534:', test_block)
+        self.assertIn('browser_group.write "nobody:x:65534:', test_block)
+        self.assertRegex(test_block, r'"/etc/passwd"\s+=> browser_passwd')
+        self.assertRegex(test_block, r'"/etc/group"\s+=> browser_group')
+
     def test_redis_accepts_the_current_abi_dynamic_loader_contract(self) -> None:
         source = self.formula("redis")
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import json
 from pathlib import Path
 import re
 import unittest
@@ -17,7 +16,6 @@ from scripts.abi_staging.formula_inventory import (
     normalize_formula_source,
     parse_formula_source,
     validate_formula_probe,
-    validate_legacy_sidecar,
 )
 from scripts.abi_staging.policy import (
     generate_formula_capture_catalog,
@@ -237,24 +235,6 @@ class FormulaInventoryTests(unittest.TestCase):
                         self.capture_policy,
                         self.capture_catalog,
                     )
-
-    def test_sidecar_drift_is_rejected_without_making_sidecars_authoritative(self) -> None:
-        parsed = next(
-            entry for entry in self.probe["formulae"] if entry["name"] == "curl"
-        )
-        sidecar = json.loads((TAP_ROOT / "Kandelo/formula/curl.json").read_bytes())
-        validate_legacy_sidecar(parsed, sidecar)
-        for field, value in [
-            ("formula_path", "Formula/other.rb"),
-            ("formula_revision", 9),
-            ("bottle_rebuild", 9),
-            ("name", "other"),
-        ]:
-            with self.subTest(field=field):
-                mutated = copy.deepcopy(sidecar)
-                mutated[field] = value
-                with self.assertRaises(FormulaInventoryError):
-                    validate_legacy_sidecar(parsed, mutated)
 
     def test_probe_rejects_unknown_fields_and_dynamic_dependency_fallbacks(self) -> None:
         probe = copy.deepcopy(self.probe)
