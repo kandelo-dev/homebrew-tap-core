@@ -951,6 +951,21 @@ class ReconciliationTests(unittest.TestCase):
             [item["formula_subject"] for item in plan.canonical_work],
             [dependant.decision.formula_subject, root.decision.formula_subject],
         )
+        self.assertEqual(len(plan.metadata_work), 1)
+        batch = plan.metadata_work[0]
+        self.assertEqual(batch["operation"], "formula-metadata-batch")
+        self.assertEqual(
+            batch["member_formula_subjects"],
+            [dependant.decision.formula_subject, root.decision.formula_subject],
+        )
+        self.assertEqual(
+            [item["formula_subject"] for item in plan.admission_work],
+            [dependant.decision.formula_subject, root.decision.formula_subject],
+        )
+        self.assertEqual(
+            {item["metadata_work_id"] for item in plan.admission_work},
+            {batch["work_id"]},
+        )
 
     def test_complete_required_graph_fits_one_promotion_wave(self) -> None:
         reconciliation = self.merged_promotion_reconciliation()
@@ -1016,31 +1031,28 @@ class ReconciliationTests(unittest.TestCase):
             [item["formula_subject"] for item in first.canonical_work],
             [root.decision.formula_subject, background.decision.formula_subject],
         )
+        self.assertEqual(len(first.metadata_work), 1)
+        first_batch = first.metadata_work[0]
+        self.assertEqual(first_batch["operation"], "formula-metadata-batch")
         self.assertEqual(
-            [item["formula_subject"] for item in first.metadata_work],
-            [root.decision.formula_subject],
+            first_batch["member_formula_subjects"],
+            [root.decision.formula_subject, background.decision.formula_subject],
         )
         self.assertEqual(
             [item["formula_subject"] for item in first.admission_work],
-            [root.decision.formula_subject],
+            [root.decision.formula_subject, background.decision.formula_subject],
         )
         self.assertEqual(
-            first.metadata_work[0]["canonical_work_id"],
-            first.canonical_work[0]["work_id"],
+            {item["metadata_work_id"] for item in first.admission_work},
+            {first_batch["work_id"]},
         )
         self.assertEqual(
-            first.admission_work[0]["metadata_work_id"],
-            first.metadata_work[0]["work_id"],
+            [item["canonical_work_id"] for item in first.admission_work],
+            [item["work_id"] for item in first.canonical_work],
         )
         self.assertEqual(
             [(item["formula_subject"], item["guard_code"]) for item in first.blocked],
-            [
-                (background.decision.formula_subject, "dependency_unavailable"),
-                (drifted.decision.formula_subject, "tap_source_drift"),
-            ],
-        )
-        self.assertEqual(
-            first.blocked[0]["blocked_by"], root.decision.formula_subject
+            [(drifted.decision.formula_subject, "tap_source_drift")],
         )
         self.assertEqual(
             first,
@@ -1072,8 +1084,8 @@ class ReconciliationTests(unittest.TestCase):
             activation_mode="active",
         )
         self.assertEqual(
-            [item["formula_subject"] for item in metadata.metadata_work],
-            [root.decision.formula_subject],
+            metadata.metadata_work[0]["member_formula_subjects"],
+            [root.decision.formula_subject, background.decision.formula_subject],
         )
         stale_admission = build_promotion_workflow_plan(
             reconciliation,
@@ -1089,7 +1101,7 @@ class ReconciliationTests(unittest.TestCase):
             activation_mode="active",
         )
         self.assertEqual(
-            [item["formula_subject"] for item in stale_admission.metadata_work],
+            stale_admission.metadata_work[0]["member_formula_subjects"],
             [root.decision.formula_subject],
         )
         self.assertEqual(stale_admission.admission_work, ())
@@ -1132,7 +1144,7 @@ class ReconciliationTests(unittest.TestCase):
             [root.decision.formula_subject, background.decision.formula_subject],
         )
         self.assertEqual(
-            [item["formula_subject"] for item in admission.metadata_work],
+            admission.metadata_work[0]["member_formula_subjects"],
             [background.decision.formula_subject],
         )
         self.assertEqual(
