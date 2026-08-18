@@ -1239,7 +1239,7 @@ def recover_landed_formula_metadata_commit(
                 "-r",
                 landed_commit,
             ).splitlines()
-            if sorted(changed_paths) != sorted(checked.allowed_paths):
+            if not set(checked.allowed_paths).issubset(changed_paths):
                 continue
             base_source = {
                 "repository": policy.tap_repository,
@@ -1307,6 +1307,7 @@ def recover_landed_formula_metadata_commit(
                 base_source=base_source,
                 landed_source=landed_source,
                 patch=recovered_patch,
+                allow_formula_batch=True,
             )
             matches.append(
                 RecoveredFormulaMetadataCommitV1(
@@ -2279,6 +2280,7 @@ def validate_landed_formula_metadata_commit(
     base_source: Mapping[str, Any],
     landed_source: Mapping[str, Any],
     patch: TapMetadataPatchV1,
+    allow_formula_batch: bool = False,
 ) -> None:
     """Prove the landed Formula commit is the exact CAS patch from its base."""
 
@@ -2321,9 +2323,32 @@ def validate_landed_formula_metadata_commit(
         "-r",
         landed["commit"],
     ).splitlines()
-    if sorted(changed_paths) != sorted(patch.files):
-        raise TapMetadataError("landed Formula metadata changed another path set")
+    batch_landing = sorted(changed_paths) != sorted(patch.files)
+    if batch_landing:
+        if not allow_formula_batch or not set(patch.files).issubset(changed_paths):
+            raise TapMetadataError("landed Formula metadata changed another path set")
+        metadata_path = re.compile(
+            r"(?:Formula/[a-z0-9][a-z0-9+._-]*\.rb|"
+            r"Kandelo/formula/[a-z0-9][a-z0-9+._-]*\.json|"
+            r"Kandelo/metadata\.json|"
+            r"Kandelo/link/[a-z0-9][a-z0-9+._-]*-"
+            r"[A-Za-z0-9][A-Za-z0-9._+,-]{0,255}-"
+            r"rebuild(?:0|[1-9][0-9]{0,9})-(?:wasm32|wasm64)\.json)"
+        )
+        for path in changed_paths:
+            if metadata_path.fullmatch(path) is None:
+                raise TapMetadataError(
+                    "landed Formula metadata batch changed another path set"
+                )
+            _git_regular_blob(
+                root,
+                landed["commit"],
+                path,
+                f"landed Formula metadata batch {path}",
+            )
     for path, expected in patch.files.items():
+        if batch_landing and not path.startswith("Kandelo/link/"):
+            continue
         if _git_bytes(root, "show", f"{landed['commit']}:{path}") != expected:
             raise TapMetadataError("landed Formula metadata bytes differ from the patch")
 
