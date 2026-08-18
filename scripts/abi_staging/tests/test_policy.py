@@ -142,7 +142,7 @@ class PolicyTests(unittest.TestCase):
 
     def test_musl_fts_installed_bottle_test_does_not_require_build_only_automake(self) -> None:
         source = (TAP_ROOT / "Formula/musl-fts.rb").read_text(encoding="utf-8")
-        test_block = source[source.index("  test do\n") : source.index("  bottle do\n")]
+        test_block = source[source.index("  test do\n") :]
 
         self.assertNotIn("kandelo_wasm_build", test_block)
         self.assertIn("sdk_root = kandelo_activate_sdk!", test_block)

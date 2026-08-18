@@ -784,8 +784,9 @@ def validate_formula_probe(
         if list(catalog.get("architectures", ())) != entry["architectures"]:
             raise FormulaInventoryError(f"capture architecture drifted for {name}")
         formula_path = entry["formula_path"]
+        formula_bytes = (root / formula_path).read_bytes()
         normalized_formula_sha = hashlib.sha256(
-            normalize_formula_source((root / formula_path).read_bytes())
+            normalize_formula_source(formula_bytes)
         ).hexdigest()
         components = sorted(
             (
@@ -805,7 +806,13 @@ def validate_formula_probe(
             ),
         }
         sidecar_path = root / f"Kandelo/formula/{name}.json"
-        if sidecar_path.exists():
+        # Legacy sidecars describe the generated bottle block. Once successor
+        # metadata removes that block, the sidecar is no longer an authority
+        # for current Formula source and must not prevent inventory refreshes.
+        has_legacy_bottle_block = _bottle_span(
+            _decode_formula(formula_bytes).splitlines(keepends=True)
+        ) is not None
+        if sidecar_path.exists() and has_legacy_bottle_block:
             if not sidecar_path.is_file() or sidecar_path.is_symlink():
                 raise FormulaInventoryError(f"legacy sidecar is not a direct file for {name}")
             try:

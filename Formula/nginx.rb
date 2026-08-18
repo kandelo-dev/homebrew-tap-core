@@ -410,9 +410,16 @@ class Nginx < Formula
 
     browser_root = "/opt/kandelo-nginx-test"
     browser_config = testpath/"nginx-browser.conf"
+    browser_passwd = testpath/"nginx-browser-passwd"
+    browser_group = testpath/"nginx-browser-group"
     # WHY: the Node lifecycle uses a writable /tmp host mount, while the
     # browser runner stages immutable fixture files outside its scratch mounts.
     browser_config.write((testpath/"nginx.conf").read.sub(guest_testpath, browser_root))
+    # WHY: nginx resolves its configured worker account before serving. The
+    # isolated browser guest deliberately has no ambient host account database,
+    # so stage the same minimal nobody identity that the Formula configures.
+    browser_passwd.write "nobody:x:65534:65534:nobody:/:/sbin/nologin\n"
+    browser_group.write "nobody:x:65534:\n"
     browser_script = <<~SH
       set -eu
       server=#{GUEST_OPT_PREFIX}/bin/nginx
@@ -441,6 +448,8 @@ class Nginx < Formula
         "/usr/local/bin/nginx-browser-probe" => browser_probe,
       },
       guest_files:        {
+        "/etc/group"                          => browser_group,
+        "/etc/passwd"                         => browser_passwd,
         "#{GUEST_OPT_PREFIX}/conf/mime.types"  => prefix/"conf/mime.types",
         "#{browser_root}/nginx.conf"           => browser_config,
         "#{browser_root}/html/new/message.txt" => testpath/"html/new/message.txt",

@@ -505,8 +505,6 @@ def _observed_architectures(name: str, formula_source: str) -> tuple[str, ...]:
     bottle_architectures = tuple(
         sorted(set(re.findall(r"\b(wasm(?:32|64))_kandelo\b", formula_source)))
     )
-    if not bottle_architectures:
-        raise PolicyError(f"Formula {name} has no explicit supported architecture evidence")
     return bottle_architectures
 
 
@@ -539,7 +537,11 @@ def generate_formula_capture_catalog(
         except (OSError, UnicodeDecodeError) as error:
             raise PolicyError(f"cannot audit Formula {entry.name}: {error}") from error
         observed_architectures = _observed_architectures(entry.name, source)
-        if entry.architectures != observed_architectures:
+        # Generated bottle metadata is removed once successor metadata owns the
+        # canonical bottle projection. Formulae without an explicit runtime
+        # architecture guard therefore rely on this reviewed capture policy;
+        # keep cross-checking any architecture evidence the Formula does own.
+        if observed_architectures and entry.architectures != observed_architectures:
             raise PolicyError(
                 f"Formula {entry.name} capture architectures {entry.architectures!r} "
                 f"differ from source evidence {observed_architectures!r}"
