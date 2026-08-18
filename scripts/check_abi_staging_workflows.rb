@@ -1934,14 +1934,18 @@ module AbiStagingWorkflowCheck
     require_contract(publish.fetch("working-directory") == "tap-authority" &&
                      publish.fetch("env") == {
                        "HOMEBREW_GITHUB_PACKAGES_TOKEN" => "${{ github.token }}",
-                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}"
+                       "HOMEBREW_GITHUB_PACKAGES_USER" => "${{ github.actor }}",
+                       "PYTHONPATH" => "${{ github.workspace }}/tap-authority"
                      } &&
                      publish.fetch("run").include?("publish-pages-canonical") &&
                      publish.fetch("run").include?("--anonymous-readback"),
                      "Pages canonical package writer changed")
     update_text = update.fetch("run")
     require_contract(update.fetch("working-directory") == "tap-authority" &&
-                     update.fetch("env") == {"CANDIDATES" => "${{ inputs.candidates }}"} &&
+                     update.fetch("env") == {
+                       "CANDIDATES" => "${{ inputs.candidates }}",
+                       "PYTHONPATH" => "${{ github.workspace }}/tap-authority"
+                     } &&
                      update_text.include?("apply-pages-canonical-metadata") &&
                      update_text.include?("--anonymous-readback") &&
                      update_text.include?("--contents-only") &&
