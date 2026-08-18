@@ -2080,6 +2080,7 @@ class ProductBuildHandoffTests(unittest.TestCase):
             sysroot = root / "runtime/toolchain/wasm32-sysroot"
             scripts.mkdir(parents=True)
             tools.mkdir()
+            cargo_target.mkdir()
             sysroot.mkdir(parents=True)
             (sysroot / "libc.a").write_bytes(b"exact runtime sysroot\n")
             (scripts / "dev-shell.sh").write_text(
@@ -2095,6 +2096,8 @@ class ProductBuildHandoffTests(unittest.TestCase):
                 "set -euo pipefail\n"
                 "test -L \"$PWD/sysroot\"\n"
                 "test \"$(readlink \"$PWD/sysroot\")\" = \"$WASM_POSIX_SYSROOT\"\n"
+                "test -L \"$PWD/target\"\n"
+                "test \"$(readlink \"$PWD/target\")\" = \"$CARGO_TARGET_DIR\"\n"
                 "mkdir -p \"$WASM_POSIX_BINARY_CACHE_ROOT/result\"\n"
                 "printf '%s\\n' \"$WASM_POSIX_BINARY_CACHE_ROOT/result\"\n"
             )
@@ -2120,6 +2123,8 @@ class ProductBuildHandoffTests(unittest.TestCase):
             self.assertEqual(completed.stdout.decode().strip(), str(cache / "result"))
             self.assertFalse((candidate / "sysroot").exists())
             self.assertFalse((candidate / "sysroot").is_symlink())
+            self.assertFalse((candidate / "target").exists())
+            self.assertFalse((candidate / "target").is_symlink())
 
     def test_product_collection_and_builder_commands_keep_protected_argv_authority(
         self,
