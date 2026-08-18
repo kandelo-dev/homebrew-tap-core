@@ -1215,6 +1215,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         'playwright_browsers="$realm_root/playwright"',
       )
     end
+    assert_reusable_rejected(:candidate, "candidate hosted Playwright apt mutation") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub(
+        "install chromium",
+        "install chromium --with-deps",
+      )
+    end
     assert_reusable_rejected(:candidate, "candidate Homebrew cache loses runner ownership") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
