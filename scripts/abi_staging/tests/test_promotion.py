@@ -1826,6 +1826,60 @@ class PromotionTests(unittest.TestCase):
         )
         self.assertIsNone(plan.layers[2].mount_from)
 
+    def test_canonical_promotion_accepts_verified_descriptor_inventory_bound(self) -> None:
+        descriptor = json.loads(self._candidate_composition_descriptor())
+        descriptor["tree"]["inventory"] = {
+            "entries": [
+                {
+                    "materialization": "archive",
+                    "mode": 0o755,
+                    "ownership": "layer",
+                    "path": f"share/large-inventory/{index}",
+                    "size": 0,
+                    "source_path": f"bash/share/large-inventory/{index}",
+                    "type": "directory",
+                }
+                for index in range(7_000)
+            ]
+        }
+        descriptor_body = canonical_bytes(descriptor, maximum_items=4_000_000)
+        record = copy.deepcopy(self.candidate_record)
+        component = next(
+            item
+            for item in record["candidate"]["normalized_components"]
+            if item["id"] == "vfs-composition-descriptor"
+        )
+        component["artifact"] = _artifact(
+            descriptor_body,
+            self.candidate.repository,
+        )
+        candidate_plan = self._candidate_plan(record)
+        candidate_plan = replace(
+            candidate_plan,
+            layers=tuple(
+                replace(layer, body=descriptor_body)
+                if layer.role == "vfs-composition-descriptor"
+                else layer
+                for layer in candidate_plan.layers
+            ),
+        )
+        candidate = _fetched_from_plan(candidate_plan)
+        decision = replace(
+            self._evaluate(),
+            candidate_record_digest=candidate.digest.removeprefix("sha256:"),
+        )
+
+        plan = build_canonical_bottle_plan(
+            decision,
+            candidate=candidate,
+            policy=self.promotion_policy,
+        )
+
+        self.assertEqual(
+            json.loads(plan.layers[2].body)["tree"]["inventory"],
+            descriptor["tree"]["inventory"],
+        )
+
     def test_canonical_destination_and_layer_cannot_be_changed_or_rebuilt(self) -> None:
         decision = self._evaluate()
         wrong_subject = replace(
