@@ -1677,6 +1677,52 @@ class ProductInputObjectAuthorityTests(unittest.TestCase):
             self.assertEqual([item.id for item in toolchains], ["sdk"])
             self.assertEqual([item.id for item in repositories], ["config"])
 
+    def test_build_spec_groups_distinct_selectors_for_one_package_recipe(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = self._fixture(Path(temporary))
+            product = fixture["catalog"]["products"][0]
+            product["manifest"]["software"]["package"].append(
+                {
+                    "name": "mini",
+                    "outputs": ["headers"],
+                    "source_roles": ["source"],
+                    "role": "build",
+                }
+            )
+            manifest_sha256 = canonical_sha256(product["manifest"])
+            product["sha256"] = manifest_sha256
+            fixture["request"]["requirements"]["products"][0][
+                "manifest_sha256"
+            ] = manifest_sha256
+            fixture["request"]["requirements"]["digest"] = canonical_sha256(
+                {
+                    key: fixture["request"]["requirements"][key]
+                    for key in (
+                        "change_classes",
+                        "products",
+                        "registries",
+                        "evidence",
+                    )
+                }
+            )
+
+            build_spec = select_product_input_build_spec(
+                fixture["request"], fixture["catalog"], "authority-product"
+            )
+
+            self.assertEqual(
+                build_spec["packages"],
+                [
+                    {
+                        "name": "mini",
+                        "outputs": ["headers", "runtime"],
+                        "source_roles": ["source"],
+                    }
+                ],
+            )
+
     def test_protected_authority_rejects_self_consistent_untrusted_drift(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             fixture = self._fixture(Path(temporary))

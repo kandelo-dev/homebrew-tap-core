@@ -667,8 +667,7 @@ def select_product_input_build_spec(
     # Reuse the protected private-authority derivation so a manifest with a
     # colliding selector or contradictory role cannot reach command planning.
     _manifest_private_input_authority(manifest)
-    packages = []
-    seen_packages: set[str] = set()
+    package_selectors: dict[str, dict[str, set[str]]] = {}
     for index, value in enumerate(
         _sequence(manifest["software"]["package"], "product build packages")
     ):
@@ -680,11 +679,6 @@ def select_product_input_build_spec(
         )
         package = _exact(candidate, keys, f"product build package {index}")
         name = _stable_id(package["name"], f"product build package {index} name")
-        if name in seen_packages:
-            raise ProductInputResolutionError(
-                "product build packages repeat a package recipe"
-            )
-        seen_packages.add(name)
         outputs = sorted(
             _stable_id(item, f"product build package {name} output")
             for item in _sequence(
@@ -704,10 +698,19 @@ def select_product_input_build_spec(
             raise ProductInputResolutionError(
                 "product build package selectors are not duplicate-free"
             )
-        packages.append(
-            {"name": name, "outputs": outputs, "source_roles": source_roles}
+        selectors = package_selectors.setdefault(
+            name, {"outputs": set(), "source_roles": set()}
         )
-    packages.sort(key=lambda item: item["name"])
+        selectors["outputs"].update(outputs)
+        selectors["source_roles"].update(source_roles)
+    packages = [
+        {
+            "name": name,
+            "outputs": sorted(selectors["outputs"]),
+            "source_roles": sorted(selectors["source_roles"]),
+        }
+        for name, selectors in sorted(package_selectors.items())
+    ]
 
     archives = []
     for index, value in enumerate(
