@@ -1105,7 +1105,6 @@ def _checked_candidate(
     verification_locators: Mapping[str, Mapping[str, str]],
     verification_tests: tuple[VerificationTestDefinitionV1, ...],
     tap_plan_repository: str,
-    tap_source: Mapping[str, str],
     allow_unready: bool = False,
 ) -> tuple[CandidateFactV1, Mapping[str, Any]] | None:
     contract_sha256 = formula_plan.get("contract_sha256")
@@ -1223,11 +1222,6 @@ def _checked_candidate(
                 for key in ("repository", "commit", "tree")
             }
             != source
-            or {
-                key: custody_sources.get("tap", {}).get(key)
-                for key in ("repository", "commit", "tree")
-            }
-            != tap_source
         ):
             raise ProductInputResolutionError("candidate source custody is stale for this request")
     else:
@@ -1352,7 +1346,6 @@ def selected_product_formula_readiness(
                 verification_locators=verification_locators,
                 verification_tests=verification_tests,
                 tap_plan_repository=tap_plan["tap_source"]["repository"],
-                tap_source=tap_plan["tap_source"],
                 allow_unready=True,
             )
             is not None
@@ -1545,7 +1538,6 @@ def resolve_product_inputs(
             verification_locators=verification_locators,
             verification_tests=verification_tests,
             tap_plan_repository=tap_plan["tap_source"]["repository"],
-            tap_source=tap_plan["tap_source"],
         )
 
     product_index = _unique_index(product_artifacts, lambda item: item.product_id, "product artifacts")
