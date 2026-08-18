@@ -67,6 +67,7 @@ from .handoff import (
     validate_handoff,
 )
 from .oci import (
+    CANONICAL_TAG_PREFIX,
     FetchedOciRecordV1,
     OciPublicationError,
     PublishedRecordLocatorV1,
@@ -1856,6 +1857,7 @@ def _canonical_progress(
     locators = list_public_record_locators(
         repository,
         transport=transport,
+        tag_prefix=CANONICAL_TAG_PREFIX,
         max_records=4096,
     )
     if not any(locator["digest"] == expected.locator.digest for locator in locators):
