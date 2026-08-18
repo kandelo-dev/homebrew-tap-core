@@ -1705,6 +1705,7 @@ def plan_formula_metadata_batch(
     allowed_paths: set[str] = set()
     expected_files: dict[str, str | None] = {}
     files: dict[str, bytes] = {}
+    formula_sidecars: dict[str, dict[str, Any]] = {}
     for patch, update in checked_members:
         member_metadata = patch.files.get(metadata_path)
         if not isinstance(member_metadata, bytes):
@@ -1732,7 +1733,71 @@ def plan_formula_metadata_batch(
             raise TapMetadataError(
                 "Formula metadata batch member top-index row is absent or duplicated"
             )
-        packages[package_indexes[update.formula]] = dict(member_packages[0])
+
+        sidecar_path = f"Kandelo/formula/{update.formula}.json"
+        member_sidecar_bytes = patch.files.get(sidecar_path)
+        if not isinstance(member_sidecar_bytes, bytes):
+            raise TapMetadataError("Formula metadata batch member has no sidecar")
+        try:
+            member_sidecar = _mapping(
+                json.loads(member_sidecar_bytes.decode("utf-8", errors="strict")),
+                "Formula metadata batch member sidecar",
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            raise TapMetadataError(
+                f"Formula metadata batch member sidecar is invalid: {error}"
+            ) from error
+        member_bottles = [
+            dict(_mapping(item, "Formula metadata batch member bottle"))
+            for item in _sequence(
+                member_sidecar.get("bottles"),
+                "Formula metadata batch member bottles",
+            )
+        ]
+        member_matches = [
+            bottle
+            for bottle in member_bottles
+            if bottle.get("arch") == update.architecture
+        ]
+        if len(member_matches) != 1:
+            raise TapMetadataError(
+                "Formula metadata batch member architecture is absent or duplicated"
+            )
+        combined_sidecar = formula_sidecars.get(update.formula)
+        if combined_sidecar is None:
+            formula_sidecars[update.formula] = {
+                **dict(member_sidecar),
+                "bottles": member_bottles,
+            }
+        else:
+            member_identity = {
+                key: value for key, value in member_sidecar.items() if key != "bottles"
+            }
+            combined_identity = {
+                key: value for key, value in combined_sidecar.items() if key != "bottles"
+            }
+            if member_identity != combined_identity:
+                raise TapMetadataError(
+                    "Formula metadata batch architectures use different sidecars"
+                )
+            combined_bottles = [
+                dict(_mapping(item, "Formula metadata batch combined bottle"))
+                for item in _sequence(
+                    combined_sidecar.get("bottles"),
+                    "Formula metadata batch combined bottles",
+                )
+            ]
+            combined_matches = [
+                index
+                for index, bottle in enumerate(combined_bottles)
+                if bottle.get("arch") == update.architecture
+            ]
+            if len(combined_matches) != 1:
+                raise TapMetadataError(
+                    "Formula metadata batch combined architecture is absent or duplicated"
+                )
+            combined_bottles[combined_matches[0]] = member_matches[0]
+            combined_sidecar["bottles"] = combined_bottles
 
         for path in patch.allowed_paths:
             allowed_paths.add(path)
@@ -1741,11 +1806,56 @@ def plan_formula_metadata_batch(
                 raise TapMetadataError("Formula metadata batch CAS inputs conflict")
             expected_files[path] = expected
         for path, body in patch.files.items():
-            if path == metadata_path:
+            if path in {
+                metadata_path,
+                f"Formula/{update.formula}.rb",
+                sidecar_path,
+            }:
                 continue
             if path in files:
                 raise TapMetadataError("Formula metadata batch output paths conflict")
             files[path] = body
+
+    for formula, sidecar in formula_sidecars.items():
+        bottles = [
+            dict(_mapping(item, "Formula metadata batch final bottle"))
+            for item in _sequence(
+                sidecar.get("bottles"),
+                "Formula metadata batch final bottles",
+            )
+        ]
+        bottles.sort(key=lambda item: str(item["arch"]))
+        sidecar["bottles"] = bottles
+        roots = {
+            str(bottle["url"]).rsplit("/blobs/sha256:", 1)[0]
+            for bottle in bottles
+            if bottle.get("status") == "success"
+            and "/blobs/sha256:" in str(bottle.get("url"))
+        }
+        if len(roots) != 1:
+            raise TapMetadataError(
+                "Formula metadata batch architectures use different canonical roots"
+            )
+        formula_path = f"Formula/{formula}.rb"
+        normalized = normalize_formula_source(
+            _read_regular(
+                root / formula_path,
+                f"metadata batch Formula {formula}",
+                MAX_METADATA_BYTES,
+            )
+        )
+        files[formula_path] = _compose_formula_bottles(
+            normalized,
+            root_url=roots.pop(),
+            rebuild=int(sidecar["bottle_rebuild"]),
+            bottles=bottles,
+        )
+        files[f"Kandelo/formula/{formula}.json"] = _pretty_json_bytes(sidecar)
+        projected = {
+            key: sidecar[key] for key in PACKAGE_KEYS if key != "formula_metadata"
+        }
+        projected["formula_metadata"] = f"Kandelo/formula/{formula}.json"
+        packages[package_indexes[formula]] = projected
 
     metadata["packages"] = packages
     files[metadata_path] = _pretty_json_bytes(metadata)
