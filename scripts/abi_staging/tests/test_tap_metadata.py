@@ -38,6 +38,7 @@ from scripts.abi_staging.tap_metadata import (
     load_abi_state,
     load_promotion_activation,
     load_promotion_policy,
+    managed_abi_activation_document,
 )
 
 
@@ -401,6 +402,39 @@ class TapMetadataTests(unittest.TestCase):
             path.write_bytes(canonical_bytes(changed))
             with self.subTest(mutate=mutate), self.assertRaises(TapMetadataError):
                 load_abi_state(path)
+
+    def test_managed_activation_document_is_plain_canonical_data(self) -> None:
+        path = self.root / "Kandelo/abi-state.json"
+        expected = {
+            "abi_history_record_digest": "c" * 64,
+            "merge_commit": "4" * 40,
+            "merged_pull_request": {
+                "head": "3" * 40,
+                "merge_commit": "4" * 40,
+                "number": 19,
+                "repository": "Automattic/kandelo",
+            },
+            "prior_abi": PRIOR_ABI,
+            "prior_branch": f"abi/{PRIOR_ABI}",
+            "request_digest": "d" * 64,
+        }
+        path.write_bytes(
+            canonical_bytes(
+                {
+                    "activation": expected,
+                    "current_abi": SOURCE_ABI,
+                    "current_snapshot_sha256": DIGEST,
+                    "kind": "kandelo-homebrew-abi-state",
+                    "schema": 1,
+                }
+            )
+        )
+
+        document = managed_abi_activation_document(load_abi_state(path).activation)
+
+        self.assertEqual(document, expected)
+        self.assertIsInstance(document["merged_pull_request"], dict)
+        canonical_sha256(document)
 
     def test_rejects_current_abi_or_active_sidecar_drift(self) -> None:
         metadata_path = self.root / "Kandelo/metadata.json"
