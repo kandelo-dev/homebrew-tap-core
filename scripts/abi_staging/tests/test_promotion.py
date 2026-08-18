@@ -430,8 +430,8 @@ class PromotionTests(unittest.TestCase):
         ]
         return load_bottle_contract(canonical_bytes(value))
 
-    def _source_plan(self) -> OciRecordPlanV1:
-        custody = self.root / "custody"
+    def _source_plan(self, custody_name: str = "custody") -> OciRecordPlanV1:
+        custody = self.root / custody_name
         _write_custody(custody)
         manifest_path = custody / "manifest.json"
         manifest = json.loads(manifest_path.read_bytes())
@@ -930,6 +930,63 @@ class PromotionTests(unittest.TestCase):
             (self.verification.digest.removeprefix("sha256:"),),
         )
         self.assertEqual(decision.candidate_binding_digest, self.candidate_digest)
+
+    def test_exact_candidate_from_intermediate_tap_commit_is_eligible(self) -> None:
+        original_tap_source = copy.deepcopy(self.tap_plan["tap_source"])
+        self.tap_plan["tap_source"] = {
+            **original_tap_source,
+            "commit": "8" * 40,
+            "tree": "9" * 40,
+        }
+        try:
+            intermediate_source_plan = self._source_plan("intermediate-custody")
+        finally:
+            self.tap_plan["tap_source"] = original_tap_source
+        source_locator = publish_record(
+            intermediate_source_plan,
+            transport=self.transport,
+            expected_source_repository=SOURCE_ASSOCIATION,
+        )
+        intermediate_source = fetch_public_record(
+            _locator(source_locator),
+            transport=self.transport,
+            expected_artifact_type=SOURCE_CUSTODY_MANIFEST_MEDIA_TYPE,
+            required_layer_roles=tuple(
+                layer.role for layer in intermediate_source_plan.layers
+            ),
+        )
+        candidate_record = self._candidate_record()
+        source_component = next(
+            item["artifact"]
+            for item in candidate_record["candidate"]["normalized_components"]
+            if item["id"] == "source-custody"
+        )
+        source_component.update(
+            {
+                "sha256": intermediate_source.digest.removeprefix("sha256:"),
+                "bytes": len(intermediate_source.manifest),
+                "immutable_reference": intermediate_source.immutable_reference,
+            }
+        )
+        candidate_record["candidate"]["source_custody_sha256"] = (
+            intermediate_source.digest.removeprefix("sha256:")
+        )
+        candidate = _fetched_from_plan(self._candidate_plan(candidate_record))
+        verification = self._verification_for_candidate_digest(
+            candidate.digest.removeprefix("sha256:")
+        )
+
+        decision = self._evaluate(
+            candidate=candidate,
+            source_custody=intermediate_source,
+            verification_receipts=(verification,),
+        )
+
+        self.assertEqual(decision.eligibility, "eligible")
+        self.assertEqual(
+            decision.source_custody_digest,
+            intermediate_source.digest.removeprefix("sha256:"),
+        )
 
     def test_exact_historical_candidate_reuse_is_eligible_and_keeps_provenance(self) -> None:
         request, request_digest, tap_plan, _record, reuse = self._new_request_reuse()
