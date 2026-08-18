@@ -1740,6 +1740,7 @@ def _select_current_candidate_fact(
 def _selected_verification_receipts(
     inventory: Any,
     *,
+    request_sha256: str,
     subject: str,
     candidate_record_sha256: str,
     verification_tests: tuple[Any, ...],
@@ -1751,7 +1752,8 @@ def _selected_verification_receipts(
             matches = [
                 fact
                 for fact in inventory.records.verifications
-                if fact.subject == subject
+                if fact.request_sha256 == request_sha256
+                and fact.subject == subject
                 and fact.candidate_record_sha256 == candidate_record_sha256
                 and fact.test_definition_sha256 == definition.sha256
                 and fact.host == host
@@ -2238,6 +2240,7 @@ def _collect_active_promotion_inputs(
             )
         receipts = _selected_verification_receipts(
             inventory,
+            request_sha256=request_sha256,
             subject=subject,
             candidate_record_sha256=fact.record_sha256,
             verification_tests=verification_tests,

@@ -1311,8 +1311,6 @@ def evaluate_promotion(
         )
     )
     candidate_digest = candidate.digest.removeprefix("sha256:")
-    candidate_request_digest = candidate_record["common"]["request_sha256"]
-    candidate_source = candidate_record["common"]["source"]
     binding_digest = candidate_digest
     reuse_record = None
     if candidate_reuse is not None:
@@ -1338,8 +1336,8 @@ def evaluate_promotion(
     for receipt in verification_receipts:
         digest, guard, identity = _verification_receipt(
             receipt,
-            request_digest=candidate_request_digest,
-            request_source=candidate_source,
+            request_digest=request_digest,
+            request_source=request_source,
             candidate_digest=candidate_digest,
             bottle=bottle,
             expected_authority=expected_verification,
@@ -1381,21 +1379,11 @@ def evaluate_promotion(
             raise PromotionError(
                 "candidate reuse cannot acquire a new override for old bytes"
             )
-        expected_reuse_receipts = [
-            {
-                "record_sha256": receipt.digest.removeprefix("sha256:"),
-                "immutable_reference": receipt.immutable_reference,
-            }
-            for receipt in sorted(
-                verification_receipts,
-                key=lambda item: item.digest.removeprefix("sha256:"),
-            )
-        ]
-        if (
-            failed_guards
-            or reuse_record["candidate_reuse"]["qualifying_receipts"]
-            != expected_reuse_receipts
-        ):
+        # The reuse record preserves the receipts that qualified the original
+        # candidate. Promotion is qualified independently by receipts issued
+        # for the current request, so the two immutable receipt sets must not
+        # be conflated.
+        if failed_guards:
             raise PromotionError(
                 "candidate reuse differs from its exact qualifying receipts"
             )
@@ -2371,10 +2359,6 @@ def validate_promotion_candidate_binding(
             "bottle_contract_sha256": formula["bottle_contract_sha256"],
         }
         or reuse["original_producer"] != payload["producer"]
-        or [
-            item["record_sha256"] for item in reuse["qualifying_receipts"]
-        ]
-        != list(decision.qualifying_receipts)
         or decision.override_receipts
     ):
         raise PromotionError("candidate reuse binding differs from promotion decision")

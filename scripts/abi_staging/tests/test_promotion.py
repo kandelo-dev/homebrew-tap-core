@@ -259,6 +259,52 @@ class CandidateSelectionTests(unittest.TestCase):
         )
         self.assertIsNone(selected)
 
+    def test_verification_selection_uses_the_current_request_receipt(self) -> None:
+        subject = exact_formula_subject("bash", ARCHITECTURE)
+        candidate_digest = "c" * 64
+        test_digest = "d" * 64
+        historical = SimpleNamespace(
+            request_sha256="a" * 64,
+            subject=subject,
+            candidate_record_sha256=candidate_digest,
+            test_definition_sha256=test_digest,
+            host="build",
+            outcome="success",
+            attempt_ordinal=0,
+            completed_at="2026-08-01T00:00:00Z",
+            record_sha256="1" * 64,
+        )
+        current = SimpleNamespace(
+            **{
+                **vars(historical),
+                "request_sha256": "b" * 64,
+                "record_sha256": "2" * 64,
+            }
+        )
+        inventory = SimpleNamespace(
+            records=SimpleNamespace(verifications=(historical, current)),
+            verification_locators={
+                historical.record_sha256: {"digest": "sha256:" + "1" * 64},
+                current.record_sha256: {"digest": "sha256:" + "2" * 64},
+            },
+        )
+        fetched = object()
+
+        with patch.object(cli_module, "fetch_public_record", return_value=fetched) as fetch:
+            selected = cli_module._selected_verification_receipts(
+                inventory,
+                request_sha256=current.request_sha256,
+                subject=subject,
+                candidate_record_sha256=candidate_digest,
+                verification_tests=(
+                    SimpleNamespace(sha256=test_digest, hosts=("build",)),
+                ),
+                transport=object(),
+            )
+
+        self.assertEqual(selected, (fetched,))
+        self.assertEqual(fetch.call_args.args[0], inventory.verification_locators[current.record_sha256])
+
 
 class PromotionTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -749,11 +795,21 @@ class PromotionTests(unittest.TestCase):
         )
 
     def _verification_for_candidate_digest(
-        self, candidate_digest: str
+        self,
+        candidate_digest: str,
+        *,
+        request: dict[str, object] | None = None,
+        request_digest: str | None = None,
     ) -> FetchedOciRecordV1:
         receipt_record = self._verification_record(outcome="success")
         receipt_record["common"]["subject"]["identity"] = candidate_digest
         receipt_record["verification"]["candidate_record_sha256"] = candidate_digest
+        if request is not None:
+            receipt_record["common"]["request_sha256"] = request_digest
+            receipt_record["common"]["source"] = copy.deepcopy(
+                request["build_source"]
+            )
+            validate_verification_receipt_record(receipt_record)
         receipt_body = canonical_bytes(receipt_record)
         receipt_plan = self._verification_plan(outcome="success")
         receipt_plan = replace(
@@ -990,6 +1046,11 @@ class PromotionTests(unittest.TestCase):
 
     def test_exact_historical_candidate_reuse_is_eligible_and_keeps_provenance(self) -> None:
         request, request_digest, tap_plan, _record, reuse = self._new_request_reuse()
+        current_verification = self._verification_for_candidate_digest(
+            self.candidate_digest,
+            request=request,
+            request_digest=request_digest,
+        )
         decision = self._evaluate(
             request=request,
             request_digest=request_digest,
@@ -1000,6 +1061,7 @@ class PromotionTests(unittest.TestCase):
             tap_plan=tap_plan,
             tap_plan_digest=canonical_sha256(tap_plan),
             candidate_reuse=reuse,
+            verification_receipts=(current_verification,),
         )
 
         self.assertEqual(decision.eligibility, "eligible")
@@ -1011,7 +1073,7 @@ class PromotionTests(unittest.TestCase):
         )
         self.assertEqual(
             decision.qualifying_receipts,
-            (self.verification.digest.removeprefix("sha256:"),),
+            (current_verification.digest.removeprefix("sha256:"),),
         )
         plan = build_canonical_bottle_plan(
             decision,
@@ -1143,6 +1205,11 @@ class PromotionTests(unittest.TestCase):
 
     def test_separated_writer_revalidates_the_reuse_locator(self) -> None:
         request, request_digest, tap_plan, _record, reuse = self._new_request_reuse()
+        current_verification = self._verification_for_candidate_digest(
+            self.candidate_digest,
+            request=request,
+            request_digest=request_digest,
+        )
         decision = self._evaluate(
             request=request,
             request_digest=request_digest,
@@ -1153,6 +1220,7 @@ class PromotionTests(unittest.TestCase):
             tap_plan=tap_plan,
             tap_plan_digest=canonical_sha256(tap_plan),
             candidate_reuse=reuse,
+            verification_receipts=(current_verification,),
         )
         expected = expected_canonical_publication(
             decision,
