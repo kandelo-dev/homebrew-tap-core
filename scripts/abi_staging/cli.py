@@ -1834,48 +1834,6 @@ def _fetch_candidate_overrides(
     return tuple(selected)
 
 
-def _current_dependency_layers(
-    tap_root: Path, formula_plan: Mapping[str, Any]
-) -> dict[str, dict[str, Any]]:
-    layers: dict[str, dict[str, Any]] = {}
-    for dependency in formula_plan["direct_dependencies"]:
-        subject = exact_formula_subject(
-            dependency["formula"], dependency["architecture"]
-        )
-        sidecar_path = tap_root / f"Kandelo/formula/{dependency['formula']}.json"
-        try:
-            body = sidecar_path.read_bytes()
-            if not 1 <= len(body) <= 32 * 1024 * 1024:
-                raise ValueError("sidecar size is outside its bound")
-            sidecar = json.loads(
-                body.decode("utf-8", errors="strict"),
-                object_pairs_hook=_unique_json_object,
-            )
-            if not isinstance(sidecar, Mapping):
-                raise ValueError("sidecar is not an object")
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
-            raise ReconciliationError(
-                f"promotion dependency metadata is invalid: {error}"
-            ) from error
-        matches = [
-            item
-            for item in sidecar["bottles"]
-            if item.get("arch") == dependency["architecture"]
-            and item.get("status") == "success"
-        ]
-        if len(matches) != 1:
-            raise ReconciliationError(
-                "promotion dependency has no exact selected bottle"
-            )
-        bottle = matches[0]
-        layers[subject] = {
-            "sha256": bottle["sha256"],
-            "bytes": bottle["bytes"],
-            "immutable_reference": bottle["url"],
-        }
-    return layers
-
-
 def _canonical_progress(
     decision: Any,
     *,
@@ -2268,9 +2226,11 @@ def _collect_active_promotion_inputs(
             history_protection_snapshot=history_snapshot,
             current_tap_source=tap_source,
             current_formula=current_formulae[subject],
-            current_dependency_layers=_current_dependency_layers(
-                tap_root, current_formulae[subject]
-            ),
+            # Candidate construction and current-request verification already
+            # bind its direct dependency inputs.  Requiring those dependencies
+            # to be selected in tap metadata creates a circular promotion gate
+            # for a new ABI without strengthening the candidate identity.
+            current_dependency_layers=None,
             policy=promotion_policy,
             expected_request_policy=request["issuance"],
             verification_tests=verification_tests,

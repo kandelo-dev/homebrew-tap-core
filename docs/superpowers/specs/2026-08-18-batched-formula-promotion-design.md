@@ -2,29 +2,31 @@
 
 ## Goal
 
-Promote an already-built ABI bottle graph in dependency-level waves without
-repeating public-inventory planning once per Formula.
+Promote an already-built, verified ABI bottle graph without repeating
+public-inventory planning or requiring its dependencies to be selected in tap
+metadata first.
 
 ## Preserved invariants
 
 Each promoted Formula must still bind the exact target ABI, normalized Formula
 contract, immutable candidate record and bottle layer, current-request
 verification receipts, actual producer source custody, canonical anonymous
-readback, and protected ABI history barrier. Dependency ordering remains
-strict: a dependant is not eligible until every direct dependency has a
-canonical admission.
+readback, and protected ABI history barrier. Promotion does not compare those
+inputs to the currently selected dependency bottles: candidate construction
+and verification already bind the dependencies that were actually used.
 
 ## Dependency readiness
 
-An absent canonical dependency is local unavailability, not a global planning
-error. Promotion planning omits that dependant from the current subject set and
-continues with dependency roots whose exact candidates are ready. A later wave
-reconsiders the dependant after its dependencies are admitted.
+Current tap dependency selection is not a promotion input. A Formula can be
+promoted as soon as its own exact candidate and verification are present. A
+missing exact candidate or verification receipt still blocks that Formula,
+but missing dependency sidecars or admissions do not create a circular
+new-ABI gate.
 
 ## Metadata batching
 
-For each dependency level, canonical bottle manifests are published in
-parallel. The protected metadata writer then validates every selected
+Canonical bottle manifests are published in parallel. The protected metadata
+writer then validates every selected
 per-Formula update against the same tap base, composes the shared
 `Kandelo/metadata.json` projection once, and commits the union of Formula,
 sidecar, link-manifest, and top-index changes atomically. The batch document
@@ -45,8 +47,9 @@ commits from invalidating bottle contents.
 
 ## Validation
 
-Tests cover dependency deferral, atomic multi-Formula metadata composition,
-conflicting-path rejection, current-main compare-and-swap failure, per-member
-admission readback, and product resolution across metadata-only tap movement.
+Tests cover dependency-selection independence, atomic multi-Formula metadata
+composition, conflicting-path rejection, current-main compare-and-swap
+failure, per-member admission readback, and product resolution across
+metadata-only tap movement.
 The hosted ABI 43 request must continue to schedule zero builds and must
 advance canonical publication and admissions before Pages composition begins.
