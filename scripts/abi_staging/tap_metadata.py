@@ -569,6 +569,31 @@ def load_abi_state(path: Path) -> AbiStateV1:
     )
 
 
+def require_current_abi_authority(
+    state: AbiStateV1,
+    *,
+    target_abi: int,
+    target_snapshot_sha256: str,
+    abi_history_record_digest: str,
+) -> ManagedAbiActivationV1:
+    """Return the ABI transition authority shared by later Formula waves."""
+
+    if not isinstance(state, AbiStateV1):
+        raise TapMetadataError("current ABI state is not protected schema 1")
+    target = _positive_integer(target_abi, "target ABI")
+    snapshot = _digest(target_snapshot_sha256, "target ABI snapshot")
+    history = _digest(abi_history_record_digest, "ABI history record")
+    activation = state.activation
+    if (
+        state.current_abi != target
+        or state.current_snapshot_sha256 != snapshot
+        or activation is None
+        or activation.abi_history_record_digest != history
+    ):
+        raise TapMetadataError("current tap ABI state differs from its transition authority")
+    return activation
+
+
 def _formula_bottle_projection(path: Path) -> dict[str, Any]:
     source = _read_regular(path, f"Formula {path.name}", MAX_METADATA_BYTES)
     name = _stable_id(path.stem, f"Formula name {path.name}")
