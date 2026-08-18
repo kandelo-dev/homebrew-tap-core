@@ -141,6 +141,23 @@ def _digest(value: Any, field: str) -> str:
     return value
 
 
+def bottle_metadata_formula_key(tap_repository: Any, formula: Any) -> str:
+    """Return Homebrew's fully qualified bottle-JSON key for one Formula."""
+
+    if (
+        not isinstance(tap_repository, str)
+        or tap_repository != tap_repository.lower()
+        or re.fullmatch(
+            r"[a-z0-9._-]+/homebrew-[a-z0-9._-]+", tap_repository
+        )
+        is None
+    ):
+        raise PlanError("bottle metadata tap repository is invalid")
+    checked_formula = _stable_id(formula, "bottle metadata Formula")
+    owner, repository = tap_repository.split("/", 1)
+    return f"{owner}/{repository.removeprefix('homebrew-')}/{checked_formula}"
+
+
 def _git_sha(value: Any, field: str) -> str:
     if not isinstance(value, str) or GIT_SHA.fullmatch(value) is None:
         raise PlanError(f"{field} is not a full lowercase Git SHA")

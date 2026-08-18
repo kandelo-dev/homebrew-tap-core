@@ -909,7 +909,7 @@ class TapMetadataTests(unittest.TestCase):
             f"homebrew-tap-core-abi-{SUCCESSOR_ABI}-candidates/{formula}"
         )
         candidate_metadata = {
-            formula: {
+            f"kandelo-dev/tap-core/{formula}": {
                 "formula": {
                     "name": formula,
                     "path": (
@@ -1438,7 +1438,7 @@ class TapMetadataTests(unittest.TestCase):
         history, snapshot, preactivation, current = self._activate_fixture()
         prepared = self._prepared_admission(preactivation=preactivation)
         metadata = copy.deepcopy(dict(prepared.candidate_bottle_metadata))
-        metadata["bash"]["bottle"]["cellar"] = "any"
+        metadata["kandelo-dev/tap-core/bash"]["bottle"]["cellar"] = "any"
         prepared = replace(prepared, candidate_bottle_metadata=metadata)
 
         result = self._prepare_formula(
