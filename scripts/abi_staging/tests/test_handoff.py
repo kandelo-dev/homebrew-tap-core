@@ -455,6 +455,30 @@ class BuildHandoffTests(unittest.TestCase):
                 _git(prepared_wasm64, "status", "--short", capture=True), ""
             )
 
+    def test_prepares_first_candidate_dependency_before_formula_promotion(self) -> None:
+        source = (
+            'class Dash < Formula\n'
+            '  desc "fixture"\n'
+            '  url "https://example.test/dash.tar.gz"\n'
+            f'  sha256 "{"1" * 64}"\n'
+            'end\n'
+        ).encode("utf-8")
+        digest = "2" * 64
+
+        prepared = handoff_module._candidate_dependency_formula_source(
+            source,
+            root_url=(
+                "https://ghcr.io/v2/"
+                "kandelo-dev/homebrew-tap-core-abi-43-candidates"
+            ),
+            architecture="wasm32",
+            digest=digest,
+        )
+
+        self.assertEqual(normalize_formula_source(prepared), source)
+        self.assertIn(b"  bottle do\n", prepared)
+        self.assertIn(digest.encode("ascii"), prepared)
+
     def test_git_identity_accepts_an_exact_protected_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "source"

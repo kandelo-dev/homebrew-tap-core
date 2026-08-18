@@ -1850,8 +1850,39 @@ def _candidate_dependency_formula_source(
         ) from error
     lines = text.splitlines(keepends=True)
     starts = [index for index, line in enumerate(lines) if line == "  bottle do\n"]
-    if len(starts) != 1:
-        raise HandoffError("dependency Formula must contain one canonical bottle block")
+    if len(starts) > 1:
+        raise HandoffError("dependency Formula must contain at most one bottle block")
+    if not starts:
+        if (
+            architecture not in {"wasm32", "wasm64"}
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            or not lines
+            or lines[-1] != "end\n"
+        ):
+            raise HandoffError("dependency Formula cannot accept a candidate bottle block")
+        insertion = len(lines) - 1
+        block = [] if insertion == 0 or lines[insertion - 1] == "\n" else ["\n"]
+        block.extend(
+            [
+                "  bottle do\n",
+                f'    root_url "{root_url}"\n',
+                "    sha256 cellar: :any_skip_relocation, "
+                f'{architecture}_kandelo: "{digest}"\n',
+                "  end\n",
+            ]
+        )
+        lines[insertion:insertion] = block
+        prepared = "".join(lines).encode("utf-8")
+        try:
+            if normalize_formula_source(prepared) != source_normalized:
+                raise HandoffError(
+                    "candidate dependency preparation changed Formula recipe bytes"
+                )
+        except FormulaInventoryError as error:
+            raise HandoffError(
+                f"dependency Formula bottle block is invalid: {error}"
+            ) from error
+        return prepared
     start = starts[0]
     end = next(
         (index for index in range(start + 1, len(lines)) if lines[index] == "  end\n"),
