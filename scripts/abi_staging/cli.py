@@ -2983,17 +2983,27 @@ if [ ! -d "$sysroot" ] || [ -L "$sysroot" ]; then
   exit 2
 fi
 source_sysroot="$PWD/sysroot"
-if [ -e "$source_sysroot" ] || [ -L "$source_sysroot" ]; then
-  echo "candidate source already contains a sysroot projection" >&2
+source_target="$PWD/target"
+if [ ! -d "$cargo_target" ] || [ -L "$cargo_target" ]; then
+  echo "private Cargo target is not one real directory" >&2
   exit 2
 fi
-cleanup_source_sysroot() {
+if [ -e "$source_sysroot" ] || [ -L "$source_sysroot" ] || \
+   [ -e "$source_target" ] || [ -L "$source_target" ]; then
+  echo "candidate source already contains a build-root projection" >&2
+  exit 2
+fi
+cleanup_source_projections() {
   if [ -L "$source_sysroot" ] && [ "$(readlink "$source_sysroot")" = "$sysroot" ]; then
     rm "$source_sysroot"
   fi
+  if [ -L "$source_target" ] && [ "$(readlink "$source_target")" = "$cargo_target" ]; then
+    rm "$source_target"
+  fi
 }
-trap cleanup_source_sysroot EXIT
+trap cleanup_source_projections EXIT
 ln -s "$sysroot" "$source_sysroot"
+ln -s "$cargo_target" "$source_target"
 host_target="$(rustc -vV | awk '/^host/ {print $2}')"
 cargo run -p xtask --target "$host_target" --quiet -- \
   build-deps "--arch=$architecture" --force-source-build resolve "$package"
