@@ -47,6 +47,7 @@ from .oci import (
 from .override import OVERRIDE_RECEIPT_MEDIA_TYPE
 from .plan import (
     PlanError,
+    bottle_metadata_formula_key,
     exact_formula_subject,
     parse_formula_subject,
     validate_tap_plan,
@@ -2630,13 +2631,14 @@ def prepare_formula_metadata_patch(
     ):
         raise PromotionError("Formula metadata layer escaped its candidate namespace")
 
+    metadata_key = bottle_metadata_formula_key(policy.tap_repository, name)
     metadata = _exact(
         prepared.candidate_bottle_metadata,
-        frozenset({name}),
+        frozenset({metadata_key}),
         "candidate Homebrew bottle metadata",
     )
     entry = _exact(
-        metadata[name],
+        metadata[metadata_key],
         frozenset({"formula", "bottle"}),
         "candidate Homebrew bottle entry",
     )

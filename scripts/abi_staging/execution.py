@@ -22,7 +22,7 @@ from .coordination import (
 )
 from .handoff import HandoffError, load_build_run
 from .oci import UrllibOciTransportV1, fetch_public_record
-from .plan import exact_formula_subject
+from .plan import PlanError, bottle_metadata_formula_key, exact_formula_subject
 from .plan import snapshot_tap_source
 from .policy import TapStagingPolicyV1
 from .records import CANDIDATE_RECORD_MEDIA_TYPE, validate_candidate_record
@@ -964,20 +964,6 @@ def _candidate_repository_name(
     return f"ghcr.io/{tap_repository}-abi-{target_abi}-candidates/{formula}"
 
 
-def _bottle_metadata_formula_key(tap_repository: Any, formula: Any) -> str:
-    if (
-        not isinstance(tap_repository, str)
-        or tap_repository != tap_repository.lower()
-        or re.fullmatch(r"[a-z0-9._-]+/homebrew-[a-z0-9._-]+", tap_repository)
-        is None
-        or not isinstance(formula, str)
-        or re.fullmatch(r"[a-z0-9][a-z0-9._-]*", formula) is None
-    ):
-        raise ExecutionError("candidate bottle metadata identity is invalid")
-    owner, repository = tap_repository.split("/", 1)
-    return f"{owner}/{repository.removeprefix('homebrew-')}/{formula}"
-
-
 def _normalized_candidate_bottle_metadata(
     candidate: Mapping[str, Any], metadata: Mapping[str, Any]
 ) -> tuple[dict[str, Any], str, str]:
@@ -987,7 +973,10 @@ def _normalized_candidate_bottle_metadata(
     tap_repository = candidate.get("tap_repository")
     target_abi = candidate.get("target_abi")
     architecture = candidate.get("architecture")
-    formula_key = _bottle_metadata_formula_key(tap_repository, formula)
+    try:
+        formula_key = bottle_metadata_formula_key(tap_repository, formula)
+    except PlanError as error:
+        raise ExecutionError("candidate bottle metadata identity is invalid") from error
     candidate_repository = _candidate_repository_name(
         tap_repository, target_abi, formula
     )
