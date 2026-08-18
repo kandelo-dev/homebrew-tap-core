@@ -138,6 +138,7 @@ from .tap_metadata import (
     load_abi_state,
     load_promotion_activation,
     load_promotion_policy,
+    require_current_abi_authority,
     recover_landed_formula_metadata_commit,
     validate_formula_admission_projection,
     validate_landed_formula_metadata_commit,
@@ -2143,21 +2144,15 @@ def _collect_active_promotion_inputs(
             }
         return planned, details
 
-    activation = state.activation
-    if (
-        state.current_abi != target_abi
-        or state.current_snapshot_sha256 != target_snapshot
-        or activation is None
-        or activation.request_digest != request_sha256
-        or dict(activation.merged_pull_request) != merge
-        or activation.merge_commit != merge["merge_commit"]
-        or activation.prior_abi != target_abi - 1
-        or activation.prior_branch != branch
-        or activation.abi_history_record_digest != history_digest
-    ):
-        raise ReconciliationError(
-            "current tap ABI state differs from exact successor activation"
+    try:
+        activation = require_current_abi_authority(
+            state,
+            target_abi=target_abi,
+            target_snapshot_sha256=target_snapshot,
+            abi_history_record_digest=history_digest,
         )
+    except TapMetadataError as error:
+        raise ReconciliationError(str(error)) from error
     activation_identity = asdict(activation)
     epoch = PromotionEpochV1(
         request_digest=request_sha256,

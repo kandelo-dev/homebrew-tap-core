@@ -1164,6 +1164,51 @@ class TapMetadataTests(unittest.TestCase):
                 current=current,
             )
 
+    def test_formula_update_accepts_a_later_request_for_the_active_abi(self) -> None:
+        history, snapshot, preactivation, current = self._activate_fixture()
+        prepared = self._prepared_admission(preactivation=preactivation)
+        request_digest = "a" * 64
+        head = "b" * 40
+        merged_pull_request = {
+            "repository": "Automattic/kandelo",
+            "number": 23,
+            "head": head,
+            "merge_commit": "c" * 40,
+        }
+        later = replace(
+            prepared,
+            decision=replace(
+                prepared.decision,
+                request_digest=request_digest,
+                merged_pull_request=merged_pull_request,
+            ),
+            request_source={
+                "repository": "Automattic/kandelo",
+                "commit": head,
+                "tree": "d" * 40,
+            },
+            candidate_source={
+                "repository": "Automattic/kandelo",
+                "commit": head,
+                "tree": "d" * 40,
+            },
+            original_producer={
+                "request_sha256": request_digest,
+                "head": head,
+                "run_id": 81,
+            },
+        )
+
+        result = self._prepare_formula(
+            prepared=later,
+            history=history,
+            snapshot=snapshot,
+            current=current,
+        )
+
+        sidecar = json.loads(result.patch.files["Kandelo/formula/bash.json"])
+        self.assertEqual(sidecar["bottles"][0]["built_from"]["kandelo_commit"], head)
+
     def test_formula_update_rejects_an_unexpected_patch_path(self) -> None:
         history, snapshot, preactivation, current = self._activate_fixture()
         prepared = self._prepared_admission(preactivation=preactivation)

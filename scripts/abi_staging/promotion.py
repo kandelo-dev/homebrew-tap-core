@@ -77,6 +77,7 @@ from .tap_metadata import (
     load_abi_state,
     plan_formula_metadata_patch,
     plan_successor_activation_patch,
+    require_current_abi_authority,
 )
 from .verification import (
     VERIFICATION_RECEIPT_MEDIA_TYPE,
@@ -2519,16 +2520,6 @@ def prepare_formula_metadata_patch(
         state = load_abi_state(tap_root / "Kandelo/abi-state.json")
     except (OSError, TapMetadataError) as error:
         raise PromotionError(f"current Formula ABI state is invalid: {error}") from error
-    activation = state.activation
-    if (
-        activation is None
-        or activation.request_digest != prepared.decision.request_digest
-        or dict(activation.merged_pull_request)
-        != _plain(prepared.decision.merged_pull_request)
-        or activation.abi_history_record_digest != history_digest
-    ):
-        raise PromotionError("Formula metadata update differs from ABI activation authority")
-
     formula_value = _exact(
         prepared.candidate_formula,
         frozenset(
@@ -2581,6 +2572,17 @@ def prepare_formula_metadata_patch(
         or contract["formula"]["rebuild"] != rebuild
     ):
         raise PromotionError("prepared bottle contract differs from the candidate Formula")
+    try:
+        require_current_abi_authority(
+            state,
+            target_abi=target_abi,
+            target_snapshot_sha256=contract["target"]["snapshot_sha256"],
+            abi_history_record_digest=history_digest,
+        )
+    except TapMetadataError as error:
+        raise PromotionError(
+            "Formula metadata update differs from current ABI authority"
+        ) from error
     formula_components = [
         component
         for component in contract["formula"]["source_components"]
