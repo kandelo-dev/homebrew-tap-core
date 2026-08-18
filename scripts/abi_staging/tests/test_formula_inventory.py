@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 from pathlib import Path
 import re
 import unittest
@@ -15,6 +16,7 @@ from scripts.abi_staging.formula_inventory import (
     load_formula_inventory,
     normalize_formula_source,
     parse_formula_source,
+    validate_legacy_sidecar,
     validate_formula_probe,
 )
 from scripts.abi_staging.policy import (
@@ -183,6 +185,27 @@ class FormulaInventoryTests(unittest.TestCase):
             sorted(source["role"] for source in by_name["fbdoom"]["sources"]),
             ["primary", "resource:chocolate-doom", "resource:doom-shareware"],
         )
+
+    def test_legacy_sidecar_keeps_unpublished_architecture_pending(self) -> None:
+        parsed = parse_formula_source(
+            "curl",
+            "Formula/curl.rb",
+            (TAP_ROOT / "Formula/curl.rb").read_bytes(),
+            ("wasm32", "wasm64"),
+        )
+        sidecar = json.loads(
+            (TAP_ROOT / "Kandelo/formula/curl.json").read_bytes()
+        )
+
+        validate_legacy_sidecar(parsed, sidecar)
+        pending = next(
+            bottle for bottle in sidecar["bottles"] if bottle["status"] == "pending"
+        )
+        pending["link_manifest"] = (
+            "Kandelo/link/curl-8.11.1-rebuild0-wasm64.json"
+        )
+        with self.assertRaises(FormulaInventoryError):
+            validate_legacy_sidecar(parsed, sidecar)
 
     def test_checked_in_current_fixture_is_canonical_and_repeatable(self) -> None:
         first = generate_formula_inventory(TAP_ROOT)
