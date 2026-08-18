@@ -254,7 +254,7 @@ jobs:
             PLAYWRIGHT_BROWSERS_PATH="$playwright_browsers" \
             "$node_bin" \
               "$GITHUB_WORKSPACE/kandelo-source/apps/browser-demos/node_modules/playwright/cli.js" \
-              install chromium --with-deps
+              install chromium
 
           host_target="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/host-target")"
           [[ "$host_target" =~ ^[A-Za-z0-9_.+-]+$ ]]

@@ -1338,6 +1338,8 @@ module AbiStagingWorkflowCheck
                        realm.fetch("run").include?(
                          'playwright_browsers="$shared_temp/ms-playwright"'
                        ) &&
+                       realm.fetch("run").include?("install chromium") &&
+                       !realm.fetch("run").include?("--with-deps") &&
                        !realm.fetch("run").include?('"$realm_root/package-cache"') &&
                        realm.fetch("run").include?("homebrew-prepare-host-prefix.sh") &&
                        realm.fetch("run").include?(
