@@ -484,7 +484,6 @@ def _candidate_facts(
     tap_plan: Mapping[str, Any],
     policy: PromotionPolicyV1,
     allow_historical_request: bool,
-    historical_tap_source: Mapping[str, str] | None,
 ) -> tuple[dict[str, Any], Mapping[str, Any], dict[str, object], str, str]:
     record, candidate_layers = _validated_fetched_record(
         candidate,
@@ -664,13 +663,6 @@ def _candidate_facts(
     }
     if custody_tap_source.get("repository", "").lower() != policy.tap_repository.lower():
         raise PromotionError("source custody names another protected tap")
-    allowed_tap_sources = [tap_plan["tap_source"]]
-    if historical_tap_source is not None:
-        allowed_tap_sources.append(historical_tap_source)
-    if not allow_historical_request and custody_tap_source not in allowed_tap_sources:
-        raise PromotionError(
-            "source custody differs from the current plan and protected epoch"
-        )
     return record, formula_plan, bottle, contract_digest, custody_digest
 
 
@@ -1313,7 +1305,6 @@ def evaluate_promotion(
             tap_plan=tap_plan,
             policy=policy,
             allow_historical_request=candidate_reuse is not None,
-            historical_tap_source=protected_history_source,
         )
     )
     candidate_digest = candidate.digest.removeprefix("sha256:")
