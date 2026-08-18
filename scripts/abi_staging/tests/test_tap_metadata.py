@@ -1274,6 +1274,49 @@ class TapMetadataTests(unittest.TestCase):
                 item.update.bottle_layer_sha256,
             )
 
+    def test_composes_two_architectures_of_one_formula_into_one_atomic_patch(
+        self,
+    ) -> None:
+        self._enable_wasm64()
+        history, snapshot, preactivation, current = self._activate_fixture()
+        prepared = [
+            self._prepare_formula(
+                prepared=self._prepared_admission(
+                    preactivation=preactivation,
+                    architecture=architecture,
+                    canonical_digest=marker * 64,
+                ),
+                history=history,
+                snapshot=snapshot,
+                current=current,
+            )
+            for architecture, marker in (("wasm32", "5"), ("wasm64", "6"))
+        ]
+
+        batch = tap_metadata_module.plan_formula_metadata_batch(
+            self.root,
+            members=tuple((item.patch, item.update) for item in prepared),
+        )
+
+        sidecar = json.loads(batch.patch.files["Kandelo/formula/bash.json"])
+        selected = {
+            bottle["arch"]: bottle
+            for bottle in sidecar["bottles"]
+            if bottle["arch"] in {"wasm32", "wasm64"}
+        }
+        self.assertEqual(set(selected), {"wasm32", "wasm64"})
+        self.assertEqual(
+            {
+                architecture: bottle["status"]
+                for architecture, bottle in selected.items()
+            },
+            {"wasm32": "success", "wasm64": "success"},
+        )
+        formula = batch.patch.files["Formula/bash.rb"].decode()
+        self.assertIn("wasm32_kandelo", formula)
+        self.assertIn("wasm64_kandelo", formula)
+        tap_metadata_module.validate_formula_metadata_batch(self.root, batch)
+
     def test_formula_update_rejects_canonical_or_candidate_layer_drift(self) -> None:
         history, snapshot, preactivation, current = self._activate_fixture()
         prepared = self._prepared_admission(preactivation=preactivation)
