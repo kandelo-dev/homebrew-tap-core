@@ -1619,13 +1619,17 @@ def plan_formula_metadata_patch(
     metadata = dict(_load_json(root / "Kandelo/metadata.json", "metadata top index"))
     packages = [dict(_mapping(item, "metadata package")) for item in metadata["packages"]]
     package_matches = [index for index, item in enumerate(packages) if item["name"] == name]
-    if len(package_matches) != 1:
-        raise TapMetadataError("metadata top-index Formula is absent or duplicated")
+    if len(package_matches) > 1:
+        raise TapMetadataError("metadata top-index Formula is duplicated")
     projected = {
         key: sidecar[key] for key in PACKAGE_KEYS if key != "formula_metadata"
     }
     projected["formula_metadata"] = f"Kandelo/formula/{name}.json"
-    packages[package_matches[0]] = projected
+    if package_matches:
+        packages[package_matches[0]] = projected
+    else:
+        packages.append(projected)
+        packages.sort(key=lambda item: str(item["name"]))
     metadata["packages"] = packages
     metadata_output = _pretty_json_bytes(metadata)
     outputs = {
