@@ -155,6 +155,48 @@ _RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL = """        child_environment = add_ru
 _STAGING_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL = """        child_environment = add_runner_owned_platform_environment(
             request["environment"], request["platform_root"], config["llvm_bin"]
         )"""
+_RECIPE_RUNNER_NIX_REQUISITES_SIGNATURE = (
+    "def nix_store_requisites(config: dict[str, Any]) -> list[Path]:"
+)
+_STAGING_RECIPE_RUNNER_NIX_REQUISITES_SIGNATURE = """def staging_runtime_paths(config: dict[str, Any]) -> list[Path]:
+    \"\"\"Resolve the exact dev-shell Rust tools projected by the workflow.\"\"\"
+    store = Path("/nix/store")
+    runtime_paths = [
+        config["node_bin"],
+        config["llvm_bin"],
+    ]
+    for name in ("cargo", "rustc"):
+        alias = config["platform_host_root"] / "tools" / "bin" / name
+        try:
+            alias_metadata = alias.lstat()
+        except OSError as error:
+            fail(f"configured {name} alias is unavailable: {error}")
+        if (
+            not stat.S_ISLNK(alias_metadata.st_mode)
+            or alias_metadata.st_uid != 0
+            or alias_metadata.st_gid != 0
+            or alias_metadata.st_nlink != 1
+        ):
+            fail(f"configured {name} alias is not one sealed root-owned link")
+        resolved = canonical_host_projection_source(
+            alias, label=f"configured {name}", directory=False
+        )
+        if (
+            not is_within(resolved, store)
+            or stat.S_IMODE(resolved.lstat().st_mode) & 0o111 == 0
+        ):
+            fail(f"configured {name} left the executable Nix store closure")
+        runtime_paths.append(resolved)
+    return runtime_paths
+
+
+def nix_store_requisites(config: dict[str, Any]) -> list[Path]:"""
+_RECIPE_RUNNER_NIX_RUNTIME_PATHS = (
+    '    runtime_paths = [config["node_bin"], config["llvm_bin"]]'
+)
+_STAGING_RECIPE_RUNNER_NIX_RUNTIME_PATHS = (
+    "    runtime_paths = staging_runtime_paths(config)"
+)
 _RECIPE_RUNNER_PROTECTED_ROOT = (
     'PROTECTED_PUBLISHER_ROOT = Path("/run/kandelo-homebrew-publisher")'
 )
@@ -309,6 +351,7 @@ def _prepare_staging_recipe_runner(*, source: Path, destination: Path) -> Path:
         (_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_SIGNATURE, "platform environment"),
         (_RECIPE_RUNNER_CONFIG_SITE_ENVIRONMENT, "config-site environment"),
         (_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL, "platform environment call"),
+        (_RECIPE_RUNNER_NIX_REQUISITES_SIGNATURE, "Nix runtime closure"),
         (_RECIPE_RUNNER_PROTECTED_ROOT, "protected root"),
         (
             _RECIPE_RUNNER_PROTECTED_ROOT_CONFIG_CHECK,
@@ -317,6 +360,10 @@ def _prepare_staging_recipe_runner(*, source: Path, destination: Path) -> Path:
     ):
         if body.count(marker) != 1:
             raise ExecutionError(f"candidate recipe runner {label} boundary changed")
+    if body.count(_RECIPE_RUNNER_NIX_RUNTIME_PATHS) != 2:
+        raise ExecutionError(
+            "candidate recipe runner Nix runtime selections changed"
+        )
     prepared = body.replace(
         _RECIPE_RUNNER_LIMITS,
         _STAGING_RECIPE_RUNNER_LIMITS,
@@ -332,6 +379,12 @@ def _prepare_staging_recipe_runner(*, source: Path, destination: Path) -> Path:
     ).replace(
         _RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL,
         _STAGING_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL,
+    ).replace(
+        _RECIPE_RUNNER_NIX_REQUISITES_SIGNATURE,
+        _STAGING_RECIPE_RUNNER_NIX_REQUISITES_SIGNATURE,
+    ).replace(
+        _RECIPE_RUNNER_NIX_RUNTIME_PATHS,
+        _STAGING_RECIPE_RUNNER_NIX_RUNTIME_PATHS,
     )
     if destination.exists() or destination.is_symlink():
         raise ExecutionError("protected recipe runner destination already exists")
