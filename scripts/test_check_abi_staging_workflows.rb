@@ -1154,6 +1154,13 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
                     'playwright_seed="$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/ms-playwright"'
     assert_includes realm_source,
                     'node_bin="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/node-bin")"'
+    assert_includes realm_source, 'rustc_bin="$(command -v rustc)"'
+    assert_includes realm_source, 'cargo_bin="$(command -v cargo)"'
+    assert_includes realm_source, 'rustlib/wasm32-unknown-unknown/lib'
+    assert_includes realm_source,
+                    'ln -s "$rustc_bin" "$source_root/tools/bin/rustc"'
+    assert_includes realm_source,
+                    'ln -s "$cargo_bin" "$source_root/tools/bin/cargo"'
     assert_includes realm_source,
                     'host_target="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/host-target")"'
     refute_includes realm_source, "formula_test_packages"
@@ -1370,6 +1377,15 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub("candidate_platform_tools=(", "mutable_platform_tools=(")
+    end
+    assert_reusable_rejected(:candidate, "candidate loses exact Rust toolchain") do |workflow|
+      step = workflow.dig("jobs", "build", "steps").find do |candidate|
+        candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
+      end
+      step["run"] = step.fetch("run").sub(
+        'ln -s "$rustc_bin" "$source_root/tools/bin/rustc"',
+        ':'
+      )
     end
     assert_reusable_rejected(:candidate, "candidate rebuilds the shared realm") do |workflow|
       step = workflow.dig("jobs", "build", "steps").find do |candidate|

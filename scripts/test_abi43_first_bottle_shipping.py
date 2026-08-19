@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -90,11 +92,50 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         self.assertLess(compile_thread, instrument_thread)
         self.assertLess(instrument_thread, execute_thread)
 
-    def test_node_declares_the_native_rust_recipe_toolchain(self) -> None:
+    def test_node_uses_the_exact_shared_realm_rust_toolchain(self) -> None:
         source = self.formula("node")
         self.assertIn('depends_on "cbindgen" => :build', source)
         self.assertIn('depends_on "python@3.13" => :build', source)
-        self.assertIn('depends_on "rust" => :build', source)
+        self.assertNotIn('depends_on "rust" => :build', source)
+
+        realm = (ROOT / ".github/workflows/abi-staging-candidate.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('rustc_bin="$(command -v rustc)"', realm)
+        self.assertIn('cargo_bin="$(command -v cargo)"', realm)
+        self.assertIn('ln -s "$rustc_bin" "$source_root/tools/bin/rustc"', realm)
+        self.assertIn('ln -s "$cargo_bin" "$source_root/tools/bin/cargo"', realm)
+        self.assertIn('rustlib/wasm32-unknown-unknown/lib', realm)
+
+    def test_exact_dev_shell_rust_toolchain_compiles_the_node_wasm_target(self) -> None:
+        rustc = Path(shutil.which("rustc") or "")
+        cargo = Path(shutil.which("cargo") or "")
+        self.assertTrue(str(rustc).startswith("/nix/store/"))
+        self.assertTrue(str(cargo).startswith("/nix/store/"))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tools = root / "tools/bin"
+            tools.mkdir(parents=True)
+            os.symlink(rustc, tools / "rustc")
+            os.symlink(cargo, tools / "cargo")
+            source = root / "probe.rs"
+            source.write_text('pub extern "C" fn probe() {}\n', encoding="utf-8")
+            subprocess.run(
+                [
+                    str(tools / "rustc"),
+                    "--crate-type",
+                    "staticlib",
+                    "--target=wasm32-unknown-unknown",
+                    "-o",
+                    str(root / "probe.a"),
+                    str(source),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue((root / "probe.a").is_file())
 
     def test_node_build_telemetry_allows_an_isolated_host_without_proc(self) -> None:
         patch_file = (

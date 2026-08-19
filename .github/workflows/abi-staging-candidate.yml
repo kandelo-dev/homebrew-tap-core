@@ -230,7 +230,29 @@ jobs:
               "WASM_POSIX_BINARY_CACHE_ROOT=$package_cache" \
               "PLAYWRIGHT_BROWSERS_PATH=$playwright_browsers" \
               "KANDELO_ABI_STAGING_ARCHITECTURE=$KANDELO_ABI_STAGING_ARCHITECTURE" \
-              true
+              "KANDELO_ABI_STAGING_PLATFORM_ROOT=$GITHUB_WORKSPACE/kandelo-source" \
+              # The single-quoted program is intentionally expanded by the
+              # nested exact dev shell, not by this outer workflow shell.
+              # shellcheck disable=SC2016
+              bash -euo pipefail -c '
+                source_root="$KANDELO_ABI_STAGING_PLATFORM_ROOT"
+                rustc_bin="$(command -v rustc)"
+                cargo_bin="$(command -v cargo)"
+                case "$rustc_bin:$cargo_bin" in
+                  /nix/store/*/bin/rustc:/nix/store/*/bin/cargo) ;;
+                  *) echo "candidate realm resolved an undeclared Rust toolchain" >&2; exit 2 ;;
+                esac
+                rust_sysroot="$("$rustc_bin" --print sysroot)"
+                case "$rust_sysroot" in
+                  /nix/store/*) ;;
+                  *) echo "candidate realm resolved an undeclared Rust sysroot" >&2; exit 2 ;;
+                esac
+                test -d "$rust_sysroot/lib/rustlib/wasm32-unknown-unknown/lib"
+                test ! -e "$source_root/tools/bin/rustc" && test ! -L "$source_root/tools/bin/rustc"
+                test ! -e "$source_root/tools/bin/cargo" && test ! -L "$source_root/tools/bin/cargo"
+                ln -s "$rustc_bin" "$source_root/tools/bin/rustc"
+                ln -s "$cargo_bin" "$source_root/tools/bin/cargo"
+              '
 
           node_bin="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/node-bin")"
           case "$node_bin" in
@@ -298,6 +320,16 @@ jobs:
             test "$(/usr/bin/stat -c '%u:%g:%a:%h' "$tool")" = "0:0:555:1"
             test "$(/usr/bin/sha256sum "$tool" | /usr/bin/awk '{print $1}')" = \
               "$tool_sha256"
+          done
+          for relative in tools/bin/rustc tools/bin/cargo; do
+            tool="$GITHUB_WORKSPACE/kandelo-source/$relative"
+            test -L "$tool" && test -x "$tool"
+            case "$(readlink "$tool")" in
+              /nix/store/*/bin/rustc|/nix/store/*/bin/cargo) ;;
+              *) echo "candidate Rust tool leaves the exact Nix closure: $relative" >&2; exit 2 ;;
+            esac
+            /usr/bin/sudo -n /usr/bin/chown -h root:root -- "$tool"
+            test "$(/usr/bin/stat -c '%u:%g' "$tool")" = "0:0"
           done
           /usr/bin/sudo -n /usr/bin/chown root:root -- \
             "$GITHUB_WORKSPACE/kandelo-source" \

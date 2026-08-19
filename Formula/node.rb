@@ -20,7 +20,6 @@ class Node < Formula
   depends_on "kandelo-dev/tap-core/openssl"
   depends_on "kandelo-dev/tap-core/zlib"
   depends_on "python@3.13" => :build
-  depends_on "rust" => :build
 
   skip_clean "bin/node"
 

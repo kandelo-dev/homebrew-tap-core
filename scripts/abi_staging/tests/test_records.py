@@ -541,6 +541,19 @@ class CandidateRecordTests(unittest.TestCase):
             ],
         )
 
+    def test_candidate_record_accepts_a_large_bounded_composition_descriptor(self) -> None:
+        descriptor = canonical_bytes({"inventory": "x" * (4 * 1024 * 1024)})
+        (self.handoff / "vfs-composition-descriptor.json").write_bytes(descriptor)
+
+        _, candidate = self._plans()
+
+        layer = next(
+            item
+            for item in candidate.layers
+            if item.role == "vfs-composition-descriptor"
+        )
+        self.assertEqual(layer.body, descriptor)
+
     def test_candidate_is_factual_nonendorsed_and_separate_from_trust_decisions(self) -> None:
         source, candidate = self._plans()
         record = json.loads(candidate.config.body)

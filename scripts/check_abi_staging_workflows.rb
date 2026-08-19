@@ -1383,6 +1383,21 @@ module AbiStagingWorkflowCheck
                          'node_bin="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/node-bin")"'
                        ) &&
                        realm.fetch("run").include?(
+                         'rustc_bin="$(command -v rustc)"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'cargo_bin="$(command -v cargo)"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'rustlib/wasm32-unknown-unknown/lib'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'ln -s "$rustc_bin" "$source_root/tools/bin/rustc"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         'ln -s "$cargo_bin" "$source_root/tools/bin/cargo"'
+                       ) &&
+                       realm.fetch("run").include?(
                          '"tools/bin/wasm-local-root-spill"'
                        ) &&
                        realm.fetch("run").include?(

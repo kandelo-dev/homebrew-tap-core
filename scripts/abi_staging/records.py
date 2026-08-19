@@ -11,7 +11,12 @@ import re
 import stat
 from typing import Any
 
-from .canonical import CanonicalJsonError, canonical_bytes, parse_canonical_bytes
+from .canonical import (
+    CanonicalJsonError,
+    MAX_VFS_COMPOSITION_JSON_BYTES,
+    canonical_bytes,
+    parse_canonical_bytes,
+)
 from .contract import (
     load_bottle_contract,
     load_canonical_mapping,
@@ -446,7 +451,7 @@ def build_candidate_oci_plan(
     composition_body = _read_regular(
         handoff_root / "vfs-composition-descriptor.json",
         "candidate VFS composition descriptor",
-        MAX_RECORD_BYTES,
+        MAX_VFS_COMPOSITION_JSON_BYTES,
     )
     bottle_sha256 = hashlib.sha256(bottle_body).hexdigest()
     candidate_blob_reference = f"ghcr.io/{checked_repository}@sha256:{bottle_sha256}"
