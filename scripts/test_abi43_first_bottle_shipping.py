@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import subprocess
+import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -92,6 +95,51 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         self.assertIn('depends_on "cbindgen" => :build', source)
         self.assertIn('depends_on "python@3.13" => :build', source)
         self.assertIn('depends_on "rust" => :build', source)
+
+    def test_node_build_telemetry_allows_an_isolated_host_without_proc(self) -> None:
+        patch_file = (
+            ROOT
+            / "Kandelo/recipes/node/patches"
+            / "0015-handle-missing-linux-cpuinfo.patch"
+        )
+        self.assertTrue(patch_file.is_file())
+        upstream = (
+            "def cpu_brand_linux():\n"
+            "    \"\"\"\n"
+            "    Read the CPU brand string out of /proc/cpuinfo on Linux.\n"
+            "    \"\"\"\n"
+            "    with open(\"/proc/cpuinfo\") as f:\n"
+            "        for line in f:\n"
+            "            if line.startswith(\"model name\"):\n"
+            "                _, brand = line.split(\": \", 1)\n"
+            "                return brand.rstrip()\n"
+            "    # not found?\n"
+            "    return None\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            source_file = (
+                Path(temporary)
+                / "python/mozbuild/mozbuild/telemetry.py"
+            )
+            source_file.parent.mkdir(parents=True)
+            source_file.write_text(upstream, encoding="utf-8")
+            subprocess.run(
+                ["patch", "-p1", "-i", str(patch_file)],
+                cwd=temporary,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            namespace: dict[str, object] = {}
+            exec(source_file.read_text(encoding="utf-8"), namespace)
+            cpu_brand_linux = namespace["cpu_brand_linux"]
+            with mock.patch("builtins.open", side_effect=FileNotFoundError):
+                self.assertIsNone(cpu_brand_linux())
+            with mock.patch(
+                "builtins.open",
+                mock.mock_open(read_data="model name: Kandelo Builder\n"),
+            ):
+                self.assertEqual("Kandelo Builder", cpu_brand_linux())
 
     def test_mariadb_maps_private_build_paths_out_of_target_artifacts(self) -> None:
         source = self.recipe("mariadb")

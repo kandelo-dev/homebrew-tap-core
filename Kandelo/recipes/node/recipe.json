@@ -114,6 +114,12 @@
       "mode": "0644",
       "path": "patches/0014-disable-mozglue-interposers-on-wasm32.patch",
       "sha256": "f0926fbbcbf085fea29057db1b377ca3e77e740bc84028acda06164be5e9dd46"
+    },
+    {
+      "bytes": 800,
+      "mode": "0644",
+      "path": "patches/0015-handle-missing-linux-cpuinfo.patch",
+      "sha256": "335fd9bdf5e6bfa19825192ec31dfb4c1bb85d0ae11bd5e515d9b26f2d87a70a"
     }
   ]
 }
