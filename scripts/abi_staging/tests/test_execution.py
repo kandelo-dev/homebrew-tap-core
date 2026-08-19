@@ -247,6 +247,38 @@ class WorkflowExecutionTests(unittest.TestCase):
             ):
                 namespace["staging_runtime_paths"](config)
 
+    def test_staging_launcher_projects_the_exact_rust_alias_pair(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            runner = temporary_root / "protected-recipe-runner.py"
+            launcher = temporary_root / "protected-launcher.sh"
+
+            execution._prepare_staging_recipe_runner(
+                source=KANDELO_ROOT / "scripts/homebrew-tap-recipe-runner.py",
+                destination=runner,
+            )
+            execution._prepare_staging_launcher(
+                source=KANDELO_ROOT / "scripts/homebrew-patched-launcher.sh",
+                destination=launcher,
+                protected_recipe_runner=runner,
+            )
+
+            prepared = launcher.read_text(encoding="utf-8")
+            self.assertIn("    tools/bin/cargo\n", prepared)
+            self.assertIn("    tools/bin/rustc\n", prepared)
+            self.assertIn(
+                'tools/bin/cargo:/nix/store/*/bin/cargo|'
+                'tools/bin/rustc:/nix/store/*/bin/rustc)',
+                prepared,
+            )
+            subprocess.run(
+                ["bash", "-n", str(launcher)],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+
     def test_staging_launcher_places_large_recipe_copies_on_runner_disk(self) -> None:
         execution = importlib.import_module("scripts.abi_staging.execution")
         with tempfile.TemporaryDirectory() as temporary:
