@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "dependencies": [],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 1528,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "b24494b727ea660140e64ed9e70d71392d7967b75b2233055e0cb74a8866514a"
+    },
+    {
+      "bytes": 54778,
+      "mode": "0644",
+      "path": "src/modeset.c",
+      "sha256": "b8f8ff72375d8eca5163a935a52f3ab4c47eba06b8e773e42cd7002ecd14b237"
+    }
+  ]
+}

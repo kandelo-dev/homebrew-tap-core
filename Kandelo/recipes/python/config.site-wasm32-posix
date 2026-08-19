@@ -1,0 +1,43 @@
+# CPython-specific configure cache layered on Kandelo's shared SDK truth.
+#
+# Function/header/type availability belongs to sdk/config.site. This file owns
+# only CPython probes that cannot be answered by a target link or run during a
+# cross build. The build script supplies WASM_POSIX_SDK_CONFIG_SITE explicitly
+# so a sealed Formula cannot inherit an ambient host CONFIG_SITE.
+
+: "${WASM_POSIX_SDK_CONFIG_SITE:?WASM_POSIX_SDK_CONFIG_SITE must name sdk/config.site}"
+# shellcheck source=/dev/null
+. "$WASM_POSIX_SDK_CONFIG_SITE"
+
+ac_cv_buggy_getaddrinfo=${ac_cv_buggy_getaddrinfo=no}
+ac_cv_file__dev_ptmx=${ac_cv_file__dev_ptmx=no}
+ac_cv_file__dev_ptc=${ac_cv_file__dev_ptc=no}
+ac_cv_pthread=${ac_cv_pthread=yes}
+
+# Kandelo executables intentionally preserve unresolved imports for the kernel
+# ABI. That makes Autoconf's bare-symbol link probes report success even for a
+# few functions that musl does not declare or define. Keep this list limited to
+# CPython's absent function probes; all positive platform facts still come from
+# the shared SDK config above.
+ac_cv_func__getpty=${ac_cv_func__getpty=no}
+ac_cv_func_fork1=${ac_cv_func_fork1=no}
+ac_cv_func_fseek64=${ac_cv_func_fseek64=no}
+ac_cv_func_ftell64=${ac_cv_func_ftell64=no}
+ac_cv_func_rtpSpawn=${ac_cv_func_rtpSpawn=no}
+ac_cv_func_tmpnam_r=${ac_cv_func_tmpnam_r=no}
+
+# CPython treats a successful unresolved-symbol link as proof that these
+# optional external-library modules are buildable. Formula/package metadata
+# declares zlib only, so keep the undeclared native-library extensions absent.
+py_cv_module__ssl=${py_cv_module__ssl=n/a}
+py_cv_module__hashlib=${py_cv_module__hashlib=n/a}
+py_cv_module__decimal=${py_cv_module__decimal=n/a}
+py_cv_module__ctypes=${py_cv_module__ctypes=n/a}
+py_cv_module__ctypes_test=${py_cv_module__ctypes_test=n/a}
+py_cv_module__bz2=${py_cv_module__bz2=n/a}
+py_cv_module__lzma=${py_cv_module__lzma=n/a}
+py_cv_module__sqlite3=${py_cv_module__sqlite3=n/a}
+py_cv_module_readline=${py_cv_module_readline=n/a}
+py_cv_module__tkinter=${py_cv_module__tkinter=n/a}
+py_cv_module__dbm=${py_cv_module__dbm=n/a}
+py_cv_module__gdbm=${py_cv_module__gdbm=n/a}

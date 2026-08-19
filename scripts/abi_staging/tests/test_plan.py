@@ -185,6 +185,31 @@ def _formula_by_name(plan: dict[str, object], name: str) -> dict[str, object]:
 
 
 class TapPlanTests(unittest.TestCase):
+    def test_disabled_background_formula_is_not_planned(self) -> None:
+        inventory = _miniature_inventory()
+        inventory["disabled_formulae"] = ["asa"]
+        plan = _plan(inventory=inventory)
+
+        self.assertNotIn(
+            exact_formula_subject("asa", "wasm32"),
+            plan["background_subjects"],
+        )
+        self.assertNotIn(
+            "asa",
+            {formula["identity"]["name"] for formula in plan["formulae"]},
+        )
+
+    def test_disabled_required_formula_or_dependency_fails_closed(self) -> None:
+        inventory = _miniature_inventory()
+        inventory["disabled_formulae"] = ["bash"]
+        with self.assertRaisesRegex(PlanError, "selected Formula root bash is disabled"):
+            _plan(inventory=inventory)
+
+        inventory = _miniature_inventory()
+        inventory["disabled_formulae"] = ["zlib"]
+        with self.assertRaisesRegex(PlanError, "active Formula .* depends on disabled zlib"):
+            _plan(inventory=inventory)
+
     def test_snapshots_an_exact_checkout_with_protected_ownership(self) -> None:
         expected = snapshot_tap_source(
             TAP_ROOT, "kandelo-dev/homebrew-tap-core"

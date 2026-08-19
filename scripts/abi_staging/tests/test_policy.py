@@ -107,6 +107,7 @@ class PolicyTests(unittest.TestCase):
         policy = load_formula_build_inputs(
             self.staging / "formula-build-inputs.toml", tap_root=TAP_ROOT
         )
+        self.assertEqual(policy.disabled_formulae, ("erlang", "texlive"))
         formula_files = sorted(path.stem for path in (TAP_ROOT / "Formula").glob("*.rb"))
         self.assertEqual([entry.name for entry in policy.formulae], formula_files)
         self.assertEqual(len(set(formula_files)), len(policy.formulae))
@@ -128,6 +129,31 @@ class PolicyTests(unittest.TestCase):
             self.assertEqual(entry.architectures, expected)
             self.assertTrue(entry.profiles)
             self.assertEqual(tuple(sorted(entry.profiles)), entry.profiles)
+
+    def test_formula_policy_rejects_unknown_or_unsorted_disabled_formulae(self) -> None:
+        source = self.staging / "formula-build-inputs.toml"
+        body = source.read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = Path(directory) / "formula-build-inputs.toml"
+            candidate.write_text(
+                body.replace(
+                    'disabled_formulae = ["erlang", "texlive"]',
+                    'disabled_formulae = ["texlive", "erlang"]',
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(PolicyError, "disabled Formulae.*sorted"):
+                load_formula_build_inputs(candidate, tap_root=TAP_ROOT)
+
+            candidate.write_text(
+                body.replace(
+                    'disabled_formulae = ["erlang", "texlive"]',
+                    'disabled_formulae = ["erlang", "missing", "texlive"]',
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(PolicyError, "disabled Formulae.*inventory"):
+                load_formula_build_inputs(candidate, tap_root=TAP_ROOT)
 
     def test_musl_fts_binds_both_relocated_automake_macro_roots(self) -> None:
         source = (TAP_ROOT / "Formula/musl-fts.rb").read_text(encoding="utf-8")
@@ -209,16 +235,29 @@ class PolicyTests(unittest.TestCase):
         )
         for name in [
             "bc",
-            "erlang",
             "fbdoom",
             "lsof",
+            "mariadb",
             "modeset",
             "netcat",
             "nethack",
+            "node",
+            "php",
             "posix-utils-lite",
+            "python",
         ]:
-            self.assertIn(f"packages/registry/{name}", by_name[name]["kandelo_paths"])
-        self.assertIn("packages/registry/cpython", by_name["python"]["kandelo_paths"])
+            self.assertIn(
+                f"Kandelo/recipes/{name}", by_name[name]["tap_paths"]
+            )
+            self.assertFalse(
+                any(
+                    path.startswith("packages/registry/")
+                    for path in by_name[name]["kandelo_paths"]
+                )
+            )
+        self.assertIn(
+            "packages/registry/erlang", by_name["erlang"]["kandelo_paths"]
+        )
         self.assertIn(
             "Kandelo/recipes/homebrew-bootstrap",
             by_name["homebrew-bootstrap"]["tap_paths"],
@@ -288,8 +327,8 @@ class PolicyTests(unittest.TestCase):
     def test_missing_observed_input_reports_exact_formula_architecture_and_subject(self) -> None:
         source_path = self.staging / "formula-build-inputs.toml"
         source = source_path.read_text().replace(
-            'kandelo_paths = ["packages/registry/cpython"]',
-            "kandelo_paths = []",
+            'tap_paths = ["Kandelo/recipes/python"]',
+            "tap_paths = []",
             1,
         )
         with tempfile.TemporaryDirectory() as directory:
@@ -301,7 +340,7 @@ class PolicyTests(unittest.TestCase):
         message = str(raised.exception)
         self.assertIn("python", message)
         self.assertIn("wasm32", message)
-        self.assertIn("packages/registry/cpython", message)
+        self.assertIn("Kandelo/recipes/python", message)
         self.assertIn('"kind":"formula"', message)
 
 

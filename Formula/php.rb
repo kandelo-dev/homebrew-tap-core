@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Php < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
   EXTENSION_DIRECTORY = "lib/php/extensions".freeze
   RUNTIME_OUTPUTS = {
     "php.wasm"     => "bin/php",
@@ -39,19 +39,9 @@ class Php < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-    out_dir = kandelo_build_package(
-      package:    "php",
-      script_env: {
-        "WASM_POSIX_DEP_ICU_DIR"     => formula_opt_prefix("kandelo-dev/tap-core/icu"),
-        "WASM_POSIX_DEP_LIBCURL_DIR" => formula_opt_prefix("kandelo-dev/tap-core/libcurl"),
-        "WASM_POSIX_DEP_LIBCXX_DIR"  => formula_opt_prefix("kandelo-dev/tap-core/libcxx"),
-        "WASM_POSIX_DEP_LIBICONV_DIR" => formula_opt_prefix("kandelo-dev/tap-core/libiconv"),
-        "WASM_POSIX_DEP_LIBXML2_DIR" => formula_opt_prefix("kandelo-dev/tap-core/libxml2"),
-        "WASM_POSIX_DEP_LIBZIP_DIR"  => formula_opt_prefix("kandelo-dev/tap-core/libzip"),
-        "WASM_POSIX_DEP_OPENSSL_DIR" => formula_opt_prefix("kandelo-dev/tap-core/openssl"),
-        "WASM_POSIX_DEP_SQLITE_DIR"  => formula_opt_prefix("kandelo-dev/tap-core/sqlite"),
-        "WASM_POSIX_DEP_ZLIB_DIR"    => formula_opt_prefix("kandelo-dev/tap-core/zlib"),
-      },
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "68f97fbbb314c5b9ef02b660c3ed69bd3548dacd5400de6cf9a295c9bb993e8c",
+      script_env:      {},
     )
 
     kandelo_validate_wasm_artifact(out_dir/"php.wasm", fork: :required)

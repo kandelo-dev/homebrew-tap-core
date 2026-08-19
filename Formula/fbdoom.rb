@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Fbdoom < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   FBDOOM_COMMIT = "17280163bc95e5d954d2efaa0633489b763b4cd1".freeze
   CHOCOLATE_DOOM_COMMIT = "35fb1372d10756ca27eca05665bd8a7cebc71c05".freeze
@@ -36,25 +36,11 @@ class Fbdoom < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-    resource_root = buildpath/"kandelo-package-resources"
-    chocolate_source = resource_root/"chocolate-doom"
-    resource_root.mkpath
-
-    # Transitional Tier-2 bridge: preserve the registry recipe's reviewed
-    # fbdev/input/audio patch set. Homebrew verifies both pinned archives; the
-    # registry recipe copies and patches them only in caller-owned work space.
-    resource("chocolate-doom").stage do
-      chocolate_source.mkpath
-      Pathname.pwd.children.each do |entry|
-        cp_r(entry, chocolate_source/entry.basename)
-      end
-    end
-
-    out_dir = kandelo_build_package(script_env: {
-      "FBDOOM_CHOCOLATE_DOOM_SOURCE_DIR"    => chocolate_source,
-      "FBDOOM_CHOCOLATE_DOOM_SOURCE_SHA256" => CHOCOLATE_DOOM_SHA256,
-      "FBDOOM_CHOCOLATE_DOOM_SOURCE_URL"    => CHOCOLATE_DOOM_URL,
-    })
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "4f86bad0196ae2d05d721c9f49ff1d7027ac533720602b703634816a26a10cb0",
+      resources:       ["chocolate-doom"],
+      script_env:      {},
+    )
     kandelo_validate_wasm_artifact(out_dir/"fbdoom.wasm", fork: :forbidden)
     kandelo_install_bin(out_dir, "fbdoom.wasm", "fbdoom")
   end
@@ -81,6 +67,7 @@ class Fbdoom < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/fbdoom"
+    rebuild 3
     sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "51424ffe3c680b57cca4b56f8c1fef768cacde90d2cfd96927f9fecc673609bc"
   end
 end

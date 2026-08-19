@@ -1,0 +1,119 @@
+{
+  "schema": 1,
+  "dependencies": [
+    "kandelo-dev/tap-core/libcxx",
+    "kandelo-dev/tap-core/openssl",
+    "kandelo-dev/tap-core/zlib"
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 11796,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "f3c477cf07ec9f3131912c941a889fce8addc8aa3c6e22743a05697968d45a87"
+    },
+    {
+      "bytes": 18358,
+      "mode": "0644",
+      "path": "node-compat/adapter.js",
+      "sha256": "381433bd5b55e2269feb905e70474abfaeba06fb51f546ec8ea2b38fc3a5e60a"
+    },
+    {
+      "bytes": 207633,
+      "mode": "0644",
+      "path": "node-compat/bootstrap.js",
+      "sha256": "799e78a91f00b203a701dc353a47e038b82e9c37b9ae7b7c06bbbf9a87738788"
+    },
+    {
+      "bytes": 6,
+      "mode": "0644",
+      "path": "node-compat/suffix.js",
+      "sha256": "49fac5a3039bbad287ac815d533cf3abd4b4217920cbe2c93bb34a6e30003142"
+    },
+    {
+      "bytes": 718,
+      "mode": "0644",
+      "path": "patches/0001-allow-static-cxx-runtime-for-wasm-linux.patch",
+      "sha256": "d0c2ccf64c46d11cc512011b8b1b3b72af2e7f6e3bf65b96bd93d41c2c6c9e2e"
+    },
+    {
+      "bytes": 1878,
+      "mode": "0644",
+      "path": "patches/0002-map-kandelo-wasm-linux-rust-target.patch",
+      "sha256": "7deeacd2052e7a964aa5ac0147bc313c1d28b5bda7e817fda705660203eecbcf"
+    },
+    {
+      "bytes": 1188,
+      "mode": "0644",
+      "path": "patches/0003-jsonprinter-size-t-wasm32.patch",
+      "sha256": "e259107555c745cff184092667548679f9e7e8993e6ab329e3e3afb65c946ff4"
+    },
+    {
+      "bytes": 865,
+      "mode": "0644",
+      "path": "patches/0004-disable-wasm32-return-address-stackwalk.patch",
+      "sha256": "d075352ab5f8ab76620a964891a81063e44543dda10d4b1235da681a9c1c1ea6"
+    },
+    {
+      "bytes": 1342,
+      "mode": "0644",
+      "path": "patches/0005-getrandom-custom-backend-wasm32.patch",
+      "sha256": "615eb35b13d9ee74c5bcb5d3b8e4768dd817be71e9f57f310cbe6234c4437aa9"
+    },
+    {
+      "bytes": 489,
+      "mode": "0644",
+      "path": "patches/0006-randomnum-use-sys-random-on-wasm32.patch",
+      "sha256": "03c2496b0e6ddc4bafd8f3b1e84a0034eb0c8228517a9a3b8c3dc921326ae8c7"
+    },
+    {
+      "bytes": 704,
+      "mode": "0644",
+      "path": "patches/0007-skip-elf-network-check-for-wasm-target.patch",
+      "sha256": "778bc6bc2817ed36de9c325f1c20d06b412f45b8ac6e6da94c9c6120a6395ef6"
+    },
+    {
+      "bytes": 2072,
+      "mode": "0644",
+      "path": "patches/0008-use-wasm-trap-for-moz-crash.patch",
+      "sha256": "59a87abf141cc4bf40acf11c48ab662ec1ac9e5be896b997bebcf42904d6b95e"
+    },
+    {
+      "bytes": 1095,
+      "mode": "0644",
+      "path": "patches/0009-use-wasm-frame-address-for-native-stack-base.patch",
+      "sha256": "5e954b61c692e799e216c8f732cc936ad3be1b8e0aef0db2459f68748cf99cc0"
+    },
+    {
+      "bytes": 567,
+      "mode": "0644",
+      "path": "patches/0010-use-wasm-icu-data-section-syntax.patch",
+      "sha256": "d655d6fc1b13e1b892c01be43ccf421524d8bf45fa0bea17dc3a51967f6309bf"
+    },
+    {
+      "bytes": 2616,
+      "mode": "0644",
+      "path": "patches/0011-heap-autorunparallel-task-on-wasm32.patch",
+      "sha256": "62147693a4932d0f431ea4739d9bb73bc51126dceda735dec5314e306ad78637"
+    },
+    {
+      "bytes": 68730,
+      "mode": "0644",
+      "path": "patches/0012-kandelo-node-compat-shell-entry.patch",
+      "sha256": "ab3eaea6ceffed9c752cac4f176bec517608f695f274f93e4cb4c9c252ec4d1f"
+    },
+    {
+      "bytes": 1670,
+      "mode": "0644",
+      "path": "patches/0013-kandelo-join-shell-workers.patch",
+      "sha256": "f0aa3c64bddba28865089c5796fff310050380e6b7cc85239e6e8b55ccfe9923"
+    },
+    {
+      "bytes": 617,
+      "mode": "0644",
+      "path": "patches/0014-disable-mozglue-interposers-on-wasm32.patch",
+      "sha256": "f0926fbbcbf085fea29057db1b377ca3e77e740bc84028acda06164be5e9dd46"
+    }
+  ]
+}

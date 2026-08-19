@@ -1,0 +1,452 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Build MariaDB 10.5 LTS for kandelo.
+#
+# Two-step cross-compilation:
+#   1. Host build: generates import_executables.cmake (native helper programs)
+#   2. Cross build: uses CMake toolchain file for wasm32 or wasm64
+
+MARIADB_VERSION="${WASM_POSIX_DEP_VERSION:?}"
+MARIADB_MAJOR="10.5"
+
+RECIPE_DIR="${WASM_POSIX_DEP_RECIPE_DIR:?}"
+SOURCE_INPUT="${WASM_POSIX_DEP_SOURCE_DIR:?}"
+WORK_DIR="${WASM_POSIX_DEP_WORK_DIR:?}"
+OUT_DIR="${WASM_POSIX_DEP_OUT_DIR:?}"
+GLUE_DIR="$RECIPE_DIR/glue"
+
+WASM_ARCH="${WASM_POSIX_DEP_TARGET_ARCH:?}"
+[ "$#" -eq 0 ] || { echo "ERROR: the tap recipe accepts no arguments" >&2; exit 2; }
+
+SOURCE_URL="${WASM_POSIX_DEP_SOURCE_URL:?}"
+SOURCE_SHA256="${WASM_POSIX_DEP_SOURCE_SHA256:?}"
+if [ "${WASM_POSIX_DEP_NAME:?}" != "mariadb" ] ||
+   [ "$MARIADB_VERSION" != "10.5.28" ] ||
+   [ "$SOURCE_URL" != "https://archive.mariadb.org/mariadb-10.5.28/source/mariadb-10.5.28.tar.gz" ] ||
+   [ "$SOURCE_SHA256" != "0b5070208da0116640f20bd085f1136527f998cc23268715bcbf352e7b7f3cc1" ] ||
+   [ "$WASM_ARCH" != "wasm32" ]; then
+    echo "ERROR: MariaDB Formula identity differs from the reviewed tap recipe" >&2
+    exit 2
+fi
+
+SRC_DIR="$WORK_DIR/source"
+HOST_BUILD_DIR="$WORK_DIR/host-build"
+CROSS_BUILD_DIR="$WORK_DIR/cross-build"
+INSTALL_DIR="$WORK_DIR/install"
+BUILD_STATE_ROOT="$WORK_DIR"
+SOURCE_SYSROOT="${WASM_POSIX_SYSROOT:?}"
+TOOLCHAIN_FILE="$RECIPE_DIR/wasm32-posix-toolchain.cmake"
+SYSROOT="$WORK_DIR/mariadb-sysroot"
+WASM_TARGET="wasm32-unknown-unknown"
+[ ! -e "$SYSROOT" ] || { echo "ERROR: private MariaDB sysroot already exists" >&2; exit 2; }
+mkdir -p "$WORK_DIR" "$OUT_DIR" "$SYSROOT"
+cp -a --no-preserve=ownership "$SOURCE_SYSROOT/." "$SYSROOT/"
+find -P "$SYSROOT" -type d -exec chmod u+rwx {} +
+find -P "$SYSROOT" -type f -exec chmod u+rw {} +
+export WASM_POSIX_SYSROOT="$SYSROOT"
+
+NPROC="$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
+HOST_HELPERS=(
+    "$HOST_BUILD_DIR/extra/comp_err"
+    "$HOST_BUILD_DIR/scripts/comp_sql"
+    "$HOST_BUILD_DIR/dbug/factorial"
+    "$HOST_BUILD_DIR/sql/gen_lex_hash"
+    "$HOST_BUILD_DIR/sql/gen_lex_token"
+)
+
+host_helpers_ready() {
+    [ -f "$HOST_BUILD_DIR/import_executables.cmake" ] || return 1
+    local helper
+    for helper in "${HOST_HELPERS[@]}"; do
+        [ -x "$helper" ] || return 1
+    done
+}
+
+# --- Verify prerequisites ---
+if [ ! -f "$SYSROOT/lib/libc.a" ]; then
+    echo "ERROR: copied sysroot is missing libc.a at $SYSROOT" >&2
+    exit 1
+fi
+
+if [ ! -f "$TOOLCHAIN_FILE" ]; then
+    echo "ERROR: Toolchain file not found at $TOOLCHAIN_FILE" >&2
+    exit 1
+fi
+
+# Check for cmake
+if ! command -v cmake &>/dev/null; then
+    echo "ERROR: cmake not found. Run through scripts/dev-shell.sh." >&2
+    exit 1
+fi
+
+if ! command -v bison &>/dev/null; then
+    echo "ERROR: bison not found. Run through scripts/dev-shell.sh." >&2
+    exit 1
+fi
+
+# --- Stage verified MariaDB source ---
+echo "==> Staging Formula-verified MariaDB $MARIADB_VERSION source..."
+[ ! -e "$SRC_DIR" ] || { echo "ERROR: private MariaDB source already exists" >&2; exit 2; }
+mkdir -p "$SRC_DIR"
+cp -a --no-preserve=ownership "$SOURCE_INPUT/." "$SRC_DIR/"
+find -P "$SRC_DIR" -type d -exec chmod u+rwx {} +
+find -P "$SRC_DIR" -type f -exec chmod u+rw {} +
+
+# --- Apply wasm32 source patches ---
+echo "==> Applying wasm32 source patches..."
+
+# 1. Patch mariadb_connector_c.cmake: disable SSL for cross-builds
+CONC_CMAKE="$SRC_DIR/cmake/mariadb_connector_c.cmake"
+if grep -q 'IF(NOT CONC_WITH_SSL)' "$CONC_CMAKE" 2>/dev/null; then
+    echo "  Patching cmake/mariadb_connector_c.cmake (disable SSL for cross-build)..."
+    sed -i.bak 's/IF(NOT CONC_WITH_SSL)/IF(NOT CONC_WITH_SSL AND NOT CONC_WITH_SSL STREQUAL "OFF")/' "$CONC_CMAKE"
+fi
+
+# 2. my_gethwaddr: Enable Linux code path for wasm (SIOCGIFCONF + SIOCGIFHWADDR)
+HWADDR_FILE="$SRC_DIR/mysys/my_gethwaddr.c"
+if ! grep -q '__wasm' "$HWADDR_FILE" 2>/dev/null; then
+    echo "  Patching mysys/my_gethwaddr.c (enable MAC address retrieval for wasm)..."
+    sed -i.bak 's/defined(__linux__) || defined(__sun) || defined(_WIN32)/defined(__linux__) || defined(__sun) || defined(_WIN32) || defined(__wasm32__) || defined(__wasm64__)/' "$HWADDR_FILE"
+    sed -i.bak 's/#elif defined(_AIX) || defined(__linux__) || defined(__sun)/#elif defined(_AIX) || defined(__linux__) || defined(__sun) || defined(__wasm32__) || defined(__wasm64__)/' "$HWADDR_FILE"
+fi
+
+# Apply any .patch files from patches/ directory
+PATCH_DIR="$RECIPE_DIR/patches"
+if [ -d "$PATCH_DIR" ]; then
+    for patch in "$PATCH_DIR"/*.patch; do
+        [ -f "$patch" ] || continue
+        echo "  Applying $(basename "$patch")..."
+        if patch -p1 -N --dry-run --silent -d "$SRC_DIR" < "$patch" 2>/dev/null; then
+            patch -p1 -N -d "$SRC_DIR" < "$patch"
+        else
+            echo "  (already applied)"
+        fi
+    done
+fi
+
+# --- Step 1: Host build (native executables for cross-compile) ---
+if ! host_helpers_ready; then
+    echo "==> Step 1: Host build (generating import_executables.cmake)..."
+    mkdir -p "$HOST_BUILD_DIR"
+    cd "$HOST_BUILD_DIR"
+
+    # `WITH_SSL=OFF` + `CONC_WITH_SSL=OFF`: the host build only
+    # produces helper executables (the import_executables target).
+    # None of those helpers need SSL, but libmariadb's
+    # CMakeLists.txt:336 unconditionally calls FIND_PACKAGE(GnuTLS
+    # REQUIRED) unless CONC_WITH_SSL=OFF — and the patch we apply
+    # earlier to cmake/mariadb_connector_c.cmake already wires the
+    # OFF code path. Without these flags, configure dies with
+    # "Could NOT find GnuTLS (missing: GNUTLS_LIBRARY
+    # GNUTLS_INCLUDE_DIR)" on any host that doesn't have GnuTLS
+    # ≥3.4.2 installed (Nix dev shell, fresh CI runner, etc.).
+    cmake "$SRC_DIR" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DWITH_UNIT_TESTS=OFF \
+        -DWITH_MARIABACKUP=OFF \
+        -DPLUGIN_CONNECT=NO \
+        -DPLUGIN_ROCKSDB=NO \
+        -DPLUGIN_TOKUDB=NO \
+        -DPLUGIN_MROONGA=NO \
+        -DPLUGIN_SPIDER=NO \
+        -DPLUGIN_OQGRAPH=NO \
+        -DPLUGIN_PERFSCHEMA=NO \
+        -DPLUGIN_SPHINX=NO \
+        -DPLUGIN_COLUMNSTORE=NO \
+        -DPLUGIN_S3=NO \
+        -DPLUGIN_CRACKLIB_PASSWORD_CHECK=NO \
+        -DWITH_SSL=OFF \
+        -DCONC_WITH_SSL=OFF \
+        -DWITH_PCRE=bundled \
+        -DWITH_EDITLINE=bundled \
+        -DWITH_ZLIB=bundled \
+        2>&1 | tail -20
+
+    # Only build the helper executables needed for import_executables.cmake.
+    # Keep the full log for diagnostics. Piping make directly into tail under
+    # pipefail can report SIGPIPE as a failure when the build is merely verbose.
+    HOST_IMPORT_LOG="$HOST_BUILD_DIR/import_executables.log"
+    if ! make -j"$NPROC" import_executables >"$HOST_IMPORT_LOG" 2>&1; then
+        tail -40 "$HOST_IMPORT_LOG"
+        exit 1
+    fi
+    tail -5 "$HOST_IMPORT_LOG"
+
+    if [ ! -f "$HOST_BUILD_DIR/import_executables.cmake" ]; then
+        echo "ERROR: import_executables.cmake not generated" >&2
+        exit 1
+    fi
+    if ! host_helpers_ready; then
+        echo "ERROR: host helper executables were not generated" >&2
+        exit 1
+    fi
+    echo "==> Host build complete."
+fi
+
+# --- Install exact poured dependencies into the private sysroot. ---
+LLVM_PREFIX="${LLVM_PREFIX:?LLVM_PREFIX not set. Run through scripts/dev-shell.sh.}"
+LLVM_CLANG="$LLVM_PREFIX/bin/clang"
+if [ ! -x "$LLVM_CLANG" ]; then
+    echo "ERROR: clang not found at $LLVM_CLANG. Run through scripts/dev-shell.sh." >&2
+    exit 1
+fi
+
+LIBCXX_PREFIX="${WASM_POSIX_DEP_LIBCXX_DIR:?}"
+[ -f "$LIBCXX_PREFIX/lib/libc++.a" ] || {
+    echo "ERROR: libcxx resolve missing libc++.a at $LIBCXX_PREFIX" >&2
+    exit 1
+}
+[ -f "$LIBCXX_PREFIX/lib/libc++abi.a" ] || {
+    echo "ERROR: libcxx resolve missing libc++abi.a at $LIBCXX_PREFIX" >&2
+    exit 1
+}
+[ -d "$LIBCXX_PREFIX/include/c++/v1" ] || {
+    echo "ERROR: libcxx resolve missing include/c++/v1 at $LIBCXX_PREFIX" >&2
+    exit 1
+}
+
+# MariaDB's CMake / link steps expect libc++.a, libc++abi.a, and the C++
+# header tree under the sysroot. Copy the poured bottle into the private
+# build sysroot so the recipe never mutates or depends on an ambient cache.
+mkdir -p "$SYSROOT/lib" "$SYSROOT/include/c++"
+cp "$LIBCXX_PREFIX/lib/libc++.a" "$SYSROOT/lib/libc++.a"
+cp "$LIBCXX_PREFIX/lib/libc++abi.a" "$SYSROOT/lib/libc++abi.a"
+rm -rf "$SYSROOT/include/c++/v1"
+cp -R "$LIBCXX_PREFIX/include/c++/v1" "$SYSROOT/include/c++/v1"
+
+echo "==> libcxx copied from poured prefix $LIBCXX_PREFIX"
+
+PCRE2_PREFIX="${WASM_POSIX_DEP_PCRE2_DIR:?}"
+for path in \
+    "$PCRE2_PREFIX/lib/libpcre2-8.a" \
+    "$PCRE2_PREFIX/lib/libpcre2-posix.a" \
+    "$PCRE2_PREFIX/include/pcre2.h" \
+    "$PCRE2_PREFIX/include/pcre2posix.h"; do
+    [ -f "$path" ] || { echo "ERROR: pcre2 bottle prefix is missing $path" >&2; exit 1; }
+done
+cp "$PCRE2_PREFIX/lib/libpcre2-8.a" "$SYSROOT/lib/"
+cp "$PCRE2_PREFIX/lib/libpcre2-posix.a" "$SYSROOT/lib/"
+cp "$PCRE2_PREFIX/include/pcre2.h" "$SYSROOT/include/"
+cp "$PCRE2_PREFIX/include/pcre2posix.h" "$SYSROOT/include/"
+echo "==> PCRE2 copied from poured prefix $PCRE2_PREFIX"
+
+# --- Pre-compile glue objects ---
+WASM_COMPILE_FLAGS="--target=$WASM_TARGET -matomics -mbulk-memory -mexception-handling -mllvm -wasm-enable-sjlj -fno-trapping-math --sysroot=$SYSROOT"
+
+GLUE_OBJ_DIR="$BUILD_STATE_ROOT/mariadb-glue-objs"
+mkdir -p "$GLUE_OBJ_DIR"
+
+NEED_GLUE_REBUILD=0
+if [ ! -f "$GLUE_OBJ_DIR/channel_syscall.o" ]; then
+    NEED_GLUE_REBUILD=1
+elif [ "$GLUE_DIR/channel_syscall.c" -nt "$GLUE_OBJ_DIR/channel_syscall.o" ] || \
+     [ "$GLUE_DIR/compiler_rt.c" -nt "$GLUE_OBJ_DIR/compiler_rt.o" ]; then
+    NEED_GLUE_REBUILD=1
+fi
+if [ "$NEED_GLUE_REBUILD" = "1" ]; then
+    echo "==> Compiling glue objects..."
+    $LLVM_CLANG $WASM_COMPILE_FLAGS -O2 -c "$GLUE_DIR/channel_syscall.c" -o "$GLUE_OBJ_DIR/channel_syscall.o"
+    $LLVM_CLANG $WASM_COMPILE_FLAGS -O2 -c "$GLUE_DIR/compiler_rt.c" -o "$GLUE_OBJ_DIR/compiler_rt.o"
+    echo "==> Glue objects compiled."
+fi
+
+# --- Step 2: Cross build ---
+echo "==> Step 2: Cross build for $WASM_ARCH..."
+mkdir -p "$CROSS_BUILD_DIR"
+cd "$CROSS_BUILD_DIR"
+
+export WASM_POSIX_SYSROOT="$SYSROOT"
+
+cmake "$SRC_DIR" \
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
+    -DWASM_POSIX_MARIADB_GLUE_OBJ_DIR="$GLUE_OBJ_DIR" \
+    -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+    -DIMPORT_EXECUTABLES="$HOST_BUILD_DIR/import_executables.cmake" \
+    \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_FLAGS_RELEASE="${MARIADB_OPT_LEVEL:--O2} -DNDEBUG" \
+    -DCMAKE_CXX_FLAGS_RELEASE="${MARIADB_OPT_LEVEL:--O2} -DNDEBUG" \
+    \
+    -DWITH_UNIT_TESTS=OFF \
+    -DWITH_MARIABACKUP=OFF \
+    -DSECURITY_HARDENED=OFF \
+    -DWITH_SAFEMALLOC=OFF \
+    -DWITH_EMBEDDED_SERVER=OFF \
+    -DENABLED_PROFILING=OFF \
+    -DWITHOUT_DYNAMIC_PLUGIN=ON \
+    -DDISABLE_SHARED=ON \
+    \
+    -DWITH_SSL=OFF \
+    -DCONC_WITH_SSL=OFF \
+    -DWITH_PCRE=system \
+    -DWITH_EDITLINE=bundled \
+    -DWITH_ZLIB=system \
+    -DWITH_SYSTEMD=no \
+    -DWITH_WSREP=OFF \
+    -DDISABLE_THREADPOOL=ON \
+    \
+    -DPLUGIN_INNODB=STATIC \
+    -DPLUGIN_INNOBASE=STATIC \
+    -DPLUGIN_XTRADB=NO \
+    -DPLUGIN_CONNECT=NO \
+    -DPLUGIN_ROCKSDB=NO \
+    -DPLUGIN_TOKUDB=NO \
+    -DPLUGIN_MROONGA=NO \
+    -DPLUGIN_SPIDER=NO \
+    -DPLUGIN_OQGRAPH=NO \
+    -DPLUGIN_SPHINX=NO \
+    -DPLUGIN_COLUMNSTORE=NO \
+    -DPLUGIN_S3=NO \
+    -DPLUGIN_PERFSCHEMA=NO \
+    -DPLUGIN_CRACKLIB_PASSWORD_CHECK=NO \
+    -DPLUGIN_AUTH_GSSAPI=NO \
+    -DPLUGIN_AUTH_PAM=NO \
+    -DPLUGIN_FEEDBACK=NO \
+    -DPLUGIN_QUERY_RESPONSE_TIME=NO \
+    -DPLUGIN_SERVER_AUDIT=NO \
+    -DPLUGIN_DISKS=NO \
+    -DPLUGIN_METADATA_LOCK_INFO=NO \
+    -DPLUGIN_QUERY_CACHE_INFO=NO \
+    -DPLUGIN_LOCALE_INFO=NO \
+    -DPLUGIN_SIMPLE_PASSWORD_CHECK=NO \
+    \
+    -DPLUGIN_ARIA=STATIC \
+    -DPLUGIN_MYISAM=STATIC \
+    -DPLUGIN_MYISAMMRG=STATIC \
+    -DPLUGIN_CSV=STATIC \
+    -DPLUGIN_HEAP=STATIC \
+    -DPLUGIN_PARTITION=STATIC \
+    \
+    -DSTACK_DIRECTION=-1 \
+    -DHAVE_LLVM_LIBCPP=OFF \
+    2>&1 | tail -40
+
+echo "==> CMake configuration complete. Starting build..."
+
+# Build mysqld. Capture full output to a log so a failed build doesn't
+# bury the actual diagnostic in `tail -N`. Show the tail on success and
+# the relevant error context on failure.
+MARIADBD_LOG="$CROSS_BUILD_DIR/build-mariadbd.log"
+if make -j"$NPROC" mariadbd > "$MARIADBD_LOG" 2>&1; then
+    tail -10 "$MARIADBD_LOG"
+else
+    echo "==> mariadbd build failed; printing error context:" >&2
+    grep -B 2 -E "[Ee]rror|fatal|undefined" "$MARIADBD_LOG" | tail -50 >&2
+    echo "" >&2
+    echo "Full log: $MARIADBD_LOG" >&2
+    exit 1
+fi
+
+# Build mysqltest client (mariadb-test target)
+echo "==> Building mysqltest..."
+MYSQLTEST_LOG="$CROSS_BUILD_DIR/build-mysqltest.log"
+if make -j"$NPROC" mariadb-test > "$MYSQLTEST_LOG" 2>&1; then
+    tail -10 "$MYSQLTEST_LOG"
+else
+    echo "==> mariadb-test build failed; printing error context:" >&2
+    grep -B 2 -E "[Ee]rror|fatal|undefined" "$MYSQLTEST_LOG" | tail -50 >&2
+    echo "" >&2
+    echo "Full log: $MYSQLTEST_LOG" >&2
+    exit 1
+fi
+
+# Check if mariadbd was built (10.5+ renames mysqld → mariadbd)
+MYSQLD_BIN="$CROSS_BUILD_DIR/sql/mariadbd"
+if [ -f "$MYSQLD_BIN" ]; then
+    echo "==> MariaDB mysqld built successfully!"
+    ls -lh "$MYSQLD_BIN"
+    file "$MYSQLD_BIN" || true
+
+    # Install the manifest/resolver-facing artifact. Keep the no-extension
+    # copy as a local-build compatibility alias for older demo/test workflows.
+    mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/share/mysql"
+    cp "$MYSQLD_BIN" "$INSTALL_DIR/bin/mariadbd.wasm"
+    cp "$MYSQLD_BIN" "$INSTALL_DIR/bin/mariadbd"
+
+    # Copy system tables SQL for bootstrap
+    if [ -d "$SRC_DIR/scripts" ]; then
+        cp "$SRC_DIR/scripts/mysql_system_tables.sql" "$INSTALL_DIR/share/mysql/" 2>/dev/null || true
+        cp "$SRC_DIR/scripts/mysql_system_tables_data.sql" "$INSTALL_DIR/share/mysql/" 2>/dev/null || true
+    fi
+
+    # Copy error message files (generated by comp_err during build)
+    SHARE_BUILD="$CROSS_BUILD_DIR/sql/share"
+    if [ -d "$SHARE_BUILD" ]; then
+        echo "==> Copying error message files..."
+        for lang in bulgarian chinese czech danish dutch english estonian french german greek hindi hungarian italian japanese korean norwegian norwegian-ny polish portuguese romanian russian serbian slovak spanish swedish ukrainian; do
+            if [ -d "$SHARE_BUILD/$lang" ] && [ -f "$SHARE_BUILD/$lang/errmsg.sys" ]; then
+                mkdir -p "$INSTALL_DIR/share/$lang"
+                cp "$SHARE_BUILD/$lang/errmsg.sys" "$INSTALL_DIR/share/$lang/"
+            fi
+        done
+        echo "==> Error message files copied."
+    fi
+
+    echo "==> MariaDB install directory: $INSTALL_DIR"
+else
+    echo "ERROR: mysqld not found after build" >&2
+    echo "Check build log in $CROSS_BUILD_DIR for errors."
+    exit 1
+fi
+
+# --- Install mysqltest ---
+MYSQLTEST_BIN="$CROSS_BUILD_DIR/client/mariadb-test"
+if [ -f "$MYSQLTEST_BIN" ]; then
+    echo "==> mysqltest built successfully!"
+    ls -lh "$MYSQLTEST_BIN"
+    cp "$MYSQLTEST_BIN" "$INSTALL_DIR/bin/mysqltest.wasm"
+else
+    echo "ERROR: mysqltest not found at $MYSQLTEST_BIN" >&2
+    exit 1
+fi
+
+# --- Copy mysql-test suite data ---
+# MariaDB 10.5 layout: main test suite is in mysql-test/main/ (not t/ and r/).
+# The .test and .result files are both in main/.
+MYSQL_TEST_SRC="$SRC_DIR/mysql-test"
+if [ -d "$MYSQL_TEST_SRC" ]; then
+    echo "==> Copying mysql-test suite data..."
+    MYSQL_TEST_DST="$INSTALL_DIR/mysql-test"
+    mkdir -p "$MYSQL_TEST_DST"
+    for subdir in main include std_data suite; do
+        if [ -d "$MYSQL_TEST_SRC/$subdir" ]; then
+            cp -R "$MYSQL_TEST_SRC/$subdir" "$MYSQL_TEST_DST/"
+        fi
+    done
+    # Copy top-level helper files needed by mysqltest
+    for f in unstable-tests suite.pm; do
+        [ -f "$MYSQL_TEST_SRC/$f" ] && cp "$MYSQL_TEST_SRC/$f" "$MYSQL_TEST_DST/"
+    done
+    echo "==> mysql-test data copied to $MYSQL_TEST_DST"
+else
+    echo "WARNING: mysql-test directory not found in source tree" >&2
+fi
+
+if [ "${MARIADB_VFS_SOURCE_ROLES:?}" != "system-tables,test-suite" ]; then
+    echo "ERROR: MariaDB tap recipe requires the exact system-tables,test-suite source-role set" >&2
+    exit 2
+fi
+
+SYSTEM_TABLES="$INSTALL_DIR/share/mysql"
+TEST_SUITE="$INSTALL_DIR/mysql-test"
+for path in \
+    "$SYSTEM_TABLES/mysql_system_tables.sql" \
+    "$SYSTEM_TABLES/mysql_system_tables_data.sql" \
+    "$TEST_SUITE/main"; do
+    [ -e "$path" ] || { echo "ERROR: MariaDB build output is missing $path" >&2; exit 1; }
+done
+
+ROLES_OUT="$OUT_DIR/.kandelo-vfs-source-roles"
+mkdir -p "$ROLES_OUT/system-tables" "$ROLES_OUT/test-suite"
+cp -R "$SYSTEM_TABLES/." "$ROLES_OUT/system-tables/"
+cp -R "$TEST_SUITE/." "$ROLES_OUT/test-suite/"
+
+FORK_INSTRUMENT="${WASM_POSIX_FORK_INSTRUMENT:?}"
+[ -x "$FORK_INSTRUMENT" ] || { echo "ERROR: fork instrumenter is not executable" >&2; exit 1; }
+"$FORK_INSTRUMENT" "$INSTALL_DIR/bin/mariadbd.wasm" -o "$OUT_DIR/mariadbd.wasm"
+"$FORK_INSTRUMENT" "$INSTALL_DIR/bin/mysqltest.wasm" -o "$OUT_DIR/mysqltest.wasm"
+chmod 0755 "$OUT_DIR/mariadbd.wasm" "$OUT_DIR/mysqltest.wasm"
+
+echo "==> MariaDB tap recipe outputs written under $OUT_DIR"

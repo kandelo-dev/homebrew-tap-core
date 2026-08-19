@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "dependencies": [],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 1426,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "8428324e216db070e153187b23a03d947c520399b7f73e4c40b3bd2c985a8126"
+    },
+    {
+      "bytes": 61191,
+      "mode": "0644",
+      "path": "src/posix-utils-lite.c",
+      "sha256": "7672dd0a3cef46339acd0b3db6e3253b9dbb104a5f471a409fcb90624a5730ac"
+    }
+  ]
+}

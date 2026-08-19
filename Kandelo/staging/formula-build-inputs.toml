@@ -1,6 +1,7 @@
 schema = 1
 kind = "kandelo-formula-build-inputs"
-version = 2
+version = 3
+disabled_formulae = ["erlang", "texlive"]
 
 [profiles.kandelo-common]
 profiles = []
@@ -35,8 +36,8 @@ tap_paths = []
 name = "bc"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
-kandelo_paths = ["packages/registry/bc"]
-tap_paths = []
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/bc"]
 
 [[formulae]]
 name = "binutils"
@@ -112,8 +113,8 @@ tap_paths = []
 name = "fbdoom"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
-kandelo_paths = ["packages/registry/fbdoom"]
-tap_paths = []
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/fbdoom"]
 
 [[formulae]]
 name = "file-formula"
@@ -259,8 +260,8 @@ tap_paths = ["Kandelo/recipes/login"]
 name = "lsof"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
-kandelo_paths = ["packages/registry/lsof"]
-tap_paths = []
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/lsof"]
 
 [[formulae]]
 name = "m4"
@@ -280,20 +281,15 @@ tap_paths = []
 name = "mariadb"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
-kandelo_paths = [
-  "packages/registry/mariadb",
-  "scripts/install-local-binary.sh",
-  "scripts/package-build-roots.sh",
-  "scripts/wasm-artifact-guards.sh",
-]
-tap_paths = []
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/mariadb"]
 
 [[formulae]]
 name = "modeset"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
-kandelo_paths = ["packages/registry/modeset"]
-tap_paths = []
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/modeset"]
 
 [[formulae]]
 name = "msmtpd"
@@ -334,15 +330,15 @@ tap_paths = []
 name = "netcat"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
-kandelo_paths = ["packages/registry/netcat"]
-tap_paths = []
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/netcat"]
 
 [[formulae]]
 name = "nethack"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
-kandelo_paths = ["packages/registry/nethack"]
-tap_paths = []
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/nethack"]
 
 [[formulae]]
 name = "nginx"
@@ -355,13 +351,8 @@ tap_paths = ["Kandelo/formula_support/run-network-wasm.ts"]
 name = "node"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
-kandelo_paths = [
-  "packages/registry/node-compat",
-  "packages/registry/spidermonkey",
-  "scripts/install-local-binary.sh",
-  "scripts/wasm-artifact-guards.sh",
-]
-tap_paths = []
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/node"]
 
 [[formulae]]
 name = "openssl"
@@ -402,20 +393,15 @@ tap_paths = ["Kandelo/patches/perl"]
 name = "php"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
-kandelo_paths = [
-  "packages/registry/php",
-  "scripts/install-local-binary.sh",
-  "scripts/package-build-roots.sh",
-  "scripts/wasm-artifact-guards.sh",
-]
-tap_paths = []
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/php"]
 
 [[formulae]]
 name = "posix-utils-lite"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
-kandelo_paths = ["packages/registry/posix-utils-lite"]
-tap_paths = []
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/posix-utils-lite"]
 
 [[formulae]]
 name = "procps"
@@ -428,8 +414,8 @@ tap_paths = []
 name = "python"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
-kandelo_paths = ["packages/registry/cpython"]
-tap_paths = []
+kandelo_paths = []
+tap_paths = ["Kandelo/recipes/python"]
 
 [[formulae]]
 name = "redis"
