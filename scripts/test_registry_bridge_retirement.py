@@ -89,6 +89,42 @@ class RegistryBridgeRetirementTest(unittest.TestCase):
         }
         self.assertEqual(bridged, {"erlang"})
 
+    def test_selected_tap_recipe_resources_use_literal_source_authority(self) -> None:
+        for name in ACTIVE_TAP_RECIPES:
+            source = (ROOT / "Formula" / f"{name}.rb").read_text(
+                encoding="utf-8"
+            )
+            recipe_call = re.search(
+                r"kandelo_build_tap_recipe\((?P<body>.*?)\n\s*\)",
+                source,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(recipe_call, name)
+            selected = re.search(
+                r"resources:\s*\[(?P<names>[^]]*)\]",
+                recipe_call.group("body"),
+            )
+            if selected is None:
+                continue
+            resource_names = re.findall(r'"([a-z0-9][a-z0-9-]*)"', selected.group("names"))
+            for resource_name in resource_names:
+                with self.subTest(formula=name, resource=resource_name):
+                    block = re.search(
+                        rf'^  resource "{re.escape(resource_name)}" do\n'
+                        r"(?P<body>.*?)^  end$",
+                        source,
+                        re.DOTALL | re.MULTILINE,
+                    )
+                    self.assertIsNotNone(block)
+                    self.assertRegex(
+                        block.group("body"),
+                        r'(?m)^    url "https://[^"\n]+"$',
+                    )
+                    self.assertRegex(
+                        block.group("body"),
+                        r'(?m)^    sha256 "[0-9a-f]{64}"$',
+                    )
+
     def test_deferred_formulae_are_explicitly_disabled_from_staging(self) -> None:
         policy = (ROOT / "Kandelo/staging/formula-build-inputs.toml").read_text(
             encoding="utf-8"
