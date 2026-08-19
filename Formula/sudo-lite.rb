@@ -35,4 +35,9 @@ class SudoLite < Formula
     assert_match(/sudo-lite: unsupported option/, output)
     assert_match(/usage: .*sudo-lite/, output)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/sudo-lite"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "d9ea481112c25ea278b36888ed5e814358ffa663be203a90cb4081ada40fc828"
+  end
 end
