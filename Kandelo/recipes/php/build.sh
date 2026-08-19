@@ -1161,9 +1161,6 @@ wasm32posix-cc -shared -fPIC -o "$BIN_DIR/opcache.so" \
     ext/opcache/.libs/shared_alloc_mmap.o \
     ext/opcache/.libs/shared_alloc_posix.o \
     "$FORK_SIDE_MODULE_ABI_OBJECT"
-echo "==> Applying fork instrumentation to opcache.so side module..."
-"$FORK_INSTRUMENT" "$BIN_DIR/opcache.so" -o "$BIN_DIR/opcache.so.instr" --entry env.fork
-mv "$BIN_DIR/opcache.so.instr" "$BIN_DIR/opcache.so"
 echo "==> opcache.so: $(wc -c < "$BIN_DIR/opcache.so") bytes"
 
 # Build ext/curl as a normal shared PHP extension. The Curl bottle publishes a

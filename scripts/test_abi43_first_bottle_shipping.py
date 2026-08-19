@@ -81,10 +81,15 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
     def test_node_declares_the_native_rust_recipe_toolchain(self) -> None:
         source = self.formula("node")
         self.assertIn('depends_on "cbindgen" => :build', source)
+        self.assertIn('depends_on "python@3.13" => :build', source)
         self.assertIn('depends_on "rust" => :build', source)
 
     def test_mariadb_maps_private_build_paths_out_of_target_artifacts(self) -> None:
         source = self.recipe("mariadb")
+        self.assertIn(
+            'GUEST_PREFIX="/opt/kandelo/homebrew/opt/mariadb"',
+            source,
+        )
         self.assertIn('prefix_map_flags() {', source)
         self.assertIn(
             'REPRODUCIBLE_PREFIX_MAPS="$(prefix_map_flags "$WORK_DIR" '
@@ -101,6 +106,8 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
             '-DNDEBUG $REPRODUCIBLE_PREFIX_MAPS"',
             source,
         )
+        self.assertIn('-DCMAKE_INSTALL_PREFIX="$GUEST_PREFIX"', source)
+        self.assertNotIn('-DCMAKE_INSTALL_PREFIX="$INSTALL_DIR"', source)
 
     def test_php_links_curl_side_module_with_the_pic_libcurl_archive(self) -> None:
         source = self.recipe("php")
@@ -115,6 +122,15 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         ]
         self.assertIn('"$LIBCURL_PREFIX/lib/libcurl-pic.a"', curl_link)
         self.assertNotIn('"$LIBCURL_PREFIX/lib/libcurl.a"', curl_link)
+
+    def test_php_does_not_instrument_the_nonforking_opcache_module(self) -> None:
+        source = self.recipe("php")
+        opcache_start = source.index('echo "==> Building opcache.so')
+        opcache_end = source.index('echo "==> opcache.so:', opcache_start)
+        opcache_build = source[opcache_start:opcache_end]
+
+        self.assertIn('"$FORK_SIDE_MODULE_ABI_OBJECT"', opcache_build)
+        self.assertNotIn('"$FORK_INSTRUMENT"', opcache_build)
 
     def test_zip_does_not_require_the_broken_external_unzip_pipe(self) -> None:
         source = self.formula("zip")
