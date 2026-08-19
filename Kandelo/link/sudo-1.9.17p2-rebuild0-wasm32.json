@@ -1,0 +1,48 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 1069926,
+    "cache_key_sha": "adb1211379b0f885a560a537a79e05a51a5c91491913e6a401a4f74e7ca02693",
+    "payload_root": "sudo/1.9.17p2",
+    "sha256": "adb1211379b0f885a560a537a79e05a51a5c91491913e6a401a4f74e7ca02693",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/sudo/blobs/sha256:adb1211379b0f885a560a537a79e05a51a5c91491913e6a401a4f74e7ca02693"
+  },
+  "cellar": "/opt/kandelo/homebrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/sudo/1.9.17p2",
+  "links": [
+    {
+      "source": "bin/cvtsudoers",
+      "target": "bin/cvtsudoers",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sudo",
+      "target": "bin/sudo",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/sudoreplay",
+      "target": "bin/sudoreplay",
+      "type": "symlink"
+    },
+    {
+      "source": "bin/visudo",
+      "target": "bin/visudo",
+      "type": "symlink"
+    }
+  ],
+  "package": "sudo",
+  "prefix": "/opt/kandelo/homebrew",
+  "receipts": [
+    ".brew/sudo.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.9.17p2"
+}

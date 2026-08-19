@@ -38,4 +38,9 @@ class Sudo < Formula
     output = kandelo_run_wasm(bin/"sudoreplay", ["-V"], merge_stderr: true)
     assert_match(/1\.9\.17p2/, output)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/sudo"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "adb1211379b0f885a560a537a79e05a51a5c91491913e6a401a4f74e7ca02693"
+  end
 end
