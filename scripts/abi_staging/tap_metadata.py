@@ -1538,6 +1538,32 @@ def plan_formula_metadata_patch(
     sidecar_path = root / f"Kandelo/formula/{name}.json"
     sidecar = dict(_load_json(sidecar_path, f"metadata sidecar for {name}"))
     bottles = [dict(_mapping(item, "metadata bottle")) for item in sidecar["bottles"]]
+    sidecar_abi = _positive_integer(
+        sidecar.get("kandelo_abi"), "metadata sidecar ABI"
+    )
+    if sidecar_abi != checked_update.target_abi:
+        if sidecar_abi > checked_update.target_abi:
+            raise TapMetadataError("metadata sidecar cannot move to an older ABI")
+        bottles = [
+            _pending_bottle(
+                bottle,
+                target_abi=checked_update.target_abi,
+                kandelo_commit=checked_promoted.built_from["kandelo_commit"],
+                tap_commit=source["commit"],
+                normalized_formula_sha256=(
+                    checked_update.expected_normalized_formula_sha256
+                ),
+                field=f"legacy metadata bottle {name}/{index}",
+            )
+            for index, bottle in enumerate(bottles)
+        ]
+        sidecar.update(
+            {
+                "bottles": bottles,
+                "kandelo_abi": checked_update.target_abi,
+                "tap_commit": source["commit"],
+            }
+        )
     pkg_version = (
         checked_promoted.version
         if checked_promoted.revision == 0
