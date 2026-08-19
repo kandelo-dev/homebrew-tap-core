@@ -10,17 +10,22 @@
         "formula_sha256": "5615793d8bd33da59d0e740ff5be208d634f10a2cac8183e6bc9f67e29fc39d4",
         "kandelo_commit": "7ca8cb2df61c16561197c1f395892976f1ae1390",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "99134c9439ece45065b330703c013fcf9e65366e",
+        "tap_commit": "78ed2f1e73b6ae93b91b9dd0d5a56f144965a663",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
+      "bytes": 53774,
+      "cache_key_sha": "e0ebe069ee670d8e51a1feceb8227f71372b13b6e6ffe56f5a3143bd6b56579b",
       "cellar": "/opt/kandelo/homebrew/Cellar",
       "fork_instrumentation": "not-required",
       "kandelo_abi": 43,
+      "link_manifest": "Kandelo/link/login-0.1.0-rebuild0-wasm32.json",
       "prefix": "/opt/kandelo/homebrew",
       "runtime_support": [
         "node"
       ],
-      "status": "pending"
+      "sha256": "e0ebe069ee670d8e51a1feceb8227f71372b13b6e6ffe56f5a3143bd6b56579b",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/login/blobs/sha256:e0ebe069ee670d8e51a1feceb8227f71372b13b6e6ffe56f5a3143bd6b56579b"
     }
   ],
   "dependencies": [],

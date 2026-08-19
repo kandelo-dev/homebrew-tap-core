@@ -1,0 +1,33 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 53774,
+    "cache_key_sha": "e0ebe069ee670d8e51a1feceb8227f71372b13b6e6ffe56f5a3143bd6b56579b",
+    "payload_root": "login/0.1.0",
+    "sha256": "e0ebe069ee670d8e51a1feceb8227f71372b13b6e6ffe56f5a3143bd6b56579b",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/login/blobs/sha256:e0ebe069ee670d8e51a1feceb8227f71372b13b6e6ffe56f5a3143bd6b56579b"
+  },
+  "cellar": "/opt/kandelo/homebrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/login/0.1.0",
+  "links": [
+    {
+      "source": "bin/login",
+      "target": "bin/login",
+      "type": "symlink"
+    }
+  ],
+  "package": "login",
+  "prefix": "/opt/kandelo/homebrew",
+  "receipts": [
+    ".brew/login.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "0.1.0"
+}

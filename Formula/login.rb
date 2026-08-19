@@ -34,4 +34,9 @@ class Login < Formula
     )
     assert_match(/usage: .*login/, output)
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/login"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "e0ebe069ee670d8e51a1feceb8227f71372b13b6e6ffe56f5a3143bd6b56579b"
+  end
 end
