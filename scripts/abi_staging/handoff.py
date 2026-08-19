@@ -20,6 +20,7 @@ from urllib.parse import unquote, urlsplit
 
 from .canonical import (
     CanonicalJsonError,
+    MAX_VFS_COMPOSITION_JSON_ITEMS,
     canonical_bytes,
     parse_canonical_bytes,
     parse_json_bytes,
@@ -571,7 +572,12 @@ def prepare_composition_input(
         "required_by": roots,
         "link_manifest": link_manifest,
     }
-    return json.loads(canonical_bytes(result))
+    return json.loads(
+        canonical_bytes(
+            result,
+            maximum_items=MAX_VFS_COMPOSITION_JSON_ITEMS,
+        )
+    )
 
 
 def load_build_run(body: bytes, *, expected_repository: str) -> dict[str, Any]:
@@ -2214,7 +2220,12 @@ def main(arguments: list[str] | None = None) -> int:
                     64 * 1024,
                 ),
             )
-            Path(args.out).write_bytes(canonical_bytes(prepared))
+            Path(args.out).write_bytes(
+                canonical_bytes(
+                    prepared,
+                    maximum_items=MAX_VFS_COMPOSITION_JSON_ITEMS,
+                )
+            )
         elif args.command == "assemble":
             assemble_handoff(
                 context_path=Path(args.context).resolve(strict=True),

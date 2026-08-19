@@ -14,7 +14,12 @@ import tempfile
 from unittest import mock
 import unittest
 
-from scripts.abi_staging.canonical import canonical_bytes, canonical_sha256
+from scripts.abi_staging.canonical import (
+    MAX_VFS_COMPOSITION_JSON_ITEMS,
+    canonical_bytes,
+    canonical_sha256,
+    parse_canonical_bytes,
+)
 from scripts.abi_staging.custody import create_source_custody
 from scripts.abi_staging import handoff as handoff_module
 from scripts.abi_staging.formula_inventory import normalize_formula_source
@@ -108,6 +113,40 @@ def _composition_bottle_bytes() -> bytes:
             member = tarfile.TarInfo(path)
             member.size = len(body)
             member.mode = mode
+            member.mtime = 0
+            archive.addfile(member, io.BytesIO(body))
+    return stream.getvalue()
+
+
+def _large_composition_bottle_bytes(file_count: int = 16_000) -> bytes:
+    stream = io.BytesIO()
+    with tarfile.open(fileobj=stream, mode="w:gz", format=tarfile.PAX_FORMAT) as archive:
+        for path in (
+            "mini-tool/1.0.0_1",
+            "mini-tool/1.0.0_1/share",
+            "mini-tool/1.0.0_1/.brew",
+        ):
+            member = tarfile.TarInfo(path)
+            member.type = tarfile.DIRTYPE
+            member.mode = 0o755
+            member.mtime = 0
+            archive.addfile(member)
+        for path, body in (
+            ("mini-tool/1.0.0_1/.brew/mini-tool.rb", b"class MiniTool < Formula\nend\n"),
+            ("mini-tool/1.0.0_1/INSTALL_RECEIPT.json", b"{}\n"),
+        ):
+            member = tarfile.TarInfo(path)
+            member.size = len(body)
+            member.mode = 0o644
+            member.mtime = 0
+            archive.addfile(member, io.BytesIO(body))
+        for index in range(file_count):
+            body = b"fixture\n"
+            member = tarfile.TarInfo(
+                f"mini-tool/1.0.0_1/share/inventory-{index:05d}"
+            )
+            member.size = len(body)
+            member.mode = 0o644
             member.mtime = 0
             archive.addfile(member, io.BytesIO(body))
     return stream.getvalue()
@@ -853,6 +892,109 @@ class BuildHandoffTests(unittest.TestCase):
                 metadata_body=json.dumps(hostile).encode(),
                 guest_layout_body=canonical_bytes(guest_layout),
             )
+
+    def test_composition_cli_serializes_a_large_real_bottle_inventory(self) -> None:
+        bottle = _large_composition_bottle_bytes()
+        bottle_sha256 = hashlib.sha256(bottle).hexdigest()
+        candidate_root_url = (
+            "https://ghcr.io/v2/kandelo-dev/"
+            "homebrew-tap-core-abi-9-candidates/mini-tool"
+        )
+        metadata = {
+            "kandelo-dev/tap-core/mini-tool": {
+                "formula": {
+                    "name": "mini-tool",
+                    "path": (
+                        "Library/Taps/kandelo-dev/homebrew-tap-core/"
+                        "Formula/mini-tool.rb"
+                    ),
+                    "pkg_version": "1.0.0_1",
+                },
+                "bottle": {
+                    "root_url": candidate_root_url.rsplit("/", 1)[0],
+                    "cellar": "any_skip_relocation",
+                    "rebuild": 2,
+                    "tags": {
+                        "wasm32_kandelo": {
+                            "local_filename": (
+                                "mini-tool--1.0.0_1.wasm32_kandelo.bottle.2.tar.gz"
+                            ),
+                            "sha256": bottle_sha256,
+                        }
+                    },
+                },
+            }
+        }
+        context = {
+            "schema": 1,
+            "kind": "kandelo-abi-staging-build-context",
+            "request_source": {
+                "repository": "Automattic/kandelo",
+                "commit": "1" * 40,
+                "tree": "2" * 40,
+            },
+            "tap_source": {
+                "repository": "kandelo-dev/homebrew-tap-core",
+                "commit": "3" * 40,
+                "tree": "4" * 40,
+            },
+            "formula": "mini-tool",
+            "architecture": "wasm32",
+            "target_abi": 9,
+            "bottle_root_url": candidate_root_url,
+            "formula_identity": {
+                "name": "mini-tool",
+                "version": "1.0.0",
+                "revision": 1,
+                "rebuild": 2,
+                "architecture": "wasm32",
+                "formula_path": "Formula/mini-tool.rb",
+                "normalized_formula_sha256": "5" * 64,
+            },
+            "composition_roots": ["mini-shell"],
+        }
+        guest_layout = {
+            "schema": 1,
+            "kind": "kandelo-homebrew-guest-layout",
+            "prefix": "/opt/kandelo/homebrew",
+            "cellar": "/opt/kandelo/homebrew/Cellar",
+            "repository": "/opt/kandelo/homebrew",
+            "stable_entrypoint": "/opt/kandelo/homebrew/bin/brew",
+            "retired_prefixes": [],
+        }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "context.json").write_bytes(canonical_bytes(context))
+            (root / "bottle.tar.gz").write_bytes(bottle)
+            (root / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+            (root / "guest-layout.json").write_bytes(canonical_bytes(guest_layout))
+            output = root / "composition.json"
+
+            self.assertEqual(
+                handoff_module.main(
+                    [
+                        "prepare-composition",
+                        "--context",
+                        str(root / "context.json"),
+                        "--bottle",
+                        str(root / "bottle.tar.gz"),
+                        "--metadata",
+                        str(root / "metadata.json"),
+                        "--guest-layout",
+                        str(root / "guest-layout.json"),
+                        "--out",
+                        str(output),
+                    ]
+                ),
+                0,
+            )
+            parsed = parse_canonical_bytes(
+                output.read_bytes(),
+                maximum_bytes=16 * 1024 * 1024,
+                maximum_items=MAX_VFS_COMPOSITION_JSON_ITEMS,
+            )
+            self.assertEqual(parsed["formula"]["name"], "mini-tool")
 
     def test_build_run_is_canonical_and_bound_to_the_tap_build_job(self) -> None:
         loader = getattr(handoff_module, "load_build_run", None)
