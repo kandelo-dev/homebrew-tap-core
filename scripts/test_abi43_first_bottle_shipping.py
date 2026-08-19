@@ -221,14 +221,22 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         self.assertIn('"$LIBCURL_PREFIX/lib/libcurl-pic.a"', curl_link)
         self.assertNotIn('"$LIBCURL_PREFIX/lib/libcurl.a"', curl_link)
 
-    def test_php_does_not_instrument_the_nonforking_opcache_module(self) -> None:
+    def test_php_instruments_the_fork_capable_opcache_module(self) -> None:
         source = self.recipe("php")
         opcache_start = source.index('echo "==> Building opcache.so')
         opcache_end = source.index('echo "==> opcache.so:', opcache_start)
         opcache_build = source[opcache_start:opcache_end]
 
         self.assertIn('"$FORK_SIDE_MODULE_ABI_OBJECT"', opcache_build)
-        self.assertNotIn('"$FORK_INSTRUMENT"', opcache_build)
+        self.assertIn(
+            '"$FORK_INSTRUMENT" "$BIN_DIR/opcache.so" '
+            '-o "$BIN_DIR/opcache.so.instrumented"',
+            opcache_build,
+        )
+        self.assertIn(
+            'mv "$BIN_DIR/opcache.so.instrumented" "$BIN_DIR/opcache.so"',
+            opcache_build,
+        )
 
     def test_php_marks_every_shipped_side_module_with_the_current_abi(self) -> None:
         source = self.recipe("php")

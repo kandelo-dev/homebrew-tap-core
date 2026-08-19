@@ -20,16 +20,16 @@
       "sha256": "582199b96113f37d8bd277c936fac1bc5688a57ce1a4c6f936ec2892cd2d2a73"
     },
     {
-      "bytes": 63212,
+      "bytes": 63351,
       "mode": "0755",
       "path": "build.sh",
-      "sha256": "553bc8e58fc1564ca84f8082ee7f44b9cd3d880581ce030153f2dd2827ac0207"
+      "sha256": "21d6bcfd3f45e88caf6e2cdd9f68ef204e4c49498aa14097f6d97bb7daeb098b"
     },
     {
-      "bytes": 442,
+      "bytes": 468,
       "mode": "0644",
       "path": "fork-side-module-abi.c",
-      "sha256": "6df3b168d4fb83cbeedc14a366c4dcb100fb0f729b4393a86b269ef11fb315b2"
+      "sha256": "3571402831f7b4a19233d88a1e8e71cd797e117e0ffa89576a73dc0ce8aa940a"
     },
     {
       "bytes": 3520,
