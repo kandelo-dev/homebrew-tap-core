@@ -15,9 +15,11 @@ class Node < Formula
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
+  depends_on "cbindgen" => :build
   depends_on "kandelo-dev/tap-core/libcxx"
   depends_on "kandelo-dev/tap-core/openssl"
   depends_on "kandelo-dev/tap-core/zlib"
+  depends_on "rust" => :build
 
   skip_clean "bin/node"
 
