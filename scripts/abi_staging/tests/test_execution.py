@@ -169,6 +169,35 @@ class WorkflowExecutionTests(unittest.TestCase):
             )
             self.assertNotIn("/var/lib/kandelo-abi-staging", prepared)
 
+    def test_staging_recipe_runner_projects_the_exact_rust_closure(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "protected-recipe-runner.py"
+
+            execution._prepare_staging_recipe_runner(
+                source=KANDELO_ROOT / "scripts/homebrew-tap-recipe-runner.py",
+                destination=destination,
+            )
+
+            prepared = destination.read_text(encoding="utf-8")
+            self.assertIn(
+                "def staging_runtime_paths(config: dict[str, Any]) -> list[Path]:",
+                prepared,
+            )
+            self.assertIn(
+                'for name in ("cargo", "rustc"):',
+                prepared,
+            )
+            self.assertEqual(
+                prepared.count("runtime_paths = staging_runtime_paths(config)"),
+                2,
+            )
+            self.assertNotIn(
+                'runtime_paths = [config["node_bin"], config["llvm_bin"]]',
+                prepared,
+            )
+            ast.parse(prepared)
+
     def test_staging_launcher_places_large_recipe_copies_on_runner_disk(self) -> None:
         execution = importlib.import_module("scripts.abi_staging.execution")
         with tempfile.TemporaryDirectory() as temporary:
