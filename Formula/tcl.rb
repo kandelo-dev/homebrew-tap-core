@@ -271,6 +271,12 @@ class Tcl < Formula
     extension_source.write <<~C
       #define USE_TCL_STUBS
       #include <tcl.h>
+      #include "abi_constants.h"
+
+      __attribute__((export_name("__abi_version")))
+      unsigned __abi_version(void) {
+        return WASM_POSIX_ABI_VERSION;
+      }
 
       static int KandeloCommand(
           void *client_data, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
@@ -287,9 +293,10 @@ class Tcl < Formula
         return Tcl_PkgProvide(interp, "kandelo_extension", "1.0");
       }
     C
-    kandelo_wasm_build do
+    kandelo_wasm_build do |root|
       system kandelo_cc, "-shared", "-fPIC", "-O2", "-I#{include}/tcl",
-        extension_source, "-L#{lib}", "-ltclstub", "-o", extension
+        "-I#{root}/libc/glue", extension_source, "-L#{lib}", "-ltclstub",
+        "-o", extension
     end
     kandelo_fork_instrument(extension)
 

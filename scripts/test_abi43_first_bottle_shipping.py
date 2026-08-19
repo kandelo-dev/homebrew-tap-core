@@ -61,9 +61,20 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
 
     def test_tcl_instruments_its_test_side_module_before_loading_it(self) -> None:
         source = self.formula("tcl")
-        compile_extension = source.index('"-ltclstub", "-o", extension')
+        extension_source = source.index('extension_source.write <<~C')
+        self.assertIn('#include "abi_constants.h"', source[extension_source:])
+        declaration = source.index('#include "abi_constants.h"', extension_source)
+        abi_export = source.index('export_name("__abi_version")', declaration)
+        abi_value = source.index("return WASM_POSIX_ABI_VERSION;", abi_export)
+        compile_extension = source.index('"-o", extension', abi_value)
+        glue_include = source.index('"-I#{root}/libc/glue"', abi_value)
         instrument_extension = source.index("kandelo_fork_instrument(extension)")
         mount_extension = source.index('"/work/kandelo-extension.so" => extension')
+        self.assertLess(extension_source, declaration)
+        self.assertLess(declaration, abi_export)
+        self.assertLess(abi_export, abi_value)
+        self.assertLess(abi_value, glue_include)
+        self.assertLess(glue_include, compile_extension)
         self.assertLess(compile_extension, instrument_extension)
         self.assertLess(instrument_extension, mount_extension)
 
