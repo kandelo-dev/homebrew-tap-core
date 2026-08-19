@@ -78,6 +78,15 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         self.assertLess(compile_extension, instrument_extension)
         self.assertLess(instrument_extension, mount_extension)
 
+    def test_tcl_instruments_its_fork_capable_thread_test_before_execution(self) -> None:
+        source = self.formula("tcl")
+        self.assertIn("kandelo_fork_instrument(thread_wasm)", source)
+        compile_thread = source.index('"-o", thread_wasm')
+        instrument_thread = source.index("kandelo_fork_instrument(thread_wasm)")
+        execute_thread = source.index("kandelo_run_wasm(thread_wasm")
+        self.assertLess(compile_thread, instrument_thread)
+        self.assertLess(instrument_thread, execute_thread)
+
     def test_node_declares_the_native_rust_recipe_toolchain(self) -> None:
         source = self.formula("node")
         self.assertIn('depends_on "cbindgen" => :build', source)
