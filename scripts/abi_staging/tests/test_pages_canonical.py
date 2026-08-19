@@ -339,7 +339,14 @@ class PagesCanonicalSelectionTests(unittest.TestCase):
             patch.object(
                 cli_module,
                 "isolated_oras_transport",
-                return_value=nullcontext(self.fixture.transport),
+                side_effect=AssertionError(
+                    "contents-only metadata must not bootstrap registry credentials"
+                ),
+            ),
+            patch.object(
+                cli_module,
+                "UrllibOciTransportV1",
+                return_value=self.fixture.transport,
             ),
             patch.object(
                 cli_module,

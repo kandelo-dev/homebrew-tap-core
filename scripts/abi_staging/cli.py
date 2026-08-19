@@ -1741,26 +1741,26 @@ def _apply_pages_canonical_metadata(args: argparse.Namespace) -> None:
     policy = load_promotion_policy(
         tap_root / "Kandelo/staging/promotion-policy.toml"
     )
-    with isolated_oras_transport(username="", token="") as transport:
-        candidate = _fetch_candidate_record(
-            _immutable_reference_locator(args.candidate_reference),
-            transport=transport,
+    transport = UrllibOciTransportV1(username="", token="")
+    candidate = _fetch_candidate_record(
+        _immutable_reference_locator(args.candidate_reference),
+        transport=transport,
+    )
+    selected = select_pages_canonical_candidate(
+        candidate,
+        tap_root=tap_root,
+        target_abi=args.target_abi,
+    )
+    if selected.formula != args.formula:
+        raise PagesCanonicalError(
+            "Pages candidate differs from the requested Formula"
         )
-        selected = select_pages_canonical_candidate(
-            candidate,
-            tap_root=tap_root,
-            target_abi=args.target_abi,
-        )
-        if selected.formula != args.formula:
-            raise PagesCanonicalError(
-                "Pages candidate differs from the requested Formula"
-            )
-        publication = read_pages_canonical_bottle(
-            candidate,
-            tap_root=tap_root,
-            target_abi=args.target_abi,
-            transport=transport,
-        )
+    publication = read_pages_canonical_bottle(
+        candidate,
+        tap_root=tap_root,
+        target_abi=args.target_abi,
+        transport=transport,
+    )
     prepared = prepare_pages_formula_metadata_patch(
         tap_root=tap_root,
         current_tap_source=snapshot_tap_source(
