@@ -165,17 +165,29 @@ _STAGING_RECIPE_RUNNER_NIX_REQUISITES_SIGNATURE = """def staging_runtime_paths(c
         config["node_bin"],
         config["llvm_bin"],
     ]
-    for name in ("cargo", "rustc"):
-        alias = config["platform_host_root"] / "tools" / "bin" / name
+    aliases = {
+        name: config["platform_host_root"] / "tools" / "bin" / name
+        for name in ("cargo", "rustc")
+    }
+    alias_metadata = {}
+    for name, alias in aliases.items():
         try:
-            alias_metadata = alias.lstat()
+            alias_metadata[name] = alias.lstat()
+        except FileNotFoundError:
+            continue
         except OSError as error:
             fail(f"configured {name} alias is unavailable: {error}")
+    if not alias_metadata:
+        return runtime_paths
+    if set(alias_metadata) != set(aliases):
+        fail("configured Rust aliases must be both present or both absent")
+    for name, alias in aliases.items():
+        metadata = alias_metadata[name]
         if (
-            not stat.S_ISLNK(alias_metadata.st_mode)
-            or alias_metadata.st_uid != 0
-            or alias_metadata.st_gid != 0
-            or alias_metadata.st_nlink != 1
+            not stat.S_ISLNK(metadata.st_mode)
+            or metadata.st_uid != 0
+            or metadata.st_gid != 0
+            or metadata.st_nlink != 1
         ):
             fail(f"configured {name} alias is not one sealed root-owned link")
         resolved = canonical_host_projection_source(

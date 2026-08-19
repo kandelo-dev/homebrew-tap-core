@@ -185,7 +185,12 @@ class WorkflowExecutionTests(unittest.TestCase):
                 prepared,
             )
             self.assertIn(
-                'for name in ("cargo", "rustc"):',
+                'for name in ("cargo", "rustc")\n'
+                "    }",
+                prepared,
+            )
+            self.assertIn(
+                "if set(alias_metadata) != set(aliases):",
                 prepared,
             )
             self.assertEqual(
@@ -197,6 +202,50 @@ class WorkflowExecutionTests(unittest.TestCase):
                 prepared,
             )
             ast.parse(prepared)
+
+    def test_staging_recipe_runner_allows_formula_without_rust_aliases(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "protected-recipe-runner.py"
+
+            execution._prepare_staging_recipe_runner(
+                source=KANDELO_ROOT / "scripts/homebrew-tap-recipe-runner.py",
+                destination=destination,
+            )
+
+            prepared = destination.read_text(encoding="utf-8")
+            self.assertIn(
+                "if not alias_metadata:\n"
+                "        return runtime_paths",
+                prepared,
+            )
+            self.assertIn(
+                'fail("configured Rust aliases must be both present or both absent")',
+                prepared,
+            )
+            ast.parse(prepared)
+
+            namespace: dict[str, object] = {"__name__": "staging_recipe_runner_test"}
+            exec(compile(prepared, str(destination), "exec"), namespace)
+            platform_root = Path(temporary) / "platform"
+            config = {
+                "node_bin": Path("/nix/store/node/bin/node"),
+                "llvm_bin": Path("/nix/store/llvm/bin/clang"),
+                "platform_host_root": platform_root,
+            }
+            self.assertEqual(
+                namespace["staging_runtime_paths"](config),
+                [config["node_bin"], config["llvm_bin"]],
+            )
+
+            alias_root = platform_root / "tools/bin"
+            alias_root.mkdir(parents=True)
+            (alias_root / "cargo").symlink_to("/nix/store/cargo/bin/cargo")
+            with self.assertRaisesRegex(
+                namespace["RunnerError"],
+                "configured Rust aliases must be both present or both absent",
+            ):
+                namespace["staging_runtime_paths"](config)
 
     def test_staging_launcher_places_large_recipe_copies_on_runner_disk(self) -> None:
         execution = importlib.import_module("scripts.abi_staging.execution")
