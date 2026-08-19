@@ -1,0 +1,55 @@
+{
+  "bottle_rebuild": 0,
+  "bottles": [
+    {
+      "arch": "wasm32",
+      "bottle_tag": "wasm32_kandelo",
+      "browser_compatible": true,
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/32095729346",
+      "built_from": {
+        "formula_sha256": "8899563a593a253fcb01fcfe40fa0ce74cbed1a2634117d71f5d0dd525d14459",
+        "kandelo_commit": "a8d466b506af1883cdc82c179dc9ad42c4b77dc9",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "7f0e7d638c5e9b2deb4f69efdf951a0593830be7",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "cellar": "/opt/kandelo/homebrew/Cellar",
+      "fork_instrumentation": "required",
+      "kandelo_abi": 43,
+      "prefix": "/opt/kandelo/homebrew",
+      "runtime_support": [
+        "node",
+        "browser"
+      ],
+      "status": "pending"
+    }
+  ],
+  "dependencies": [
+    {
+      "full_name": "kandelo-dev/tap-core/dash",
+      "name": "dash",
+      "version": "0.5.12"
+    },
+    {
+      "full_name": "kandelo-dev/tap-core/pcre2",
+      "name": "pcre2",
+      "version": "10.44_1"
+    },
+    {
+      "full_name": "kandelo-dev/tap-core/zlib",
+      "name": "zlib",
+      "version": "1.3.1_4"
+    }
+  ],
+  "formula_path": "Formula/nginx.rb",
+  "formula_revision": 0,
+  "full_name": "kandelo-dev/tap-core/nginx",
+  "kandelo_abi": 43,
+  "name": "nginx",
+  "schema": 1,
+  "source_metadata": "Kandelo/metadata.json",
+  "tap_commit": "7f0e7d638c5e9b2deb4f69efdf951a0593830be7",
+  "tap_name": "kandelo-dev/tap-core",
+  "tap_repository": "kandelo-dev/homebrew-tap-core",
+  "version": "1.30.3"
+}

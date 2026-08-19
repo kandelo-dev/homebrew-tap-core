@@ -1,0 +1,45 @@
+{
+  "bottle_rebuild": 0,
+  "bottles": [
+    {
+      "arch": "wasm32",
+      "bottle_tag": "wasm32_kandelo",
+      "browser_compatible": true,
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/32063978357",
+      "built_from": {
+        "formula_sha256": "bf242579a957526e49f3879958c4124f8b884f01bbe5df1cf4b27198a21e8257",
+        "kandelo_commit": "2af878c5f31115fd963183accc7a660f03097355",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "7c649b372a8d7b456476dd26a56d6a357fde3169",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "cellar": "/opt/kandelo/homebrew/Cellar",
+      "fork_instrumentation": "required",
+      "kandelo_abi": 43,
+      "prefix": "/opt/kandelo/homebrew",
+      "runtime_support": [
+        "node",
+        "browser"
+      ],
+      "status": "pending"
+    }
+  ],
+  "dependencies": [
+    {
+      "full_name": "kandelo-dev/tap-core/dash",
+      "name": "dash",
+      "version": "0.5.12"
+    }
+  ],
+  "formula_path": "Formula/msmtpd.rb",
+  "formula_revision": 1,
+  "full_name": "kandelo-dev/tap-core/msmtpd",
+  "kandelo_abi": 43,
+  "name": "msmtpd",
+  "schema": 1,
+  "source_metadata": "Kandelo/metadata.json",
+  "tap_commit": "7c649b372a8d7b456476dd26a56d6a357fde3169",
+  "tap_name": "kandelo-dev/tap-core",
+  "tap_repository": "kandelo-dev/homebrew-tap-core",
+  "version": "1.8.32_1"
+}
