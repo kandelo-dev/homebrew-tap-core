@@ -160,13 +160,14 @@ class WorkflowExecutionTests(unittest.TestCase):
             exec(compile(prepared, str(destination), "exec"), namespace)
             self.assertEqual(
                 namespace["PROTECTED_PUBLISHER_ROOT"],
-                Path("/var/lib/kandelo-abi-staging"),
+                Path("/run/kandelo-homebrew-publisher"),
             )
             self.assertIn(
-                'config["protected_root"].parent != PROTECTED_PUBLISHER_ROOT',
+                'config["protected_root"].parent != '
+                'Path("/run/kandelo-homebrew-publisher")',
                 prepared,
             )
-            self.assertNotIn("/run/kandelo-homebrew-publisher", prepared)
+            self.assertNotIn("/var/lib/kandelo-abi-staging", prepared)
 
     def test_staging_launcher_places_large_recipe_copies_on_runner_disk(self) -> None:
         execution = importlib.import_module("scripts.abi_staging.execution")
@@ -185,16 +186,35 @@ class WorkflowExecutionTests(unittest.TestCase):
 
             prepared = destination.read_text(encoding="utf-8")
             self.assertIn(
-                'protected_anchor="/var/lib/kandelo-abi-staging"', prepared
+                'protected_anchor="/run/kandelo-homebrew-publisher"', prepared
             )
             self.assertIn(
-                'protected_parent" != "/var/lib/kandelo-abi-staging"', prepared
+                'protected_parent" != "/run/kandelo-homebrew-publisher"', prepared
             )
             self.assertIn(
-                "stat -c '%u:%g:%a' /var/lib", prepared
+                'protected_backing="/var/lib/kandelo-abi-staging"', prepared
             )
-            self.assertIn('= "0:0:755" ]', prepared)
-            self.assertNotIn("/run/kandelo-homebrew-publisher", prepared)
+            self.assertIn(
+                '"$sudo_bin" /usr/bin/mount --bind \\', prepared
+            )
+            self.assertIn(
+                '"$protected_backing" "$protected_anchor"', prepared
+            )
+            self.assertIn(
+                'stat -c \'%d:%i\' "$protected_backing"', prepared
+            )
+            self.assertIn(
+                'stat -c \'%d:%i\' "$protected_anchor"', prepared
+            )
+            support = (
+                TAP_ROOT
+                / "Kandelo/formula_support/kandelo_formula_support.rb"
+            ).read_text(encoding="utf-8")
+            self.assertIn(
+                'KANDELO_TAP_RECIPE_PROTECTED_ANCHOR = '
+                '"/run/kandelo-homebrew-publisher".freeze',
+                support,
+            )
             subprocess.run(["bash", "-n", str(destination)], check=True)
 
     def test_staging_launcher_makes_private_dependency_directories_auditable(self) -> None:

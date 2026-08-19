@@ -161,13 +161,6 @@ _RECIPE_RUNNER_PROTECTED_ROOT_CONFIG_CHECK = (
     'if config["protected_root"].parent != '
     'Path("/run/kandelo-homebrew-publisher"):'
 )
-_STAGING_RECIPE_RUNNER_PROTECTED_ROOT_CONFIG_CHECK = (
-    'if config["protected_root"].parent != PROTECTED_PUBLISHER_ROOT:'
-)
-_STAGING_PROTECTED_ROOT = "/var/lib/kandelo-abi-staging"
-_STAGING_RECIPE_RUNNER_PROTECTED_ROOT = (
-    f'PROTECTED_PUBLISHER_ROOT = Path("{_STAGING_PROTECTED_ROOT}")'
-)
 _RECIPE_RUNNER_SOURCE_ASSIGNMENT = (
     '  local source="$platform_root/scripts/homebrew-tap-recipe-runner.py"'
 )
@@ -199,10 +192,37 @@ _PROTECTED_ROOT_PARENT_AUDIT = """  [ "$(/usr/bin/stat -c '%u:%g:%a' /run)" = "0
     echo "homebrew-patched-launcher: /run does not provide a protected publisher anchor" >&2
     return 2
   }"""
-_STAGING_PROTECTED_ROOT_PARENT_AUDIT = """  [ "$(/usr/bin/stat -c '%u:%g:%a' /var/lib)" = "0:0:755" ] || {
+_STAGING_PROTECTED_ROOT_PARENT_AUDIT = """  [ "$(/usr/bin/stat -c '%u:%g:%a' /run)" = "0:0:755" ] || {
+    echo "homebrew-patched-launcher: /run does not provide a protected publisher anchor" >&2
+    return 2
+  }
+  [ "$(/usr/bin/stat -c '%u:%g:%a' /var/lib)" = "0:0:755" ] || {
     echo "homebrew-patched-launcher: /var/lib does not provide a disk-backed protected publisher anchor" >&2
     return 2
-  }"""
+  }
+  # WHY: Formula contracts and both protected runners share the /run anchor,
+  # but multi-gigabyte recipe copies cannot live on the runner's tmpfs. Keep
+  # the contract path and bind it to a root-owned disk-backed directory before
+  # any Formula identity or recipe process exists.
+  local protected_backing="/var/lib/kandelo-abi-staging"
+  "$sudo_bin" /usr/bin/install -d -o root -g root -m 0711 \\
+    "$protected_backing" "$protected_anchor" || return
+  [ "$(/usr/bin/stat -c '%u:%g:%a' "$protected_backing" 2>/dev/null || true)" = \\
+    "0:0:711" ] || {
+    echo "homebrew-patched-launcher: disk-backed publisher anchor has unsafe access" >&2
+    return 2
+  }
+  if /usr/bin/mountpoint -q "$protected_anchor"; then
+    echo "homebrew-patched-launcher: protected publisher anchor is already mounted" >&2
+    return 2
+  fi
+  "$sudo_bin" /usr/bin/mount --bind \\
+    "$protected_backing" "$protected_anchor" || return
+  if [ "$(/usr/bin/stat -c '%d:%i' "$protected_backing" 2>/dev/null || true)" != \\
+       "$(/usr/bin/stat -c '%d:%i' "$protected_anchor" 2>/dev/null || true)" ]; then
+    echo "homebrew-patched-launcher: protected publisher anchor is not disk-backed" >&2
+    return 2
+  fi"""
 
 
 class ExecutionError(ValueError):
@@ -311,12 +331,6 @@ def _prepare_staging_recipe_runner(*, source: Path, destination: Path) -> Path:
     ).replace(
         _RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL,
         _STAGING_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL,
-    ).replace(
-        _RECIPE_RUNNER_PROTECTED_ROOT,
-        _STAGING_RECIPE_RUNNER_PROTECTED_ROOT,
-    ).replace(
-        _RECIPE_RUNNER_PROTECTED_ROOT_CONFIG_CHECK,
-        _STAGING_RECIPE_RUNNER_PROTECTED_ROOT_CONFIG_CHECK,
     )
     if destination.exists() or destination.is_symlink():
         raise ExecutionError("protected recipe runner destination already exists")
@@ -389,9 +403,6 @@ def _prepare_staging_launcher(
     ).replace(
         _PROTECTED_ROOT_PARENT_AUDIT,
         _STAGING_PROTECTED_ROOT_PARENT_AUDIT,
-    ).replace(
-        "/run/kandelo-homebrew-publisher",
-        _STAGING_PROTECTED_ROOT,
     )
     if destination.exists() or destination.is_symlink():
         raise ExecutionError("protected staging launcher destination already exists")
