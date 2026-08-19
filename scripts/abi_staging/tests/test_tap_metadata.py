@@ -1138,6 +1138,55 @@ class TapMetadataTests(unittest.TestCase):
             self.fail("per-Formula metadata patch validation is absent")
         validate(self.root, patch, update)
 
+    def test_plans_one_formula_update_when_top_index_row_is_absent(self) -> None:
+        history, snapshot, preactivation, _current = self._activate_fixture()
+        self._add_dash()
+        dash_sidecar_path = self.root / "Kandelo/formula/dash.json"
+        dash_sidecar = json.loads(dash_sidecar_path.read_bytes())
+        dash_sidecar["kandelo_abi"] = SUCCESSOR_ABI
+        for bottle in dash_sidecar["bottles"]:
+            bottle["kandelo_abi"] = SUCCESSOR_ABI
+        dash_sidecar_path.write_bytes(
+            json.dumps(dash_sidecar, indent=2, sort_keys=True).encode() + b"\n"
+        )
+        metadata_path = self.root / "Kandelo/metadata.json"
+        metadata = json.loads(metadata_path.read_bytes())
+        dash_projection = {
+            key: dash_sidecar[key]
+            for key in tap_metadata_module.PACKAGE_KEYS
+            if key != "formula_metadata"
+        }
+        dash_projection["formula_metadata"] = "Kandelo/formula/dash.json"
+        metadata["packages"] = [
+            dash_projection if package["name"] == "dash" else package
+            for package in metadata["packages"]
+            if package["name"] != "bash"
+        ]
+        metadata_path.write_bytes(
+            json.dumps(metadata, indent=2, sort_keys=True).encode() + b"\n"
+        )
+        _git(self.root, "add", "--", "Formula", "Kandelo")
+        _git(self.root, "commit", "-m", "remove pending Formula from top index")
+        current = {
+            "repository": "kandelo-dev/homebrew-tap-core",
+            "commit": _git(self.root, "rev-parse", "HEAD"),
+            "tree": _git(self.root, "rev-parse", "HEAD^{tree}"),
+        }
+
+        result = self._prepare_formula(
+            prepared=self._prepared_admission(preactivation=preactivation),
+            history=history,
+            snapshot=snapshot,
+            current=current,
+        )
+
+        projected = json.loads(result.patch.files["Kandelo/metadata.json"])
+        matches = [
+            package for package in projected["packages"] if package["name"] == "bash"
+        ]
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0]["formula_metadata"], "Kandelo/formula/bash.json")
+
     def test_composes_two_formula_updates_into_one_atomic_patch(self) -> None:
         history, snapshot, preactivation, _current = self._activate_fixture()
         self._add_dash()
