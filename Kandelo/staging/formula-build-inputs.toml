@@ -1,6 +1,6 @@
 schema = 1
 kind = "kandelo-formula-build-inputs"
-version = 1
+version = 2
 
 [profiles.kandelo-common]
 profiles = []
@@ -277,6 +277,18 @@ kandelo_paths = []
 tap_paths = []
 
 [[formulae]]
+name = "mariadb"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = [
+  "packages/registry/mariadb",
+  "scripts/install-local-binary.sh",
+  "scripts/package-build-roots.sh",
+  "scripts/wasm-artifact-guards.sh",
+]
+tap_paths = []
+
+[[formulae]]
 name = "modeset"
 architectures = ["wasm32"]
 profiles = ["kandelo-common"]
@@ -340,6 +352,18 @@ kandelo_paths = []
 tap_paths = ["Kandelo/formula_support/run-network-wasm.ts"]
 
 [[formulae]]
+name = "node"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = [
+  "packages/registry/node-compat",
+  "packages/registry/spidermonkey",
+  "scripts/install-local-binary.sh",
+  "scripts/wasm-artifact-guards.sh",
+]
+tap_paths = []
+
+[[formulae]]
 name = "openssl"
 architectures = ["wasm32", "wasm64"]
 profiles = ["kandelo-common"]
@@ -373,6 +397,18 @@ architectures = ["wasm32"]
 profiles = ["kandelo-common"]
 kandelo_paths = []
 tap_paths = ["Kandelo/patches/perl"]
+
+[[formulae]]
+name = "php"
+architectures = ["wasm32"]
+profiles = ["kandelo-common"]
+kandelo_paths = [
+  "packages/registry/php",
+  "scripts/install-local-binary.sh",
+  "scripts/package-build-roots.sh",
+  "scripts/wasm-artifact-guards.sh",
+]
+tap_paths = []
 
 [[formulae]]
 name = "posix-utils-lite"
