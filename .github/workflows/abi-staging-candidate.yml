@@ -158,9 +158,9 @@ jobs:
             --tap-commit "$KANDELO_ABI_STAGING_TAP_COMMIT" \
             --out "$resolved_taps"
 
-          # Ordinary candidate jobs retain one writable cache in the ephemeral
-          # uncredentialed runner account. Ruby alone uses a closed tap recipe,
-          # so provision the protected recipe/build users only for that Formula.
+          # Every candidate runs through the same protected build and recipe
+          # identities. Formula ownership can evolve without requiring this
+          # workflow to maintain a second, stale classification of tap recipes.
           # shellcheck disable=SC1091
           . scripts/homebrew-guest-layout.sh
           homebrew_select_guest_layout
@@ -176,47 +176,37 @@ jobs:
           brew_bin="$HOMEBREW_GUEST_PREFIX/bin/brew"
           test "$(readlink -f "$brew_bin")" = "$brew_repository/bin/brew"
 
-          protected_recipe_formula=false
-          if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then
-            protected_recipe_formula=true
-            build_user="kandelo-homebrew-build"
-            recipe_user="kandelo-homebrew-recipe"
-            for reserved_user in "$build_user" "$recipe_user"; do
-              if id "$reserved_user" >/dev/null 2>&1; then
-                echo "reserved Homebrew identity already exists: $reserved_user" >&2
-                exit 2
-              fi
-            done
-            invoker_gid="$(/usr/bin/id -g)"
-            /usr/bin/sudo -n -- /usr/sbin/useradd --system \
-              --gid "$invoker_gid" \
-              --create-home --home-dir "/home/$build_user" \
-              --shell /usr/sbin/nologin "$build_user"
-            /usr/bin/sudo -n -- /usr/sbin/useradd --system --user-group \
-              --no-create-home --home-dir /nonexistent \
-              --shell /usr/sbin/nologin "$recipe_user"
-            test "$(/usr/bin/id -g "$build_user")" = "$invoker_gid"
-          fi
+          build_user="kandelo-homebrew-build"
+          recipe_user="kandelo-homebrew-recipe"
+          for reserved_user in "$build_user" "$recipe_user"; do
+            if id "$reserved_user" >/dev/null 2>&1; then
+              echo "reserved Homebrew identity already exists: $reserved_user" >&2
+              exit 2
+            fi
+          done
+          invoker_gid="$(/usr/bin/id -g)"
+          /usr/bin/sudo -n -- /usr/sbin/useradd --system \
+            --gid "$invoker_gid" \
+            --create-home --home-dir "/home/$build_user" \
+            --shell /usr/sbin/nologin "$build_user"
+          /usr/bin/sudo -n -- /usr/sbin/useradd --system --user-group \
+            --no-create-home --home-dir /nonexistent \
+            --shell /usr/sbin/nologin "$recipe_user"
+          test "$(/usr/bin/id -g "$build_user")" = "$invoker_gid"
 
           shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"
-          if [ "$protected_recipe_formula" = true ]; then
-            /usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp"
-            /usr/bin/sudo -n /usr/bin/chmod 1777 "$shared_temp"
-            mkdir -m 0770 "$shared_temp/cache"
-            # The exact adapter preloads candidate dependency bottle archives
-            # as the workflow user after switching to umask 077. Homebrew then
-            # downloads the adjacent manifest as the isolated build user, so
-            # create the one shared cache directory before that handoff.
-            mkdir -m 0770 "$shared_temp/cache/downloads"
-            mkdir "$shared_temp/tmp"
-            test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/cache")" = \
-              "$(/usr/bin/id -u):$(/usr/bin/id -g):770"
-            test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/cache/downloads")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):770"
-          else
-            chmod 0700 "$shared_temp"
-            mkdir -m 0700 "$shared_temp/cache" "$shared_temp/tmp"
-            test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"
-          fi
+          /usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp"
+          /usr/bin/sudo -n /usr/bin/chmod 1777 "$shared_temp"
+          mkdir -m 0770 "$shared_temp/cache"
+          # The exact adapter preloads candidate dependency bottle archives
+          # as the workflow user after switching to umask 077. Homebrew then
+          # downloads the adjacent manifest as the isolated build user, so
+          # create the one shared cache directory before that handoff.
+          mkdir -m 0770 "$shared_temp/cache/downloads"
+          mkdir "$shared_temp/tmp"
+          test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/cache")" = \
+            "$(/usr/bin/id -u):$(/usr/bin/id -g):770"
+          test "$(/usr/bin/stat -c '%u:%g:%a' "$shared_temp/cache/downloads")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):770"
 
           # The tap-owned browser runners recover this exact directory from
           # dirname(HOMEBREW_CACHE)/ms-playwright after Homebrew re-executes a
@@ -357,19 +347,17 @@ jobs:
             echo "WASM_POSIX_BINARY_CACHE_ROOT=$package_cache"
             echo "WASM_POSIX_XTASK_BIN=$candidate_xtask"
           } >>"$GITHUB_ENV"
-          if [ "$protected_recipe_formula" = true ]; then
-            {
-              echo "KANDELO_HOMEBREW_BUILD_USER=$build_user"
-              echo "KANDELO_HOMEBREW_RECIPE_USER=$recipe_user"
-              echo "KANDELO_HOMEBREW_SHARED_TEMP=$shared_temp"
-              echo "KANDELO_HOMEBREW_SUDO_BIN=/usr/bin/sudo"
-              echo "KANDELO_HOMEBREW_SYSTEMD_RUN_BIN=/usr/bin/systemd-run"
-              echo "KANDELO_HOMEBREW_SYSTEMCTL_BIN=/usr/bin/systemctl"
-              echo "KANDELO_HOMEBREW_GETENT_BIN=/usr/bin/getent"
-              echo "KANDELO_HOMEBREW_PGREP_BIN=/usr/bin/pgrep"
-              echo "KANDELO_HOMEBREW_PKILL_BIN=/usr/bin/pkill"
-            } >>"$GITHUB_ENV"
-          fi
+          {
+            echo "KANDELO_HOMEBREW_BUILD_USER=$build_user"
+            echo "KANDELO_HOMEBREW_RECIPE_USER=$recipe_user"
+            echo "KANDELO_HOMEBREW_SHARED_TEMP=$shared_temp"
+            echo "KANDELO_HOMEBREW_SUDO_BIN=/usr/bin/sudo"
+            echo "KANDELO_HOMEBREW_SYSTEMD_RUN_BIN=/usr/bin/systemd-run"
+            echo "KANDELO_HOMEBREW_SYSTEMCTL_BIN=/usr/bin/systemctl"
+            echo "KANDELO_HOMEBREW_GETENT_BIN=/usr/bin/getent"
+            echo "KANDELO_HOMEBREW_PGREP_BIN=/usr/bin/pgrep"
+            echo "KANDELO_HOMEBREW_PKILL_BIN=/usr/bin/pkill"
+          } >>"$GITHUB_ENV"
 
       - name: Build one exact uncredentialed candidate handoff
         working-directory: kandelo-source
@@ -401,19 +389,17 @@ jobs:
             "PYTHONSAFEPATH=1"
             "PYTHONPATH=$GITHUB_WORKSPACE/tap-authority"
           )
-          if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then
-            candidate_env+=(
-              "KANDELO_HOMEBREW_BUILD_USER=$KANDELO_HOMEBREW_BUILD_USER"
-              "KANDELO_HOMEBREW_RECIPE_USER=$KANDELO_HOMEBREW_RECIPE_USER"
-              "KANDELO_HOMEBREW_SHARED_TEMP=$KANDELO_HOMEBREW_SHARED_TEMP"
-              "KANDELO_HOMEBREW_SUDO_BIN=$KANDELO_HOMEBREW_SUDO_BIN"
-              "KANDELO_HOMEBREW_SYSTEMD_RUN_BIN=$KANDELO_HOMEBREW_SYSTEMD_RUN_BIN"
-              "KANDELO_HOMEBREW_SYSTEMCTL_BIN=$KANDELO_HOMEBREW_SYSTEMCTL_BIN"
-              "KANDELO_HOMEBREW_GETENT_BIN=$KANDELO_HOMEBREW_GETENT_BIN"
-              "KANDELO_HOMEBREW_PGREP_BIN=$KANDELO_HOMEBREW_PGREP_BIN"
-              "KANDELO_HOMEBREW_PKILL_BIN=$KANDELO_HOMEBREW_PKILL_BIN"
-            )
-          fi
+          candidate_env+=(
+            "KANDELO_HOMEBREW_BUILD_USER=$KANDELO_HOMEBREW_BUILD_USER"
+            "KANDELO_HOMEBREW_RECIPE_USER=$KANDELO_HOMEBREW_RECIPE_USER"
+            "KANDELO_HOMEBREW_SHARED_TEMP=$KANDELO_HOMEBREW_SHARED_TEMP"
+            "KANDELO_HOMEBREW_SUDO_BIN=$KANDELO_HOMEBREW_SUDO_BIN"
+            "KANDELO_HOMEBREW_SYSTEMD_RUN_BIN=$KANDELO_HOMEBREW_SYSTEMD_RUN_BIN"
+            "KANDELO_HOMEBREW_SYSTEMCTL_BIN=$KANDELO_HOMEBREW_SYSTEMCTL_BIN"
+            "KANDELO_HOMEBREW_GETENT_BIN=$KANDELO_HOMEBREW_GETENT_BIN"
+            "KANDELO_HOMEBREW_PGREP_BIN=$KANDELO_HOMEBREW_PGREP_BIN"
+            "KANDELO_HOMEBREW_PKILL_BIN=$KANDELO_HOMEBREW_PKILL_BIN"
+          )
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_RUNTIME_TOKEN \
             scripts/dev-shell.sh env "${candidate_env[@]}" \

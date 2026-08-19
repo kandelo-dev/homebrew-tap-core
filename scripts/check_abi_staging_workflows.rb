@@ -1310,13 +1310,17 @@ module AbiStagingWorkflowCheck
                          'shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"'
                        ) &&
                        realm.fetch("run").include?(
-                         'chmod 0700 "$shared_temp"'
+                         '/usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp"'
                        ) &&
                        realm.fetch("run").include?(
-                         'mkdir -m 0700 "$shared_temp/cache" "$shared_temp/tmp"'
+                         '/usr/bin/sudo -n /usr/bin/chmod 1777 "$shared_temp"'
                        ) &&
                        realm.fetch("run").include?(
-                         'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"'
+                         'mkdir -m 0770 "$shared_temp/cache"'
+                       ) &&
+                       realm.fetch("run").include?(
+                         "test \"$(/usr/bin/stat -c '%u:%g:%a' \"$shared_temp/cache\")\" = \\\n" \
+                           '  "$(/usr/bin/id -u):$(/usr/bin/id -g):770"'
                        ) &&
                        realm.fetch("run").include?(
                          'mkdir -m 0770 "$shared_temp/cache/downloads"'
@@ -1324,7 +1328,8 @@ module AbiStagingWorkflowCheck
                        realm.fetch("run").include?(
                          'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache/downloads")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):770"'
                        ) &&
-                       realm.fetch("run").include?(
+                       !realm.fetch("run").include?("protected_recipe_formula") &&
+                       !realm.fetch("run").include?(
                          'if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then'
                        ) &&
                        realm.fetch("run").include?(
@@ -1466,7 +1471,7 @@ module AbiStagingWorkflowCheck
                        KANDELO_HOMEBREW_PGREP_BIN
                        KANDELO_HOMEBREW_PKILL_BIN
                      ].all? { |name| source.include?("#{name}=$#{name}") }) &&
-                     (kind != :candidate || source.include?(
+                     (kind != :candidate || !source.include?(
                        'if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then'
                      )) &&
                      !source.include?("../kandelo-source/scripts/dev-shell.sh") &&

@@ -1182,18 +1182,21 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
                     'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$directory")" = "0:0:555"'
     assert_includes realm_source, 'test -d "$GITHUB_WORKSPACE/kandelo-source/binaries"'
     refute_includes realm_source, "build-deps program-index-selected"
-    assert_includes realm_source, 'protected_recipe_formula=false'
-    assert_includes realm_source, 'if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then'
+    refute_includes realm_source, "protected_recipe_formula"
+    refute_includes realm_source, 'if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then'
     assert_includes realm_source, 'build_user="kandelo-homebrew-build"'
     assert_includes realm_source, 'recipe_user="kandelo-homebrew-recipe"'
     assert_includes realm_source, "/usr/sbin/useradd"
     assert_includes realm_source, 'shared_temp="$(mktemp -d /tmp/kandelo-homebrew.XXXXXX)"'
-    assert_includes realm_source, 'chmod 0700 "$shared_temp"'
     assert_includes realm_source,
-                    'mkdir -m 0700 "$shared_temp/cache" "$shared_temp/tmp"'
+                    '/usr/bin/sudo -n /usr/bin/chown root:root "$shared_temp"'
     assert_includes realm_source,
-                    'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"'
-    assert_includes realm_source, 'if [ "$protected_recipe_formula" = true ]; then'
+                    '/usr/bin/sudo -n /usr/bin/chmod 1777 "$shared_temp"'
+    assert_includes realm_source, 'mkdir -m 0770 "$shared_temp/cache"'
+    assert_includes realm_source,
+                    "test \"$(/usr/bin/stat -c '%u:%g:%a' \"$shared_temp/cache\")\" = \\\n" \
+                      '  "$(/usr/bin/id -u):$(/usr/bin/id -g):770"'
+    refute_includes realm_source, 'if [ "$protected_recipe_formula" = true ]; then'
     assert_includes realm_source,
                     'mkdir -m 0770 "$shared_temp/cache/downloads"'
     assert_includes realm_source,
@@ -1240,7 +1243,7 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
     ].each do |name|
       assert_includes execute_source, "#{name}=$#{name}"
     end
-    assert_includes execute_source,
+    refute_includes execute_source,
                     'if [ "$KANDELO_ABI_STAGING_FORMULA" = ruby ]; then'
     assert_includes execute_source, '"PYTHONDONTWRITEBYTECODE=1"'
     assert_includes execute_source, '"PYTHONSAFEPATH=1"'
@@ -1279,7 +1282,8 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub(
-        'test "$(/usr/bin/stat -c \'%u:%g:%a\' "$shared_temp/cache")" = "$(/usr/bin/id -u):$(/usr/bin/id -g):700"',
+        "test \"$(/usr/bin/stat -c '%u:%g:%a' \"$shared_temp/cache\")\" = \\\n" \
+          '  "$(/usr/bin/id -u):$(/usr/bin/id -g):770"',
         ':'
       )
     end
@@ -1288,8 +1292,8 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
         candidate["name"] == "Prepare exact uncredentialed Homebrew realm"
       end
       step["run"] = step.fetch("run").sub(
-        'mkdir -m 0700 "$shared_temp/cache" "$shared_temp/tmp"',
-        'mkdir -m 0770 "$shared_temp/cache" "$shared_temp/tmp"'
+        'mkdir -m 0770 "$shared_temp/cache"',
+        'mkdir -m 0700 "$shared_temp/cache"'
       )
     end
     assert_reusable_rejected(:candidate, "candidate protected recipe cache blocks manifest writes") do |workflow|
