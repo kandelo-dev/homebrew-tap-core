@@ -1,0 +1,36 @@
+{
+  "bottle_rebuild": 0,
+  "bottles": [
+    {
+      "arch": "wasm32",
+      "bottle_tag": "wasm32_kandelo",
+      "browser_compatible": false,
+      "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/31864001372",
+      "built_from": {
+        "formula_sha256": "0db3c73bd8606ff75bba72f72e4ab69db143ae64c9ba4bb7f092caa2fcc53c50",
+        "kandelo_commit": "7ca8cb2df61c16561197c1f395892976f1ae1390",
+        "kandelo_repository": "Automattic/kandelo",
+        "tap_commit": "99134c9439ece45065b330703c013fcf9e65366e",
+        "tap_repository": "kandelo-dev/homebrew-tap-core"
+      },
+      "cellar": "/opt/kandelo/homebrew/Cellar",
+      "fork_instrumentation": "not-required",
+      "kandelo_abi": 43,
+      "prefix": "/opt/kandelo/homebrew",
+      "runtime_support": [],
+      "status": "pending"
+    }
+  ],
+  "dependencies": [],
+  "formula_path": "Formula/homebrew-bootstrap.rb",
+  "formula_revision": 1,
+  "full_name": "kandelo-dev/tap-core/homebrew-bootstrap",
+  "kandelo_abi": 43,
+  "name": "homebrew-bootstrap",
+  "schema": 1,
+  "source_metadata": "Kandelo/metadata.json",
+  "tap_commit": "99134c9439ece45065b330703c013fcf9e65366e",
+  "tap_name": "kandelo-dev/tap-core",
+  "tap_repository": "kandelo-dev/homebrew-tap-core",
+  "version": "6.0.12-153-gcf5bc21_1"
+}
