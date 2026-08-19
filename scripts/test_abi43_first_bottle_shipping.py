@@ -54,6 +54,14 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         self.assertLess(compile_loader, instrument_loader)
         self.assertLess(instrument_loader, execute_loader)
 
+    def test_tcl_instruments_its_test_side_module_before_loading_it(self) -> None:
+        source = self.formula("tcl")
+        compile_extension = source.index('"-ltclstub", "-o", extension')
+        instrument_extension = source.index("kandelo_fork_instrument(extension)")
+        mount_extension = source.index('"/work/kandelo-extension.so" => extension')
+        self.assertLess(compile_extension, instrument_extension)
+        self.assertLess(instrument_extension, mount_extension)
+
     def test_zip_does_not_require_the_broken_external_unzip_pipe(self) -> None:
         source = self.formula("zip")
         self.assertNotIn('bin/"zip", ["-T", "archive.zip"]', source)
