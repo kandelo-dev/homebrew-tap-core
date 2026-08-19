@@ -189,6 +189,18 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         self.assertIn('"$FORK_SIDE_MODULE_ABI_OBJECT"', opcache_build)
         self.assertNotIn('"$FORK_INSTRUMENT"', opcache_build)
 
+    def test_php_marks_every_shipped_side_module_with_the_current_abi(self) -> None:
+        source = self.recipe("php")
+
+        for extension in ("opcache", "curl", "phar", "zip", "intl"):
+            with self.subTest(extension=extension):
+                build_start = source.index(f'echo "==> Building {extension}.so')
+                build_end = source.index(f'echo "==> {extension}.so:', build_start)
+                self.assertIn(
+                    '"$FORK_SIDE_MODULE_ABI_OBJECT"',
+                    source[build_start:build_end],
+                )
+
     def test_zip_does_not_require_the_broken_external_unzip_pipe(self) -> None:
         source = self.formula("zip")
         self.assertNotIn('bin/"zip", ["-T", "archive.zip"]', source)

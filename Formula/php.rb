@@ -40,7 +40,7 @@ class Php < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "6ccc2042c2c1869f64fbcb17d60004892f9208f07f3c13bdf40fa70d61d6380a",
+      manifest_sha256: "621ed2cb6552418ad5d8bcd08ca7881a510e3ff699f64ac65eb9e0c63f2d85f8",
       script_env:      {},
     )
 

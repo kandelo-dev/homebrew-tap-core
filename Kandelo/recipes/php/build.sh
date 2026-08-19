@@ -1178,7 +1178,8 @@ wasm32posix-cc -shared -fPIC -o "$BIN_DIR/curl.so" \
     ext/curl/.libs/multi.o \
     ext/curl/.libs/share.o \
     ext/curl/.libs/curl_file.o \
-    "$LIBCURL_PREFIX/lib/libcurl-pic.a"
+    "$LIBCURL_PREFIX/lib/libcurl-pic.a" \
+    "$FORK_SIDE_MODULE_ABI_OBJECT"
 echo "==> curl.so: $(wc -c < "$BIN_DIR/curl.so") bytes"
 
 # Build Phar as a shared extension too. The PHP package intentionally keeps
@@ -1207,7 +1208,8 @@ wasm32posix-cc -shared -fPIC -o "$BIN_DIR/phar.so" \
     ext/phar/.libs/stream.o \
     ext/phar/.libs/tar.o \
     ext/phar/.libs/util.o \
-    ext/phar/.libs/zip.o
+    ext/phar/.libs/zip.o \
+    "$FORK_SIDE_MODULE_ABI_OBJECT"
 echo "==> phar.so: $(wc -c < "$BIN_DIR/phar.so") bytes"
 
 # Build zend_test as a normal shared extension. Upstream php-src uses this
@@ -1238,7 +1240,8 @@ make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)" \
 wasm32posix-cc -shared -fPIC -o "$BIN_DIR/zip.so" \
     ext/zip/.libs/php_zip.o \
     ext/zip/.libs/zip_stream.o \
-    "$LIBZIP_PREFIX/lib/libzip.a"
+    "$LIBZIP_PREFIX/lib/libzip.a" \
+    "$FORK_SIDE_MODULE_ABI_OBJECT"
 echo "==> zip.so: $(wc -c < "$BIN_DIR/zip.so") bytes"
 
 # Build intl as a shared .so, same libtool workaround as opcache: make compiles
@@ -1288,7 +1291,8 @@ wasm32posix-cc -shared -fPIC -Wl,--export=__tls_base -o "$BIN_DIR/intl.so" \
     "$ICU_PREFIX/lib/libicuuc.a" \
     "$ICU_PREFIX/lib/libicudata.a" \
     "$LIBCXX_PREFIX/lib/libc++-pic.a" \
-    "$LIBCXX_PREFIX/lib/libc++abi-pic.a"
+    "$LIBCXX_PREFIX/lib/libc++abi-pic.a" \
+    "$FORK_SIDE_MODULE_ABI_OBJECT"
 echo "==> intl.so: $(wc -c < "$BIN_DIR/intl.so") bytes"
 
 # Make the program package's runtime closure self-contained. ICU remains the
