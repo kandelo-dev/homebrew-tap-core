@@ -1,0 +1,23 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 4733336,
+    "cache_key_sha": "ab56ec75fce858dd049236963e26b2e0fde1e140b844197950a6825a18968500",
+    "payload_root": "homebrew-bootstrap/6.0.12-153-gcf5bc21_1",
+    "sha256": "ab56ec75fce858dd049236963e26b2e0fde1e140b844197950a6825a18968500",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/homebrew-bootstrap/blobs/sha256:ab56ec75fce858dd049236963e26b2e0fde1e140b844197950a6825a18968500"
+  },
+  "cellar": "/opt/kandelo/homebrew/Cellar",
+  "env": {},
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/homebrew-bootstrap/6.0.12-153-gcf5bc21_1",
+  "links": [],
+  "package": "homebrew-bootstrap",
+  "prefix": "/opt/kandelo/homebrew",
+  "receipts": [
+    ".brew/homebrew-bootstrap.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "6.0.12-153-gcf5bc21_1"
+}
