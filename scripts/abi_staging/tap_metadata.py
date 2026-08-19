@@ -1086,8 +1086,8 @@ def formula_generated_metadata_sha256(tap_root: Path, formula: str) -> str:
         for candidate in _sequence(metadata.get("packages"), "generated packages")
         if _mapping(candidate, "generated package").get("name") == name
     ]
-    if len(matches) != 1:
-        raise TapMetadataError("generated metadata Formula is absent or duplicated")
+    if len(matches) > 1:
+        raise TapMetadataError("generated metadata Formula is duplicated")
     formula_body = _read_regular(
         formula_path, f"generated Formula {name}", MAX_METADATA_BYTES
     )
@@ -1095,7 +1095,9 @@ def formula_generated_metadata_sha256(tap_root: Path, formula: str) -> str:
         {
             "formula_sha256": hashlib.sha256(formula_body).hexdigest(),
             "sidecar_sha256": canonical_sha256(sidecar),
-            "top_index_row_sha256": canonical_sha256(matches[0]),
+            "top_index_row_sha256": (
+                canonical_sha256(matches[0]) if matches else None
+            ),
         }
     )
 
