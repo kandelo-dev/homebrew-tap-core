@@ -21,6 +21,7 @@ from scripts.abi_staging.policy import (
     load_verification_tests,
     source_custody_repository,
 )
+from scripts.abi_staging.tap_metadata import load_promotion_activation
 
 
 TAP_ROOT = Path(__file__).resolve().parents[3]
@@ -102,6 +103,12 @@ class PolicyTests(unittest.TestCase):
             candidate.write_text(candidate.read_text() + 'fallback = "legacy"\n')
             with self.assertRaisesRegex(PolicyError, "fields changed"):
                 load_candidate_publication_activation(candidate)
+
+    def test_checked_in_formula_promotion_is_active_for_abi_43(self) -> None:
+        activation = load_promotion_activation(
+            self.staging / "promotion-activation.toml"
+        )
+        self.assertEqual(activation.mode, "active")
 
     def test_formula_policy_covers_every_direct_formula_exactly_once(self) -> None:
         policy = load_formula_build_inputs(
