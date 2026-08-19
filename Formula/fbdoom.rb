@@ -6,9 +6,6 @@ class Fbdoom < Formula
   KANDELO_TAP_RECIPE = true
 
   FBDOOM_COMMIT = "17280163bc95e5d954d2efaa0633489b763b4cd1".freeze
-  CHOCOLATE_DOOM_COMMIT = "35fb1372d10756ca27eca05665bd8a7cebc71c05".freeze
-  CHOCOLATE_DOOM_URL = "https://github.com/chocolate-doom/chocolate-doom/archive/#{CHOCOLATE_DOOM_COMMIT}.tar.gz".freeze
-  CHOCOLATE_DOOM_SHA256 = "dc62c13cab469e19e0ad295b2dd7e460263c637a39c51d3771e96dabb08ecab2".freeze
 
   desc "Framebuffer Doom engine for Kandelo"
   homepage "https://github.com/maximevince/fbDOOM"
@@ -23,9 +20,9 @@ class Fbdoom < Formula
   skip_clean "bin/fbdoom"
 
   resource "chocolate-doom" do
-    url CHOCOLATE_DOOM_URL
+    url "https://github.com/chocolate-doom/chocolate-doom/archive/35fb1372d10756ca27eca05665bd8a7cebc71c05.tar.gz"
     version "3.1.0"
-    sha256 CHOCOLATE_DOOM_SHA256
+    sha256 "dc62c13cab469e19e0ad295b2dd7e460263c637a39c51d3771e96dabb08ecab2"
   end
 
   resource "doom-shareware" do
