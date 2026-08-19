@@ -1398,6 +1398,12 @@ module AbiStagingWorkflowCheck
                          'ln -s "$cargo_bin" "$source_root/tools/bin/cargo"'
                        ) &&
                        realm.fetch("run").include?(
+                         [
+                           '    "KANDELO_ABI_STAGING_PLATFORM_ROOT=$GITHUB_WORKSPACE/kandelo-source" \\',
+                           "    bash -euo pipefail -c '",
+                         ].join("\n")
+                       ) &&
+                       realm.fetch("run").include?(
                          '"tools/bin/wasm-local-root-spill"'
                        ) &&
                        realm.fetch("run").include?(
