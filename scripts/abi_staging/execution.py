@@ -190,12 +190,33 @@ _STAGING_RECIPE_RUNNER_NIX_REQUISITES_SIGNATURE = """def staging_runtime_paths(c
             or metadata.st_nlink != 1
         ):
             fail(f"configured {name} alias is not one sealed root-owned link")
-        resolved = canonical_host_projection_source(
-            alias, label=f"configured {name}", directory=False
+        # WHY: multi-user Nix deliberately owns /nix/store as root:nixbld and
+        # makes it group-writable. Validate the selected content-addressed
+        # object here; nix_store_requisites then authenticates and projects
+        # every exact root in its closure. The generic host-ancestry rule is
+        # for conventional mutable paths and would reject every valid Nix tool.
+        try:
+            resolved = alias.resolve(strict=True)
+            metadata = resolved.lstat()
+        except OSError as error:
+            fail(f"configured {name} is unavailable: {error}")
+        validate_host_projection_metadata(
+            resolved, metadata, label=f"configured {name}", directory=False
+        )
+        root = next(
+            (parent for parent in resolved.parents if parent.parent == store), None
+        )
+        if root is None or not NIX_STORE_ROOT_RE.fullmatch(str(root)):
+            fail(f"configured {name} left one content-addressed Nix store root")
+        canonical_real_directory(
+            root,
+            label=f"configured {name} Nix store root",
+            owner_uid=0,
+            exact_mode=0o555,
         )
         if (
             not is_within(resolved, store)
-            or stat.S_IMODE(resolved.lstat().st_mode) & 0o111 == 0
+            or stat.S_IMODE(metadata.st_mode) & 0o111 == 0
         ):
             fail(f"configured {name} left the executable Nix store closure")
         runtime_paths.append(resolved)

@@ -193,6 +193,24 @@ class WorkflowExecutionTests(unittest.TestCase):
                 "if set(alias_metadata) != set(aliases):",
                 prepared,
             )
+            self.assertNotIn(
+                "resolved = canonical_host_projection_source(\n"
+                "            alias, label=f\"configured {name}\", directory=False\n"
+                "        )",
+                prepared,
+            )
+            self.assertIn("resolved = alias.resolve(strict=True)", prepared)
+            self.assertIn(
+                "validate_host_projection_metadata(\n"
+                "            resolved, metadata, label=f\"configured {name}\", "
+                "directory=False\n"
+                "        )",
+                prepared,
+            )
+            self.assertIn(
+                "if root is None or not NIX_STORE_ROOT_RE.fullmatch(str(root)):",
+                prepared,
+            )
             self.assertEqual(
                 prepared.count("runtime_paths = staging_runtime_paths(config)"),
                 2,
