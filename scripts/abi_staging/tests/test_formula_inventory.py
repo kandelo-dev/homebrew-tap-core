@@ -166,7 +166,7 @@ class FormulaInventoryTests(unittest.TestCase):
             self.capture_policy,
             self.capture_catalog,
         )
-        self.assertEqual(len(inventory["formulae"]), 71)
+        self.assertEqual(len(inventory["formulae"]), 74)
         self.assertRegex(inventory["formula_tree"], r"^[0-9a-f]{40,64}$")
         self.assertRegex(inventory["sidecar_tree"], r"^[0-9a-f]{40,64}$")
         self.assertRegex(inventory["graph_sha256"], r"^[0-9a-f]{64}$")
