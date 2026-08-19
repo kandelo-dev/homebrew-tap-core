@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import stat
 import subprocess
 import tempfile
@@ -114,6 +115,51 @@ _LOCAL_ARCHIVE_DEPENDENCY_INSTALL = """  dependency_sha="$(jq -er --arg dependen
     --as-dependency \\
     --ignore-dependencies \\
     "$dependency_archive"""
+_CANDIDATE_LAUNCHER_LOAD = '. "$KANDELO_ROOT/scripts/homebrew-patched-launcher.sh"'
+_RECIPE_RUNNER_LIMITS = """EXPECTED_LIMITS = {
+    "max_bytes": 2_147_483_648,
+    "max_entries": 262_144,
+    "max_file_bytes": 1_073_741_824,
+    "max_path_bytes": 4_096,
+}
+"""
+_STAGING_RECIPE_RUNNER_LIMITS = _RECIPE_RUNNER_LIMITS + """SOURCE_INPUT_LIMITS = {
+    **EXPECTED_LIMITS,
+    "max_bytes": 4_294_967_296,
+    "max_entries": 524_288,
+}
+"""
+_RECIPE_RUNNER_SOURCE_COPY = (
+    'copy_input_tree(request["source_root"], source_root, request["limits"])'
+)
+_STAGING_RECIPE_RUNNER_SOURCE_COPY = (
+    'copy_input_tree(request["source_root"], source_root, SOURCE_INPUT_LIMITS)'
+)
+_RECIPE_RUNNER_SOURCE_ASSIGNMENT = (
+    '  local source="$platform_root/scripts/homebrew-tap-recipe-runner.py"'
+)
+_RECIPE_RUNNER_SOURCE_AUTHORITY_COMMENT = """  # WHY: this Python program runs as root before any tap recipe is admitted.
+  # Select it only from the exact root-owned platform projection whose complete
+  # manifest was sealed by the launcher; a checkout path supplied separately
+  # would reintroduce mutable workflow state as privileged code authority."""
+_STAGING_RECIPE_RUNNER_SOURCE_AUTHORITY_COMMENT = """  # WHY: this Python program runs as root before any tap recipe is admitted.
+  # Staging replaces it with the tap executor's mode-0500, digest-literal
+  # derivative while still revalidating the exact sealed platform projection."""
+_RECIPE_RUNNER_SOURCE_STATE = (
+    '       2>/dev/null || true)" != "0:0:444:1" ]; then'
+)
+_RECIPE_RUNNER_SOURCE_DIGEST_CHECK = (
+    '  if ! [[ "$source_sha" =~ ^[0-9a-f]{64}$ ]]; then'
+)
+_TARGET_CELLAR_AUDIT = """  homebrew_patched_launcher_assert_target_cellar_links_safe \\
+    "$build_user" "$cellar" || return"""
+_STAGING_TARGET_CELLAR_AUDIT = """  # Reused local bottles are poured by the isolated build identity under
+  # umask 077. Make only their directories traversable and non-writable before
+  # the unchanged link/type audit inspects them; files and links are untouched.
+  "$sudo_bin" -n -- /usr/bin/find "$cellar" -xdev -mindepth 1 -type d \\
+    -exec /usr/bin/chmod 0555 {} + || return
+  homebrew_patched_launcher_assert_target_cellar_links_safe \\
+    "$build_user" "$cellar" || return"""
 
 
 class ExecutionError(ValueError):
@@ -127,6 +173,7 @@ def _prepare_staging_normal_builder(
     root_assignment: str = _CANDIDATE_ROOT_ASSIGNMENT,
     dependency_install: str = _FORMULA_DEPENDENCY_INSTALL,
     formula_info_capture: str | None = None,
+    protect_launcher: bool = False,
 ) -> Path:
     """Derive the staging-only builder without changing Formula contracts."""
 
@@ -147,6 +194,8 @@ def _prepare_staging_normal_builder(
         raise ExecutionError("candidate dependency install boundary changed")
     if formula_info_capture is not None and body.count(formula_info_capture) != 1:
         raise ExecutionError("candidate Formula info capture boundary changed")
+    if protect_launcher and body.count(_CANDIDATE_LAUNCHER_LOAD) != 1:
+        raise ExecutionError("candidate patched launcher selection boundary changed")
     prepared = body.replace(
         root_assignment,
         'KANDELO_ROOT="${KANDELO_ABI_STAGING_CANDIDATE_ROOT:?}"',
@@ -159,6 +208,11 @@ def _prepare_staging_normal_builder(
             formula_info_capture,
             _STAGING_VERIFIER_FORMULA_INFO_CAPTURE,
         )
+    if protect_launcher:
+        prepared = prepared.replace(
+            _CANDIDATE_LAUNCHER_LOAD,
+            '. "${KANDELO_ABI_STAGING_PROTECTED_LAUNCHER:?}"',
+        )
     if destination.exists() or destination.is_symlink():
         raise ExecutionError("protected staging builder destination already exists")
     try:
@@ -166,6 +220,107 @@ def _prepare_staging_normal_builder(
         destination.chmod(0o500)
     except OSError as error:
         raise ExecutionError(f"cannot write protected staging builder: {error}") from error
+    return destination.resolve(strict=True)
+
+
+def _prepare_staging_recipe_runner(*, source: Path, destination: Path) -> Path:
+    """Expand only the staging source-input envelope for large upstream trees."""
+
+    try:
+        metadata = source.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise ExecutionError("candidate recipe runner must be a regular file")
+        if metadata.st_size < 1 or metadata.st_size > 2 * 1024 * 1024:
+            raise ExecutionError("candidate recipe runner is outside its byte bound")
+        body = source.read_text(encoding="utf-8", errors="strict")
+    except (OSError, UnicodeError) as error:
+        raise ExecutionError(f"cannot read candidate recipe runner: {error}") from error
+    if "\r" in body or not body.endswith("\n"):
+        raise ExecutionError("candidate recipe runner is not canonical LF text")
+    if body.count(_RECIPE_RUNNER_LIMITS) != 1:
+        raise ExecutionError("candidate recipe runner limit boundary changed")
+    if body.count(_RECIPE_RUNNER_SOURCE_COPY) != 1:
+        raise ExecutionError("candidate recipe runner source-copy boundary changed")
+    prepared = body.replace(
+        _RECIPE_RUNNER_LIMITS,
+        _STAGING_RECIPE_RUNNER_LIMITS,
+    ).replace(
+        _RECIPE_RUNNER_SOURCE_COPY,
+        _STAGING_RECIPE_RUNNER_SOURCE_COPY,
+    )
+    if destination.exists() or destination.is_symlink():
+        raise ExecutionError("protected recipe runner destination already exists")
+    try:
+        destination.write_text(prepared, encoding="utf-8", errors="strict")
+        destination.chmod(0o500)
+    except OSError as error:
+        raise ExecutionError(f"cannot write protected recipe runner: {error}") from error
+    return destination.resolve(strict=True)
+
+
+def _prepare_staging_launcher(
+    *, source: Path, destination: Path, protected_recipe_runner: Path
+) -> Path:
+    """Derive a staging launcher that admits protected runner and poured inputs."""
+
+    try:
+        runner_metadata = protected_recipe_runner.lstat()
+        if (
+            stat.S_ISLNK(runner_metadata.st_mode)
+            or not stat.S_ISREG(runner_metadata.st_mode)
+            or stat.S_IMODE(runner_metadata.st_mode) != 0o500
+            or runner_metadata.st_nlink != 1
+            or runner_metadata.st_size < 1
+            or runner_metadata.st_size > 2 * 1024 * 1024
+        ):
+            raise ExecutionError("protected recipe runner has an invalid state")
+        runner = protected_recipe_runner.resolve(strict=True)
+        runner_sha256 = hashlib.sha256(runner.read_bytes()).hexdigest()
+        metadata = source.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise ExecutionError("candidate patched launcher must be a regular file")
+        if metadata.st_size < 1 or metadata.st_size > 2 * 1024 * 1024:
+            raise ExecutionError("candidate patched launcher is outside its byte bound")
+        body = source.read_text(encoding="utf-8", errors="strict")
+    except (OSError, UnicodeError) as error:
+        raise ExecutionError(f"cannot read staging launcher input: {error}") from error
+    if "\r" in body or not body.endswith("\n"):
+        raise ExecutionError("candidate patched launcher is not canonical LF text")
+    for marker, label in (
+        (_RECIPE_RUNNER_SOURCE_ASSIGNMENT, "recipe runner source"),
+        (_RECIPE_RUNNER_SOURCE_AUTHORITY_COMMENT, "recipe runner authority"),
+        (_RECIPE_RUNNER_SOURCE_STATE, "recipe runner state"),
+        (_RECIPE_RUNNER_SOURCE_DIGEST_CHECK, "recipe runner digest"),
+        (_TARGET_CELLAR_AUDIT, "target Cellar audit"),
+    ):
+        if body.count(marker) != 1:
+            raise ExecutionError(f"candidate patched launcher {label} boundary changed")
+    prepared = body.replace(
+        _RECIPE_RUNNER_SOURCE_ASSIGNMENT,
+        f"  local source={shlex.quote(str(runner))}",
+    ).replace(
+        _RECIPE_RUNNER_SOURCE_AUTHORITY_COMMENT,
+        _STAGING_RECIPE_RUNNER_SOURCE_AUTHORITY_COMMENT,
+    ).replace(
+        _RECIPE_RUNNER_SOURCE_STATE,
+        (
+            '       2>/dev/null || true)" != '
+            f'"{os.getuid()}:{os.getgid()}:500:1" ]; then'
+        ),
+    ).replace(
+        _RECIPE_RUNNER_SOURCE_DIGEST_CHECK,
+        f'  if [ "$source_sha" != "{runner_sha256}" ]; then',
+    ).replace(
+        _TARGET_CELLAR_AUDIT,
+        _STAGING_TARGET_CELLAR_AUDIT,
+    )
+    if destination.exists() or destination.is_symlink():
+        raise ExecutionError("protected staging launcher destination already exists")
+    try:
+        destination.write_text(prepared, encoding="utf-8", errors="strict")
+        destination.chmod(0o500)
+    except OSError as error:
+        raise ExecutionError(f"cannot write protected staging launcher: {error}") from error
     return destination.resolve(strict=True)
 
 
@@ -913,9 +1068,19 @@ def execute_build_work(
             os.environ if environment is None else environment,
             sandbox_root=Path(temporary) / "environment",
         )
+        staging_recipe_runner = _prepare_staging_recipe_runner(
+            source=kandelo / "scripts/homebrew-tap-recipe-runner.py",
+            destination=Path(temporary) / "protected-recipe-runner.py",
+        )
+        staging_launcher = _prepare_staging_launcher(
+            source=kandelo / "scripts/homebrew-patched-launcher.sh",
+            destination=Path(temporary) / "protected-launcher.sh",
+            protected_recipe_runner=staging_recipe_runner,
+        )
         staging_builder = _prepare_staging_normal_builder(
             source=kandelo / "scripts/homebrew-bottle-build.sh",
             destination=Path(temporary) / "protected-normal-builder.sh",
+            protect_launcher=True,
         )
         child_environment.update(
             {
@@ -927,6 +1092,10 @@ def execute_build_work(
                 "KANDELO_ABI_STAGING_CANDIDATE_ROOT": str(kandelo),
                 "KANDELO_ABI_STAGING_NORMAL_BUILDER": str(staging_builder),
                 "KANDELO_ABI_STAGING_PROTECTED_NORMAL_BUILDER": "1",
+                "KANDELO_ABI_STAGING_PROTECTED_LAUNCHER": str(staging_launcher),
+                "KANDELO_ABI_STAGING_PROTECTED_RECIPE_RUNNER": str(
+                    staging_recipe_runner
+                ),
             }
         )
         result = run_process(command, cwd=tap, env=child_environment, check=False)
