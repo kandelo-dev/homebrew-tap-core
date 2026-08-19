@@ -15,6 +15,7 @@ import tempfile
 from typing import Any
 
 from .canonical import (
+    MAX_VFS_COMPOSITION_JSON_BYTES,
     MAX_VFS_COMPOSITION_JSON_ITEMS,
     CanonicalJsonError,
     canonical_bytes,
@@ -1663,7 +1664,7 @@ def _fetched_candidate_material(
         parse_canonical_bytes(layers[1].body, maximum_bytes=4 * 1024 * 1024)
         parse_canonical_bytes(
             layers[2].body,
-            maximum_bytes=16 * 1024 * 1024,
+            maximum_bytes=MAX_VFS_COMPOSITION_JSON_BYTES,
             maximum_items=MAX_VFS_COMPOSITION_JSON_ITEMS,
         )
     except CanonicalJsonError as error:
