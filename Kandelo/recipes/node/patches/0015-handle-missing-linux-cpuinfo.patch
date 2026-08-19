@@ -1,0 +1,23 @@
+diff --git a/python/mozbuild/mozbuild/telemetry.py b/python/mozbuild/mozbuild/telemetry.py
+--- a/python/mozbuild/mozbuild/telemetry.py
++++ b/python/mozbuild/mozbuild/telemetry.py
+@@ -1,12 +1,15 @@
+ def cpu_brand_linux():
+     """
+     Read the CPU brand string out of /proc/cpuinfo on Linux.
+     """
+-    with open("/proc/cpuinfo") as f:
+-        for line in f:
+-            if line.startswith("model name"):
+-                _, brand = line.split(": ", 1)
+-                return brand.rstrip()
++    try:
++        with open("/proc/cpuinfo") as f:
++            for line in f:
++                if line.startswith("model name"):
++                    _, brand = line.split(": ", 1)
++                    return brand.rstrip()
++    except OSError:
++        return None
+     # not found?
+     return None

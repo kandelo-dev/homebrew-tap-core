@@ -27,7 +27,7 @@ class Node < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "22b396bf81b6126c99b31c5b0cf86a240f92d0f113652b60d7bb3b9f0057af6d",
+      manifest_sha256: "298277abcf6305458dc3f673865db4fb928d2cb3b1fba850d851c58da3d4d5b1",
       script_env:      {},
     )
     kandelo_validate_wasm_artifact(out_dir/"node.wasm", fork: :forbidden)
