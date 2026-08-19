@@ -247,7 +247,7 @@ class WorkflowExecutionTests(unittest.TestCase):
             ):
                 namespace["staging_runtime_paths"](config)
 
-    def test_staging_launcher_projects_the_exact_rust_alias_pair(self) -> None:
+    def test_staging_launcher_projects_rust_aliases_after_test_runtime(self) -> None:
         execution = importlib.import_module("scripts.abi_staging.execution")
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = Path(temporary)
@@ -265,13 +265,34 @@ class WorkflowExecutionTests(unittest.TestCase):
             )
 
             prepared = launcher.read_text(encoding="utf-8")
-            self.assertIn("    tools/bin/cargo\n", prepared)
-            self.assertIn("    tools/bin/rustc\n", prepared)
+            projection_start = prepared.index(
+                "homebrew_patched_launcher_prepare_platform_projection() {"
+            )
+            projection_end = prepared.index(
+                "homebrew_staging_launcher_add_rust_aliases() {"
+            )
+            projection = prepared[projection_start:projection_end]
+            self.assertNotIn("    tools/bin/cargo\n", projection)
+            self.assertNotIn("    tools/bin/rustc\n", projection)
+            self.assertIn(
+                "homebrew_staging_launcher_add_rust_aliases() {", prepared
+            )
             self.assertIn(
                 'tools/bin/cargo:/nix/store/*/bin/cargo|'
                 'tools/bin/rustc:/nix/store/*/bin/rustc)',
                 prepared,
             )
+            test_runtime_call = """    homebrew_patched_launcher_prepare_formula_test_runtime \\
+      "$kandelo_root" \\
+      "$HOMEBREW_PATCHED_PROTECTED_DIR/formula-test-runtime" \\
+      "$platform_source_root" "$protected_xtask" "$xtask_relative" \\
+      "$formula_test_program_index" "$sudo_bin" || return
+    homebrew_staging_launcher_add_rust_aliases \\
+      "$kandelo_root" "$HOMEBREW_PATCHED_PLATFORM_ROOT" \\
+      "$sudo_bin" || return
+  fi
+  source_alias_dir="$work_dir/source-aliases"""
+            self.assertIn(test_runtime_call, prepared)
             subprocess.run(
                 ["bash", "-n", str(launcher)],
                 check=True,

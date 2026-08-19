@@ -242,67 +242,6 @@ _STAGING_TARGET_CELLAR_AUDIT = """  # Reused local bottles are poured by the iso
   homebrew_patched_launcher_assert_target_cellar_links_safe \\
     "$build_user" "$cellar" || return"""
 
-_PLATFORM_PROJECTION_ROOTS = """    tools/bin/wasm-local-root-spill
-    crates/shared/src/lib.rs
-  )"""
-_STAGING_PLATFORM_PROJECTION_ROOTS = """    tools/bin/wasm-local-root-spill
-    tools/bin/cargo
-    tools/bin/rustc
-    crates/shared/src/lib.rs
-  )"""
-_PLATFORM_PROJECTION_SOURCE_CLASSIFICATION = """    elif [ -f "$source" ] && [ ! -L "$source" ]; then
-      entries=("$source")
-    else"""
-_STAGING_PLATFORM_PROJECTION_SOURCE_CLASSIFICATION = """    elif [ -f "$source" ] && [ ! -L "$source" ]; then
-      entries=("$source")
-    elif [ -L "$source" ] && {
-      [ "$relative" = "tools/bin/cargo" ] ||
-        [ "$relative" = "tools/bin/rustc" ]
-    }; then
-      entries=("$source")
-    else"""
-_PLATFORM_PROJECTION_ENTRY_VALIDATION = """      if [ ! -f "$entry" ] || [ -L "$entry" ]; then
-        echo "homebrew-patched-launcher: platform input contains an unsupported node: $relative" >&2
-        return 2
-      fi"""
-_STAGING_PLATFORM_PROJECTION_ENTRY_VALIDATION = """      if [ -L "$entry" ]; then
-        local target
-        target="$(/usr/bin/readlink -- "$entry")" || return
-        case "$relative:$target" in
-          tools/bin/cargo:/nix/store/*/bin/cargo|tools/bin/rustc:/nix/store/*/bin/rustc) ;;
-          *)
-            echo "homebrew-patched-launcher: projected Rust alias leaves its exact Nix tool: $relative" >&2
-            return 2
-            ;;
-        esac
-        source_state="$(/usr/bin/stat -c '%d:%i:%u:%g:%h' "$entry")" || return
-        case "$source_state" in
-          *:0:0:1) ;;
-          *)
-            echo "homebrew-patched-launcher: projected Rust alias is unavailable or unsealed: $relative" >&2
-            return 2
-            ;;
-        esac
-        [ -x "$target" ] || {
-          echo "homebrew-patched-launcher: projected Rust tool is not executable: $relative" >&2
-          return 2
-        }
-        parent="${destination}/${relative%/*}"
-        "$sudo_bin" /usr/bin/install -d -o root -g root -m 0555 "$parent" || return
-        "$sudo_bin" /usr/bin/ln -s -- "$target" "$destination/$relative" || return
-        "$sudo_bin" /usr/bin/chown -h root:root "$destination/$relative" || return
-        source_state_after="$(/usr/bin/stat -c '%d:%i:%u:%g:%h' "$entry")" || return
-        [ "$source_state_after" = "$source_state" ] &&
-          [ "$(/usr/bin/readlink -- "$entry")" = "$target" ] || {
-          echo "homebrew-patched-launcher: projected Rust alias changed while it was staged: $relative" >&2
-          return 2
-        }
-        continue
-      fi
-      if [ ! -f "$entry" ]; then
-        echo "homebrew-patched-launcher: platform input contains an unsupported node: $relative" >&2
-        return 2
-      fi"""
 _PLATFORM_PROJECTION_MANIFEST_REJECTION = """    else
       echo "homebrew-patched-launcher: platform projection contains an unsupported node: $relative" >&2
       return 2
@@ -327,6 +266,98 @@ _STAGING_PLATFORM_PROJECTION_MANIFEST_REJECTION = """    elif [ -L "$entry" ]; t
       echo "homebrew-patched-launcher: platform projection contains an unsupported node: $relative" >&2
       return 2
     fi"""
+
+_FORMULA_TEST_RUNTIME_FUNCTION = (
+    "homebrew_patched_launcher_prepare_formula_test_runtime() {"
+)
+_STAGING_RUST_ALIAS_HELPER = r'''homebrew_staging_launcher_add_rust_aliases() {
+  if [ "$#" -ne 3 ]; then
+    echo "homebrew_staging_launcher_add_rust_aliases: expected KANDELO-ROOT PLATFORM SUDO" >&2
+    return 2
+  fi
+  local kandelo_root="$1" platform_root="$2" sudo_bin="$3"
+  local relative source destination parent target state state_after digest
+  local current_digest
+
+  [ "$platform_root" = "$HOMEBREW_PATCHED_PLATFORM_ROOT" ] &&
+    [ -n "$HOMEBREW_PATCHED_PLATFORM_SHA256" ] || {
+    echo "homebrew-patched-launcher: Rust aliases require one sealed platform projection" >&2
+    return 2
+  }
+  current_digest="$(
+    homebrew_patched_launcher_manifest_sha256 \
+      homebrew_patched_launcher_platform_projection_manifest "$platform_root"
+  )" || return
+  [ "$current_digest" = "$HOMEBREW_PATCHED_PLATFORM_SHA256" ] || {
+    echo "homebrew-patched-launcher: platform projection changed before Rust aliases" >&2
+    return 2
+  }
+
+  for relative in tools/bin/cargo tools/bin/rustc; do
+    source="$kandelo_root/$relative"
+    destination="$platform_root/$relative"
+    parent="${destination%/*}"
+    [ -L "$source" ] && [ ! -e "$destination" ] && [ ! -L "$destination" ] || {
+      echo "homebrew-patched-launcher: exact Rust alias is unavailable: $relative" >&2
+      return 2
+    }
+    [ "$(/usr/bin/stat -c '%u:%g:%a' "$parent")" = "0:0:555" ] || {
+      echo "homebrew-patched-launcher: Rust alias parent is not sealed: $relative" >&2
+      return 2
+    }
+    target="$(/usr/bin/readlink -- "$source")" || return
+    case "$relative:$target" in
+      tools/bin/cargo:/nix/store/*/bin/cargo|tools/bin/rustc:/nix/store/*/bin/rustc) ;;
+      *)
+        echo "homebrew-patched-launcher: Rust alias leaves its exact Nix tool: $relative" >&2
+        return 2
+        ;;
+    esac
+    state="$(/usr/bin/stat -c '%d:%i:%u:%g:%h' "$source")" || return
+    case "$state" in
+      *:0:0:1) ;;
+      *)
+        echo "homebrew-patched-launcher: Rust alias is not root-owned and single-linked: $relative" >&2
+        return 2
+        ;;
+    esac
+    [ -x "$target" ] || {
+      echo "homebrew-patched-launcher: Rust tool is not executable: $relative" >&2
+      return 2
+    }
+    "$sudo_bin" /usr/bin/ln -s -- "$target" "$destination" || return
+    "$sudo_bin" /usr/bin/chown -h root:root "$destination" || return
+    state_after="$(/usr/bin/stat -c '%d:%i:%u:%g:%h' "$source")" || return
+    [ "$state_after" = "$state" ] &&
+      [ "$(/usr/bin/readlink -- "$source")" = "$target" ] || {
+      echo "homebrew-patched-launcher: Rust alias changed while it was staged: $relative" >&2
+      return 2
+    }
+  done
+  digest="$(
+    homebrew_patched_launcher_manifest_sha256 \
+      homebrew_patched_launcher_platform_projection_manifest "$platform_root"
+  )" || return
+  [ -n "$digest" ] || return 2
+  HOMEBREW_PATCHED_PLATFORM_SHA256="$digest"
+}
+'''
+
+_FORMULA_TEST_RUNTIME_CALL = r'''    homebrew_patched_launcher_prepare_formula_test_runtime \
+      "$kandelo_root" \
+      "$HOMEBREW_PATCHED_PROTECTED_DIR/formula-test-runtime" \
+      "$platform_source_root" "$protected_xtask" "$xtask_relative" \
+      "$formula_test_program_index" "$sudo_bin" || return
+  fi'''
+_STAGING_FORMULA_TEST_RUNTIME_CALL = r'''    homebrew_patched_launcher_prepare_formula_test_runtime \
+      "$kandelo_root" \
+      "$HOMEBREW_PATCHED_PROTECTED_DIR/formula-test-runtime" \
+      "$platform_source_root" "$protected_xtask" "$xtask_relative" \
+      "$formula_test_program_index" "$sudo_bin" || return
+    homebrew_staging_launcher_add_rust_aliases \
+      "$kandelo_root" "$HOMEBREW_PATCHED_PLATFORM_ROOT" \
+      "$sudo_bin" || return
+  fi'''
 
 
 _PROTECTED_ROOT_PARENT_AUDIT = """  [ "$(/usr/bin/stat -c '%u:%g:%a' /run)" = "0:0:755" ] || {
@@ -528,19 +559,12 @@ def _prepare_staging_launcher(
         (_RECIPE_RUNNER_SOURCE_STATE, "recipe runner state"),
         (_RECIPE_RUNNER_SOURCE_DIGEST_CHECK, "recipe runner digest"),
         (_TARGET_CELLAR_AUDIT, "target Cellar audit"),
-        (_PLATFORM_PROJECTION_ROOTS, "platform projection roots"),
-        (
-            _PLATFORM_PROJECTION_SOURCE_CLASSIFICATION,
-            "platform projection source classification",
-        ),
-        (
-            _PLATFORM_PROJECTION_ENTRY_VALIDATION,
-            "platform projection entry validation",
-        ),
         (
             _PLATFORM_PROJECTION_MANIFEST_REJECTION,
             "platform projection manifest",
         ),
+        (_FORMULA_TEST_RUNTIME_FUNCTION, "Formula test runtime function"),
+        (_FORMULA_TEST_RUNTIME_CALL, "Formula test runtime call"),
         (_PROTECTED_ROOT_PARENT_AUDIT, "protected-root parent audit"),
     ):
         if body.count(marker) != 1:
@@ -566,17 +590,14 @@ def _prepare_staging_launcher(
         _TARGET_CELLAR_AUDIT,
         _STAGING_TARGET_CELLAR_AUDIT,
     ).replace(
-        _PLATFORM_PROJECTION_ROOTS,
-        _STAGING_PLATFORM_PROJECTION_ROOTS,
-    ).replace(
-        _PLATFORM_PROJECTION_SOURCE_CLASSIFICATION,
-        _STAGING_PLATFORM_PROJECTION_SOURCE_CLASSIFICATION,
-    ).replace(
-        _PLATFORM_PROJECTION_ENTRY_VALIDATION,
-        _STAGING_PLATFORM_PROJECTION_ENTRY_VALIDATION,
-    ).replace(
         _PLATFORM_PROJECTION_MANIFEST_REJECTION,
         _STAGING_PLATFORM_PROJECTION_MANIFEST_REJECTION,
+    ).replace(
+        _FORMULA_TEST_RUNTIME_FUNCTION,
+        f"{_STAGING_RUST_ALIAS_HELPER}\n{_FORMULA_TEST_RUNTIME_FUNCTION}",
+    ).replace(
+        _FORMULA_TEST_RUNTIME_CALL,
+        _STAGING_FORMULA_TEST_RUNTIME_CALL,
     ).replace(
         _PROTECTED_ROOT_PARENT_AUDIT,
         _STAGING_PROTECTED_ROOT_PARENT_AUDIT,
