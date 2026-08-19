@@ -32,7 +32,7 @@ class Mariadb < Formula
   def install
     kandelo_require_arch!("wasm32")
     out_dir = kandelo_build_tap_recipe(
-      manifest_sha256: "44ee71a69a11465545a5e6c2febcc2983c4bbca1f37a08e40ed3ee0ed7772c05",
+      manifest_sha256: "5eeabe2ab9f93dd7b6ad1a4cefbc0bbaf0eb669d4e6b32e6bd07b382706f4b09",
       script_env:      {
         "MARIADB_VFS_SOURCE_ROLES" => "system-tables,test-suite",
       },

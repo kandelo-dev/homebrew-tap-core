@@ -68,6 +68,7 @@ LIBCXX_PREFIX="${WASM_POSIX_DEP_LIBCXX_DIR:?}"
 [ -f "$LIBICONV_PREFIX/lib/libiconv.a" ] || { echo "ERROR: GNU libiconv resolve missing libiconv.a"; exit 1; }
 [ -f "$LIBZIP_PREFIX/lib/libzip.a" ] || { echo "ERROR: libzip resolve missing libzip.a"; exit 1; }
 [ -f "$LIBCURL_PREFIX/lib/libcurl.a" ] || { echo "ERROR: libcurl resolve missing libcurl.a"; exit 1; }
+[ -f "$LIBCURL_PREFIX/lib/libcurl-pic.a" ] || { echo "ERROR: libcurl resolve missing libcurl-pic.a"; exit 1; }
 [ -f "$ICU_PREFIX/lib/libicuuc.a" ] || { echo "ERROR: icu resolve missing libicuuc.a"; exit 1; }
 [ -f "$ICU_PREFIX/lib/libicui18n.a" ] || { echo "ERROR: icu resolve missing libicui18n.a"; exit 1; }
 [ -f "$ICU_PREFIX/lib/libicuio.a" ] || { echo "ERROR: icu resolve missing libicuio.a"; exit 1; }
@@ -1165,9 +1166,9 @@ echo "==> Applying fork instrumentation to opcache.so side module..."
 mv "$BIN_DIR/opcache.so.instr" "$BIN_DIR/opcache.so"
 echo "==> opcache.so: $(wc -c < "$BIN_DIR/opcache.so") bytes"
 
-# Build ext/curl as a normal shared PHP extension. libcurl.a is PIC and is
-# absorbed into curl.so; libc, zlib, and OpenSSL remain imports from php.wasm
-# so dlopen does not create duplicate process-global library state.
+# Build ext/curl as a normal shared PHP extension. The Curl bottle publishes a
+# distinct PIC archive for side modules; libc, zlib, and OpenSSL remain imports
+# from php.wasm so dlopen does not create duplicate process-global state.
 echo "==> Building curl.so (extension)..."
 make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)" \
     EXTRA_CFLAGS="$EXTRA_INC_LIBXML -I$LIBCURL_PREFIX/include -DCURL_STATICLIB" \
@@ -1180,7 +1181,7 @@ wasm32posix-cc -shared -fPIC -o "$BIN_DIR/curl.so" \
     ext/curl/.libs/multi.o \
     ext/curl/.libs/share.o \
     ext/curl/.libs/curl_file.o \
-    "$LIBCURL_PREFIX/lib/libcurl.a"
+    "$LIBCURL_PREFIX/lib/libcurl-pic.a"
 echo "==> curl.so: $(wc -c < "$BIN_DIR/curl.so") bytes"
 
 # Build Phar as a shared extension too. The PHP package intentionally keeps

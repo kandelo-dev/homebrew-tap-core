@@ -20,10 +20,10 @@
       "sha256": "582199b96113f37d8bd277c936fac1bc5688a57ce1a4c6f936ec2892cd2d2a73"
     },
     {
-      "bytes": 63149,
+      "bytes": 63276,
       "mode": "0755",
       "path": "build.sh",
-      "sha256": "c6382134e96028ea7714d185cfd19dbb43034d30d7e29bb1a57cc7a28f0ff0b1"
+      "sha256": "7c55d45cd655015cf77c28879506fdb8e26fc75056d9b28fa0cb73f8140a9e4b"
     },
     {
       "bytes": 517,

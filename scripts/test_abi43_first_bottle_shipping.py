@@ -11,6 +11,11 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
     def formula(self, name: str) -> str:
         return (ROOT / f"Formula/{name}.rb").read_text(encoding="utf-8")
 
+    def recipe(self, name: str) -> str:
+        return (ROOT / f"Kandelo/recipes/{name}/build.sh").read_text(
+            encoding="utf-8"
+        )
+
     def test_staged_formulae_expose_dash_to_the_runtime_dependency_cache(self) -> None:
         for formula in ("ed", "findutils", "less", "nginx", "redis", "vim"):
             with self.subTest(formula=formula):
@@ -66,6 +71,39 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         source = self.formula("node")
         self.assertIn('depends_on "cbindgen" => :build', source)
         self.assertIn('depends_on "rust" => :build', source)
+
+    def test_mariadb_maps_private_build_paths_out_of_target_artifacts(self) -> None:
+        source = self.recipe("mariadb")
+        self.assertIn('prefix_map_flags() {', source)
+        self.assertIn(
+            'REPRODUCIBLE_PREFIX_MAPS="$(prefix_map_flags "$WORK_DIR" '
+            '/usr/src/mariadb-build)"',
+            source,
+        )
+        self.assertIn(
+            '-DCMAKE_C_FLAGS_RELEASE="${MARIADB_OPT_LEVEL:--O2} '
+            '-DNDEBUG $REPRODUCIBLE_PREFIX_MAPS"',
+            source,
+        )
+        self.assertIn(
+            '-DCMAKE_CXX_FLAGS_RELEASE="${MARIADB_OPT_LEVEL:--O2} '
+            '-DNDEBUG $REPRODUCIBLE_PREFIX_MAPS"',
+            source,
+        )
+
+    def test_php_links_curl_side_module_with_the_pic_libcurl_archive(self) -> None:
+        source = self.recipe("php")
+        self.assertIn(
+            '[ -f "$LIBCURL_PREFIX/lib/libcurl-pic.a" ] || '
+            '{ echo "ERROR: libcurl resolve missing libcurl-pic.a"; exit 1; }',
+            source,
+        )
+        curl_start = source.index('echo "==> Building curl.so (extension)..."')
+        curl_link = source[
+            curl_start : source.index('echo "==> curl.so:', curl_start)
+        ]
+        self.assertIn('"$LIBCURL_PREFIX/lib/libcurl-pic.a"', curl_link)
+        self.assertNotIn('"$LIBCURL_PREFIX/lib/libcurl.a"', curl_link)
 
     def test_zip_does_not_require_the_broken_external_unzip_pipe(self) -> None:
         source = self.formula("zip")
