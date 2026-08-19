@@ -1138,7 +1138,7 @@ class TapMetadataTests(unittest.TestCase):
             self.fail("per-Formula metadata patch validation is absent")
         validate(self.root, patch, update)
 
-    def test_plans_one_formula_update_when_top_index_row_is_absent(self) -> None:
+    def test_plans_one_formula_update_from_an_unselected_legacy_sidecar(self) -> None:
         history, snapshot, preactivation, _current = self._activate_fixture()
         self._add_dash()
         dash_sidecar_path = self.root / "Kandelo/formula/dash.json"
@@ -1162,6 +1162,14 @@ class TapMetadataTests(unittest.TestCase):
             for package in metadata["packages"]
             if package["name"] != "bash"
         ]
+        bash_sidecar_path = self.root / "Kandelo/formula/bash.json"
+        bash_sidecar = json.loads(bash_sidecar_path.read_bytes())
+        bash_sidecar["kandelo_abi"] = SUCCESSOR_ABI - 1
+        for bottle in bash_sidecar["bottles"]:
+            bottle["kandelo_abi"] = SUCCESSOR_ABI - 1
+        bash_sidecar_path.write_bytes(
+            json.dumps(bash_sidecar, indent=2, sort_keys=True).encode() + b"\n"
+        )
         metadata_path.write_bytes(
             json.dumps(metadata, indent=2, sort_keys=True).encode() + b"\n"
         )
@@ -1186,6 +1194,9 @@ class TapMetadataTests(unittest.TestCase):
         ]
         self.assertEqual(len(matches), 1)
         self.assertEqual(matches[0]["formula_metadata"], "Kandelo/formula/bash.json")
+        sidecar = json.loads(result.patch.files["Kandelo/formula/bash.json"])
+        self.assertEqual(sidecar["kandelo_abi"], SUCCESSOR_ABI)
+        self.assertEqual(sidecar["bottles"][0]["kandelo_abi"], SUCCESSOR_ABI)
 
     def test_composes_two_formula_updates_into_one_atomic_patch(self) -> None:
         history, snapshot, preactivation, _current = self._activate_fixture()
