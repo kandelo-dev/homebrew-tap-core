@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "dependencies": [],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 1038,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "a114741c96065e033775a6ca9d1a464240eb6031ace5939ce8f9cf74bcdbd77c"
+    },
+    {
+      "bytes": 4890,
+      "mode": "0644",
+      "path": "src/lsof.c",
+      "sha256": "503dbbf4a5182ce5daf782f6498ee0a389470a418497ca80df3c3093658a14c6"
+    }
+  ]
+}

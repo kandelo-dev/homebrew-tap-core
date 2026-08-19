@@ -84,6 +84,7 @@ class FormulaBuildInputPolicyV1:
     schema: int
     kind: str
     version: int
+    disabled_formulae: tuple[str, ...]
     profiles: Mapping[str, FormulaCaptureProfileV1]
     formulae: tuple[FormulaCaptureEntryV1, ...]
 
@@ -366,7 +367,16 @@ def load_formula_build_inputs(
     value = _read_toml(path, 4 * 1024 * 1024)
     _exact_keys(
         value,
-        frozenset({"schema", "kind", "version", "profiles", "formulae"}),
+        frozenset(
+            {
+                "schema",
+                "kind",
+                "version",
+                "disabled_formulae",
+                "profiles",
+                "formulae",
+            }
+        ),
         "Formula build-input policy",
     )
     if _integer(value["schema"], "Formula policy schema", 1, 1) != 1:
@@ -415,6 +425,17 @@ def load_formula_build_inputs(
     names = tuple(entry.name for entry in formulae)
     if not names or any(left >= right for left, right in zip(names, names[1:])):
         raise PolicyError("Formula capture entries must be sorted and duplicate-free")
+    disabled_formulae = _sorted_unique(
+        value["disabled_formulae"],
+        "disabled Formulae",
+        _stable_id,
+    )
+    unknown_disabled = sorted(set(disabled_formulae) - set(names))
+    if unknown_disabled:
+        raise PolicyError(
+            "disabled Formulae differ from the Formula inventory: "
+            f"unknown={unknown_disabled!r}"
+        )
     if tap_root is not None:
         root = tap_root.resolve(strict=True)
         actual = tuple(sorted(candidate.stem for candidate in (root / "Formula").glob("*.rb")))
@@ -424,7 +445,14 @@ def load_formula_build_inputs(
                 f"missing={sorted(set(actual) - set(names))!r} "
                 f"extra={sorted(set(names) - set(actual))!r}"
             )
-    return FormulaBuildInputPolicyV1(1, "kandelo-formula-build-inputs", version, profiles, tuple(formulae))
+    return FormulaBuildInputPolicyV1(
+        1,
+        "kandelo-formula-build-inputs",
+        version,
+        disabled_formulae,
+        profiles,
+        tuple(formulae),
+    )
 
 
 def _expand_profile(
@@ -579,6 +607,7 @@ def generate_formula_capture_catalog(
         }
         generated.append({**identity, "capture_policy_sha256": canonical_sha256(identity)})
     return {
+        "disabled_formulae": list(policy.disabled_formulae),
         "formulae": generated,
         "kind": "kandelo-formula-build-input-catalog",
         "schema": 1,

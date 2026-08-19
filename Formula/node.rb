@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Node < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
   RUNTIME_OUTPUTS = { "node.wasm" => "bin/node" }.freeze
 
   desc "Node-compatible JavaScript runtime for Kandelo"
@@ -23,13 +23,9 @@ class Node < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-    out_dir = kandelo_build_package(
-      package:    "spidermonkey",
-      script_env: {
-        "WASM_POSIX_DEP_LIBCXX_DIR"  => formula_opt_prefix("kandelo-dev/tap-core/libcxx"),
-        "WASM_POSIX_DEP_OPENSSL_DIR" => formula_opt_prefix("kandelo-dev/tap-core/openssl"),
-        "WASM_POSIX_DEP_ZLIB_DIR"    => formula_opt_prefix("kandelo-dev/tap-core/zlib"),
-      },
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "22b396bf81b6126c99b31c5b0cf86a240f92d0f113652b60d7bb3b9f0057af6d",
+      script_env:      {},
     )
     kandelo_validate_wasm_artifact(out_dir/"node.wasm", fork: :forbidden)
     RUNTIME_OUTPUTS.each do |source_name, relative|

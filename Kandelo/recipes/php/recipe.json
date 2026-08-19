@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "dependencies": [
+    "kandelo-dev/tap-core/icu",
+    "kandelo-dev/tap-core/libcurl",
+    "kandelo-dev/tap-core/libcxx",
+    "kandelo-dev/tap-core/libiconv",
+    "kandelo-dev/tap-core/libxml2",
+    "kandelo-dev/tap-core/libzip",
+    "kandelo-dev/tap-core/openssl",
+    "kandelo-dev/tap-core/sqlite",
+    "kandelo-dev/tap-core/zlib"
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 14796,
+      "mode": "0644",
+      "path": "abi_constants.h",
+      "sha256": "582199b96113f37d8bd277c936fac1bc5688a57ce1a4c6f936ec2892cd2d2a73"
+    },
+    {
+      "bytes": 63149,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "c6382134e96028ea7714d185cfd19dbb43034d30d7e29bb1a57cc7a28f0ff0b1"
+    },
+    {
+      "bytes": 517,
+      "mode": "0644",
+      "path": "fork-side-module-abi.c",
+      "sha256": "29c8df2c0811bde288f4dd0f71b32598589e250316d3f883ba35e93e24dc71a2"
+    },
+    {
+      "bytes": 3520,
+      "mode": "0644",
+      "path": "intl-icu-data-loader.c",
+      "sha256": "8955c3f6ccd049deb69881eb28e1dd792c7516c1329aaabc7a06a78a54a8d345"
+    }
+  ]
+}

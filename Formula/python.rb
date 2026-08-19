@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Python < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   PYTHON_MAJOR_MINOR = "3.13".freeze
   GUEST_OPT_PREFIX =
@@ -28,11 +28,10 @@ class Python < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-    out_dir = kandelo_build_package(
-      package:    "cpython",
-      script_env: {
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "2125d8fe0e6a462d03260650cf99819e6689d4ec9aa47809741fc80957bc26ac",
+      script_env:      {
         "WASM_POSIX_DEP_GUEST_PREFIX" => GUEST_OPT_PREFIX,
-        "WASM_POSIX_DEP_ZLIB_DIR"     => formula_opt_prefix("kandelo-dev/tap-core/zlib"),
       },
     )
     kandelo_validate_wasm_artifact(out_dir/"python.wasm", fork: :required)

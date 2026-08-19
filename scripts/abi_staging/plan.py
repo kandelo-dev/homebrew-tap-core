@@ -302,7 +302,9 @@ def _validate_formula_requirements_shape(
     return result
 
 
-def _inventory_entries(inventory: Mapping[str, Any]) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+def _inventory_entries(
+    inventory: Mapping[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], tuple[str, ...]]:
     if inventory.get("schema") != 1 or inventory.get("kind") != "kandelo-protected-formula-inventory":
         raise PlanError("Formula inventory protocol is unsupported")
     entries = [
@@ -351,7 +353,20 @@ def _inventory_entries(inventory: Mapping[str, Any]) -> tuple[list[dict[str, Any
         raise PlanError(f"Formula inventory names unknown first-party dependencies {unknown!r}")
     if canonical_sha256(graph_identity) != inventory.get("graph_sha256"):
         raise PlanError("Formula inventory graph digest is stale")
-    return entries, by_name
+    disabled = tuple(
+        _stable_id(candidate, "disabled Formula")
+        for candidate in _sequence(
+            inventory.get("disabled_formulae", ()), "disabled Formulae"
+        )
+    )
+    if disabled != tuple(sorted(set(disabled))):
+        raise PlanError("disabled Formulae must be sorted and duplicate-free")
+    unknown_disabled = sorted(set(disabled) - set(by_name))
+    if unknown_disabled:
+        raise PlanError(
+            f"disabled Formulae are absent from the inventory: {unknown_disabled!r}"
+        )
+    return entries, by_name, disabled
 
 
 def _subject_graph(
@@ -537,7 +552,25 @@ def plan_request(
     products = _request_products(request_value)
     product_ids = {product["id"] for product in products}
     requirements = _validate_formula_requirements_shape(formula_requirements)
-    entries, by_name = _inventory_entries(_mapping(inventory, "Formula inventory"))
+    entries, all_by_name, disabled_names = _inventory_entries(
+        _mapping(inventory, "Formula inventory")
+    )
+    disabled = set(disabled_names)
+    for entry in entries:
+        if entry["name"] in disabled:
+            continue
+        disabled_dependencies = sorted(
+            dependency["name"]
+            for dependency in entry["target_dependencies"]
+            if dependency["name"] in disabled
+        )
+        if disabled_dependencies:
+            raise PlanError(
+                f"active Formula {entry['name']} depends on disabled "
+                f"{disabled_dependencies[0]}"
+            )
+    entries = [entry for entry in entries if entry["name"] not in disabled]
+    by_name = {entry["name"]: entry for entry in entries}
     graph = _subject_graph(entries, by_name)
     order = _topological_order(graph)
 
@@ -560,7 +593,11 @@ def plan_request(
             raise PlanError("selected Formula root addresses a third-party tap")
         subject = (requirement["formula"], requirement["architecture"])
         if subject not in graph:
-            if requirement["formula"] not in by_name:
+            if requirement["formula"] in disabled:
+                raise PlanError(
+                    f"selected Formula root {requirement['formula']} is disabled"
+                )
+            if requirement["formula"] not in all_by_name:
                 raise PlanError(f"selected Formula root {requirement['formula']} is missing")
             raise PlanError(
                 f"selected Formula root {requirement['formula']} lacks "

@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Lsof < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
 
   desc "Open-file reporter for Kandelo procfs"
   homepage "https://github.com/Automattic/kandelo"
@@ -20,9 +20,12 @@ class Lsof < Formula
   def install
     kandelo_require_arch!("wasm32")
 
-    # Transitional Tier-2 bridge: this intentionally packages Kandelo's
-    # procfs-aware implementation, not native lsof with Linux-only probes.
-    out_dir = kandelo_build_package(script_env: {})
+    # This intentionally packages the tap-owned procfs-aware implementation,
+    # not native lsof with Linux-only probes.
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "73061bc1d6d1be766c83462215b4b9f6f7aae60fac38542ee2f217e077ebd842",
+      script_env:      {},
+    )
     kandelo_validate_wasm_artifact(out_dir/"lsof.wasm")
     kandelo_install_bin(out_dir, "lsof.wasm", "lsof")
   end
@@ -35,6 +38,7 @@ class Lsof < Formula
 
   bottle do
     root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/lsof"
+    rebuild 3
     sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "be4680c74cd8e934b442f85f614bba539b1fcf46904cdef54850728fc974c3e1"
   end
 end

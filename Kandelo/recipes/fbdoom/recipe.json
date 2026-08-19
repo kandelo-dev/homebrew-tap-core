@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "dependencies": [],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 1948,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "f244d0a8f151788880b6bcad5c729659335e09f6284cd298624f71ad49b56662"
+    },
+    {
+      "bytes": 320,
+      "mode": "0644",
+      "path": "patches/0001-fix-I_InitInput-signature.patch",
+      "sha256": "e9f282ecdea0432a3d0e1764369f3560f2f9f18afeaae126e8fd8a3be349c312"
+    },
+    {
+      "bytes": 2667,
+      "mode": "0644",
+      "path": "patches/0002-add-mice-input.patch",
+      "sha256": "20dc71a9eedc5b2713a3d28978dd2a28a7b05f2b1c13c025c4ac1f2f0a26cb72"
+    },
+    {
+      "bytes": 13953,
+      "mode": "0644",
+      "path": "patches/0003-add-sound-support.patch",
+      "sha256": "c6b077c001bf20acc56fc12356e757743bb4c32dd8723f5b140228d88b18b5da"
+    },
+    {
+      "bytes": 5886,
+      "mode": "0644",
+      "path": "patches/0004-music-support-vendor-fixups.patch",
+      "sha256": "08cf5cddbe74ac3ef74c226c0d2434aa01e47aff0d1efdf3f5bd1b49660d861a"
+    },
+    {
+      "bytes": 14126,
+      "mode": "0644",
+      "path": "patches/0005-add-music-support.patch",
+      "sha256": "3ef8438f01b17261b2d0077b67633d0064df4ec241fe8abeddb95d7914e0a4a5"
+    },
+    {
+      "bytes": 566,
+      "mode": "0644",
+      "path": "patches/0006-fix-G_CheckDemoStatus-atexit-signature.patch",
+      "sha256": "877ef5f4e9de8ab23f1f80c4f736f8cd20441715e597aab28d8ec2ca1d160822"
+    },
+    {
+      "bytes": 367,
+      "mode": "0644",
+      "path": "patches/0007-use-home-for-save-directory.patch",
+      "sha256": "19de7aebfe7c89057089126a9d3bee40e647d999c1c09cf5b2c927a0e36329f8"
+    }
+  ]
+}

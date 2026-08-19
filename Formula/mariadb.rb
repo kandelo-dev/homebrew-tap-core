@@ -3,7 +3,7 @@ require (Tap.fetch("kandelo-dev", "tap-core").path/"Kandelo/formula_support/kand
 class Mariadb < Formula
   include KandeloFormulaSupport
 
-  KANDELO_REGISTRY_BRIDGE = true
+  KANDELO_TAP_RECIPE = true
   PROGRAM_OUTPUTS = {
     "mariadbd.wasm" => "bin/mariadbd",
     "mysqltest.wasm" => "bin/mysqltest",
@@ -29,12 +29,10 @@ class Mariadb < Formula
 
   def install
     kandelo_require_arch!("wasm32")
-    out_dir = kandelo_build_package(
-      package:    "mariadb",
-      script_env: {
-        "MARIADB_VFS_SOURCE_ROLES"   => "system-tables,test-suite",
-        "WASM_POSIX_DEP_LIBCXX_DIR"  => formula_opt_prefix("kandelo-dev/tap-core/libcxx"),
-        "WASM_POSIX_DEP_PCRE2_DIR"   => formula_opt_prefix("kandelo-dev/tap-core/pcre2"),
+    out_dir = kandelo_build_tap_recipe(
+      manifest_sha256: "44ee71a69a11465545a5e6c2febcc2983c4bbca1f37a08e40ed3ee0ed7772c05",
+      script_env:      {
+        "MARIADB_VFS_SOURCE_ROLES" => "system-tables,test-suite",
       },
     )
 

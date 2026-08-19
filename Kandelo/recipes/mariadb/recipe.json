@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "dependencies": [
+    "kandelo-dev/tap-core/libcxx",
+    "kandelo-dev/tap-core/pcre2"
+  ],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 17127,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "3c42a86f8bfd4c0369794bad1e96936844e434ee6b1c5d241ec905737e491059"
+    },
+    {
+      "bytes": 14796,
+      "mode": "0644",
+      "path": "glue/abi_constants.h",
+      "sha256": "582199b96113f37d8bd277c936fac1bc5688a57ce1a4c6f936ec2892cd2d2a73"
+    },
+    {
+      "bytes": 44319,
+      "mode": "0644",
+      "path": "glue/channel_syscall.c",
+      "sha256": "7086da85c7aa282faf0c14d74d0f9f9d10baf083d1e7e04386c5d74e50c92161"
+    },
+    {
+      "bytes": 39888,
+      "mode": "0644",
+      "path": "glue/compiler_rt.c",
+      "sha256": "34d287ea92cfeadd4ffd8e5696fb6e7de4adec7385aefe23b5589525bde92278"
+    },
+    {
+      "bytes": 900,
+      "mode": "0644",
+      "path": "mariadb-glue-object-contract.cmake",
+      "sha256": "d6e45d430b5ac96154ffe1274022378de8dd7f89f5ba95d517986893333633fe"
+    },
+    {
+      "bytes": 474,
+      "mode": "0644",
+      "path": "patches/001-wasm32-missing-includes.patch",
+      "sha256": "38d9ac4aa6dc92987596c65bd9aa3e72a05182d750b966e31fdf03fd739573db"
+    },
+    {
+      "bytes": 391,
+      "mode": "0644",
+      "path": "patches/002-wasm32-skip-maria-upgrade.patch",
+      "sha256": "158aa6104dcde4c3e1702d611e23cdf416b635105aef47ddf7c2c4c4ed1a3c78"
+    },
+    {
+      "bytes": 851,
+      "mode": "0644",
+      "path": "patches/003-wasm32-my-new-psi-key.patch",
+      "sha256": "70a2eb49dab16e5337bd465891d7e3793962b7b2fd2ab95c64277218ec7f8158"
+    },
+    {
+      "bytes": 620,
+      "mode": "0644",
+      "path": "patches/004-wasm32-mysqltest-client-only.patch",
+      "sha256": "fae74405ce945599273a095253aee51c5c44f6f95220cb982e355c8f6f250731"
+    },
+    {
+      "bytes": 10280,
+      "mode": "0644",
+      "path": "wasm32-posix-toolchain.cmake",
+      "sha256": "01325399eb387083deb4a17517af2dfa446bf7926a628b311fa93218761ccf38"
+    }
+  ]
+}

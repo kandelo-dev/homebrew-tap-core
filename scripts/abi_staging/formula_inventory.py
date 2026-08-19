@@ -52,6 +52,7 @@ INVENTORY_KEYS = frozenset(
         "sidecar_tree",
         "probe_sha256",
         "capture_catalog_sha256",
+        "disabled_formulae",
         "graph_sha256",
         "formulae",
     }
@@ -784,6 +785,11 @@ def validate_formula_probe(
     }
     if set(catalog_entries) != {entry["name"] for entry in entries}:
         raise FormulaInventoryError("capture catalog and Formula probe inventories differ")
+    disabled_formulae = list(
+        _sequence(capture_catalog.get("disabled_formulae"), "disabled Formulae")
+    )
+    if disabled_formulae != list(capture_policy.disabled_formulae):
+        raise FormulaInventoryError("capture catalog disabled Formulae differ from policy")
     if _git(root, "diff", "--quiet", "HEAD", "--", "Formula", "Kandelo/formula"):
         raise FormulaInventoryError("unreachable Git diff result")
     # A successful --quiet command has empty stdout. Failures are raised by _git.
@@ -841,6 +847,7 @@ def validate_formula_probe(
         "sidecar_tree": _tree_identity(root, "Kandelo/formula"),
         "probe_sha256": canonical_sha256(probe),
         "capture_catalog_sha256": canonical_sha256(capture_catalog),
+        "disabled_formulae": disabled_formulae,
         "graph_sha256": canonical_sha256(graph_identity),
         "formulae": generated,
     }
@@ -902,7 +909,9 @@ def load_formula_inventory(body: bytes) -> dict[str, Any]:
     except CanonicalJsonError as error:
         raise FormulaInventoryError(f"Formula inventory is not canonical: {error}") from error
     value = _mapping(parsed, "Formula inventory")
-    _exact_keys(value, INVENTORY_KEYS, "Formula inventory")
+    actual_keys = frozenset(value)
+    if actual_keys not in (INVENTORY_KEYS, INVENTORY_KEYS - {"disabled_formulae"}):
+        _exact_keys(value, INVENTORY_KEYS, "Formula inventory")
     if value["schema"] != 1 or value["kind"] != "kandelo-protected-formula-inventory":
         raise FormulaInventoryError("Formula inventory protocol is unsupported")
     for field in ("probe_sha256", "capture_catalog_sha256", "graph_sha256"):
@@ -925,4 +934,15 @@ def load_formula_inventory(body: bytes) -> dict[str, Any]:
             _digest(entry[field], f"{field} for {entry['name']}")
     if not names or names != sorted(set(names)):
         raise FormulaInventoryError("inventory Formulae must be sorted and duplicate-free")
+    disabled_formulae = [
+        _stable_id(candidate, "disabled Formula")
+        for candidate in _sequence(value.get("disabled_formulae", ()), "disabled Formulae")
+    ]
+    if disabled_formulae != sorted(set(disabled_formulae)):
+        raise FormulaInventoryError("disabled Formulae must be sorted and duplicate-free")
+    unknown_disabled = sorted(set(disabled_formulae) - set(names))
+    if unknown_disabled:
+        raise FormulaInventoryError(
+            f"disabled Formulae are absent from the inventory: {unknown_disabled!r}"
+        )
     return dict(value)

@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "dependencies": [],
+  "entrypoint": "build.sh",
+  "files": [
+    {
+      "bytes": 2482,
+      "mode": "0755",
+      "path": "build.sh",
+      "sha256": "f0bf711cecf2eef5bafa00273786eae68ca341085d4e67847b886eeeddc808b4"
+    },
+    {
+      "bytes": 1063,
+      "mode": "0644",
+      "path": "patches/disable-abortive-linger.patch",
+      "sha256": "6420971d14d4c568509db762333439a512c9549f7781d99dd426fdad3f9805bf"
+    },
+    {
+      "bytes": 432,
+      "mode": "0644",
+      "path": "patches/disable-pktinfo.patch",
+      "sha256": "eeac67617b378f45e03b219e05322059e68edfab2c8fceb92f8491f7e599b24a"
+    },
+    {
+      "bytes": 258,
+      "mode": "0644",
+      "path": "patches/listen-success-exit.patch",
+      "sha256": "3c59aa17f0bdd1fbd8539715b61dd47bd0d6a7484162786960286cf8f64c337f"
+    },
+    {
+      "bytes": 370,
+      "mode": "0644",
+      "path": "patches/udp-listen-single-socket.patch",
+      "sha256": "78ac661e552ed8dcbcba526f15736a7987af66f17bbe2ba75bc9f705de40730a"
+    }
+  ]
+}

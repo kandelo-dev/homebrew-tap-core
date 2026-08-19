@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import sys
+import hashlib
+import json
 import unittest
 from pathlib import Path
 
@@ -16,7 +18,6 @@ from scripts.abi_staging.formula_inventory import parse_formula_source
 
 FORMULAE = {
     "node": {
-        "bridge": "spidermonkey",
         "dependencies": {"libcxx", "openssl", "zlib"},
         "source": {
             "url": "https://ftp.mozilla.org/pub/firefox/releases/140.11.0esr/source/firefox-140.11.0esr.source.tar.xz",
@@ -26,7 +27,6 @@ FORMULAE = {
         "smoke": "node-ok",
     },
     "php": {
-        "bridge": "php",
         "dependencies": {
             "icu",
             "libcurl",
@@ -55,7 +55,6 @@ FORMULAE = {
         "smoke": "php-ok",
     },
     "mariadb": {
-        "bridge": "mariadb",
         "dependencies": {"libcxx", "pcre2"},
         "source": {
             "url": "https://archive.mariadb.org/mariadb-10.5.28/source/mariadb-10.5.28.tar.gz",
@@ -87,17 +86,22 @@ class PagesServiceFormulaTests(unittest.TestCase):
             ["wasm32"],
         )
 
-    def test_formulae_use_only_the_tap_owned_source_build_path(self) -> None:
+    def test_formulae_use_only_sealed_tap_owned_recipes(self) -> None:
         for name, contract in FORMULAE.items():
             with self.subTest(formula=name):
                 source = self.formula_source(name)
+                manifest_path = ROOT / "Kandelo" / "recipes" / name / "recipe.json"
+                manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
                 self.assertIn("include KandeloFormulaSupport", source)
-                self.assertIn("KANDELO_REGISTRY_BRIDGE = true", source)
+                self.assertIn("KANDELO_TAP_RECIPE = true", source)
+                self.assertNotIn("KANDELO_REGISTRY_BRIDGE", source)
                 self.assertIn('kandelo_require_arch!("wasm32")', source)
-                self.assertRegex(
+                self.assertIn("kandelo_build_tap_recipe(", source)
+                self.assertIn(
+                    f'manifest_sha256: "{manifest_sha256}"',
                     source,
-                    rf'kandelo_build_package\(\s*package:\s*"{contract["bridge"]}"',
                 )
+                self.assertNotIn("kandelo_build_package(", source)
                 self.assertNotIn("binaries-abi-v", source)
                 self.assertNotIn("WASM_POSIX_BINARY_CACHE_ROOT", source)
                 self.assertNotIn("ghcr.io/Automattic", source)
@@ -129,21 +133,24 @@ class PagesServiceFormulaTests(unittest.TestCase):
                     self.assertIn(path, source)
                 self.assertIn(contract["smoke"], source)
 
-    def test_formulae_bind_dependencies_to_the_registry_helpers(self) -> None:
-        node = self.formula_source("node")
-        self.assertIn('"WASM_POSIX_DEP_LIBCXX_DIR"', node)
-        self.assertIn('"WASM_POSIX_DEP_OPENSSL_DIR"', node)
-        self.assertIn('"WASM_POSIX_DEP_ZLIB_DIR"', node)
-
-        php = self.formula_source("php")
-        for dependency in FORMULAE["php"]["dependencies"]:
-            key = dependency.upper().replace("-", "_")
-            self.assertIn(f'"WASM_POSIX_DEP_{key}_DIR"', php)
-
-        mariadb = self.formula_source("mariadb")
-        self.assertIn('"WASM_POSIX_DEP_LIBCXX_DIR"', mariadb)
-        self.assertIn('"WASM_POSIX_DEP_PCRE2_DIR"', mariadb)
-        self.assertNotIn("WASM_POSIX_DEP_PCRE2_SOURCE_SRC_DIR", mariadb)
+    def test_recipe_manifests_bind_the_exact_poured_dependencies(self) -> None:
+        for name, contract in FORMULAE.items():
+            with self.subTest(formula=name):
+                manifest = json.loads(
+                    (ROOT / "Kandelo" / "recipes" / name / "recipe.json").read_bytes()
+                )
+                self.assertEqual(
+                    [f"kandelo-dev/tap-core/{dependency}" for dependency in sorted(contract["dependencies"])],
+                    manifest["dependencies"],
+                )
+                build = (
+                    ROOT / "Kandelo" / "recipes" / name / "build.sh"
+                ).read_text(encoding="utf-8")
+                for dependency in contract["dependencies"]:
+                    key = dependency.upper().replace("-", "_")
+                    self.assertIn(f'WASM_POSIX_DEP_{key}_DIR', build)
+                self.assertNotIn("build-deps resolve", build)
+                self.assertNotIn("install-local-binary", build)
 
 
 if __name__ == "__main__":
