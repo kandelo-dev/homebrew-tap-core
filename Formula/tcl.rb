@@ -332,6 +332,7 @@ class Tcl < Formula
       system kandelo_cc, thread_source, "-I#{include}/tcl", "-L#{lib}", "-ltcl9.0",
         "-L#{zlib}/lib", "-lz", "-ldl", "-pthread", "-lm", "-o", thread_wasm
     end
+    kandelo_fork_instrument(thread_wasm)
 
     child_source = testpath/"tcl-child.c"
     child_wasm = testpath/"tcl-child.wasm"
