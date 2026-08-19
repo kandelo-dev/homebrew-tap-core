@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import ast
 import copy
 import hashlib
 import importlib
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -95,6 +97,116 @@ def _active_bundle() -> dict[str, object]:
 
 
 class WorkflowExecutionTests(unittest.TestCase):
+    def test_staging_recipe_runner_expands_only_the_source_input_envelope(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "protected-recipe-runner.py"
+
+            execution._prepare_staging_recipe_runner(
+                source=KANDELO_ROOT / "scripts/homebrew-tap-recipe-runner.py",
+                destination=destination,
+            )
+
+            prepared = destination.read_text(encoding="utf-8")
+            ast.parse(prepared)
+            self.assertIn(
+                'SOURCE_INPUT_LIMITS = {\n'
+                '    **EXPECTED_LIMITS,\n'
+                '    "max_bytes": 4_294_967_296,\n'
+                '    "max_entries": 524_288,\n'
+                "}",
+                prepared,
+            )
+            self.assertIn(
+                'copy_input_tree(request["source_root"], source_root, SOURCE_INPUT_LIMITS)',
+                prepared,
+            )
+            self.assertIn(
+                "seal_output_tree(\n"
+                "            output_root,\n"
+                "            sealed,\n"
+                '            request["limits"],',
+                prepared,
+            )
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o500)
+
+    def test_staging_launcher_makes_private_dependency_directories_auditable(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runner = root / "protected-recipe-runner.py"
+            runner.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            runner.chmod(0o500)
+            destination = root / "protected-launcher.sh"
+            execution._prepare_staging_launcher(
+                source=KANDELO_ROOT / "scripts/homebrew-patched-launcher.sh",
+                destination=destination,
+                protected_recipe_runner=runner,
+            )
+
+            prepared = destination.read_text(encoding="utf-8")
+            candidate = (
+                KANDELO_ROOT / "scripts/homebrew-patched-launcher.sh"
+            ).read_text(encoding="utf-8")
+            audit_start = candidate.index(
+                "homebrew_patched_launcher_assert_target_cellar_links_safe() {"
+            )
+            audit_end = candidate.index(
+                "\nhomebrew_patched_launcher_seal_target_dependencies() {",
+                audit_start,
+            )
+            self.assertIn(candidate[audit_start:audit_end], prepared)
+            self.assertIn(str(runner.resolve()), prepared)
+            subprocess.run(["bash", "-n", str(destination)], check=True)
+            if not Path("/usr/bin/chmod").exists():
+                destination.chmod(0o700)
+                destination.write_text(
+                    prepared.replace("/usr/bin/chmod", "/bin/chmod"),
+                    encoding="utf-8",
+                )
+                destination.chmod(0o500)
+
+            prefix = root / "prefix"
+            private = prefix / "Cellar/libiconv/1.19/bin"
+            private.mkdir(parents=True)
+            for path in (prefix / "Cellar/libiconv", prefix / "Cellar/libiconv/1.19", private):
+                path.chmod(0o700)
+            sudo = root / "sudo"
+            sudo.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "[ \"${1:-}\" != -n ] || shift\n"
+                "[ \"${1:-}\" != -- ] || shift\n"
+                "if [ \"${1:-}\" = /usr/bin/chmod ]; then\n"
+                "  shift\n"
+                "  exec chmod \"$@\"\n"
+                "fi\n"
+                "exec \"$@\"\n",
+                encoding="utf-8",
+            )
+            sudo.chmod(0o500)
+            probe = root / "probe.sh"
+            probe.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                f"source {shlex.quote(str(destination))}\n"
+                f"HOMEBREW_PATCHED_PREFIX={shlex.quote(str(prefix))}\n"
+                "homebrew_patched_launcher_assert_target_cellar_links_safe() {\n"
+                "  [ \"$(python3 -c 'import os,stat,sys;"
+                "print(format(stat.S_IMODE(os.stat(sys.argv[1]).st_mode),\"o\"))' "
+                "\"$2/libiconv/1.19/bin\")\" = 555 ]\n"
+                "  return 73\n"
+                "}\n"
+                "if homebrew_patched_launcher_seal_target_dependencies "
+                f"\"$(id -un)\" {shlex.quote(str(sudo))}; then\n"
+                "  exit 99\n"
+                "else\n"
+                "  [ \"$?\" -eq 73 ]\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["bash", str(probe)], check=True)
+
     def test_staging_builder_overlay_uses_exact_local_dependency_archives(self) -> None:
         execution = importlib.import_module("scripts.abi_staging.execution")
         source = """#!/usr/bin/env bash
@@ -924,10 +1036,26 @@ done <"$DEPENDENCY_POUR_LIST"
             protected_builder = Path(
                 kwargs["env"]["KANDELO_ABI_STAGING_NORMAL_BUILDER"]
             )
+            protected_launcher = Path(
+                kwargs["env"]["KANDELO_ABI_STAGING_PROTECTED_LAUNCHER"]
+            )
+            protected_runner = Path(
+                kwargs["env"]["KANDELO_ABI_STAGING_PROTECTED_RECIPE_RUNNER"]
+            )
+            self.assertTrue(protected_launcher.is_file())
+            self.assertTrue(protected_runner.is_file())
             self.assertTrue(protected_builder.is_file())
             self.assertIn(
                 '"$dependency_archive"',
                 protected_builder.read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                '. "${KANDELO_ABI_STAGING_PROTECTED_LAUNCHER:?}"',
+                protected_builder.read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                str(protected_runner),
+                protected_launcher.read_text(encoding="utf-8"),
             )
             self.assertEqual(
                 kwargs["env"]["HOMEBREW_BREW_FILE"], "/reviewed/brew/bin/brew"

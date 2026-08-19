@@ -22,6 +22,8 @@ class Mariadb < Formula
 
   depends_on KandeloFormulaSupport::BinaryenRequirement => :build
   depends_on KandeloFormulaSupport::WabtRequirement => [:build, :test]
+  depends_on "bison" => :build
+  depends_on "cmake" => :build
   depends_on "kandelo-dev/tap-core/libcxx"
   depends_on "kandelo-dev/tap-core/pcre2"
 

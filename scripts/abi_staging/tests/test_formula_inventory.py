@@ -186,6 +186,23 @@ class FormulaInventoryTests(unittest.TestCase):
             ["primary", "resource:chocolate-doom", "resource:doom-shareware"],
         )
 
+    def test_mariadb_declares_the_native_tools_used_by_its_recipe(self) -> None:
+        parsed = parse_formula_source(
+            "mariadb",
+            "Formula/mariadb.rb",
+            (TAP_ROOT / "Formula/mariadb.rb").read_bytes(),
+            ("wasm32",),
+        )
+        self.assertEqual(
+            parsed["native_requirements"],
+            [
+                {"identity": "binaryen", "scopes": ["build"]},
+                {"identity": "bison", "scopes": ["build"]},
+                {"identity": "cmake", "scopes": ["build"]},
+                {"identity": "wabt", "scopes": ["build", "test"]},
+            ],
+        )
+
     def test_legacy_sidecar_keeps_unpublished_architecture_pending(self) -> None:
         parsed = parse_formula_source(
             "curl",
