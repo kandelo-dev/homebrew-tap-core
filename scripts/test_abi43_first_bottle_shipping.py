@@ -62,6 +62,11 @@ class Abi43FirstBottleShippingTests(unittest.TestCase):
         self.assertLess(compile_extension, instrument_extension)
         self.assertLess(instrument_extension, mount_extension)
 
+    def test_node_declares_the_native_rust_recipe_toolchain(self) -> None:
+        source = self.formula("node")
+        self.assertIn('depends_on "cbindgen" => :build', source)
+        self.assertIn('depends_on "rust" => :build', source)
+
     def test_zip_does_not_require_the_broken_external_unzip_pipe(self) -> None:
         source = self.formula("zip")
         self.assertNotIn('bin/"zip", ["-T", "archive.zip"]', source)
