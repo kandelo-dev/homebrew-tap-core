@@ -316,6 +316,14 @@ class PagesCanonicalSelectionTests(unittest.TestCase):
             tap_root=promotion_tests.TAP_ROOT,
             target_abi=promotion_tests.TARGET_ABI,
         )
+        metadata_path = fixture.root / "Kandelo/metadata.json"
+        metadata = json.loads(metadata_path.read_bytes())
+        metadata["packages"] = [
+            package
+            for package in metadata["packages"]
+            if package["name"] != selected.formula
+        ]
+        metadata_path.write_bytes(cli_module.canonical_bytes(metadata))
         arguments = [
             "apply-pages-canonical-metadata",
             "--tap-root",
