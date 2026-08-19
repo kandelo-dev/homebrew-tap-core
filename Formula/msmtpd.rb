@@ -410,6 +410,11 @@ class Msmtpd < Formula
       msmtpd-standalone-browser-ok
     OUTPUT
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/msmtpd"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "76e9ddbe808ee2b7ee86b868e3c5d82704756a2fb20c737967b3a950c4f18fc7"
+  end
 end
 
 __END__

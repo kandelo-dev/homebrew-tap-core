@@ -1,0 +1,38 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 150572,
+    "cache_key_sha": "76e9ddbe808ee2b7ee86b868e3c5d82704756a2fb20c737967b3a950c4f18fc7",
+    "payload_root": "msmtpd/1.8.32_1",
+    "sha256": "76e9ddbe808ee2b7ee86b868e3c5d82704756a2fb20c737967b3a950c4f18fc7",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/msmtpd/blobs/sha256:76e9ddbe808ee2b7ee86b868e3c5d82704756a2fb20c737967b3a950c4f18fc7"
+  },
+  "cellar": "/opt/kandelo/homebrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/msmtpd/1.8.32_1",
+  "links": [
+    {
+      "source": "bin/msmtpd",
+      "target": "bin/msmtpd",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man1/msmtpd.1",
+      "target": "share/man/man1/msmtpd.1",
+      "type": "symlink"
+    }
+  ],
+  "package": "msmtpd",
+  "prefix": "/opt/kandelo/homebrew",
+  "receipts": [
+    ".brew/msmtpd.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.8.32_1"
+}
