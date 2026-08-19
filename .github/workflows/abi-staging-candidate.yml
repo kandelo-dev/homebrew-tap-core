@@ -222,6 +222,9 @@ jobs:
           # outputs and Node dependency trees are restored from the one
           # run-scoped artifact; no Formula job rebuilds them.
           cd "$GITHUB_WORKSPACE/kandelo-source"
+          # The single-quoted program is intentionally expanded by the
+          # nested exact dev shell, not by this outer workflow shell.
+          # shellcheck disable=SC2016
           env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_RUNTIME_TOKEN -u GITHUB_ENV -u GITHUB_OUTPUT \
             -u GITHUB_STEP_SUMMARY \
@@ -231,9 +234,6 @@ jobs:
               "PLAYWRIGHT_BROWSERS_PATH=$playwright_browsers" \
               "KANDELO_ABI_STAGING_ARCHITECTURE=$KANDELO_ABI_STAGING_ARCHITECTURE" \
               "KANDELO_ABI_STAGING_PLATFORM_ROOT=$GITHUB_WORKSPACE/kandelo-source" \
-              # The single-quoted program is intentionally expanded by the
-              # nested exact dev shell, not by this outer workflow shell.
-              # shellcheck disable=SC2016
               bash -euo pipefail -c '
                 source_root="$KANDELO_ABI_STAGING_PLATFORM_ROOT"
                 rustc_bin="$(command -v rustc)"

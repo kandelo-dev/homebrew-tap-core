@@ -1161,6 +1161,11 @@ class AbiStagingWorkflowCheckerTest < Minitest::Test
                     'ln -s "$rustc_bin" "$source_root/tools/bin/rustc"'
     assert_includes realm_source,
                     'ln -s "$cargo_bin" "$source_root/tools/bin/cargo"'
+    exact_rust_command = [
+      '    "KANDELO_ABI_STAGING_PLATFORM_ROOT=$GITHUB_WORKSPACE/kandelo-source" \\',
+      "    bash -euo pipefail -c '",
+    ].join("\n")
+    assert_includes realm_source, exact_rust_command
     assert_includes realm_source,
                     'host_target="$(cat "$GITHUB_WORKSPACE/kandelo-source/.ci-homebrew-realm/host-target")"'
     refute_includes realm_source, "formula_test_packages"
