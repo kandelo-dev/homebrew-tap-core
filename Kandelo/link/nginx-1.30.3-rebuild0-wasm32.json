@@ -1,0 +1,43 @@
+{
+  "arch": "wasm32",
+  "bottle": {
+    "bytes": 679548,
+    "cache_key_sha": "175667dbff22950c431e3a2634f746b7ada40b4517ee3c884d3343a76f9792c4",
+    "payload_root": "nginx/1.30.3",
+    "sha256": "175667dbff22950c431e3a2634f746b7ada40b4517ee3c884d3343a76f9792c4",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/nginx/blobs/sha256:175667dbff22950c431e3a2634f746b7ada40b4517ee3c884d3343a76f9792c4"
+  },
+  "cellar": "/opt/kandelo/homebrew/Cellar",
+  "env": {
+    "PATH_prepend": [
+      "bin"
+    ]
+  },
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/nginx/1.30.3",
+  "links": [
+    {
+      "source": "bin/nginx",
+      "target": "bin/nginx",
+      "type": "symlink"
+    },
+    {
+      "source": "share/man/man8/nginx.8",
+      "target": "share/man/man8/nginx.8",
+      "type": "symlink"
+    },
+    {
+      "source": "share/nginx/LICENSE",
+      "target": "share/nginx/LICENSE",
+      "type": "symlink"
+    }
+  ],
+  "package": "nginx",
+  "prefix": "/opt/kandelo/homebrew",
+  "receipts": [
+    ".brew/nginx.rb",
+    "INSTALL_RECEIPT.json"
+  ],
+  "schema": 1,
+  "version": "1.30.3"
+}

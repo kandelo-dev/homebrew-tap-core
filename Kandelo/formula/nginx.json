@@ -10,18 +10,23 @@
         "formula_sha256": "8899563a593a253fcb01fcfe40fa0ce74cbed1a2634117d71f5d0dd525d14459",
         "kandelo_commit": "a8d466b506af1883cdc82c179dc9ad42c4b77dc9",
         "kandelo_repository": "Automattic/kandelo",
-        "tap_commit": "7f0e7d638c5e9b2deb4f69efdf951a0593830be7",
+        "tap_commit": "218fbadb5508e344e8f8d40fef17c12255205cdf",
         "tap_repository": "kandelo-dev/homebrew-tap-core"
       },
+      "bytes": 679548,
+      "cache_key_sha": "175667dbff22950c431e3a2634f746b7ada40b4517ee3c884d3343a76f9792c4",
       "cellar": "/opt/kandelo/homebrew/Cellar",
       "fork_instrumentation": "required",
       "kandelo_abi": 43,
+      "link_manifest": "Kandelo/link/nginx-1.30.3-rebuild0-wasm32.json",
       "prefix": "/opt/kandelo/homebrew",
       "runtime_support": [
         "node",
         "browser"
       ],
-      "status": "pending"
+      "sha256": "175667dbff22950c431e3a2634f746b7ada40b4517ee3c884d3343a76f9792c4",
+      "status": "success",
+      "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/nginx/blobs/sha256:175667dbff22950c431e3a2634f746b7ada40b4517ee3c884d3343a76f9792c4"
     }
   ],
   "dependencies": [

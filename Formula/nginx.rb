@@ -460,4 +460,9 @@ class Nginx < Formula
     assert_includes browser_output, "nginx-browser-http-ok\n"
     assert_includes browser_output, "nginx-browser-service-ok\n"
   end
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/nginx"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "175667dbff22950c431e3a2634f746b7ada40b4517ee3c884d3343a76f9792c4"
+  end
 end
