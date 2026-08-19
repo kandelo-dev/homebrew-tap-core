@@ -135,6 +135,39 @@ _RECIPE_RUNNER_SOURCE_COPY = (
 _STAGING_RECIPE_RUNNER_SOURCE_COPY = (
     'copy_input_tree(request["source_root"], source_root, SOURCE_INPUT_LIMITS)'
 )
+_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_SIGNATURE = """def add_runner_owned_platform_environment(
+    environment: dict[str, str], platform_root: Path
+) -> dict[str, str]:"""
+_STAGING_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_SIGNATURE = """def add_runner_owned_platform_environment(
+    environment: dict[str, str], platform_root: Path, llvm_bin: Path
+) -> dict[str, str]:"""
+_RECIPE_RUNNER_CONFIG_SITE_ENVIRONMENT = """    child_environment[SDK_CONFIG_SITE_ENV_KEY] = str(
+        platform_root / SDK_CONFIG_SITE_RELATIVE
+    )"""
+_STAGING_RECIPE_RUNNER_CONFIG_SITE_ENVIRONMENT = (
+    _RECIPE_RUNNER_CONFIG_SITE_ENVIRONMENT
+    + '\n    child_environment["LLVM_PREFIX"] = str(llvm_bin.parent)'
+)
+_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL = """        child_environment = add_runner_owned_platform_environment(
+            request["environment"], request["platform_root"]
+        )"""
+_STAGING_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL = """        child_environment = add_runner_owned_platform_environment(
+            request["environment"], request["platform_root"], config["llvm_bin"]
+        )"""
+_RECIPE_RUNNER_PROTECTED_ROOT = (
+    'PROTECTED_PUBLISHER_ROOT = Path("/run/kandelo-homebrew-publisher")'
+)
+_RECIPE_RUNNER_PROTECTED_ROOT_CONFIG_CHECK = (
+    'if config["protected_root"].parent != '
+    'Path("/run/kandelo-homebrew-publisher"):'
+)
+_STAGING_RECIPE_RUNNER_PROTECTED_ROOT_CONFIG_CHECK = (
+    'if config["protected_root"].parent != PROTECTED_PUBLISHER_ROOT:'
+)
+_STAGING_PROTECTED_ROOT = "/var/lib/kandelo-abi-staging"
+_STAGING_RECIPE_RUNNER_PROTECTED_ROOT = (
+    f'PROTECTED_PUBLISHER_ROOT = Path("{_STAGING_PROTECTED_ROOT}")'
+)
 _RECIPE_RUNNER_SOURCE_ASSIGNMENT = (
     '  local source="$platform_root/scripts/homebrew-tap-recipe-runner.py"'
 )
@@ -160,6 +193,16 @@ _STAGING_TARGET_CELLAR_AUDIT = """  # Reused local bottles are poured by the iso
     -exec /usr/bin/chmod 0555 {} + || return
   homebrew_patched_launcher_assert_target_cellar_links_safe \\
     "$build_user" "$cellar" || return"""
+
+
+_PROTECTED_ROOT_PARENT_AUDIT = """  [ "$(/usr/bin/stat -c '%u:%g:%a' /run)" = "0:0:755" ] || {
+    echo "homebrew-patched-launcher: /run does not provide a protected publisher anchor" >&2
+    return 2
+  }"""
+_STAGING_PROTECTED_ROOT_PARENT_AUDIT = """  [ "$(/usr/bin/stat -c '%u:%g:%a' /var/lib)" = "0:0:755" ] || {
+    echo "homebrew-patched-launcher: /var/lib does not provide a disk-backed protected publisher anchor" >&2
+    return 2
+  }"""
 
 
 class ExecutionError(ValueError):
@@ -241,12 +284,39 @@ def _prepare_staging_recipe_runner(*, source: Path, destination: Path) -> Path:
         raise ExecutionError("candidate recipe runner limit boundary changed")
     if body.count(_RECIPE_RUNNER_SOURCE_COPY) != 1:
         raise ExecutionError("candidate recipe runner source-copy boundary changed")
+    for marker, label in (
+        (_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_SIGNATURE, "platform environment"),
+        (_RECIPE_RUNNER_CONFIG_SITE_ENVIRONMENT, "config-site environment"),
+        (_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL, "platform environment call"),
+        (_RECIPE_RUNNER_PROTECTED_ROOT, "protected root"),
+        (
+            _RECIPE_RUNNER_PROTECTED_ROOT_CONFIG_CHECK,
+            "protected-root config check",
+        ),
+    ):
+        if body.count(marker) != 1:
+            raise ExecutionError(f"candidate recipe runner {label} boundary changed")
     prepared = body.replace(
         _RECIPE_RUNNER_LIMITS,
         _STAGING_RECIPE_RUNNER_LIMITS,
     ).replace(
         _RECIPE_RUNNER_SOURCE_COPY,
         _STAGING_RECIPE_RUNNER_SOURCE_COPY,
+    ).replace(
+        _RECIPE_RUNNER_PLATFORM_ENVIRONMENT_SIGNATURE,
+        _STAGING_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_SIGNATURE,
+    ).replace(
+        _RECIPE_RUNNER_CONFIG_SITE_ENVIRONMENT,
+        _STAGING_RECIPE_RUNNER_CONFIG_SITE_ENVIRONMENT,
+    ).replace(
+        _RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL,
+        _STAGING_RECIPE_RUNNER_PLATFORM_ENVIRONMENT_CALL,
+    ).replace(
+        _RECIPE_RUNNER_PROTECTED_ROOT,
+        _STAGING_RECIPE_RUNNER_PROTECTED_ROOT,
+    ).replace(
+        _RECIPE_RUNNER_PROTECTED_ROOT_CONFIG_CHECK,
+        _STAGING_RECIPE_RUNNER_PROTECTED_ROOT_CONFIG_CHECK,
     )
     if destination.exists() or destination.is_symlink():
         raise ExecutionError("protected recipe runner destination already exists")
@@ -292,9 +362,12 @@ def _prepare_staging_launcher(
         (_RECIPE_RUNNER_SOURCE_STATE, "recipe runner state"),
         (_RECIPE_RUNNER_SOURCE_DIGEST_CHECK, "recipe runner digest"),
         (_TARGET_CELLAR_AUDIT, "target Cellar audit"),
+        (_PROTECTED_ROOT_PARENT_AUDIT, "protected-root parent audit"),
     ):
         if body.count(marker) != 1:
             raise ExecutionError(f"candidate patched launcher {label} boundary changed")
+    if body.count("/run/kandelo-homebrew-publisher") != 2:
+        raise ExecutionError("candidate patched launcher protected-root boundary changed")
     prepared = body.replace(
         _RECIPE_RUNNER_SOURCE_ASSIGNMENT,
         f"  local source={shlex.quote(str(runner))}",
@@ -313,6 +386,12 @@ def _prepare_staging_launcher(
     ).replace(
         _TARGET_CELLAR_AUDIT,
         _STAGING_TARGET_CELLAR_AUDIT,
+    ).replace(
+        _PROTECTED_ROOT_PARENT_AUDIT,
+        _STAGING_PROTECTED_ROOT_PARENT_AUDIT,
+    ).replace(
+        "/run/kandelo-homebrew-publisher",
+        _STAGING_PROTECTED_ROOT,
     )
     if destination.exists() or destination.is_symlink():
         raise ExecutionError("protected staging launcher destination already exists")

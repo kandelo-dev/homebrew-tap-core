@@ -130,6 +130,73 @@ class WorkflowExecutionTests(unittest.TestCase):
             )
             self.assertEqual(destination.stat().st_mode & 0o777, 0o500)
 
+    def test_staging_recipe_runner_derives_the_native_llvm_prefix(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "protected-recipe-runner.py"
+
+            execution._prepare_staging_recipe_runner(
+                source=KANDELO_ROOT / "scripts/homebrew-tap-recipe-runner.py",
+                destination=destination,
+            )
+
+            prepared = destination.read_text(encoding="utf-8")
+            self.assertIn(
+                "def add_runner_owned_platform_environment(\n"
+                "    environment: dict[str, str], platform_root: Path, llvm_bin: Path\n"
+                ") -> dict[str, str]:",
+                prepared,
+            )
+            self.assertIn(
+                'child_environment["LLVM_PREFIX"] = str(llvm_bin.parent)',
+                prepared,
+            )
+            self.assertIn(
+                'request["environment"], request["platform_root"], config["llvm_bin"]',
+                prepared,
+            )
+
+            namespace: dict[str, object] = {"__name__": "staging_recipe_runner_test"}
+            exec(compile(prepared, str(destination), "exec"), namespace)
+            self.assertEqual(
+                namespace["PROTECTED_PUBLISHER_ROOT"],
+                Path("/var/lib/kandelo-abi-staging"),
+            )
+            self.assertIn(
+                'config["protected_root"].parent != PROTECTED_PUBLISHER_ROOT',
+                prepared,
+            )
+            self.assertNotIn("/run/kandelo-homebrew-publisher", prepared)
+
+    def test_staging_launcher_places_large_recipe_copies_on_runner_disk(self) -> None:
+        execution = importlib.import_module("scripts.abi_staging.execution")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runner = root / "protected-recipe-runner.py"
+            runner.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            runner.chmod(0o500)
+            destination = root / "protected-launcher.sh"
+
+            execution._prepare_staging_launcher(
+                source=KANDELO_ROOT / "scripts/homebrew-patched-launcher.sh",
+                destination=destination,
+                protected_recipe_runner=runner,
+            )
+
+            prepared = destination.read_text(encoding="utf-8")
+            self.assertIn(
+                'protected_anchor="/var/lib/kandelo-abi-staging"', prepared
+            )
+            self.assertIn(
+                'protected_parent" != "/var/lib/kandelo-abi-staging"', prepared
+            )
+            self.assertIn(
+                "stat -c '%u:%g:%a' /var/lib", prepared
+            )
+            self.assertIn('= "0:0:755" ]', prepared)
+            self.assertNotIn("/run/kandelo-homebrew-publisher", prepared)
+            subprocess.run(["bash", "-n", str(destination)], check=True)
+
     def test_staging_launcher_makes_private_dependency_directories_auditable(self) -> None:
         execution = importlib.import_module("scripts.abi_staging.execution")
         with tempfile.TemporaryDirectory() as temporary:
