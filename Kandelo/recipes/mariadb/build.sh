@@ -231,6 +231,17 @@ cp "$PCRE2_PREFIX/include/pcre2.h" "$SYSROOT/include/"
 cp "$PCRE2_PREFIX/include/pcre2posix.h" "$SYSROOT/include/"
 echo "==> PCRE2 copied from poured prefix $PCRE2_PREFIX"
 
+prefix_map_flags() {
+    local producer_path="$1"
+    local stable_path="$2"
+    printf '%s' "-ffile-prefix-map=$producer_path=$stable_path -fdebug-prefix-map=$producer_path=$stable_path -fmacro-prefix-map=$producer_path=$stable_path"
+}
+
+# CMake invokes the compiler from absolute source and build directories under
+# Homebrew's private staging root. Keep those ephemeral paths out of the
+# installed Wasm while retaining stable source locations for diagnostics.
+REPRODUCIBLE_PREFIX_MAPS="$(prefix_map_flags "$WORK_DIR" /usr/src/mariadb-build)"
+
 # --- Pre-compile glue objects ---
 WASM_COMPILE_FLAGS="--target=$WASM_TARGET -matomics -mbulk-memory -mexception-handling -mllvm -wasm-enable-sjlj -fno-trapping-math --sysroot=$SYSROOT"
 
@@ -266,8 +277,8 @@ cmake "$SRC_DIR" \
     -DIMPORT_EXECUTABLES="$HOST_BUILD_DIR/import_executables.cmake" \
     \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_C_FLAGS_RELEASE="${MARIADB_OPT_LEVEL:--O2} -DNDEBUG" \
-    -DCMAKE_CXX_FLAGS_RELEASE="${MARIADB_OPT_LEVEL:--O2} -DNDEBUG" \
+    -DCMAKE_C_FLAGS_RELEASE="${MARIADB_OPT_LEVEL:--O2} -DNDEBUG $REPRODUCIBLE_PREFIX_MAPS" \
+    -DCMAKE_CXX_FLAGS_RELEASE="${MARIADB_OPT_LEVEL:--O2} -DNDEBUG $REPRODUCIBLE_PREFIX_MAPS" \
     \
     -DWITH_UNIT_TESTS=OFF \
     -DWITH_MARIABACKUP=OFF \
