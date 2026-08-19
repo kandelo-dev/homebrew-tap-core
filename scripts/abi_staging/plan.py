@@ -1046,7 +1046,14 @@ def _miniature_inputs(tap_root: Path) -> tuple[dict[str, Any], dict[str, Any], l
         }
         for entry in formulae
     ]
-    inventory = {**inventory, "formulae": formulae, "graph_sha256": canonical_sha256(graph_identity)}
+    inventory = {
+        **inventory,
+        # The miniature intentionally projects a closed eight-Formula graph.
+        # Disabled Formulae outside that graph are not members of this fixture.
+        "disabled_formulae": [],
+        "formulae": formulae,
+        "graph_sha256": canonical_sha256(graph_identity),
+    }
     request = json.loads(
         (tap_root / "Kandelo/staging/fixtures/request/current-request.json").read_bytes()
     )

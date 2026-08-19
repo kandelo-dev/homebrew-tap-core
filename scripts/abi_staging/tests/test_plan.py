@@ -54,6 +54,7 @@ def _miniature_inventory() -> dict[str, object]:
     ]
     return {
         **current,
+        "disabled_formulae": [],
         "formulae": formulae,
         "graph_sha256": canonical_sha256(graph),
     }
