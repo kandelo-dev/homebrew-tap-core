@@ -338,6 +338,11 @@ class Dinit < Formula
     assert_malformed_service.call(malformed_browser)
   end
 
+
+  bottle do
+    root_url "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/dinit"
+    sha256 cellar: "/opt/kandelo/homebrew/Cellar", wasm32_kandelo: "326a6e030b5d9c8702ee169aeba3a9523c9787f90a746c74dbce8cd387b598e0"
+  end
 end
 
 __END__

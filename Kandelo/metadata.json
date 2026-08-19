@@ -449,6 +449,50 @@
           "browser_compatible": false,
           "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/32095729346",
           "built_from": {
+            "formula_sha256": "7e05e481ef076ddfe714944b1a1983c9bc243e09980c2d23811c877ddde0cb89",
+            "kandelo_commit": "a8d466b506af1883cdc82c179dc9ad42c4b77dc9",
+            "kandelo_repository": "Automattic/kandelo",
+            "tap_commit": "0e18305b526b29b0f81869f38be873c1722f073b",
+            "tap_repository": "kandelo-dev/homebrew-tap-core"
+          },
+          "bytes": 1092524,
+          "cache_key_sha": "326a6e030b5d9c8702ee169aeba3a9523c9787f90a746c74dbce8cd387b598e0",
+          "cellar": "/opt/kandelo/homebrew/Cellar",
+          "fork_instrumentation": "required",
+          "kandelo_abi": 43,
+          "link_manifest": "Kandelo/link/dinit-0.19.4-rebuild0-wasm32.json",
+          "prefix": "/opt/kandelo/homebrew",
+          "runtime_support": [
+            "node"
+          ],
+          "sha256": "326a6e030b5d9c8702ee169aeba3a9523c9787f90a746c74dbce8cd387b598e0",
+          "status": "success",
+          "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/dinit/blobs/sha256:326a6e030b5d9c8702ee169aeba3a9523c9787f90a746c74dbce8cd387b598e0"
+        }
+      ],
+      "dependencies": [
+        {
+          "full_name": "kandelo-dev/tap-core/libcxx",
+          "name": "libcxx",
+          "version": "21.1.7_1"
+        }
+      ],
+      "formula_metadata": "Kandelo/formula/dinit.json",
+      "formula_path": "Formula/dinit.rb",
+      "formula_revision": 0,
+      "full_name": "kandelo-dev/tap-core/dinit",
+      "name": "dinit",
+      "version": "0.19.4"
+    },
+    {
+      "bottle_rebuild": 0,
+      "bottles": [
+        {
+          "arch": "wasm32",
+          "bottle_tag": "wasm32_kandelo",
+          "browser_compatible": false,
+          "built_by": "https://github.com/kandelo-dev/homebrew-tap-core/actions/runs/32095729346",
+          "built_from": {
             "formula_sha256": "b61b8c2765f0aac39f400ce02ac038c2c14a3f88115d16b0536bf336a4e4fa09",
             "kandelo_commit": "a8d466b506af1883cdc82c179dc9ad42c4b77dc9",
             "kandelo_repository": "Automattic/kandelo",

@@ -1,20 +1,20 @@
 {
   "arch": "wasm32",
   "bottle": {
-    "bytes": 1055018,
-    "cache_key_sha": "211e70a89b0a3e61d41767056d5b05e4637416802a7d1c65eaeb164b6c05cfa5",
+    "bytes": 1092524,
+    "cache_key_sha": "326a6e030b5d9c8702ee169aeba3a9523c9787f90a746c74dbce8cd387b598e0",
     "payload_root": "dinit/0.19.4",
-    "sha256": "211e70a89b0a3e61d41767056d5b05e4637416802a7d1c65eaeb164b6c05cfa5",
-    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core/dinit/blobs/sha256:211e70a89b0a3e61d41767056d5b05e4637416802a7d1c65eaeb164b6c05cfa5"
+    "sha256": "326a6e030b5d9c8702ee169aeba3a9523c9787f90a746c74dbce8cd387b598e0",
+    "url": "https://ghcr.io/v2/kandelo-dev/homebrew-tap-core-abi-43/dinit/blobs/sha256:326a6e030b5d9c8702ee169aeba3a9523c9787f90a746c74dbce8cd387b598e0"
   },
-  "cellar": "/home/linuxbrew/.linuxbrew/Cellar",
+  "cellar": "/opt/kandelo/homebrew/Cellar",
   "env": {
     "PATH_prepend": [
       "sbin"
     ]
   },
-  "kandelo_abi": 41,
-  "keg": "/home/linuxbrew/.linuxbrew/Cellar/dinit/0.19.4",
+  "kandelo_abi": 43,
+  "keg": "/opt/kandelo/homebrew/Cellar/dinit/0.19.4",
   "links": [
     {
       "source": "sbin/dinit",
@@ -53,7 +53,7 @@
     }
   ],
   "package": "dinit",
-  "prefix": "/home/linuxbrew/.linuxbrew",
+  "prefix": "/opt/kandelo/homebrew",
   "receipts": [
     ".brew/dinit.rb",
     "INSTALL_RECEIPT.json"
